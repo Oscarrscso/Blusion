@@ -1,0 +1,63 @@
+name: CI
+
+# ADR-002: the Linux job proves the host layer (packages + mock addon); the macOS job runs the Xcode steps of
+# scripts/verify.sh (xcodegen, xcodebuild on a simulator, SwiftLint). Both must be green for a milestone.
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-linux:
+    name: Host layer (Linux, Swift 6.3)
+    runs-on: ubuntu-24.04
+    container: swift:6.3.3-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install node, ffmpeg, curl, python
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs ffmpeg curl python3 ca-certificates
+          node --version
+          swift --version
+      - name: verify.sh (host layer)
+        run: ./scripts/verify.sh
+      - name: Coverage gate (StremioKit)
+        run: ./scripts/coverage.sh StremioKit 90
+
+  macos:
+    name: Full layer (macOS, Xcode, simulator)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain info
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list runtimes
+          node --version
+      - name: Install tools
+        run: brew install xcodegen swiftlint ffmpeg xcbeautify
+      - name: verify.sh milestone
+        run: ./scripts/verify.sh milestone
+        env:
+          SHOT: ci-launch
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-verify
+          path: |
+            shots/
+            build/xcodebuild.log
+            build/verify.xcresult
+            .mock-addon.log
+          if-no-files-found: ignore
+          retention-days: 14
