@@ -4,7 +4,9 @@
  * Blusion mock addon: a catalog addon and a stream addon on separate ports, plus media.
  * Zero dependencies, Node 18+.
  *
- *   node server.js [--host 127.0.0.1] [--catalog-port 7001] [--stream-port 7002] [--fixtures DIR]
+ *   node server.js [--host 127.0.0.1] [--catalog-port 7001] [--stream-port 7002] [--fixtures DIR] [--watch-stdin]
+ *
+ * --watch-stdin: exit when stdin closes, so a server spawned by a test process can never outlive it.
  *
  * Port 0 picks free ports. Once both servers listen, ONE JSON line is printed on stdout:
  *   {"ready":true,"catalog":"http://127.0.0.1:7001","stream":"http://127.0.0.1:7002"}
@@ -48,6 +50,7 @@ function parseArgs(argv) {
     else if (a === '--catalog-port') out.catalogPort = Number(argv[++i]);
     else if (a === '--stream-port') out.streamPort = Number(argv[++i]);
     else if (a === '--fixtures') out.fixtures = path.resolve(argv[++i]);
+    else if (a === '--watch-stdin') out.watchStdin = true;
   }
   return out;
 }
@@ -394,5 +397,10 @@ if (require.main === module) {
     const stop = () => s.close().then(() => process.exit(0));
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
+    if (parseArgs(process.argv.slice(2)).watchStdin) {
+      process.stdin.resume();
+      process.stdin.on('end', stop);
+      process.stdin.on('close', stop);
+    }
   }).catch((e) => { process.stderr.write(`mock addon failed to start: ${e}\n`); process.exit(1); });
 }

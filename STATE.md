@@ -18,7 +18,11 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M1.2 Models: manifest (routing, validation), meta, stream, subtitle, content id | accept: swift test --filter ManifestDecodingTests
     - [x] M1.3 URL normaliser, request builder/parser | accept: swift test --filter URLNormaliseTests
     - [x] M1.4 18 manifest + 11 response fixtures, mutation tests | accept: swift test --filter MutationTests
-  - [ ] M2 Client and registry | composite
+  - [d] M2 Client and registry | accept: swift test --filter MockIntegrationTests && RegistryTests | tries 1
+    - [x] M2.1 HTTP transport (size cap, redirects, cancel), deadline, AddonClient (retries, status map) | accept: swift test --filter AddonClientTests
+    - [x] M2.2 Registry: install/remove/enable/reorder/routing/updates, stores protocols + in-memory | accept: swift test --filter RegistryTests
+    - [x] M2.3 FanOut AsyncStream; isolation, timeout, token-free logs proven against the mock | accept: swift test --filter MockIntegrationTests
+    - [d] M2.4 SwiftData AddonStore + Keychain SecretStore, Info.plist ATS/local-network keys | accept: macOS CI (PersistenceTests, BlusionTests)
   - [ ] M3 Browse UI | composite
   - [ ] M4 Streams | composite
   - [ ] M5 Playback (AVPlayer) | composite
@@ -36,4 +40,8 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
 - M1 done: 80 tests, 98.56% line coverage (scripts/coverage.sh). Public API: ResponseDecoder.{manifest,catalog,meta,streams,subtitles},
   AddonURLNormaliser.normalise -> AddonLocation, AddonRequestBuilder.url/parse, Manifest.supports/validate, Redactor, AddonLogger/MemoryLogSink.
   Decisions: query strings in addon URLs are rejected; empty idPrefixes = no restriction; manifest without any types accepts all types.
+- M2 done on host: 47 StremioKit-adjacent tests added (client 20, mock integration 12, registry 15), coverage 97.95%. FOUND AND FIXED a real bug:
+  per-task state was a struct copied on every received chunk (quadratic for big bodies, held the lock, and tripped a swift-corelibs
+  redirect assertion on Linux). Pending state is now a class. SwiftData/Keychain stores and plist keys are [d] (macOS only).
+  Gotchas: Swift 6 forbids NSLock.lock() in async code (use withLock); `#expect(x.allSatisfy(\.kp))` does not compile (use closures).
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.
