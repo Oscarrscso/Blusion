@@ -137,6 +137,7 @@ struct AppDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
+            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
     }
 }
 

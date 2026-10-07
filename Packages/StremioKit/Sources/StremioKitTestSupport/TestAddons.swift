@@ -44,3 +44,20 @@ public func makeStubbedRegistry(manifests: [Manifest], transport: StubTransport,
     try await registry.load()
     return (registry, client)
 }
+
+/// Sniffer that answers from a table keyed by the URL's last path component; anything else is "no verdict".
+public struct StubSniffer: ContainerSniffing {
+    private let table: [String: MediaContainer]
+
+    public init(_ table: [String: MediaContainer] = [:]) {
+        self.table = table
+    }
+
+    public func sniff(url: URL, headers: [String: String]) async -> MediaContainer? { table[url.lastPathComponent] }
+}
+
+/// A manifest for an addon that answers `stream` requests for every movie and series id.
+public func streamManifest(_ name: String) -> Manifest {
+    Manifest(id: "stream.\(name)", name: name, version: "1",
+             resources: [ResourceDescriptor(name: "stream", types: ["movie", "series"])], types: ["movie", "series"])
+}

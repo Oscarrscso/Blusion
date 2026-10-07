@@ -28,7 +28,12 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M3.2 View models: Board, Discover, Search (debounce, error chips), Detail, Addons | accept: swift test --package-path Packages/Features
     - [d] M3.3 SwiftUI views (tabs, poster grid, Detail, Addons incl. empty state + suggestion) | accept: swiftc -parse + macOS CI
     - [d] M3.4 XCUITest flows on the mock, accessibility audit, AX5, screenshots script (SE / Pro Max / iPad) | accept: macOS CI, scripts/screenshots.sh
-  - [ ] M4 Streams | composite
+  - [d] M4 Streams | accept: swift test (ranking, policy, listing, service); UI test on macOS CI | tries 1
+    - [x] M4.1 ContainerSniffer (bytes > content-type > extension), RangedContainerSniffer | accept: swift test --filter ContainerSnifferTests
+    - [x] M4.2 StreamQuality heuristics, PlaybackPolicy (ADR-003 notWebReady refinement), StreamingServerRoute (ADR-004, UNVERIFIED) | accept: swift test --filter PlaybackPolicyTests
+    - [x] M4.3 Ranking, de-duplication, StreamListing (incremental), BingeSelection, StreamService with bounded sniffing | accept: swift test --filter StreamListingTests
+    - [x] M4.4 StreamPickerViewModel, PlaybackPlan/Candidate, PlaybackSettings | accept: swift test --package-path Packages/Features --filter StreamPickerViewModelTests
+    - [d] M4.5 StreamPickerView + UI test (first row before slowest addon) | accept: macOS CI
   - [ ] M5 Playback (AVPlayer) | composite
   - [ ] M6 Format coverage | composite
   - [ ] M7 Library and settings | composite
@@ -53,4 +58,8 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   Shared test helpers now live in the StremioKitTestSupport library (MockServer, StubTransport, makeStubbedRegistry).
   Unverified risks for the first macOS run: `@Observable` views under Swift 6 isolation, `NSAllowsLocalNetworking` covering 127.0.0.1,
   accessibility-audit findings (contrast of orange chips, poster labels), `.searchable` + `.onChange` wiring.
+- M4 host part done: StremioKit 205 tests, Features 47. ADR-003 (protocol verification; notWebReady is NOT a codec statement) and ADR-004
+  (torrent route UNVERIFIED) written. Streams are sniffed only when the URL has no extension/filename hint (spares CDNs).
+  Swift Testing gotcha: `#expect(optionalInt64 == 700 * 1_048_576)` type-checks the arithmetic alone as Int and quietly fails; use explicit Int64.
+  PlayerScreen is a STUB until M5. AppServices now carries streams, settings (SettingsStore) and fallbackEngineLinked.
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.
