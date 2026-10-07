@@ -8,13 +8,19 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "PlayerKit", targets: ["PlayerKit"]),
+        // MockEngine for test targets of this and other packages. Never linked into the app.
+        .library(name: "PlayerKitTestSupport", targets: ["PlayerKitTestSupport"]),
     ],
     dependencies: [
         .package(path: "../StremioKit"),
     ],
     targets: [
         .target(name: "PlayerKit", dependencies: ["StremioKit"]),
-        .testTarget(name: "PlayerKitTests", dependencies: ["PlayerKit"]),
+        .target(name: "PlayerKitTestSupport", dependencies: ["PlayerKit"]),
+        .testTarget(
+            name: "PlayerKitTests",
+            dependencies: ["PlayerKit", "PlayerKitTestSupport", .product(name: "StremioKitTestSupport", package: "StremioKit")]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

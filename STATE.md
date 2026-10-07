@@ -34,7 +34,14 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M4.3 Ranking, de-duplication, StreamListing (incremental), BingeSelection, StreamService with bounded sniffing | accept: swift test --filter StreamListingTests
     - [x] M4.4 StreamPickerViewModel, PlaybackPlan/Candidate, PlaybackSettings | accept: swift test --package-path Packages/Features --filter StreamPickerViewModelTests
     - [d] M4.5 StreamPickerView + UI test (first row before slowest addon) | accept: macOS CI
-  - [ ] M5 Playback (AVPlayer) | composite
+  - [d] M5 Playback (AVPlayer) | accept: host tests + macOS CI (AVEngineTests, PlaybackFlowTests); device items in docs/DEVICE_CHECKLIST.md | tries 1
+    - [x] M5.1 PlaybackEngine protocol/state, PlaybackCoordinator (auto-advance, startup timeout, mid-stream failover with resume), MockEngine | accept: swift test --filter PlaybackCoordinatorTests
+    - [x] M5.2 SRT/VTT parsers, SubtitleTimeline + offset, language codes, SubtitleService | accept: swift test --filter SubtitleParserTests
+    - [x] M5.3 Progress: 10 s saves, watched at 90%, resume policy, ProgressSession | accept: swift test --filter ProgressTests
+    - [x] M5.4 PlayerViewModel (scrubbing, controls auto-hide, subtitles, next-episode binge) | accept: swift test --package-path Packages/Features --filter PlayerViewModelTests
+    - [x] M5.5 Header route logic (custom scheme, HLS rewrite, ranges) | accept: swift test --filter HeaderLoaderSupportTests
+    - [d] M5.6 AVEngine, HeaderResourceLoader (ADR-005 B), NowPlayingController, SwiftUI player, PiP proxy, AirPlay | accept: swiftc -parse + macOS CI
+    - [d] M5.7 PiP, AirPlay, lock-screen, background audio, interruptions | accept: docs/DEVICE_CHECKLIST.md (device only)
   - [ ] M6 Format coverage | composite
   - [ ] M7 Library and settings | composite
   - [ ] M8 Hardening and release | composite
@@ -62,4 +69,9 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   (torrent route UNVERIFIED) written. Streams are sniffed only when the URL has no extension/filename hint (spares CDNs).
   Swift Testing gotcha: `#expect(optionalInt64 == 700 * 1_048_576)` type-checks the arithmetic alone as Int and quietly fails; use explicit Int64.
   PlayerScreen is a STUB until M5. AppServices now carries streams, settings (SettingsStore) and fallbackEngineLinked.
+- M5 host part done: PlayerKit 61 tests, Features 66. ADR-005: documented AVAssetResourceLoader route is the default, the undocumented
+  AVURLAssetHTTPHeaderFieldsKey sits behind -D BLUSION_UNDOCUMENTED_AV_HEADERS. Info.plist gains NSAllowsArbitraryLoadsForMedia + UIBackgroundModes audio.
+  FOUND AND FIXED by tests: HLS rewriter did nothing on CRLF playlists ("\r\n" is one Character in Swift: normalise before splitting);
+  `advance()` on the last candidate would have killed a working stream.
+  Progress persistence is in-memory until M7 (SwiftData V2). Fallback engine factory returns nil until M6.
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.

@@ -74,6 +74,28 @@ import Testing
         #expect(meta.episodes(inSeason: 9).isEmpty)
     }
 
+    @Test func nextEpisodeFollowsWatchingOrder() throws {
+        let meta = try loadMeta(data("meta-series"))
+        func video(_ id: String) throws -> Video { try #require(meta.videos.first { $0.id == id }) }
+        #expect(meta.nextVideo(after: try video("tt0000010:1:1"))?.id == "tt0000010:1:2")
+        #expect(meta.nextVideo(after: try video("tt0000010:1:2"))?.id == "tt0000010:2:1", "rolls over into the next season")
+        #expect(meta.nextVideo(after: try video("tt0000010:2:1")) == nil, "the finale does not roll into specials")
+        #expect(meta.nextVideo(after: try video("tt0000010:0:1")) == nil, "last in the list")
+        #expect(meta.nextVideo(after: Video(id: "unknown")) == nil)
+    }
+
+    @Test func requestsForEpisodesRememberTheNextOne() throws {
+        let meta = try loadMeta(data("meta-series"))
+        let first = try #require(meta.videos.first { $0.id == "tt0000010:1:1" })
+        let request = StreamRequest(episode: first, of: meta)
+        #expect(request.nextID == "tt0000010:1:2" && request.nextSeason == 1 && request.nextEpisode == 2)
+        let next = try #require(request.nextRequest)
+        #expect(next.id == "tt0000010:1:2" && next.title == "Series · Two" && next.type == "series")
+        let finale = try #require(meta.videos.first { $0.id == "tt0000010:2:1" })
+        #expect(StreamRequest(episode: finale, of: meta).nextRequest == nil)
+        #expect(StreamRequest(movie: MetaPreview(id: "tt1", name: "M")).nextRequest == nil)
+    }
+
     @Test func missingMetaIsNilNotAnError() throws {
         #expect(try ResponseDecoder.meta(from: data("meta-missing")) == nil)
         #expect(try ResponseDecoder.meta(from: Data("{}".utf8)) == nil)

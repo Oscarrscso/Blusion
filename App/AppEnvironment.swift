@@ -1,4 +1,5 @@
 import Foundation
+import PlayerKit
 import SwiftData
 import StremioKit
 import Persistence
@@ -37,6 +38,13 @@ final class AppEnvironment {
             }
         }
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
-        return AppEnvironment(services: AppServices(registry: registry, client: client), isUITesting: uiTesting)
+        // AVPlayer for MP4/MOV/M4V/HLS. The fallback engine for MKV and friends arrives in M6.
+        let makeEngine: EngineFactory = { candidate in
+            switch candidate.route {
+            case .native: return AVEngine()
+            default: return nil
+            }
+        }
+        return AppEnvironment(services: AppServices(registry: registry, client: client, makeEngine: makeEngine), isUITesting: uiTesting)
     }
 }

@@ -173,6 +173,16 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
     }
 
+    /// The episode after `video` in watching order: season by season, specials (season 0) only after the last regular season.
+    public func nextVideo(after video: Video) -> Video? {
+        let ordered = seasons.flatMap { episodes(inSeason: $0) }
+        guard let index = ordered.firstIndex(where: { $0.id == video.id }), index + 1 < ordered.count else { return nil }
+        let next = ordered[index + 1]
+        // Don't roll from a regular season into specials automatically.
+        if (video.season ?? 0) > 0, next.season == 0 { return nil }
+        return next
+    }
+
     /// Fills fields the addon's `meta` left out with what the catalog preview already showed (so Detail never loses its poster).
     public func filling(from preview: MetaPreview) -> MetaDetail {
         var copy = self

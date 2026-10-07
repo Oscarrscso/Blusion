@@ -18,7 +18,11 @@ let package = Package(
         .target(name: "Features", dependencies: ["StremioKit", "PlayerKit", "Persistence"]),
         .testTarget(
             name: "FeaturesTests",
-            dependencies: ["Features", .product(name: "StremioKitTestSupport", package: "StremioKit")]
+            dependencies: [
+                "Features",
+                .product(name: "StremioKitTestSupport", package: "StremioKit"),
+                .product(name: "PlayerKitTestSupport", package: "PlayerKit"),
+            ]
         ),
     ],
     swiftLanguageModes: [.v6]

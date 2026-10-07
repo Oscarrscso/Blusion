@@ -59,10 +59,15 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
-        # Addons may live on the user's LAN over plain http. NSAllowsLocalNetworking exempts local addresses from ATS only;
-        # NSAllowsArbitraryLoads is never set (PLAN §1). Media-specific keys are added in M5.
+        # Addons may live on the user's LAN over plain http. NSAllowsLocalNetworking exempts local addresses from ATS only.
+        # NSAllowsArbitraryLoadsForMedia exempts only loads AVFoundation performs itself (many direct stream URLs are plain http); ADR-005.
+        # NSAllowsArbitraryLoads is never set (PLAN §1).
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoadsForMedia: true
+        # Background audio and Picture in Picture (ADR-005).
+        UIBackgroundModes:
+          - audio
         NSLocalNetworkUsageDescription: "Blusion connects to addons you install that run on your local network."
     settings:
       base:
