@@ -27,19 +27,35 @@ final class AppEnvironment {
 
         let store: any AddonStore
         let secrets: any SecretStore
+        let progress: any ProgressStore
+        let library: any LibraryStore
+        let settingsDefaults: UserDefaults
         if uiTesting {
             store = InMemoryAddonStore()
             secrets = InMemorySecretStore()
+            progress = InMemoryProgressStore()
+            library = InMemoryLibraryStore()
+            // A throwaway suite, so UI tests neither read nor leave preferences behind.
+            let suite = "app.blusion.uitest.\(UUID().uuidString)"
+            settingsDefaults = UserDefaults(suiteName: suite) ?? .standard
+            settingsDefaults.removePersistentDomain(forName: suite)
         } else {
             secrets = KeychainSecretStore()
+            settingsDefaults = .standard
             if let container = try? PersistenceContainer.make() {
+                // One container, three stores: addons, watch progress and the library share the same file and migration plan.
                 store = SwiftDataAddonStore(container: container)
+                progress = SwiftDataProgressStore(container: container)
+                library = SwiftDataLibraryStore(container: container)
             } else {
                 // A store that cannot be opened must not stop the app: run from memory and say so.
                 logger.log(.error, "persistent store unavailable; using memory")
                 store = InMemoryAddonStore()
+                progress = InMemoryProgressStore()
+                library = InMemoryLibraryStore()
             }
         }
+        let settings = DefaultsSettingsStore(defaults: settingsDefaults, secrets: secrets)
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
         // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS and friends go to the fallback engine when it is built in (ADR-006, opt-in).
         let makeEngine: EngineFactory = { candidate in
@@ -61,7 +77,8 @@ final class AppEnvironment {
         #else
         let fallbackLinked = false
         #endif
-        let services = AppServices(registry: registry, client: client, makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked)
+        let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
+                                   makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked)
         return AppEnvironment(services: services, isUITesting: uiTesting)
     }
 }

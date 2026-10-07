@@ -4,7 +4,7 @@ import StremioKit
 
 public struct RootTabView: View {
     public enum Tab: Hashable {
-        case home, discover, search, addons
+        case home, discover, search, library, addons
     }
 
     private let services: AppServices
@@ -20,6 +20,7 @@ public struct RootTabView: View {
             NavigationStack {
                 BoardView(services: services) { selection = .addons }
                     .appDestinations(services: services)
+                    .settingsButton(services: services)
             }
             .tabItem { Label("Home", systemImage: "house") }
             .tag(Tab.home)
@@ -39,7 +40,16 @@ public struct RootTabView: View {
             .tag(Tab.search)
 
             NavigationStack {
+                LibraryView(services: services) { selection = .discover }
+                    .appDestinations(services: services)
+                    .settingsButton(services: services)
+            }
+            .tabItem { Label("Library", systemImage: "books.vertical") }
+            .tag(Tab.library)
+
+            NavigationStack {
                 AddonsView(services: services)
+                    .settingsButton(services: services)
             }
             .tabItem { Label("Addons", systemImage: "puzzlepiece.extension") }
             .tag(Tab.addons)

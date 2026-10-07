@@ -1,0 +1,54 @@
+import Foundation
+import PlayerKit
+import StremioKit
+
+/// "Clear data" in Settings. Each scope is independent; `everything` is all of them and also removes every addon (and so its Keychain URL).
+public struct DataResetService: Sendable {
+    public enum Scope: Sendable, Equatable, CaseIterable {
+        case history, library, settings, addons, everything
+
+        public var title: String {
+            switch self {
+            case .history: return "Watch history"
+            case .library: return "Saved titles"
+            case .settings: return "Settings"
+            case .addons: return "All addons"
+            case .everything: return "Everything"
+            }
+        }
+
+        public var warning: String {
+            switch self {
+            case .history: return "Removes your watch progress and watched marks. Continue Watching will be empty."
+            case .library: return "Removes every saved title from your library."
+            case .settings: return "Resets subtitle language, preferred quality and the streaming server."
+            case .addons: return "Removes every installed addon and its saved link. You'll need to add them again."
+            case .everything: return "Removes watch history, saved titles, settings and all addons."
+            }
+        }
+    }
+
+    private let services: AppServices
+
+    public init(services: AppServices) {
+        self.services = services
+    }
+
+    /// Returns a sentence describing what was cleared.
+    @discardableResult
+    public func clear(_ scope: Scope) async -> String {
+        switch scope {
+        case .history:
+            await services.progress.clear()
+        case .library:
+            await services.library.clear()
+        case .settings:
+            await services.settings.save(PlaybackSettings())
+        case .addons:
+            for addon in await services.registry.addons { try? await services.registry.remove(id: addon.id) }
+        case .everything:
+            for each in [Scope.history, .library, .settings, .addons] { await clear(each) }
+        }
+        return "\(scope.title) cleared."
+    }
+}

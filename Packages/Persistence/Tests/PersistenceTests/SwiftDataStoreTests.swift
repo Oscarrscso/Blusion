@@ -1,14 +1,25 @@
 #if canImport(SwiftData)
 import Foundation
+import PlayerKit
+import StremioKit
 import SwiftData
 import Testing
-import StremioKit
 @testable import Persistence
 
 @Suite struct SwiftDataStoreTests {
     @Test func satisfiesTheAddonStoreContract() async throws {
         let container = try PersistenceContainer.make(inMemory: true)
         try await exerciseAddonStoreContract(SwiftDataAddonStore(container: container))
+    }
+
+    @Test func satisfiesTheProgressStoreContract() async throws {
+        let container = try PersistenceContainer.make(inMemory: true)
+        await exerciseProgressStoreContract(SwiftDataProgressStore(container: container))
+    }
+
+    @Test func satisfiesTheLibraryStoreContract() async throws {
+        let container = try PersistenceContainer.make(inMemory: true)
+        await exerciseLibraryStoreContract(SwiftDataLibraryStore(container: container))
     }
 
     @Test func aSecondStoreOnTheSameContainerSeesSavedRecords() async throws {
@@ -29,6 +40,38 @@ import StremioKit
         let registry = AddonRegistry(store: store, secrets: secrets, client: AddonClient())
         try await registry.load()
         #expect(await registry.addons.map(\.name) == ["X"])
+    }
+
+    /// PLAN M7: persistence tests including a schema migration. A store written with schema V1 (addons only) is reopened with V2 + the
+    /// migration plan: addons survive, and the new progress and library stores work on the same file.
+    @Test func aVersionOneStoreMigratesToVersionTwoKeepingItsAddons() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("blusion-migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("blusion.store")
+        let record = AddonRecord(id: UUID(), manifestData: Data("manifest".utf8), isEnabled: false, order: 3, installedAt: Date(timeIntervalSince1970: 1_700_000_000))
+
+        do {
+            let v1 = Schema(versionedSchema: BlusionSchemaV1.self)
+            let container = try ModelContainer(for: v1, configurations: [ModelConfiguration(schema: v1, url: url, cloudKitDatabase: .none)])
+            try await SwiftDataAddonStore(container: container).save([record])
+        }
+
+        let migrated = try PersistenceContainer.make(url: url)
+        #expect(try await SwiftDataAddonStore(container: migrated).loadAll() == [record], "the V1 addon row survived the migration")
+
+        let progress = SwiftDataProgressStore(container: migrated)
+        await progress.save(WatchProgress(id: "movie/tt1", type: "movie", contentID: "tt1", title: "T", position: 5, duration: 50, isWatched: false, updatedAt: Date()))
+        #expect(await progress.progress(for: "movie/tt1")?.position == 5)
+        let library = SwiftDataLibraryStore(container: migrated)
+        await library.add(LibraryItem(preview: MetaPreview(id: "tt1", name: "T")))
+        #expect(await library.contains("movie/tt1"))
+    }
+
+    @Test func theSchemaVersionsAreOrdered() {
+        #expect(BlusionSchemaV1.versionIdentifier < BlusionSchemaV2.versionIdentifier)
+        #expect(BlusionMigrationPlan.schemas.count == 2)
+        #expect(BlusionMigrationPlan.stages.count == 1)
     }
 }
 #endif

@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import PlayerKit
 import StremioKit
 
 struct BoardView: View {
@@ -15,6 +16,7 @@ struct BoardView: View {
         content
             .navigationTitle("Home")
             .task { await model.observeAddons() }
+            .onAppear { Task { await model.refreshContinueWatching() } }
             .refreshable { await model.load() }
     }
 
@@ -32,6 +34,7 @@ struct BoardView: View {
         case .ready:
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
+                    if !model.continueWatching.isEmpty { ContinueWatchingRow(items: model.continueWatching) }
                     ForEach(model.rows) { row in
                         CatalogRowView(row: row) { Task { await model.retry(rowID: row.id) } }
                     }
@@ -40,6 +43,36 @@ struct BoardView: View {
             }
             .accessibilityIdentifier("board.rows")
         }
+    }
+}
+
+/// Resumable titles above the catalogs. Tapping one goes straight to its streams; the player resumes from the saved position.
+struct ContinueWatchingRow: View {
+    let items: [WatchProgress]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Continue Watching").font(.title3.bold()).padding(.horizontal).accessibilityAddTraits(.isHeader)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 12) {
+                    ForEach(items) { item in
+                        NavigationLink(value: LibraryViewModel.request(for: item)) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                PosterImage(url: item.poster, title: item.title).frame(width: 120)
+                                ProgressView(value: item.fraction).frame(width: 120)
+                                Text(item.title).font(.footnote.weight(.medium)).lineLimit(2).frame(width: 120, alignment: .leading)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(item.title), \(Int(item.fraction * 100)) percent watched")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("board.continue.\(item.id)")
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .accessibilityIdentifier("board.continueWatching")
     }
 }
 

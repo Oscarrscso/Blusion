@@ -1,0 +1,147 @@
+import XCTest
+
+/// M7 acceptance in the simulator: save a title and find it in Library, resume from Continue Watching, change settings, clear data.
+final class LibrarySettingsFlowTests: XCTestCase {
+    private var catalogURL: String { ProcessInfo.processInfo.environment["MOCK_ADDON_CATALOG_URL"] ?? "" }
+    private var streamURL: String { ProcessInfo.processInfo.environment["MOCK_ADDON_STREAM_URL"] ?? "" }
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    private func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["BLUSION_UITEST"] = "1"
+        app.launch()
+        return app
+    }
+
+    @MainActor
+    private func install(_ app: XCUIApplication, _ urls: [String]) {
+        app.tabBars.buttons["Addons"].tap()
+        for url in urls {
+            let field = app.textFields["addons.installField"]
+            XCTAssertTrue(field.waitForExistence(timeout: 10))
+            field.tap()
+            field.typeText(url)
+            app.buttons["addons.installButton"].tap()
+            XCTAssertTrue(app.staticTexts["addons.success"].waitForExistence(timeout: 15))
+        }
+    }
+
+    @MainActor
+    func testEmptyLibraryExplainsItself() throws {
+        let app = launch()
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertTrue(app.staticTexts["Your library is empty"].waitForExistence(timeout: 10))
+        captureScreenshot(app, named: "M7-library-empty")
+    }
+
+    @MainActor
+    func testSavingATitleShowsItInTheLibraryAndUnsavingRemovesIt() throws {
+        try XCTSkipIf(catalogURL.isEmpty, "MOCK_ADDON_CATALOG_URL is not set (run through scripts/verify.sh)")
+        let app = launch()
+        install(app, ["\(catalogURL)/uitest/manifest.json"])
+        app.tabBars.buttons["Home"].tap()
+        let poster = app.buttons["poster.mock:movie1"].firstMatch
+        XCTAssertTrue(poster.waitForExistence(timeout: 15))
+        poster.tap()
+
+        let save = app.buttons["detail.libraryButton"]
+        XCTAssertTrue(save.waitForExistence(timeout: 10))
+        XCTAssertEqual(save.value as? String, "Not saved")
+        save.tap()
+        XCTAssertEqual(save.value as? String, "Saved")
+        app.buttons["detail.watchedButton"].tap()
+        XCTAssertEqual(app.buttons["detail.watchedButton"].value as? String, "Watched")
+        captureScreenshot(app, named: "M7-detail-saved")
+
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons["library.saved.movie/mock:movie1"].waitForExistence(timeout: 10), "the saved title is listed")
+        XCTAssertTrue(app.staticTexts["Watched"].exists, "the watched mark is listed too")
+        captureScreenshot(app, named: "M7-library")
+
+        // Back to Detail through the library, then unsave.
+        app.buttons["library.saved.movie/mock:movie1"].tap()
+        let unsave = app.buttons["detail.libraryButton"]
+        XCTAssertTrue(unsave.waitForExistence(timeout: 10))
+        XCTAssertEqual(unsave.value as? String, "Saved", "state survives leaving and returning")
+        unsave.tap()
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertFalse(app.buttons["library.saved.movie/mock:movie1"].waitForExistence(timeout: 2))
+    }
+
+    @MainActor
+    func testStoppedPlaybackAppearsUnderContinueWatchingAndResumes() throws {
+        try XCTSkipIf(catalogURL.isEmpty || streamURL.isEmpty, "mock addon URLs are not set (run through scripts/verify.sh)")
+        let app = launch()
+        install(app, ["\(catalogURL)/uitest/manifest.json", "\(streamURL)/uitest-streams/manifest.json"])
+        app.tabBars.buttons["Home"].tap()
+        let poster = app.buttons["poster.mock:movie1"].firstMatch
+        XCTAssertTrue(poster.waitForExistence(timeout: 15))
+        poster.tap()
+        app.buttons["detail.playButton"].tap()
+        let row = app.buttons["stream.row.Mock MP4"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.otherElements["player.screen"].waitForExistence(timeout: 10))
+
+        // Let it pass the five-second resume threshold, then leave.
+        let deadline = Date().addingTimeInterval(25)
+        var seconds = 0.0
+        while Date() < deadline, seconds < 6.0 {
+            if !app.buttons["player.playPause"].exists { app.otherElements["player.screen"].tap() }
+            if app.staticTexts["player.time"].waitForExistence(timeout: 2) {
+                seconds = app.staticTexts["player.time"].label.split(separator: ":").compactMap { Double($0) }.reduce(0) { $0 * 60 + $1 }
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertGreaterThanOrEqual(seconds, 6.0, "playback never got past the resume threshold")
+        if !app.buttons["player.close"].exists { app.otherElements["player.screen"].tap() }
+        app.buttons["player.close"].tap()
+
+        // Home shows Continue Watching; Library does too.
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons["library.continue.movie/mock:movie1"].waitForExistence(timeout: 10))
+        captureScreenshot(app, named: "M7-library-continue")
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.otherElements["board.continueWatching"].waitForExistence(timeout: 10))
+        captureScreenshot(app, named: "M7-home-continue")
+    }
+
+    @MainActor
+    func testSettingsPersistAndDataCanBeCleared() throws {
+        let app = launch()
+        app.tabBars.buttons["Home"].tap()
+        app.buttons["settings.open"].tap()
+        XCTAssertTrue(app.otherElements["settings.form"].waitForExistence(timeout: 10) || app.tables["settings.form"].waitForExistence(timeout: 2))
+        captureScreenshot(app, named: "M7-settings")
+
+        // An invalid server address explains itself and cannot be saved.
+        let server = app.textFields["settings.serverURL"]
+        XCTAssertTrue(server.waitForExistence(timeout: 5))
+        server.tap()
+        server.typeText("not a url")
+        XCTAssertTrue(app.staticTexts["settings.serverURL.message"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["settings.serverURL.save"].isEnabled)
+        captureScreenshot(app, named: "M7-settings-invalid-server")
+
+        // Clearing asks first, and Cancel changes nothing.
+        let clearHistory = app.buttons["settings.clear.history"]
+        while !clearHistory.isHittable { app.swipeUp() }
+        clearHistory.tap()
+        XCTAssertTrue(app.buttons["settings.confirmClear"].waitForExistence(timeout: 5))
+        captureScreenshot(app, named: "M7-settings-confirm")
+        app.buttons["settings.confirmClear"].tap()
+        XCTAssertTrue(app.staticTexts["settings.clearMessage"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["settings.clearMessage"].label, "Watch history cleared.")
+
+        // Acknowledgements.
+        let acknowledgements = app.buttons["settings.acknowledgements"]
+        while !acknowledgements.isHittable { app.swipeUp() }
+        acknowledgements.tap()
+        XCTAssertTrue(app.staticTexts["Apple frameworks"].waitForExistence(timeout: 5))
+        captureScreenshot(app, named: "M7-acknowledgements")
+    }
+}

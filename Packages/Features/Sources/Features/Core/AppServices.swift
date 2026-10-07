@@ -14,13 +14,14 @@ public struct AppServices: Sendable {
     public let subtitles: SubtitleService
     public let settings: any SettingsStore
     public let progress: any ProgressStore
+    public let library: any LibraryStore
     public let makeEngine: EngineFactory
     /// True once a fallback engine (M6) is linked into the app.
     public let fallbackEngineLinked: Bool
 
     public init(registry: AddonRegistry, client: AddonClient, browse: BrowseService? = nil, streams: StreamService? = nil,
                 subtitles: SubtitleService? = nil, settings: (any SettingsStore)? = nil, progress: (any ProgressStore)? = nil,
-                makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false) {
+                library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -28,6 +29,7 @@ public struct AppServices: Sendable {
         self.subtitles = subtitles ?? SubtitleService(registry: registry, client: client)
         self.settings = settings ?? InMemorySettingsStore()
         self.progress = progress ?? InMemoryProgressStore()
+        self.library = library ?? InMemoryLibraryStore()
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
     }

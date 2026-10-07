@@ -1,0 +1,163 @@
+#if canImport(SwiftData)
+import Foundation
+import PlayerKit
+import StremioKit
+import SwiftData
+
+public enum PersistenceContainer {
+    /// The app's container at the current schema (V2), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
+    /// at `url` (default: SwiftData's default location).
+    public static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
+        let schema = Schema(versionedSchema: BlusionSchemaV2.self)
+        let configuration: ModelConfiguration
+        if inMemory {
+            configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
+        } else if let url {
+            configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        } else {
+            configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+        }
+        return try ModelContainer(for: schema, migrationPlan: BlusionMigrationPlan.self, configurations: [configuration])
+    }
+}
+
+/// `AddonStore` backed by SwiftData. The context is confined to this actor.
+public actor SwiftDataAddonStore: AddonStore {
+    private let context: ModelContext
+
+    public init(container: ModelContainer) {
+        self.context = ModelContext(container)
+    }
+
+    public func loadAll() async throws -> [AddonRecord] {
+        let entities = try context.fetch(FetchDescriptor<AddonEntity>(sortBy: [SortDescriptor(\.order)]))
+        return entities.map { AddonRecord(id: $0.id, manifestData: $0.manifestData, isEnabled: $0.isEnabled, order: $0.order, installedAt: $0.installedAt) }
+    }
+
+    public func save(_ records: [AddonRecord]) async throws {
+        let existing = try context.fetch(FetchDescriptor<AddonEntity>())
+        var byID: [UUID: AddonEntity] = [:]
+        for entity in existing { byID[entity.id] = entity }
+        let wanted = Set(records.map(\.id))
+        for entity in existing where !wanted.contains(entity.id) { context.delete(entity) }
+        for record in records {
+            if let entity = byID[record.id] {
+                entity.manifestData = record.manifestData
+                entity.isEnabled = record.isEnabled
+                entity.order = record.order
+                entity.installedAt = record.installedAt
+            } else {
+                context.insert(AddonEntity(id: record.id, manifestData: record.manifestData, isEnabled: record.isEnabled,
+                                           order: record.order, installedAt: record.installedAt))
+            }
+        }
+        try context.save()
+    }
+}
+
+/// `ProgressStore` backed by SwiftData.
+public actor SwiftDataProgressStore: ProgressStore {
+    private let context: ModelContext
+
+    public init(container: ModelContainer) {
+        self.context = ModelContext(container)
+    }
+
+    private func fetch(_ identity: String) -> WatchProgressEntity? {
+        var descriptor = FetchDescriptor<WatchProgressEntity>(predicate: #Predicate { $0.id == identity })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private static func progress(from entity: WatchProgressEntity) -> WatchProgress {
+        WatchProgress(id: entity.id, type: entity.type, contentID: entity.contentID, title: entity.title,
+                      poster: entity.posterURLString.flatMap(URL.init(string:)), position: entity.position, duration: entity.duration,
+                      isWatched: entity.isWatched, updatedAt: entity.updatedAt, season: entity.season, episode: entity.episode)
+    }
+
+    public func progress(for identity: String) async -> WatchProgress? {
+        fetch(identity).map(Self.progress(from:))
+    }
+
+    public func save(_ progress: WatchProgress) async {
+        if let entity = fetch(progress.id) {
+            entity.type = progress.type
+            entity.contentID = progress.contentID
+            entity.title = progress.title
+            entity.posterURLString = progress.poster?.absoluteString
+            entity.position = progress.position
+            entity.duration = progress.duration
+            entity.isWatched = progress.isWatched
+            entity.updatedAt = progress.updatedAt
+            entity.season = progress.season
+            entity.episode = progress.episode
+        } else {
+            context.insert(WatchProgressEntity(id: progress.id, type: progress.type, contentID: progress.contentID, title: progress.title,
+                                               posterURLString: progress.poster?.absoluteString, position: progress.position, duration: progress.duration,
+                                               isWatched: progress.isWatched, updatedAt: progress.updatedAt, season: progress.season, episode: progress.episode))
+        }
+        try? context.save()
+    }
+
+    public func all() async -> [WatchProgress] {
+        let entities = (try? context.fetch(FetchDescriptor<WatchProgressEntity>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]))) ?? []
+        return entities.map(Self.progress(from:))
+    }
+
+    public func remove(_ identity: String) async {
+        if let entity = fetch(identity) {
+            context.delete(entity)
+            try? context.save()
+        }
+    }
+
+    public func clear() async {
+        try? context.delete(model: WatchProgressEntity.self)
+        try? context.save()
+    }
+}
+
+/// `LibraryStore` backed by SwiftData.
+public actor SwiftDataLibraryStore: LibraryStore {
+    private let context: ModelContext
+
+    public init(container: ModelContainer) {
+        self.context = ModelContext(container)
+    }
+
+    private func fetch(_ id: String) -> LibraryEntity? {
+        var descriptor = FetchDescriptor<LibraryEntity>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    public func all() async -> [LibraryItem] {
+        let entities = (try? context.fetch(FetchDescriptor<LibraryEntity>(sortBy: [SortDescriptor(\.addedAt, order: .reverse)]))) ?? []
+        return entities.map {
+            LibraryItem(id: $0.id, type: $0.type, contentID: $0.contentID, name: $0.name, poster: $0.posterURLString.flatMap(URL.init(string:)),
+                        releaseInfo: $0.releaseInfo, addedAt: $0.addedAt)
+        }
+    }
+
+    public func contains(_ id: String) async -> Bool { fetch(id) != nil }
+
+    public func add(_ item: LibraryItem) async {
+        guard fetch(item.id) == nil else { return }
+        context.insert(LibraryEntity(id: item.id, type: item.type, contentID: item.contentID, name: item.name,
+                                     posterURLString: item.poster?.absoluteString, releaseInfo: item.releaseInfo, addedAt: item.addedAt))
+        try? context.save()
+    }
+
+    public func remove(_ id: String) async {
+        if let entity = fetch(id) {
+            context.delete(entity)
+            try? context.save()
+        }
+    }
+
+    public func clear() async {
+        try? context.delete(model: LibraryEntity.self)
+        try? context.save()
+    }
+}
+#endif

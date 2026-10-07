@@ -18,6 +18,11 @@ public enum LanguageCodes {
         ("slv", "sl", "Slovenian", ["slovenian"]), ("cat", "ca", "Catalan", ["catalan"]), ("per", "fa", "Persian", ["fas", "persian", "farsi"]),
     ]
 
+    /// Every language we can name, alphabetically, for pickers.
+    public static var all: [(code: String, name: String)] {
+        table.map { ($0.iso2, $0.name) }.sorted { $0.1 < $1.1 }
+    }
+
     /// Canonical ISO 639-2/B code, or the lower-cased input when unknown.
     public static func normalise(_ raw: String) -> String {
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PlayerKit
 import StremioKit
 
 /// Board: one row per browsable catalog of the user's addons, each filling in as its addon answers.
@@ -21,6 +22,8 @@ public final class BoardViewModel {
         case ready
     }
 
+    /// In-progress titles, newest first. Shown above the addon rows once at least one addon exists.
+    public private(set) var continueWatching: [WatchProgress] = []
     public private(set) var rows: [Row] = []
     public private(set) var phase: Phase = .loading
 
@@ -33,13 +36,20 @@ public final class BoardViewModel {
         self.services = services
     }
 
+    /// Cheap refresh for when the Home tab reappears (after watching something): only Continue Watching changes.
+    public func refreshContinueWatching() async {
+        continueWatching = LibraryViewModel.continueWatching(from: await services.progress.all())
+    }
+
     /// Rebuilds the rows from the registry and loads each one concurrently.
     public func load() async {
         generation += 1
         let current = generation
         let addons = await services.registry.addons
         let sources = await services.browse.catalogSources()
+        let inProgress = LibraryViewModel.continueWatching(from: await services.progress.all())
         guard current == generation else { return }
+        continueWatching = inProgress
         if addons.isEmpty {
             rows = []
             phase = .noAddons

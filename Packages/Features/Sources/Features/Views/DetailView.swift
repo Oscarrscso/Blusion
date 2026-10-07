@@ -20,6 +20,7 @@ struct DetailView: View {
                         .accessibilityIdentifier("detail.fallbackNote")
                 }
                 playSection
+                libraryButtons
                 if let description = model.detail.preview.description {
                     Text(description).font(.body).fixedSize(horizontal: false, vertical: true)
                 }
@@ -30,6 +31,7 @@ struct DetailView: View {
         .navigationTitle(model.detail.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
+        .onAppear { Task { await model.refreshUserState() } }
         .accessibilityIdentifier("detail.scroll")
     }
 
@@ -68,6 +70,33 @@ struct DetailView: View {
         }
     }
 
+    private var libraryButtons: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task { await model.toggleLibrary() }
+            } label: {
+                Label(model.isInLibrary ? "Saved" : "Save to Library", systemImage: model.isInLibrary ? "bookmark.fill" : "bookmark")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("detail.libraryButton")
+            .accessibilityValue(model.isInLibrary ? "Saved" : "Not saved")
+            if !model.isSeries {
+                let request = model.movieRequest
+                let watched = model.isWatched(request)
+                Button {
+                    Task { await model.setWatched(!watched, for: request) }
+                } label: {
+                    Label(watched ? "Watched" : "Mark Watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("detail.watchedButton")
+                .accessibilityValue(watched ? "Watched" : "Not watched")
+            }
+        }
+    }
+
     @ViewBuilder
     private var seriesSection: some View {
         if model.seasons.count > 1 {
@@ -83,7 +112,17 @@ struct DetailView: View {
                     Text("\(video.episode.map(String.init) ?? "•")").font(.headline).frame(minWidth: 28)
                     Text(video.title).multilineTextAlignment(.leading)
                     Spacer()
+                    if model.isWatched(model.request(for: video)) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Watched")
+                    }
                     Image(systemName: "play.circle")
+                }
+            }
+            .contextMenu {
+                let request = model.request(for: video)
+                let watched = model.isWatched(request)
+                Button(watched ? "Mark as not watched" : "Mark as watched", systemImage: watched ? "xmark.circle" : "checkmark.circle") {
+                    Task { await model.setWatched(!watched, for: request) }
                 }
             }
             .accessibilityIdentifier("detail.episode.\(video.id)")

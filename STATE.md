@@ -47,7 +47,12 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M6.2 FallbackBackend protocol, FallbackEngine (event -> state mapping), MockBackend, routing through the coordinator | accept: swift test --filter FallbackEngineTests
     - [d] M6.3 MPVBackend glue (opt-in package, UNVERIFIED), overlay spec, enable script, spec checker incl. GPL guard | accept: swiftc -parse, scripts/check-project-spec.py; Mac build
     - [d] M6.4 MKV (AC3) and MKV (DTS) UI tests, size report, licenses.md | accept: Mac: FALLBACK=1 verify.sh milestone; scripts/size-report.sh; human license sign-off
-  - [ ] M7 Library and settings | composite
+  - [d] M7 Library and settings | accept: swift test (Features PrivacyTests), macOS CI LibrarySettingsFlowTests | tries 0
+    - [x] M7.1 LibraryStore + SettingsStore persistence (Defaults + Keychain), validation, LanguageCodes.all | accept: swift test --filter LibraryAndSettingsTests
+    - [d] M7.2 SwiftData schema V2 (library entity) + lightweight migration V1 to V2, Swift Data progress/library stores | accept: StoreContractTests on host; SwiftDataStoreTests on macOS CI
+    - [x] M7.3 View models: Library, Settings, DataResetService, Detail library/watched, Home continue-watching, acknowledgements | accept: swift test --package-path Packages/Features
+    - [x] M7.4 Privacy acceptance: a whole session leaves the mock token out of every log line and every store except the secret store | accept: swift test --filter PrivacyTests
+    - [d] M7.5 SwiftUI Library/Settings/Acknowledgements, Library tab + settings sheet, Home row, Detail buttons, persistent wiring, UI tests | accept: swiftc -parse + macOS CI
   - [ ] M8 Hardening and release | composite
 
 ## Handoff notes
@@ -83,3 +88,9 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   AnyObject inside #expect crashed swift 6.3.3 ("Invalid conformance"); hoist such expressions out of the macro.
   Size delta: UNMEASURED (needs a Mac). Licensing: docs/licenses.md, human sign-off open.
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.
+- M7 host part done: StremioKit LibraryStore/DefaultsSettingsStore, Features 84 tests incl. PrivacyTests. Persistence gains schema V2
+  (LibraryEntity) with a lightweight migration, SwiftData progress/library stores; the app now persists progress, library and settings
+  (UI tests stay in memory with a throwaway UserDefaults suite). Settings open as a sheet from the gear on Home, Library and Addons.
+  Privacy rule enforced by test: progress/library keep poster URLs an addon published but never an addon endpoint or token.
+  Swift Testing gotcha again: `await` on the right of `&&` inside #expect does not compile; hoist the awaited value into a let.
+  Unverified until a Mac: swipe actions + confirmation dialog in UI, SwiftData V1 to V2 migration at runtime.

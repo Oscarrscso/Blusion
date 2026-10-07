@@ -15,7 +15,14 @@ let package = Package(
     ],
     targets: [
         .target(name: "Persistence", dependencies: ["StremioKit", "PlayerKit"]),
-        .testTarget(name: "PersistenceTests", dependencies: ["Persistence"]),
+        .testTarget(
+            name: "PersistenceTests",
+            dependencies: [
+                "Persistence",
+                .product(name: "StremioKit", package: "StremioKit"),
+                .product(name: "PlayerKit", package: "PlayerKit"),
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

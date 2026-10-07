@@ -24,6 +24,17 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
         return url
     }
 
+    /// Why `streamingServerURL` can't be used, or nil when it is empty or fine. Shown in Settings as the user types.
+    public static func validationMessage(forServerURL text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(), url.host != nil else {
+            return "Enter a full address such as http://192.168.1.10:11470"
+        }
+        guard scheme == "http" || scheme == "https" else { return "The address must start with http:// or https://" }
+        return nil
+    }
+
     public var rankingPreferences: RankingPreferences { RankingPreferences(preferredResolution: preferredResolution) }
 
     public func policy(fallbackEngineLinked: Bool) -> PolicyConfiguration {
