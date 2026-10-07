@@ -45,3 +45,15 @@ Concrete choices:
 - A macOS CI failure costs one push round-trip. To keep that cheap, Apple-only code is kept thin and view logic lives in tested view models.
 - The Definition of Done item "verify.sh milestone green on a clean checkout" is demonstrated by the macOS CI run on the final commit;
   the CI run URL is recorded in the Changelog.
+
+## Amendment 1 (2026-10-07): GitHub write access was denied (BLOCKERS B-002)
+
+The macOS CI layer above could not be exercised: the Claude GitHub App has no write access to the repository, so nothing could be pushed
+and no workflow could run. What this changes in practice:
+
+- The workflow in `.github/workflows/ci.yml` is complete and committed, but **unproven**. The first macOS run is the first time
+  `xcodegen`, `xcodebuild`, SwiftLint, SwiftData, Keychain, SwiftUI and AVFoundation code is compiled by anything.
+- Apple-only sources are therefore `[d]`, never `[x]`. They are checked on the host only with `swiftc -parse` (syntax) by `verify.sh`,
+  and are kept thin: logic lives in view models and packages that are compiled and tested on Linux.
+- Expect a short list of compile fixes on the first macOS run, most likely Swift 6 strict-concurrency diagnostics in Apple-only files.
+  `docs/MAC_FIRST_RUN.md` lists the exact commands and the files most likely to need attention.
