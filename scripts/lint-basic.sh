@@ -7,6 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 status=0
 while IFS= read -r f; do
+  [[ -f "$f" ]] || continue
   if grep -nE '[[:space:]]+$' "$f" >/dev/null; then echo "$f: trailing whitespace: $(grep -nE '[[:space:]]+$' "$f" | head -3 | cut -d: -f1 | tr '\n' ' ')"; status=1; fi
   if grep -nP '\t' "$f" >/dev/null; then echo "$f: tab character"; status=1; fi
   if [[ -s "$f" ]]; then

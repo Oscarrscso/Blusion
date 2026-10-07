@@ -13,7 +13,11 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M0.2 Mock addon, fixtures generator, node tests | accept: cd Tools/MockAddon && node --test test/server.test.js | tries 2
     - [x] M0.3 Four local packages, verify.sh, coverage.sh, lint-basic.sh | accept: ./scripts/verify.sh | tries 0
     - [d] M0.4 XcodeGen project, app skeleton, UI launch test, CI workflow | accept: macOS CI `verify.sh milestone` | tries 0
-  - [ ] M1 Protocol core (StremioKit) | composite
+  - [x] M1 Protocol core (StremioKit) | accept: ./scripts/coverage.sh StremioKit 90 | tries 1
+    - [x] M1.1 Lenient decoding helpers, redaction, logging | accept: swift test --filter LenientDecodingTests
+    - [x] M1.2 Models: manifest (routing, validation), meta, stream, subtitle, content id | accept: swift test --filter ManifestDecodingTests
+    - [x] M1.3 URL normaliser, request builder/parser | accept: swift test --filter URLNormaliseTests
+    - [x] M1.4 18 manifest + 11 response fixtures, mutation tests | accept: swift test --filter MutationTests
   - [ ] M2 Client and registry | composite
   - [ ] M3 Browse UI | composite
   - [ ] M4 Streams | composite
@@ -29,4 +33,7 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   other prefix segments are user tokens. Media from `make-fixtures.sh` (mp4, hls, mkv ac3, mkv dts, srt, vtt). 13 node tests green.
 - M0.3 done: Swift 6.3.3 at /opt/swift (symlinked in /usr/local/bin). verify.sh on Linux prints SKIPPED for xcodegen/xcodebuild and
   `milestone` fails without Xcode unless ALLOW_HOST_ONLY=1. Packages build with `-Xswiftc -warnings-as-errors`.
+- M1 done: 80 tests, 98.56% line coverage (scripts/coverage.sh). Public API: ResponseDecoder.{manifest,catalog,meta,streams,subtitles},
+  AddonURLNormaliser.normalise -> AddonLocation, AddonRequestBuilder.url/parse, Manifest.supports/validate, Redactor, AddonLogger/MemoryLogSink.
+  Decisions: query strings in addon URLs are rejected; empty idPrefixes = no restriction; manifest without any types accepts all types.
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.

@@ -62,6 +62,17 @@ for pkg in "${PACKAGES[@]}"; do
 done
 SUMMARY+=("swift:${#PACKAGES[@]}pkgs")
 
+# Apple-only sources (app target, app tests) cannot be compiled without Xcode. Parse them so syntax errors are caught on every host.
+# Apple-only code inside packages sits behind #if canImport(...) and is parsed by the package builds above.
+log "1b/6 syntax check (Apple-only app sources)"
+APPLE_SRC=()
+while IFS= read -r f; do [[ -f "$f" ]] && APPLE_SRC+=("$f"); done < <(git ls-files -co --exclude-standard -- 'App/*.swift' 'Tests/BlusionTests/*.swift' 'Tests/BlusionUITests/*.swift')
+if [[ ${#APPLE_SRC[@]} -gt 0 ]]; then
+  swiftc -parse "${APPLE_SRC[@]}" || fail "swiftc -parse (app sources)"
+  echo "parsed ${#APPLE_SRC[@]} files"
+  SUMMARY+=("parse:${#APPLE_SRC[@]}files")
+fi
+
 # ---- 2. mock addon ------------------------------------------------------------
 log "2/6 mock addon"
 command -v node >/dev/null 2>&1 || fail "node missing (need Node 18+)"
