@@ -15,6 +15,7 @@
 # Environment:
 #   ALLOW_HOST_ONLY=1   let `milestone` pass on a host without Xcode (host layer only; never claims a full green)
 #   SHOT=<node id>      after the app tests, save shots/<id>.png from the booted simulator
+#   FALLBACK=1          build with the opt-in fallback engine (MPVKit, ADR-006) and run the MKV UI tests
 #   CATALOG_PORT / STREAM_PORT   mock ports (default 7001 / 7002)
 set -uo pipefail
 
@@ -64,7 +65,8 @@ SUMMARY+=("swift:${#PACKAGES[@]}pkgs")
 
 # Apple-only sources (app target, app tests) cannot be compiled without Xcode. Parse them so syntax errors are caught on every host.
 # Apple-only code inside packages sits behind #if canImport(...) and is parsed by the package builds above.
-log "1b/6 syntax check (Apple-only app sources)"
+log "1b/6 project spec + syntax check (Apple-only app sources)"
+python3 scripts/check-project-spec.py || fail "project spec check"
 APPLE_SRC=()
 while IFS= read -r f; do [[ -f "$f" ]] && APPLE_SRC+=("$f"); done < <(git ls-files -co --exclude-standard -- 'App/*.swift' 'Tests/BlusionTests/*.swift' 'Tests/BlusionUITests/*.swift')
 if [[ ${#APPLE_SRC[@]} -gt 0 ]]; then
@@ -106,8 +108,13 @@ SUMMARY+=("mock:up")
 if [[ "$HAS_XCODE" == 1 ]]; then
   log "3/6 xcodegen"
   command -v xcodegen >/dev/null 2>&1 || fail "xcodegen missing (brew install xcodegen)"
-  xcodegen generate --quiet || fail "xcodegen generate"
-  SUMMARY+=("xcodegen")
+  SPEC="project.yml"
+  if [[ -n "${FALLBACK:-}" ]]; then
+    ./scripts/enable-fallback.sh --generate-only || fail "enable-fallback"
+    SPEC="project.fallback.generated.yml"
+  fi
+  xcodegen generate --spec "$SPEC" --quiet || fail "xcodegen generate ($SPEC)"
+  SUMMARY+=("xcodegen${FALLBACK:+:fallback}")
 
   log "4/6 xcodebuild test"
   # Newest iOS runtime, first iPhone on it. Never hardcode a device name.
@@ -134,6 +141,7 @@ print(pick["udid"])
   TEST_RUNNER_UITEST_SHOT_DIR="$ROOT/shots" \
   TEST_RUNNER_MOCK_ADDON_CATALOG_URL="$MOCK_ADDON_CATALOG_URL" \
   TEST_RUNNER_MOCK_ADDON_STREAM_URL="$MOCK_ADDON_STREAM_URL" \
+  TEST_RUNNER_BLUSION_FALLBACK="${FALLBACK:-}" \
   xcodebuild test \
     -project Blusion.xcodeproj -scheme Blusion \
     -destination "platform=iOS Simulator,id=$UDID" \

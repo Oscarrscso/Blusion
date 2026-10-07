@@ -1,6 +1,8 @@
 name: Blusion
 
 # Source of truth for the Xcode project. Never hand-edit or commit *.xcodeproj (PLAN §1).
+# Lines starting with `#fallback# ` are the opt-in fallback engine (ADR-006). scripts/enable-fallback.sh strips that marker into
+# project.fallback.generated.yml; the default build never sees the third-party player.
 # Bundle id and signing team are placeholders for the human to change before release (docs/RELEASE.md).
 options:
   bundleIdPrefix: app.blusion
@@ -30,6 +32,8 @@ packages:
     path: Packages/Persistence
   Features:
     path: Packages/Features
+  #fallback# FallbackPlayer:
+  #fallback#   path: Packages/FallbackPlayer
 
 targets:
   Blusion:
@@ -42,6 +46,7 @@ targets:
       - package: PlayerKit
       - package: Persistence
       - package: Features
+      #fallback# - package: FallbackPlayer
     info:
       path: App/Info.plist
       properties:
@@ -75,6 +80,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
+        #fallback# OTHER_SWIFT_FLAGS: "$(inherited) -DBLUSION_FALLBACK_ENGINE"
 
   BlusionTests:
     type: bundle.unit-test

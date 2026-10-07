@@ -12,6 +12,19 @@ final class PlayerLayerView: UIView {
         guard let layer = layer as? AVPlayerLayer else { preconditionFailure("layerClass is AVPlayerLayer") }
         return layer
     }
+
+    private weak var embedded: UIView?
+
+    /// Hosts the view a fallback engine renders into (nil removes it).
+    func embed(_ surface: UIView?) {
+        guard surface !== embedded else { return }
+        embedded?.removeFromSuperview()
+        embedded = surface
+        guard let surface else { return }
+        surface.frame = bounds
+        surface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(surface)
+    }
 }
 
 /// Picture in Picture for the AVPlayer engine. It starts only from `toggle()`, which only the PiP button calls (ADR-005: App Review rejects
@@ -58,12 +71,17 @@ struct PlayerSurface: UIViewRepresentable {
 
     func updateUIView(_ view: PlayerLayerView, context: Context) {
         if let avEngine = engine as? AVEngine {
+            view.embed(nil)
             if view.playerLayer.player !== avEngine.player {
                 view.playerLayer.player = avEngine.player
                 pip.attach(to: view.playerLayer)
             }
+        } else if let provider = engine as? any VideoSurfaceProviding, let surface = provider.videoSurface as? UIView {
+            view.playerLayer.player = nil
+            view.embed(surface)
         } else {
             view.playerLayer.player = nil
+            view.embed(nil)
         }
     }
 }

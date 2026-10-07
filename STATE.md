@@ -42,7 +42,11 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M5.5 Header route logic (custom scheme, HLS rewrite, ranges) | accept: swift test --filter HeaderLoaderSupportTests
     - [d] M5.6 AVEngine, HeaderResourceLoader (ADR-005 B), NowPlayingController, SwiftUI player, PiP proxy, AirPlay | accept: swiftc -parse + macOS CI
     - [d] M5.7 PiP, AirPlay, lock-screen, background audio, interruptions | accept: docs/DEVICE_CHECKLIST.md (device only)
-  - [ ] M6 Format coverage | composite
+  - [d] M6 Format coverage | accept: host tests for engine/routing; `FALLBACK=1 ./scripts/verify.sh milestone` on a Mac | tries 1
+    - [x] M6.1 Research + ADR-006 (MPVKit LGPL chosen; comparison with VLCKit, KSPlayer) | accept: docs/decisions/006-fallback-player.md
+    - [x] M6.2 FallbackBackend protocol, FallbackEngine (event -> state mapping), MockBackend, routing through the coordinator | accept: swift test --filter FallbackEngineTests
+    - [d] M6.3 MPVBackend glue (opt-in package, UNVERIFIED), overlay spec, enable script, spec checker incl. GPL guard | accept: swiftc -parse, scripts/check-project-spec.py; Mac build
+    - [d] M6.4 MKV (AC3) and MKV (DTS) UI tests, size report, licenses.md | accept: Mac: FALLBACK=1 verify.sh milestone; scripts/size-report.sh; human license sign-off
   - [ ] M7 Library and settings | composite
   - [ ] M8 Hardening and release | composite
 
@@ -74,4 +78,8 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   FOUND AND FIXED by tests: HLS rewriter did nothing on CRLF playlists ("\r\n" is one Character in Swift: normalise before splitting);
   `advance()` on the last candidate would have killed a working stream.
   Progress persistence is in-memory until M7 (SwiftData V2). Fallback engine factory returns nil until M6.
+- M6 host part done: PlayerKit 73 tests. DECISION: fallback engine is OPT-IN (FALLBACK=1 / scripts/enable-fallback.sh) because the MPVKit pin and libmpv calls
+  could not be compiled here; the default build has zero third-party code. Compiler crash avoided: `#expect(x is SomeProtocol)` / `a === b` on
+  AnyObject inside #expect crashed swift 6.3.3 ("Invalid conformance"); hoist such expressions out of the macro.
+  Size delta: UNMEASURED (needs a Mac). Licensing: docs/licenses.md, human sign-off open.
 - M0.4 written, awaiting macOS CI. If CI is red, read the job log via the GitHub MCP tools (get_job_logs) and fix project.yml / app skeleton.

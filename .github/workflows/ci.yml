@@ -61,3 +61,30 @@ jobs:
             .mock-addon.log
           if-no-files-found: ignore
           retention-days: 14
+
+  # Informational: the opt-in fallback engine (ADR-006, MPVKit). It cannot fail the build; it tells you whether the unverified
+  # MPVKit pin and MPVBackend glue work. Fix Packages/FallbackPlayer first if this job is red.
+  macos-fallback:
+    name: Opt-in fallback engine (informational)
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: brew install xcodegen swiftlint ffmpeg xcbeautify
+      - name: verify.sh milestone with the fallback engine
+        run: FALLBACK=1 ./scripts/verify.sh milestone
+      - name: Binary size delta
+        if: always()
+        run: ./scripts/size-report.sh
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-fallback
+          path: |
+            shots/
+            build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 14

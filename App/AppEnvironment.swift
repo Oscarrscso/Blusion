@@ -4,6 +4,9 @@ import SwiftData
 import StremioKit
 import Persistence
 import Features
+#if BLUSION_FALLBACK_ENGINE
+import FallbackPlayer
+#endif
 
 /// Builds the app's long-lived services once. UI tests (`BLUSION_UITEST=1`) get in-memory stores, so every test launch starts empty
 /// and nothing is written to the Keychain or disk.
@@ -38,13 +41,27 @@ final class AppEnvironment {
             }
         }
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
-        // AVPlayer for MP4/MOV/M4V/HLS. The fallback engine for MKV and friends arrives in M6.
+        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS and friends go to the fallback engine when it is built in (ADR-006, opt-in).
         let makeEngine: EngineFactory = { candidate in
             switch candidate.route {
-            case .native: return AVEngine()
-            default: return nil
+            case .native:
+                return AVEngine()
+            case .fallback:
+                #if BLUSION_FALLBACK_ENGINE
+                return FallbackEngine(backend: MPVBackend())
+                #else
+                return nil
+                #endif
+            default:
+                return nil
             }
         }
-        return AppEnvironment(services: AppServices(registry: registry, client: client, makeEngine: makeEngine), isUITesting: uiTesting)
+        #if BLUSION_FALLBACK_ENGINE
+        let fallbackLinked = true
+        #else
+        let fallbackLinked = false
+        #endif
+        let services = AppServices(registry: registry, client: client, makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked)
+        return AppEnvironment(services: services, isUITesting: uiTesting)
     }
 }
