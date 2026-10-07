@@ -73,7 +73,7 @@ final class LibrarySettingsFlowTests: XCTestCase {
     }
 
     @MainActor
-    func testStoppedPlaybackAppearsUnderContinueWatchingAndResumes() throws {
+    func testStoppedPlaybackAppearsUnderContinueWatching() throws {
         try XCTSkipIf(catalogURL.isEmpty || streamURL.isEmpty, "mock addon URLs are not set (run through scripts/verify.sh)")
         let app = launch()
         install(app, ["\(catalogURL)/uitest/manifest.json", "\(streamURL)/uitest-streams/manifest.json"])
@@ -87,17 +87,19 @@ final class LibrarySettingsFlowTests: XCTestCase {
         row.tap()
         XCTAssertTrue(app.otherElements["player.screen"].waitForExistence(timeout: 10))
 
-        // Let it pass the five-second resume threshold, then leave.
+        // Let it pass the five-second resume threshold, then pause (the clip is only 10 s: it must not finish and count as watched) and leave.
         let deadline = Date().addingTimeInterval(25)
         var seconds = 0.0
-        while Date() < deadline, seconds < 6.0 {
+        while Date() < deadline, seconds < 5.5 {
             if !app.buttons["player.playPause"].exists { app.otherElements["player.screen"].tap() }
             if app.staticTexts["player.time"].waitForExistence(timeout: 2) {
                 seconds = app.staticTexts["player.time"].label.split(separator: ":").compactMap { Double($0) }.reduce(0) { $0 * 60 + $1 }
             }
-            Thread.sleep(forTimeInterval: 0.5)
+            Thread.sleep(forTimeInterval: 0.25)
         }
-        XCTAssertGreaterThanOrEqual(seconds, 6.0, "playback never got past the resume threshold")
+        XCTAssertGreaterThanOrEqual(seconds, 5.5, "playback never got past the resume threshold")
+        if !app.buttons["player.playPause"].exists { app.otherElements["player.screen"].tap() }
+        app.buttons["player.playPause"].tap()
         if !app.buttons["player.close"].exists { app.otherElements["player.screen"].tap() }
         app.buttons["player.close"].tap()
 
