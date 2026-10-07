@@ -6,11 +6,13 @@ final class LaunchTests: XCTestCase {
     }
 
     @MainActor
-    func testAppLaunchesAndShowsRoot() {
+    func testAppLaunchesAndShowsTheTabs() {
         let app = XCUIApplication()
+        app.launchEnvironment["BLUSION_UITEST"] = "1"
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
-        XCTAssertTrue(app.staticTexts["Blusion"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Addons"].exists)
         captureScreenshot(app, named: "M0-launch")
     }
 }

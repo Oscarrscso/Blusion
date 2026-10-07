@@ -1,0 +1,174 @@
+#if canImport(SwiftUI)
+import SwiftUI
+import StremioKit
+#if canImport(UIKit)
+import UIKit
+#endif
+
+struct AddonsView: View {
+    @State private var model: AddonsViewModel
+
+    init(services: AppServices) {
+        _model = State(initialValue: AddonsViewModel(services: services))
+    }
+
+    var body: some View {
+        @Bindable var model = model
+        List {
+            installSection(model: $model.installText)
+            if model.addons.isEmpty {
+                emptySection
+            } else {
+                installedSection
+            }
+        }
+        .navigationTitle("Addons")
+        .toolbar {
+            if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton() } }
+        }
+        .navigationDestination(for: UUID.self) { id in
+            if let addon = model.addons.first(where: { $0.id == id }) {
+                AddonDetailView(model: model, addon: addon)
+            }
+        }
+        .task { await model.observe() }
+        .accessibilityIdentifier("addons.list")
+    }
+
+    private func installSection(model text: Binding<String>) -> some View {
+        Section {
+            TextField("https:// or stremio:// link", text: text)
+                .textContentType(.URL)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.go)
+                .onSubmit { Task { await model.install() } }
+                .accessibilityIdentifier("addons.installField")
+            HStack {
+                #if canImport(UIKit)
+                Button("Paste") { if let text = UIPasteboard.general.string { model.installText = text } }
+                    .accessibilityIdentifier("addons.pasteButton")
+                #endif
+                Spacer()
+                Button {
+                    Task { await model.install() }
+                } label: {
+                    if model.isInstalling { ProgressView() } else { Text("Install") }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!model.canInstall)
+                .accessibilityIdentifier("addons.installButton")
+            }
+            if let message = model.errorMessage {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("addons.error")
+            }
+            if let name = model.lastInstalledName {
+                Label("Installed \(name)", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityIdentifier("addons.success")
+            }
+        } header: {
+            Text("Add an addon")
+        } footer: {
+            Text("Links usually come from the addon's own page. They can contain a private token, so Blusion keeps them in the Keychain and never shows or logs them.")
+        }
+    }
+
+    private var emptySection: some View {
+        Section {
+            Text("Blusion doesn't include any addons. Paste a link above to add your first one.")
+                .accessibilityIdentifier("addons.emptyText")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Suggested: \(AddonsViewModel.suggestion.name)").font(.headline)
+                Text(AddonsViewModel.suggestion.detail).font(.footnote).foregroundStyle(.secondary)
+                Button("Install \(AddonsViewModel.suggestion.name)") { Task { await model.installSuggested() } }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("addons.installSuggested")
+            }
+        } header: {
+            Text("Nothing installed")
+        }
+    }
+
+    private var installedSection: some View {
+        Section {
+            ForEach(model.addons) { addon in
+                HStack {
+                    NavigationLink(value: addon.id) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(addon.name).font(.headline)
+                            Text("\(addon.manifest.version.isEmpty ? "" : "v\(addon.manifest.version) · ")\(addon.displayHost)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle("Enabled", isOn: Binding(get: { addon.isEnabled }, set: { value in Task { await model.setEnabled(value, id: addon.id) } }))
+                        .labelsHidden()
+                        .accessibilityLabel("\(addon.name) enabled")
+                        .accessibilityIdentifier("addons.toggle.\(addon.name)")
+                }
+                .accessibilityIdentifier("addons.row.\(addon.name)")
+                .swipeActions {
+                    Button(role: .destructive) { Task { await model.remove(id: addon.id) } } label: { Label("Remove", systemImage: "trash") }
+                }
+            }
+            .onMove { offsets, destination in Task { await model.move(fromOffsets: offsets, toOffset: destination) } }
+            .onDelete { offsets in
+                let ids = offsets.map { model.addons[$0].id }
+                Task { for id in ids { await model.remove(id: id) } }
+            }
+        } header: {
+            Text("Installed")
+        } footer: {
+            Text("Order matters: addons higher up supply rows and streams first.")
+        }
+    }
+}
+
+struct AddonDetailView: View {
+    let model: AddonsViewModel
+    let addon: InstalledAddon
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let details = model.details(for: addon)
+        List {
+            Section("About") {
+                LabeledContent("Name", value: details.name)
+                if !details.version.isEmpty { LabeledContent("Version", value: details.version) }
+                LabeledContent("Host", value: details.host)
+                if let description = details.description { Text(description).font(.footnote) }
+            }
+            if !details.warnings.isEmpty {
+                Section("Notes") { ForEach(details.warnings, id: \.self) { Label($0, systemImage: "info.circle") } }
+            }
+            Section("Provides") {
+                LabeledContent("Resources", value: details.resources.joined(separator: ", "))
+                if !details.types.isEmpty { LabeledContent("Types", value: details.types.joined(separator: ", ")) }
+                if !details.idPrefixes.isEmpty { LabeledContent("Id prefixes", value: details.idPrefixes.joined(separator: ", ")) }
+                ForEach(details.catalogs, id: \.self) { Text($0) }
+            }
+            Section("Manifest") {
+                Text(details.manifestJSON)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("addonDetail.manifest")
+            }
+            Section {
+                Button("Remove addon", role: .destructive) {
+                    Task {
+                        await model.remove(id: addon.id)
+                        dismiss()
+                    }
+                }
+                .accessibilityIdentifier("addonDetail.remove")
+            }
+        }
+        .navigationTitle(details.name)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+#endif

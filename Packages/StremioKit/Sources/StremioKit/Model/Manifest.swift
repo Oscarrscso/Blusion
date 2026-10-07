@@ -28,7 +28,7 @@ public struct ResourceDescriptor: Sendable, Equatable, Codable {
 }
 
 /// One entry of a catalog's `extra` array (`{ "name": "genre", "options": [...], "isRequired": true }`).
-public struct ExtraDescriptor: Sendable, Equatable, Codable {
+public struct ExtraDescriptor: Sendable, Equatable, Hashable, Codable {
     public var name: String
     public var isRequired: Bool
     public var options: [String]
@@ -53,7 +53,7 @@ public struct ExtraDescriptor: Sendable, Equatable, Codable {
     }
 }
 
-public struct CatalogDescriptor: Sendable, Equatable, Codable {
+public struct CatalogDescriptor: Sendable, Equatable, Hashable, Codable {
     public var type: String
     public var id: String
     public var name: String
@@ -100,6 +100,9 @@ public struct CatalogDescriptor: Sendable, Equatable, Codable {
     public func extra(named name: String) -> ExtraDescriptor? { extra.first { $0.name == name } }
 
     public var supportsSearch: Bool { extra(named: "search") != nil }
+
+    /// Usable for search: offers `search` and requires nothing else (a catalog that also requires `genre` can't be searched blind).
+    public var isSearchable: Bool { supportsSearch && requiredExtraNames.allSatisfy { $0 == "search" } }
     public var supportsSkip: Bool { extra(named: "skip") != nil }
     public var genreOptions: [String] { extra(named: "genre")?.options ?? [] }
     public var requiredExtraNames: [String] { extra.filter(\.isRequired).map(\.name) }
@@ -225,7 +228,7 @@ extension Manifest {
 
     public var searchableCatalogs: [CatalogDescriptor] {
         guard provides(.catalog) else { return [] }
-        return catalogs.filter(\.supportsSearch)
+        return catalogs.filter(\.isSearchable)
     }
 
     private func nonEmpty(_ values: [String]?) -> [String]? {

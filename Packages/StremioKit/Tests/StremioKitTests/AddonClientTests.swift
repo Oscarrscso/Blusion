@@ -4,6 +4,7 @@ import Testing
 import FoundationNetworking
 #endif
 @testable import StremioKit
+import StremioKitTestSupport
 
 @Suite struct AddonClientTests {
     let url = URL(string: "https://addon.example.com/SECRET-TOKEN/catalog/movie/top.json")!

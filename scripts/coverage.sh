@@ -23,9 +23,9 @@ LLVM_COV=(llvm-cov); command -v llvm-cov >/dev/null 2>&1 || LLVM_COV=(xcrun llvm
 
 # Sources only: exclude tests and checkouts.
 "${LLVM_COV[@]}" report "$BIN" -instr-profile "$PROFDATA" \
-  -ignore-filename-regex='(\.build|Tests|/usr/)' | tee "$ROOT/coverage-$PKG.txt" | tail -n 40
+  -ignore-filename-regex='(\.build|Tests|StremioKitTestSupport|/usr/)' | tee "$ROOT/coverage-$PKG.txt" | tail -n 40
 
 PCT="$("${LLVM_COV[@]}" export "$BIN" -instr-profile "$PROFDATA" -summary-only \
-  -ignore-filename-regex='(\.build|Tests|/usr/)' | python3 -c 'import json,sys; d=json.load(sys.stdin); print("%.2f" % d["data"][0]["totals"]["lines"]["percent"])')"
+  -ignore-filename-regex='(\.build|Tests|StremioKitTestSupport|/usr/)' | python3 -c 'import json,sys; d=json.load(sys.stdin); print("%.2f" % d["data"][0]["totals"]["lines"]["percent"])')"
 echo "coverage: $PKG lines = ${PCT}% (threshold ${THRESHOLD}%)"
 python3 -c "import sys; sys.exit(0 if float('$PCT') >= float('$THRESHOLD') else 1)" || { echo "coverage below threshold" >&2; exit 1; }

@@ -1,15 +1,20 @@
 import Foundation
-@testable import StremioKit
+import StremioKit
+
+#if os(macOS) || os(Linux)
 
 /// Gives tests a running mock addon. Uses the one `verify.sh` started (MOCK_ADDON_CATALOG_URL / MOCK_ADDON_STREAM_URL) when present,
 /// otherwise spawns `node Tools/MockAddon/server.js` on free ports and lets it die with the test process (`--watch-stdin`).
-final class MockServer: @unchecked Sendable {
-    struct LaunchError: Error, CustomStringConvertible { let description: String }
+public final class MockServer: @unchecked Sendable {
+    public struct LaunchError: Error, CustomStringConvertible {
+        public let description: String
+        public init(description: String) { self.description = description }
+    }
 
-    let catalog: URL
-    let stream: URL
+    public let catalog: URL
+    public let stream: URL
     /// How long `flag-slow` takes on this server.
-    let slowDelay: TimeInterval
+    public let slowDelay: TimeInterval
     private let process: Process?
     private let stdin: Pipe?
 
@@ -24,7 +29,7 @@ final class MockServer: @unchecked Sendable {
         self.stdin = stdin
     }
 
-    static func shared() throws -> MockServer {
+    public static func shared() throws -> MockServer {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }
@@ -40,9 +45,9 @@ final class MockServer: @unchecked Sendable {
             return MockServer(catalog: catalog, stream: stream, slowDelay: delay, process: nil, stdin: nil)
         }
 
-        // …/Packages/StremioKit/Tests/StremioKitTests/Support/MockServer.swift -> repo root is five levels up.
+        // …/Packages/StremioKit/Sources/StremioKitTestSupport/MockServer.swift -> the repo root is five path components up.
         var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<6 { root.deleteLastPathComponent() }
+        for _ in 0..<5 { root.deleteLastPathComponent() }
         let script = root.appendingPathComponent("Tools/MockAddon/server.js")
         guard FileManager.default.fileExists(atPath: script.path) else { throw LaunchError(description: "mock server script not found at \(script.path)") }
 
@@ -73,15 +78,15 @@ final class MockServer: @unchecked Sendable {
     }
 
     /// `<origin>/flag-a/flag-b/<token>`; flags switch on misbehaviour, the token stands in for a user secret.
-    func catalogBase(flags: [String] = [], token: String? = nil) -> URL { url(catalog, flags: flags, token: token) }
+    public func catalogBase(flags: [String] = [], token: String? = nil) -> URL { url(catalog, flags: flags, token: token) }
 
-    func streamBase(flags: [String] = [], token: String? = nil) -> URL { url(stream, flags: flags, token: token) }
+    public func streamBase(flags: [String] = [], token: String? = nil) -> URL { url(stream, flags: flags, token: token) }
 
-    func catalogManifestURL(flags: [String] = [], token: String? = nil) -> URL {
+    public func catalogManifestURL(flags: [String] = [], token: String? = nil) -> URL {
         catalogBase(flags: flags, token: token).appendingPathComponent("manifest.json")
     }
 
-    func streamManifestURL(flags: [String] = [], token: String? = nil) -> URL {
+    public func streamManifestURL(flags: [String] = [], token: String? = nil) -> URL {
         streamBase(flags: flags, token: token).appendingPathComponent("manifest.json")
     }
 
@@ -92,3 +97,4 @@ final class MockServer: @unchecked Sendable {
         return url
     }
 }
+#endif

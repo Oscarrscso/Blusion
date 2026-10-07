@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import StremioKit
+import StremioKitTestSupport
 
 /// PLAN M2 acceptance, against the local mock addon over real HTTP.
 @Suite struct MockIntegrationTests {

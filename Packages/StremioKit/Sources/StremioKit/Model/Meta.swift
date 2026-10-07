@@ -173,6 +173,20 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
     }
 
+    /// Fills fields the addon's `meta` left out with what the catalog preview already showed (so Detail never loses its poster).
+    public func filling(from preview: MetaPreview) -> MetaDetail {
+        var copy = self
+        copy.preview.poster = copy.preview.poster ?? preview.poster
+        copy.preview.background = copy.preview.background ?? preview.background
+        copy.preview.logo = copy.preview.logo ?? preview.logo
+        copy.preview.description = copy.preview.description ?? preview.description
+        copy.preview.releaseInfo = copy.preview.releaseInfo ?? preview.releaseInfo
+        copy.preview.imdbRating = copy.preview.imdbRating ?? preview.imdbRating
+        if copy.preview.genres.isEmpty { copy.preview.genres = preview.genres }
+        if copy.preview.type.isEmpty { copy.preview.type = preview.type }
+        return copy
+    }
+
     /// Detail built from a catalog preview when the addon's `meta` request fails.
     public static func fallback(from preview: MetaPreview) -> MetaDetail { MetaDetail(preview: preview) }
 }

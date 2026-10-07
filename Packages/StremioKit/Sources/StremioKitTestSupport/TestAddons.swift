@@ -1,9 +1,9 @@
 import Foundation
-@testable import StremioKit
+import StremioKit
 
-enum TestAddons {
+public enum TestAddons {
     /// An installed addon pointing at `base`; resources and catalogs mirror the mock's catalog addon.
-    static func catalogAddon(base: URL, name: String = "Mock Catalog", enabled: Bool = true) -> InstalledAddon {
+    public static func catalogAddon(base: URL, name: String = "Mock Catalog", enabled: Bool = true) -> InstalledAddon {
         let manifest = Manifest(
             id: "test.\(name)", name: name, version: "1.0.0",
             resources: [ResourceDescriptor(name: "catalog"), ResourceDescriptor(name: "meta")],
@@ -15,7 +15,7 @@ enum TestAddons {
         return InstalledAddon(manifestURL: base.appendingPathComponent("manifest.json"), baseURL: base, manifest: manifest, isEnabled: enabled)
     }
 
-    static func streamAddon(base: URL, name: String = "Mock Streams") -> InstalledAddon {
+    public static func streamAddon(base: URL, name: String = "Mock Streams") -> InstalledAddon {
         let manifest = Manifest(
             id: "test.\(name)", name: name, version: "1.0.0",
             resources: [ResourceDescriptor(name: "stream", types: ["movie", "series"], idPrefixes: ["mock:"]),
@@ -26,4 +26,21 @@ enum TestAddons {
 }
 
 /// Seconds since `start`, for ordering assertions.
-func elapsed(since start: Date) -> TimeInterval { Date().timeIntervalSince(start) }
+public func elapsed(since start: Date) -> TimeInterval { Date().timeIntervalSince(start) }
+
+/// A registry preloaded with hand-written manifests (no network needed to install), answered by `transport`.
+public func makeStubbedRegistry(manifests: [Manifest], transport: StubTransport, logger: AddonLogger = .silent) async throws -> (registry: AddonRegistry, client: AddonClient) {
+    let store = InMemoryAddonStore()
+    let secrets = InMemorySecretStore()
+    var records: [AddonRecord] = []
+    for (index, manifest) in manifests.enumerated() {
+        let id = UUID()
+        records.append(AddonRecord(id: id, manifestData: try JSONEncoder().encode(manifest), isEnabled: true, order: index, installedAt: Date()))
+        try await secrets.set("https://stub\(index).example.com/TOKEN/manifest.json", for: "addon.\(id.uuidString).manifestURL")
+    }
+    try await store.save(records)
+    let client = makeClient(transport, retries: 0, logger: logger)
+    let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
+    try await registry.load()
+    return (registry, client)
+}

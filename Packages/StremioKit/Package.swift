@@ -7,12 +7,15 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [
         .library(name: "StremioKit", targets: ["StremioKit"]),
+        // Mock addon launcher, stub transport and sample addons for test targets of this and other packages. Never linked into the app.
+        .library(name: "StremioKitTestSupport", targets: ["StremioKitTestSupport"]),
     ],
     targets: [
         .target(name: "StremioKit"),
+        .target(name: "StremioKitTestSupport", dependencies: ["StremioKit"]),
         .testTarget(
             name: "StremioKitTests",
-            dependencies: ["StremioKit"],
+            dependencies: ["StremioKit", "StremioKitTestSupport"],
             resources: [.copy("Fixtures")]
         ),
     ],

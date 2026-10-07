@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import StremioKit
+import StremioKitTestSupport
 
 private struct StoreFailure: Error {}
 
