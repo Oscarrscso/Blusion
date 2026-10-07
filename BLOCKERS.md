@@ -18,7 +18,7 @@ Entry format: node / tried / error / hypotheses / the one question / resolution.
      and listed in `docs/DEVICE_CHECKLIST.md`.
 - **Resolution:** routed; see ADR-002. Residual risk: code that only compiles on Apple platforms is verified one CI round-trip at a time.
 
-## B-002 · M0 · GitHub write access denied (git push 403, API "Resource not accessible by integration") — OPEN, needs the human
+## B-002 · M0 · GitHub write access denied (git push 403, API "Resource not accessible by integration") — DEFERRED to the human (only they can grant it)
 
 - **Node:** M0.4 (CI proof), and delivery of every milestone to `Oscarrscso/Blusion`.
 - **Tried:** `git push -u origin claude/blusion-github-e2e-sqx5r4` -> 403 "Claude doesn't have GitHub access to Oscarrscso/Blusion for your organization".
@@ -31,3 +31,7 @@ Entry format: node / tried / error / hypotheses / the one question / resolution.
   `git push -u origin claude/blusion-github-e2e-sqx5r4` from this session's checkout, or start a new session with the repo selected.
 - **Route taken meanwhile:** all work is committed locally on the designated branch with `<id>: <title>` commits; the push is retried at the end of the run.
   Consequence for ADR-002: the macOS CI job is written but has NOT run. Apple-only code is `[d]` = written and syntax-checked (`swiftc -parse`), not compiled.
+- **Final retry (end of M8, 2026-10-07):** `git push -u origin claude/blusion-github-e2e-sqx5r4` -> the same 403. A permission denial is not a network error, so it was
+  attempted once, not looped. Deferred, not resolved: the fix is an owner installing or reconnecting the Claude GitHub App for `Oscarrscso/Blusion`
+  (links above). **All work is on the local branch `claude/blusion-github-e2e-sqx5r4` of the session checkout (commits M0 to M8); nothing is on GitHub yet.**
+  Once access exists: push that branch, let `.github/workflows/ci.yml` run, and use `docs/MAC_FIRST_RUN.md` for whatever the first macOS run reports.
