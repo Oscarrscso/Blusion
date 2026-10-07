@@ -1,24 +1,36 @@
-Filename                          Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-Client/AddonClient.swift               65                 2    96.92%          22                 0   100.00%         106                 1    99.06%           0                 0         -
-Client/AddonError.swift                26                 0   100.00%           5                 0   100.00%          30                 0   100.00%           0                 0         -
-Client/Deadline.swift                  10                 1    90.00%           4                 0   100.00%          27                 0   100.00%           0                 0         -
-Client/HTTPTransport.swift             97                10    89.69%          42                 4    90.48%         222                 8    96.40%           0                 0         -
-Model/AddonStream.swift                45                 2    95.56%          20                 2    90.00%          89                 2    97.75%           0                 0         -
-Model/ContentID.swift                  29                 1    96.55%          11                 1    90.91%          45                 1    97.78%           0                 0         -
-Model/Manifest.swift                  115                 3    97.39%          55                 1    98.18%         202                 3    98.51%           0                 0         -
-Model/Meta.swift                       71                 4    94.37%          31                 4    87.10%         139                 4    97.12%           0                 0         -
-Model/ResourceKind.swift                1                 0   100.00%           1                 0   100.00%           1                 0   100.00%           0                 0         -
-Model/Responses.swift                  28                 0   100.00%          11                 0   100.00%          45                 0   100.00%           0                 0         -
-Model/Subtitle.swift                    7                 0   100.00%           4                 0   100.00%          13                 0   100.00%           0                 0         -
-Registry/AddonRegistry.swift          108                 6    94.44%          41                 1    97.56%         168                 8    95.24%           0                 0         -
-Registry/InstalledAddon.swift          15                 4    73.33%           9                 1    88.89%          28                 1    96.43%           0                 0         -
-Registry/Stores.swift                  10                 0   100.00%          10                 0   100.00%          23                 0   100.00%           0                 0         -
-Resolve/FanOut.swift                   21                 1    95.24%          10                 0   100.00%          87                 1    98.85%           0                 0         -
-Support/LenientDecoding.swift         105                 5    95.24%          27                 0   100.00%         124                 0   100.00%           0                 0         -
-Support/Logging.swift                   9                 0   100.00%           7                 0   100.00%          20                 0   100.00%           0                 0         -
-Support/Redaction.swift                20                 2    90.00%          10                 1    90.00%          42                 1    97.62%           0                 0         -
-URL/AddonRequest.swift                 29                 3    89.66%          10                 2    80.00%          52                 2    96.15%           0                 0         -
-URL/AddonURL.swift                     75                 3    96.00%          16                 0   100.00%          99                 0   100.00%           0                 0         -
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-TOTAL                                 886                47    94.70%         346                17    95.09%        1562                32    97.95%           0                 0         -
+Filename                                 Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Client/AddonClient.swift                      65                 2    96.92%          22                 0   100.00%         106                 1    99.06%           0                 0         -
+Client/AddonError.swift                       26                 0   100.00%           5                 0   100.00%          30                 0   100.00%           0                 0         -
+Client/Deadline.swift                         10                 1    90.00%           4                 0   100.00%          27                 0   100.00%           0                 0         -
+Client/HTTPTransport.swift                    97                10    89.69%          42                 4    90.48%         222                 8    96.40%           0                 0         -
+Library/LibraryStore.swift                    16                 1    93.75%          12                 0   100.00%          28                 0   100.00%           0                 0         -
+Model/AddonStream.swift                       45                 2    95.56%          20                 2    90.00%          89                 2    97.75%           0                 0         -
+Model/ContentID.swift                         29                 1    96.55%          11                 1    90.91%          45                 1    97.78%           0                 0         -
+Model/Manifest.swift                         118                 3    97.46%          58                 1    98.28%         205                 3    98.54%           0                 0         -
+Model/Meta.swift                              91                 6    93.41%          42                 6    85.71%         168                 6    96.43%           0                 0         -
+Model/ResourceKind.swift                       1                 0   100.00%           1                 0   100.00%           1                 0   100.00%           0                 0         -
+Model/Responses.swift                         28                 0   100.00%          11                 0   100.00%          45                 0   100.00%           0                 0         -
+Model/Subtitle.swift                           7                 0   100.00%           4                 0   100.00%          13                 0   100.00%           0                 0         -
+Registry/AddonRegistry.swift                 108                 6    94.44%          41                 1    97.56%         168                 8    95.24%           0                 0         -
+Registry/InstalledAddon.swift                 15                 4    73.33%           9                 1    88.89%          28                 1    96.43%           0                 0         -
+Registry/Stores.swift                         10                 0   100.00%          10                 0   100.00%          23                 0   100.00%           0                 0         -
+Resolve/BrowseService.swift                   51                 3    94.12%          22                 2    90.91%         151                 2    98.68%           0                 0         -
+Resolve/FanOut.swift                          21                 1    95.24%          10                 0   100.00%          87                 1    98.85%           0                 0         -
+Settings/DefaultsSettingsStore.swift          14                 0   100.00%           4                 0   100.00%          31                 0   100.00%           0                 0         -
+Settings/PlaybackSettings.swift               19                 3    84.21%          11                 3    72.73%          32                 5    84.38%           0                 0         -
+Streams/MediaContainer.swift                 109                 9    91.74%          15                 0   100.00%         107                 0   100.00%           0                 0         -
+Streams/PlaybackPlan.swift                    14                14     0.00%          10                10     0.00%          41                41     0.00%           0                 0         -
+Streams/PlaybackPolicy.swift                  66                 1    98.48%          20                 0   100.00%          83                 0   100.00%           0                 0         -
+Streams/StreamListing.swift                   63                 4    93.65%          36                 4    88.89%         117                 4    96.58%           0                 0         -
+Streams/StreamQuality.swift                  104                 2    98.08%          29                 1    96.55%         136                 1    99.26%           0                 0         -
+Streams/StreamRanking.swift                   53                 2    96.23%          22                 1    95.45%          62                 1    98.39%           0                 0         -
+Streams/StreamRequest.swift                   12                 3    75.00%           6                 1    83.33%          27                 1    96.30%           0                 0         -
+Streams/StreamService.swift                   23                 0   100.00%          12                 0   100.00%         101                 0   100.00%           0                 0         -
+Support/LenientDecoding.swift                105                 5    95.24%          27                 0   100.00%         124                 0   100.00%           0                 0         -
+Support/Logging.swift                          9                 0   100.00%           7                 0   100.00%          20                 0   100.00%           0                 0         -
+Support/Redaction.swift                       20                 2    90.00%          10                 1    90.00%          42                 1    97.62%           0                 0         -
+URL/AddonRequest.swift                        29                 3    89.66%          10                 2    80.00%          52                 2    96.15%           0                 0         -
+URL/AddonURL.swift                            75                 3    96.00%          16                 0   100.00%          99                 0   100.00%           0                 0         -
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                                       1453                91    93.74%         559                41    92.67%        2510                89    96.45%           0                 0         -

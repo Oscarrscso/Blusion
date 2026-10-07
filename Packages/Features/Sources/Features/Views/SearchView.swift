@@ -13,7 +13,9 @@ struct SearchView: View {
         @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if !model.failures.isEmpty {
+                if model.isOffline {
+                    OfflineBanner()
+                } else if !model.failures.isEmpty {
                     WrappingStack {
                         ForEach(model.failures) { ErrorChip(text: $0.text) }
                     }

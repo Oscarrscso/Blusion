@@ -83,7 +83,59 @@ if os.path.isfile(fallback_manifest):
     if "MPVKit-GPL" in manifest_text or "-GPL" in manifest_text:
         errors.append("Packages/FallbackPlayer/Package.swift references a GPL product; only the LGPL build may be linked (docs/licenses.md)")
 
+def check_release_assets(info_properties):
+    """M8: privacy manifest, string catalogs and the app icon exist and say what the plan requires."""
+    import json
+    import plistlib
+    import struct
+
+    privacy_path = os.path.join(root, "App", "PrivacyInfo.xcprivacy")
+    try:
+        privacy = plistlib.load(open(privacy_path, "rb"))
+    except Exception as exc:  # noqa: BLE001 - any failure to read or parse is the finding
+        errors.append(f"App/PrivacyInfo.xcprivacy unreadable: {exc}")
+        privacy = {}
+    if privacy:
+        if privacy.get("NSPrivacyTracking") is not False:
+            errors.append("PrivacyInfo.xcprivacy: NSPrivacyTracking must be false")
+        if privacy.get("NSPrivacyTrackingDomains"):
+            errors.append("PrivacyInfo.xcprivacy: no tracking domains may be declared")
+        if privacy.get("NSPrivacyCollectedDataTypes"):
+            errors.append("PrivacyInfo.xcprivacy: the app collects no data; declare none")
+        declared = {item.get("NSPrivacyAccessedAPIType"): item.get("NSPrivacyAccessedAPITypeReasons", []) for item in privacy.get("NSPrivacyAccessedAPITypes", [])}
+        if not declared.get("NSPrivacyAccessedAPICategoryUserDefaults"):
+            errors.append("PrivacyInfo.xcprivacy: UserDefaults is used (settings) and needs a declared reason")
+
+    for name in ("Localizable.xcstrings", "InfoPlist.xcstrings"):
+        path = os.path.join(root, "App", name)
+        try:
+            catalog = json.load(open(path, encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"App/{name} unreadable: {exc}")
+            continue
+        if catalog.get("sourceLanguage") != "en" or "strings" not in catalog:
+            errors.append(f"App/{name}: must be a string catalog with sourceLanguage en")
+        if name == "InfoPlist.xcstrings":
+            for key in ("CFBundleDisplayName", "NSLocalNetworkUsageDescription"):
+                value = catalog.get("strings", {}).get(key, {}).get("localizations", {}).get("en", {}).get("stringUnit", {}).get("value")
+                if value != info_properties.get(key):
+                    errors.append(f"App/InfoPlist.xcstrings: {key} differs from project.yml ({value!r} vs {info_properties.get(key)!r})")
+
+    icon = os.path.join(root, "App", "Assets.xcassets", "AppIcon.appiconset", "AppIcon-1024.png")
+    try:
+        header = open(icon, "rb").read(33)
+        width, height, depth, color_type = struct.unpack(">IIBB", header[16:26])
+        if header[:8] != b"\x89PNG\r\n\x1a\n" or (width, height) != (1024, 1024):
+            errors.append("AppIcon-1024.png must be a 1024x1024 PNG")
+        if color_type in (4, 6):
+            errors.append("AppIcon-1024.png must not have an alpha channel (App Store rejects it)")
+    except OSError as exc:
+        errors.append(f"app icon missing: {exc}")
+
+
 text = open(os.path.join(root, "project.yml"), encoding="utf-8").read()
+_spec = load(text, "project.yml") or {}
+check_release_assets(_spec.get("targets", {}).get("Blusion", {}).get("info", {}).get("properties", {}))
 check(load(text, "project.yml"), "project.yml", fallback=False)
 check(load(text.replace("#fallback# ", ""), "fallback overlay"), "fallback overlay", fallback=True)
 

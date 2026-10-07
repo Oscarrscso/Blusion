@@ -7,8 +7,8 @@ Linux agent host with `./scripts/verify.sh`; everything that needs Xcode (app ta
 SwiftData, Keychain, AVFoundation) is verified by the `macos` job in `.github/workflows/ci.yml`
 on the same branch. `[d]` means "written, host-verified where possible, awaiting the macOS/device check".
 
-- [~] ROOT Blusion v1 | accept: ./scripts/verify.sh milestone | tries 0
-  - [~] M0 Bootstrap | composite
+- [d] ROOT Blusion v1 | accept: ./scripts/verify.sh milestone on a Mac (host layer is green; see handoff notes) | tries 0
+  - [d] M0 Bootstrap | composite
     - [x] M0.1 Probe toolchain, route around missing Xcode (B-001, ADR-002) | accept: swift --version && node --version
     - [x] M0.2 Mock addon, fixtures generator, node tests | accept: cd Tools/MockAddon && node --test test/server.test.js | tries 2
     - [x] M0.3 Four local packages, verify.sh, coverage.sh, lint-basic.sh | accept: ./scripts/verify.sh | tries 0
@@ -53,7 +53,12 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
     - [x] M7.3 View models: Library, Settings, DataResetService, Detail library/watched, Home continue-watching, acknowledgements | accept: swift test --package-path Packages/Features
     - [x] M7.4 Privacy acceptance: a whole session leaves the mock token out of every log line and every store except the secret store | accept: swift test --filter PrivacyTests
     - [d] M7.5 SwiftUI Library/Settings/Acknowledgements, Library tab + settings sheet, Home row, Detail buttons, persistent wiring, UI tests | accept: swiftc -parse + macOS CI
-  - [ ] M8 Hardening and release | composite
+  - [d] M8 Hardening and release | accept: macOS `verify.sh milestone` (includes unsigned archive); signing steps in docs/RELEASE.md | tries 0
+    - [x] M8.1 Offline, empty and error states: Connectivity + isOffline on Home/Discover/Search/Streams, OfflineBanner (ADR-007) | accept: swift test --filter OfflineStateTests
+    - [d] M8.2 PrivacyInfo.xcprivacy, String Catalogs + extract-strings.py, icon checks, project-spec guards | accept: scripts/check-project-spec.py; Xcode consumes them on the first Mac build
+    - [x] M8.3 Leak pass, host half: LeakTests in PlayerKit (3) and Features (9, incl. a negative control) | accept: swift test --filter LeakTests
+    - [d] M8.4 Launch-time baseline (XCTApplicationLaunchMetric + 8 s budget), scripts/leaks.sh, scripts/archive.sh wired into milestone | accept: macOS `verify.sh milestone`
+    - [x] M8.5 Docs: README, APP_REVIEW_NOTES, MAC_FIRST_RUN, RELEASE, LOCALIZATION, DEVICE_CHECKLIST additions, ADR-007 | accept: review
 
 ## Handoff notes
 (append a 3-line note after each DONE node)
@@ -94,3 +99,8 @@ on the same branch. `[d]` means "written, host-verified where possible, awaiting
   Privacy rule enforced by test: progress/library keep poster URLs an addon published but never an addon endpoint or token.
   Swift Testing gotcha again: `await` on the right of `&&` inside #expect does not compile; hoist the awaited value into a let.
   Unverified until a Mac: swipe actions + confirmation dialog in UI, SwiftData V1 to V2 migration at runtime.
+- M8 host part done: offline detection from request evidence (ADR-007), leak tests (a deliberate retain cycle proves the helper can fail),
+  privacy manifest + string catalogs guarded by check-project-spec.py, release docs. Final host counts: StremioKit 213, PlayerKit 76,
+  Persistence 5 (macOS adds the SwiftData tests), Features 100, mock addon 13; StremioKit line coverage 96.45%.
+  ROOT is `[d]`, not `[x]`: the Definition of Done needs `verify.sh milestone` green on a Mac and the push to GitHub (B-002) did not go through.
+  Next person: docs/MAC_FIRST_RUN.md, then docs/DEVICE_CHECKLIST.md, then docs/RELEASE.md.

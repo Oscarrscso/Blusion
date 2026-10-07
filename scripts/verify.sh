@@ -67,6 +67,7 @@ SUMMARY+=("swift:${#PACKAGES[@]}pkgs")
 # Apple-only code inside packages sits behind #if canImport(...) and is parsed by the package builds above.
 log "1b/6 project spec + syntax check (Apple-only app sources)"
 python3 scripts/check-project-spec.py || fail "project spec check"
+python3 scripts/extract-strings.py --check || fail "App/Localizable.xcstrings is missing strings (run scripts/extract-strings.py)"
 APPLE_SRC=()
 while IFS= read -r f; do [[ -f "$f" ]] && APPLE_SRC+=("$f"); done < <(git ls-files -co --exclude-standard -- 'App/*.swift' 'Tests/BlusionTests/*.swift' 'Tests/BlusionUITests/*.swift')
 if [[ ${#APPLE_SRC[@]} -gt 0 ]]; then
@@ -156,6 +157,12 @@ print(pick["udid"])
       && echo "screenshot: shots/${SHOT}.png" || echo "screenshot skipped (simulator not booted)"
   fi
   SUMMARY+=("xcodebuild:$MODE")
+
+  if [[ "$MODE" == "milestone" ]]; then
+    log "4b/6 xcodebuild archive (unsigned)"
+    SPEC="$SPEC" ./scripts/archive.sh || fail "xcodebuild archive"
+    SUMMARY+=("archive")
+  fi
 else
   log "3-4/6 xcodegen + xcodebuild"
   echo "SKIPPED (no Xcode on this host: $OS). Apple-only code is verified by the macOS CI job (ADR-002)."

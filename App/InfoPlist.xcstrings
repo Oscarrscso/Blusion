@@ -1,0 +1,30 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "CFBundleDisplayName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blusion"
+          }
+        }
+      },
+      "comment": "App name under the icon"
+    },
+    "NSLocalNetworkUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blusion connects to addons you install that run on your local network."
+          }
+        }
+      },
+      "comment": "Shown once, when an addon on the home network is first contacted"
+    }
+  },
+  "version": "1.0"
+}

@@ -192,3 +192,13 @@ Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so 
 ## Changelog
 
 - v1.0: initial plan
+- v1.1 (build record, appended by the agent that built it; sections 0-10 above are unchanged):
+  - Built on an Ubuntu host with no Xcode (BLOCKERS B-001). Verification was split: StremioKit, PlayerKit logic, Persistence contracts, Features view models and the
+    mock addon are compiled and tested for real with Swift 6.3.3 on Linux; SwiftUI, SwiftData, Keychain, AVFoundation, the app target and the UI tests were syntax-checked only
+    and are marked `[d]` (ADR-002). `verify.sh milestone` therefore refuses to pass on Linux without `ALLOW_HOST_ONLY=1`.
+  - One working branch (`claude/blusion-github-e2e-sqx5r4`) instead of a branch per milestone, because the operator pinned it. Milestone commits are `M<n>: <title>`.
+  - GitHub write access was denied (B-002): nothing was pushed, so the macOS CI workflow has not run.
+  - The fallback player (M6) is opt-in (`FALLBACK=1`) instead of default: the MPVKit pin could not be compiled here, and the default build stays free of third-party code (ADR-006).
+  - Added beyond the plan: `scripts/check-project-spec.py` (ATS, trademark, GPL and privacy-manifest guards), `scripts/archive.sh`, `scripts/leaks.sh`, `scripts/extract-strings.py`,
+    ADRs 001-007, `docs/MAC_FIRST_RUN.md`, `docs/RELEASE.md`, `docs/APP_REVIEW_NOTES.md`, `docs/LOCALIZATION.md`.
+  - Final host counts: StremioKit 213 tests (96.45% line coverage), PlayerKit 76, Persistence 5, Features 100, mock addon 13.

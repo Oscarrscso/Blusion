@@ -68,11 +68,15 @@ struct DiscoverView: View {
         case .idle, .loadingFirstPage:
             ProgressView().frame(maxWidth: .infinity)
         case .failed(let error):
-            WrappingStack {
-                ErrorChip(text: error.shortDescription)
-                Button("Try again") { Task { await model.reload() } }
+            if model.isOffline {
+                OfflineBanner()
+            } else {
+                WrappingStack {
+                    ErrorChip(text: error.shortDescription)
+                    Button("Try again") { Task { await model.reload() } }
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         case .loaded, .loadingMore:
             PosterGrid(items: model.items) { Task { await model.loadMore() } }
             if model.state == .loadingMore { ProgressView().frame(maxWidth: .infinity) }

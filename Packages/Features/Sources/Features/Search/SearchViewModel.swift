@@ -40,6 +40,8 @@ public final class SearchViewModel {
     }
 
     public var hasResults: Bool { sections.contains { !$0.items.isEmpty } }
+    /// Nothing came back and every addon failed because the device is offline.
+    public var isOffline: Bool { !hasResults && Connectivity.isOffline(failures.map(\.error)) }
     public var showsNoResults: Bool { phase == .done && !hasResults && failures.isEmpty }
 
     /// Call whenever `query` changes. Cancels the previous search and starts a new debounced one.

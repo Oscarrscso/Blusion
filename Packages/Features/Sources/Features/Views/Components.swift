@@ -17,6 +17,18 @@ struct ErrorChip: View {
     }
 }
 
+/// Shown instead of a wall of per-addon errors when every request failed because the device is offline.
+struct OfflineBanner: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label(Connectivity.offlineTitle, systemImage: "wifi.slash")
+        } description: {
+            Text(Connectivity.offlineMessage)
+        }
+        .accessibilityIdentifier("offline.banner")
+    }
+}
+
 /// Wraps its children onto several lines instead of clipping them (chips at large Dynamic Type sizes).
 struct WrappingStack<Content: View>: View {
     @ViewBuilder let content: () -> Content

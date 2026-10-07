@@ -36,6 +36,12 @@ public final class BoardViewModel {
         self.services = services
     }
 
+    /// Every row failed and every failure was "offline": show one banner instead of a chip per row.
+    public var isOffline: Bool {
+        let errors = rows.compactMap(\.state.error)
+        return phase == .ready && errors.count == rows.count && Connectivity.isOffline(errors)
+    }
+
     /// Cheap refresh for when the Home tab reappears (after watching something): only Continue Watching changes.
     public func refreshContinueWatching() async {
         continueWatching = LibraryViewModel.continueWatching(from: await services.progress.all())

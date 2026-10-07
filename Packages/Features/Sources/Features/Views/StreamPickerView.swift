@@ -56,6 +56,8 @@ struct StreamPickerView: View {
             ContentUnavailableView("No stream addons", systemImage: "puzzlepiece.extension",
                                    description: Text("None of your addons provides streams for this title. Install one on the Addons tab."))
                 .accessibilityIdentifier("streams.nobody")
+        } else if model.isOffline {
+            OfflineBanner()
         } else if model.showsNothingFound {
             ContentUnavailableView("No streams found", systemImage: "film.stack", description: Text("Your addons have nothing for this title."))
                 .accessibilityIdentifier("streams.none")

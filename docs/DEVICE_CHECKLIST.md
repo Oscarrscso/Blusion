@@ -25,8 +25,19 @@ Run each on a real iPhone (and the iPad item on an iPad). Tick with the date and
 - [ ] With a Stremio-compatible streaming server you run yourself, set its URL in Settings, play an `infoHash` stream, confirm it starts.
       If not, capture the requests a Stremio client makes to the server for the same title and adjust `StreamingServerRoute` only.
 
+## Library and settings (M7)
+
+- [ ] **Persistence across launches:** save a title, watch two minutes, change the subtitle language, force-quit, reopen: Library, Continue Watching and the setting are all still there.
+- [ ] **Upgrade path:** install a build from before M7 (schema V1), add an addon, then install this build over it: the addon survives and Library works (SwiftData V1 to V2 migration on a real store).
+- [ ] **Keychain:** after "Clear data > All addons", reinstalling the app does not resurrect addon links; after deleting and reinstalling the app, no old links appear.
+- [ ] **Swipe actions and the clear-data confirmation** are reachable with VoiceOver and with the largest Dynamic Type size.
+
 ## Release (M8)
 
+- [ ] **Offline:** with Airplane Mode on, Home, Discover, Search and a stream list show the "You're offline" banner (not a pile of error chips); turning it off and pulling to refresh recovers without a relaunch.
+- [ ] **Launch time:** on the oldest supported iPhone you own, cold launch to the Home tab feels instant (budget in `LaunchPerformanceTests`: 8 s ceiling, `XCTApplicationLaunchMetric` baseline to set once on the reference device).
+- [ ] **Leaks:** run `./scripts/leaks.sh` on a Mac, or Instruments > Leaks for a few minutes of browsing and one playback; no leak stack runs through Blusion's own code.
+- [ ] **Privacy manifest:** Xcode > Product > Archive > *Generate Privacy Report* shows exactly the declared UserDefaults reason and nothing else.
 - [ ] App launches without the local-network prompt appearing for non-LAN addons; the prompt appears (once) for a LAN addon.
 - [ ] Dynamic Type at the largest accessibility size: Home, Detail, Addons, Player controls are readable and nothing is clipped.
 - [ ] VoiceOver can install an addon, open a title, pick a stream and play/pause.

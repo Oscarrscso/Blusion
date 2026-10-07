@@ -20,6 +20,7 @@ public final class DiscoverViewModel {
     public private(set) var items: [MetaPreview] = []
     public private(set) var state: State = .idle
     public private(set) var canLoadMore = false
+    public var isOffline: Bool { state == .failed(.offline) }
 
     private let services: AppServices
     private var generation = 0

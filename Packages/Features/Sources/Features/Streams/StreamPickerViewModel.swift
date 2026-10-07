@@ -30,7 +30,9 @@ public final class StreamPickerViewModel {
     }
 
     public var isLoading: Bool { !hasLoaded || listing.isLoading }
-    public var showsNothingFound: Bool { hasLoaded && !listing.isLoading && listing.isEmpty && !nobodyCanAnswer }
+    /// Nothing found, and every addon that was asked failed because the device is offline.
+    public var isOffline: Bool { hasLoaded && listing.isEmpty && Connectivity.isOffline(listing.failures.map(\.error)) }
+    public var showsNothingFound: Bool { hasLoaded && !listing.isLoading && listing.isEmpty && !nobodyCanAnswer && !isOffline }
 
     public func load() async {
         settings = await services.settings.load()

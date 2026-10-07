@@ -35,8 +35,12 @@ struct BoardView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     if !model.continueWatching.isEmpty { ContinueWatchingRow(items: model.continueWatching) }
-                    ForEach(model.rows) { row in
-                        CatalogRowView(row: row) { Task { await model.retry(rowID: row.id) } }
+                    if model.isOffline {
+                        OfflineBanner()
+                    } else {
+                        ForEach(model.rows) { row in
+                            CatalogRowView(row: row) { Task { await model.retry(rowID: row.id) } }
+                        }
                     }
                 }
                 .padding(.vertical)
