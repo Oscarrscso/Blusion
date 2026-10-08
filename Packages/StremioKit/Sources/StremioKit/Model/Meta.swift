@@ -91,7 +91,8 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var released: String?
     public var thumbnail: URL?
     public var overview: String?
-    /// Episode rating, usually IMDb's (0 to 10).
+    /// Episode rating on a 0 to 10 scale, usually IMDb's, when the addon supplies one (`imdbRating` or `rating`). Never fetched
+    /// from anywhere else.
     public var rating: Double?
 
     public init(id: String, title: String? = nil, season: Int? = nil, episode: Int? = nil,
@@ -103,11 +104,14 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.released = released
         self.thumbnail = thumbnail
         self.overview = overview
-        self.rating = rating
+        self.rating = rating.flatMap { (0...10).contains($0) && $0 > 0 ? $0 : nil }
     }
 
+    /// `8.4`, or nil without a usable rating.
+    public var ratingText: String? { rating.map { String(format: "%.1f", $0) } }
+
     private enum Keys: String, CodingKey {
-        case id, title, name, season, episode, number, released, firstAired, thumbnail, overview, description, rating
+        case id, title, name, season, episode, number, released, firstAired, thumbnail, overview, description, imdbRating, rating
     }
 
     public init(from decoder: Decoder) throws {
@@ -120,7 +124,7 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
                   released: container.string(.released) ?? container.string(.firstAired),
                   thumbnail: container.url(.thumbnail),
                   overview: container.string(.overview) ?? container.string(.description),
-                  rating: container.double(.rating))
+                  rating: container.double(.imdbRating) ?? container.double(.rating))
     }
 }
 
