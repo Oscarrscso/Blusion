@@ -29,6 +29,7 @@ The generated Xcode project is ignored by Git; edit `project.yml` for persistent
 
 To keep the Mac app in `/Applications`, run `scripts/install-mac.sh`: it builds a Release copy, replaces the installed one and
 opens it. That is the only copy to open. A build product launched from `build/` becomes one more "Blusion" in Spotlight.
+`scripts/install-iphone.sh` builds for the connected iPhone and installs there; with a free Apple ID, run it again every seven days.
 
 [First Mac run](docs/MAC_FIRST_RUN.md) gives the short testing path.
 

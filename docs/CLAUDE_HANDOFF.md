@@ -85,7 +85,7 @@ For deterministic playback, generate the local mock fixtures as described in [MA
 ## Reopen and build locations
 
 On the connected iPhone, tap **Blusion**. To rebuild later, open `Blusion.xcodeproj`, choose **Blusion → Oscar**, and press **⌘R**.
-The current signed app is in `build/iphone/Build/Products/Debug-iphoneos/Blusion.app`.
+`scripts/install-iphone.sh` does the same from the shell: it builds into `build/iphone.noindex` and installs on the connected iPhone.
 The Mac app is `/Applications/Blusion.app`; `scripts/install-mac.sh` rebuilds and replaces it. Open that copy and no other:
 snapshot builds have their own bundle id and live in `build/catalyst*.noindex`, out of Spotlight's sight.
 
