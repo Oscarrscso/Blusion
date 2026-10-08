@@ -123,7 +123,7 @@ struct ReviewSitesRow: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
-                    ForEach(ReviewSite.allCases) { site in
+                    ForEach(ReviewSite.allCases.filter { item.type != "series" || $0 == .imdb }) { site in
                         if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
                             let search = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
                             Link(destination: url) {
