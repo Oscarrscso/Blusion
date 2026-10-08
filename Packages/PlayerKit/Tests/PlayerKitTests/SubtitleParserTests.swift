@@ -76,7 +76,8 @@ import Testing
     }
 
     @Test func badBlocksAreSkippedNotFatal() throws {
-        let text = "1\nnot a time --> nope\nBad\n\n2\n00:00:05,000 --> 00:00:04,000\nBackwards\n\n3\n00:00:06,000 --> 00:00:07,000\nGood\n\n4\n00:00:08,000 --> 00:00:09,000\n\n"
+        let text = "1\nnot a time --> nope\nBad\n\n2\n00:00:05,000 --> 00:00:04,000\nBackwards\n\n3\n00:00:06,000 --> 00:00:07,000\n"
+            + "Good\n\n4\n00:00:08,000 --> 00:00:09,000\n\n"
         let (cues, _) = try SubtitleParser.parse(data: Data(text.utf8))
         #expect(cues.map(\.text) == ["Good"], "unparseable, backwards and empty cues are dropped")
     }

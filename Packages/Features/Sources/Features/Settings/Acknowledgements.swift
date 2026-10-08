@@ -24,7 +24,8 @@ public struct Acknowledgement: Sendable, Equatable, Identifiable {
                             detail: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
                             sourceURL: URL(string: "https://www.themoviedb.org")),
             Acknowledgement(name: "Review site icons", license: "Respective service trademarks",
-                            detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic and TMDB marks identify links to their services. Blusion is not affiliated with them."),
+                            detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic and TMDB marks identify links to their services. "
+                                + "Blusion is not affiliated with them."),
         ]
         if fallbackEngineLinked {
             list += [

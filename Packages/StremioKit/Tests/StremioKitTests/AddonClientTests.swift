@@ -146,7 +146,8 @@ import StremioKitTestSupport
         let base = URL(string: "https://addon.example.com")!
         let streams = try await makeClient(StubTransport(data: try fixture("streams-all-kinds"))).streams(base: base, type: "movie", id: "tt1")
         #expect(streams.count == 8)
-        let subs = try await makeClient(StubTransport(data: try fixture("subtitles-basic"))).subtitles(base: base, type: "movie", id: "tt1", extras: [ExtraParam("videoHash", "abc")])
+        let client = makeClient(StubTransport(data: try fixture("subtitles-basic")))
+        let subs = try await client.subtitles(base: base, type: "movie", id: "tt1", extras: [ExtraParam("videoHash", "abc")])
         #expect(subs.count == 2)
     }
 

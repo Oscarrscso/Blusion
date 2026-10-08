@@ -111,7 +111,13 @@ struct PlayerContent: View {
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { location in
                     let third = proxy.size.width / 3
-                    if location.x < third { Task { await model.skip(by: -10) } } else if location.x > 2 * third { Task { await model.skip(by: 10) } } else { model.togglePlayPause() }
+                    if location.x < third {
+                        Task { await model.skip(by: -10) }
+                    } else if location.x > 2 * third {
+                        Task { await model.skip(by: 10) }
+                    } else {
+                        model.togglePlayPause()
+                    }
                 }
                 .onTapGesture { model.toggleControls() }
                 .gesture(DragGesture(minimumDistance: 40).onEnded { if $0.translation.height > 140 { close() } })

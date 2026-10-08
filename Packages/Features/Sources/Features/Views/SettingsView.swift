@@ -47,7 +47,8 @@ struct SettingsView: View {
             await model.load()
             if let url = URL(string: "infuse://") { infuseInstalled = UIApplication.shared.canOpenURL(url) }
         }
-        .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "", isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
+        .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "",
+                            isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
                             titleVisibility: .visible, presenting: pendingScope) { scope in
             Button("Clear \(scope.title.lowercased())", role: .destructive) { Task { await model.clear(scope) } }
                 .accessibilityIdentifier("settings.confirmClear")
@@ -77,7 +78,9 @@ struct SettingsView: View {
                 Task { await model.setAutoPlayBestStream(value) }
             }))
             .accessibilityIdentifier("settings.autoPlay")
-            Picker("Preferred quality", selection: Binding(get: { model.settings.preferredResolution }, set: { value in Task { await model.setPreferredResolution(value) } })) {
+            Picker("Preferred quality",
+                   selection: Binding(get: { model.settings.preferredResolution },
+                                      set: { value in Task { await model.setPreferredResolution(value) } })) {
                 ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
             }
             .accessibilityIdentifier("settings.resolution")
@@ -88,7 +91,10 @@ struct SettingsView: View {
         } header: {
             Text("Playback")
         } footer: {
-            Text("If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as MKV and DTS, and returns your progress when you come back.")
+            Text("""
+                If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as \
+                MKV and DTS, and returns your progress when you come back.
+                """)
         }
     }
 
@@ -146,13 +152,17 @@ struct SettingsView: View {
         } header: {
             Text("Streaming server")
         } footer: {
-            Text("Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion doesn't include one. Leave this empty if you don't use any.")
+            Text("""
+                Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion \
+                doesn't include one. Leave this empty if you don't use any.
+                """)
         }
     }
 
     private var fallbackSection: some View {
         Section {
-            Toggle("Use the fallback player", isOn: Binding(get: { model.settings.fallbackEngineEnabled }, set: { value in Task { await model.setFallbackEngineEnabled(value) } }))
+            Toggle("Use the fallback player", isOn: Binding(get: { model.settings.fallbackEngineEnabled },
+                                    set: { value in Task { await model.setFallbackEngineEnabled(value) } }))
                 .accessibilityIdentifier("settings.fallbackToggle")
         } header: {
             Text("Fallback player")
@@ -180,7 +190,10 @@ struct SettingsView: View {
                 Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
             } else {
                 // A Mac build signed without a provisioning profile: the other screens still say Keychain.
-                Text("This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library folder instead. Trakt sync sends only the items you choose to share.")
+                Text("""
+                    This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library \
+                    folder instead. Trakt sync sends only the items you choose to share.
+                    """)
             }
         }
     }
@@ -190,7 +203,10 @@ struct SettingsView: View {
             LabeledContent("Version", value: SettingsViewModel.appVersion)
             NavigationLink("Acknowledgements") { AcknowledgementsView(fallbackEngineLinked: fallbackEngineLinked) }
                 .accessibilityIdentifier("settings.acknowledgements")
-            Text("Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › Addons. Blusion isn’t affiliated with any addon or service.")
+            Text("""
+                Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › \
+                Addons. Blusion isn’t affiliated with any addon or service.
+                """)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

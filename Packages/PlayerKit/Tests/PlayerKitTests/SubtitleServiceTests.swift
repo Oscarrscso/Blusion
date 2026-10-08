@@ -60,7 +60,10 @@ import StremioKitTestSupport
     @Test func streamBundledOptionsMergeWithoutDuplicates() {
         let url = URL(string: "https://e.example.com/en.srt")!
         let bundled = SubtitleService.options(from: [SubtitleItem(id: "1", url: url, lang: "en")])
-        let fromAddon = SubtitleService.options(from: [SubtitleItem(id: "9", url: url, lang: "eng"), SubtitleItem(id: "2", url: URL(string: "https://e.example.com/fr.srt")!, lang: "fr")], addon: "Subs")
+        let fromAddon = SubtitleService.options(
+            from: [SubtitleItem(id: "9", url: url, lang: "eng"),
+                SubtitleItem(id: "2", url: URL(string: "https://e.example.com/fr.srt")!, lang: "fr")],
+            addon: "Subs")
         let merged = SubtitleService.merge(bundled, fromAddon)
         #expect(merged.map(\.language) == ["eng", "fre"], "the same URL from an addon is dropped")
         #expect(merged[0].source == .stream && merged[0].title == "English")

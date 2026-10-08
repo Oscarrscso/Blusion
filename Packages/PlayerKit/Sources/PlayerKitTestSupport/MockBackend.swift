@@ -38,7 +38,8 @@ public final class MockBackend: FallbackBackend {
         if let failOnLoad {
             emit(.failed(failOnLoad))
         } else if let autoLoad {
-            emit(.loaded(duration: autoLoad.duration, audio: autoLoad.audio, subtitles: autoLoad.subtitles, selectedAudio: autoLoad.audio.first?.id, selectedSubtitle: nil))
+            emit(.loaded(duration: autoLoad.duration, audio: autoLoad.audio, subtitles: autoLoad.subtitles,
+                selectedAudio: autoLoad.audio.first?.id, selectedSubtitle: nil))
             emit(.paused(true))
         }
     }

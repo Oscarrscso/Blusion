@@ -92,7 +92,7 @@ struct PosterLink: View {
 
 struct PosterGrid: View {
     let items: [MetaPreview]
-    var onLastAppear: (() -> Void)? = nil
+    var onLastAppear: (() -> Void)?
 
     var body: some View {
         MediaGrid(items: items, aspect: .poster, onLastAppear: onLastAppear)

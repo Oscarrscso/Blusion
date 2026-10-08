@@ -10,7 +10,8 @@ public enum TestAddons {
             types: ["movie", "series"],
             catalogs: [CatalogDescriptor(type: "movie", id: "mock-top", name: "Top"),
                        CatalogDescriptor(type: "movie", id: "mock-movies", name: "Movies",
-                                         extra: [ExtraDescriptor(name: "search"), ExtraDescriptor(name: "genre", options: ["Action", "Drama", "Comedy"]), ExtraDescriptor(name: "skip")])],
+                                         extra: [ExtraDescriptor(name: "search"), ExtraDescriptor(name: "genre", options: ["Action", "Drama", "Comedy"]),
+                                             ExtraDescriptor(name: "skip")])],
             idPrefixes: ["mock:"])
         return InstalledAddon(manifestURL: base.appendingPathComponent("manifest.json"), baseURL: base, manifest: manifest, isEnabled: enabled)
     }
@@ -29,7 +30,8 @@ public enum TestAddons {
 public func elapsed(since start: Date) -> TimeInterval { Date().timeIntervalSince(start) }
 
 /// A registry preloaded with hand-written manifests (no network needed to install), answered by `transport`.
-public func makeStubbedRegistry(manifests: [Manifest], transport: StubTransport, logger: AddonLogger = .silent) async throws -> (registry: AddonRegistry, client: AddonClient) {
+public func makeStubbedRegistry(manifests: [Manifest], transport: StubTransport, logger: AddonLogger = .silent)
+    async throws -> (registry: AddonRegistry, client: AddonClient) {
     let store = InMemoryAddonStore()
     let secrets = InMemorySecretStore()
     var records: [AddonRecord] = []
