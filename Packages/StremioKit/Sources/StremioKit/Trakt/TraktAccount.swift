@@ -21,11 +21,15 @@ public enum TraktAuthorizationResult: Sendable, Equatable {
 
 public enum TraktAccountError: Error, Sendable, Equatable {
     case needsCredentials, needsSignIn, expiredCode, denied, invalidCode, credentialsChanged, invalidResponse
+    case needsRedirectURI, invalidCallback, needsClientSecret
     case network(AddonError)
 
     public var message: String {
         switch self {
-        case .needsCredentials: return "Enter your Trakt API Client ID and Client Secret first."
+        case .needsCredentials: return "Enter your Trakt API Client ID first."
+        case .needsRedirectURI: return "Enter the exact Redirect URI registered for your Trakt API app."
+        case .invalidCallback: return "The Trakt sign-in callback did not match this sign-in. Start again."
+        case .needsClientSecret: return "Device-code sign-in needs a Client Secret. Use PKCE sign-in instead."
         case .needsSignIn: return "Sign in to Trakt before syncing."
         case .expiredCode: return "The sign-in code expired. Start again for a new code."
         case .denied: return "Trakt sign-in was declined."
@@ -64,9 +68,12 @@ public struct TraktWatchedItem: Sendable, Equatable {
 
 /// OAuth credentials live only in the supplied SecretStore. Sync adds items; it never removes items from either account.
 public actor TraktAccount {
+    public static let defaultClientID = "uWo0Ywaz_S4_-uH6KDVh6G8bahxb2bD_pIUz2DgIDno"
+
     public enum Keys {
         public static let clientSecret = "trakt.account.clientSecret"
         public static let token = "trakt.account.token"
+        public static let redirectURI = "trakt.account.redirectURI"
     }
 
     private struct Token: Codable, Sendable {
@@ -75,9 +82,10 @@ public actor TraktAccount {
         let expiresIn: Int
         let createdAt: Int
         var clientID: String?
+        var redirectURI: String?
 
         enum CodingKeys: String, CodingKey {
-            case accessToken = "access_token", refreshToken = "refresh_token", expiresIn = "expires_in", createdAt = "created_at", clientID
+            case accessToken = "access_token", refreshToken = "refresh_token", expiresIn = "expires_in", createdAt = "created_at", clientID, redirectURI
         }
 
         var expiresAt: Date { Date(timeIntervalSince1970: Double(createdAt) + Double(expiresIn)) }
@@ -89,6 +97,7 @@ public actor TraktAccount {
     private let baseURL: URL
     private let now: @Sendable () -> Date
     private var credentialsRevision = 0
+    private var pendingPKCE: (clientID: String, redirectURI: String, verifier: String, state: String, revision: Int)?
 
     public init(settings: any SettingsStore, secrets: any SecretStore, transport: (any HTTPTransport)? = nil,
                 baseURL: URL = TraktClient.defaultBaseURL, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -100,6 +109,80 @@ public actor TraktAccount {
     }
 
     public func clientSecret() async -> String { (try? await secrets.get(Keys.clientSecret)) ?? "" }
+
+    public func redirectURI() async -> String { (try? await secrets.get(Keys.redirectURI)) ?? "" }
+
+    public func saveRedirectURI(_ value: String) async throws {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard value != (try await secrets.get(Keys.redirectURI) ?? "") else { return }
+        credentialsRevision += 1
+        pendingPKCE = nil
+        try await secrets.remove(Keys.token)
+        if value.isEmpty { try await secrets.remove(Keys.redirectURI) }
+        else { try await secrets.set(value, for: Keys.redirectURI) }
+    }
+
+    /// The verifier stays in memory for one browser sign-in; only tokens are saved.
+    public func beginPKCESignIn(redirectURI: String, codeVerifier: String, codeChallenge: String) async throws -> URL {
+        let (clientID, _) = try await credentials()
+        guard let redirect = URL(string: redirectURI), let scheme = redirect.scheme,
+              (scheme == "https" && redirect.host != nil) || scheme == "blusion" || redirectURI == "urn:ietf:wg:oauth:2.0:oob",
+              redirect.fragment == nil, redirect.query == nil, redirect.user == nil, redirect.password == nil else {
+            throw TraktAccountError.needsRedirectURI
+        }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        guard (43...128).contains(codeVerifier.count), codeVerifier.unicodeScalars.allSatisfy(allowed.contains),
+              codeChallenge.count == 43 else { throw TraktAccountError.invalidCode }
+        let state = UUID().uuidString
+        pendingPKCE = (clientID, redirectURI, codeVerifier, state, credentialsRevision)
+        var url = URLComponents(string: "https://auth.trakt.tv/oauth/authorize")!
+        url.queryItems = [URLQueryItem(name: "client_id", value: clientID), URLQueryItem(name: "redirect_uri", value: redirectURI),
+                         URLQueryItem(name: "response_type", value: "code"), URLQueryItem(name: "state", value: state),
+                         URLQueryItem(name: "code_challenge", value: codeChallenge), URLQueryItem(name: "code_challenge_method", value: "S256")]
+        return url.url!
+    }
+
+    public func finishPKCESignIn(callbackURL: URL) async throws {
+        guard let pending = pendingPKCE, let redirect = URL(string: pending.redirectURI),
+              callbackURL.scheme == redirect.scheme, callbackURL.host == redirect.host, callbackURL.port == redirect.port,
+              callbackURL.path == redirect.path, callbackURL.fragment == nil,
+              let query = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?.queryItems,
+              query.filter({ $0.name == "state" }).count == 1,
+              query.first(where: { $0.name == "state" })?.value == pending.state else { throw TraktAccountError.invalidCallback }
+        if query.contains(where: { $0.name == "error" }) { throw TraktAccountError.denied }
+        guard query.filter({ $0.name == "code" }).count == 1,
+              let code = query.first(where: { $0.name == "code" })?.value, !code.isEmpty else { throw TraktAccountError.invalidCode }
+        try await exchangePKCECode(code, pending: pending)
+    }
+
+    /// For Trakt apps already registered with the legacy out-of-band callback.
+    public func finishPKCESignIn(code: String) async throws {
+        guard let pending = pendingPKCE, pending.redirectURI == "urn:ietf:wg:oauth:2.0:oob" else { throw TraktAccountError.invalidCallback }
+        let code = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { throw TraktAccountError.invalidCode }
+        try await exchangePKCECode(code, pending: pending)
+    }
+
+    public func cancelPKCESignIn() { pendingPKCE = nil }
+
+    private func exchangePKCECode(_ code: String, pending: (clientID: String, redirectURI: String, verifier: String, state: String, revision: Int)) async throws {
+        let currentClientID = await settings.load().traktClientID
+        guard pendingPKCE?.state == pending.state, pending.revision == credentialsRevision,
+              currentClientID == pending.clientID else { throw TraktAccountError.credentialsChanged }
+        let result = try await request(path: "oauth/token", clientID: pending.clientID,
+                                      body: ["code": code, "client_id": pending.clientID, "redirect_uri": pending.redirectURI,
+                                             "code_verifier": pending.verifier, "grant_type": "authorization_code"])
+        try checkStatus(result)
+        var token = try token(from: result.data)
+        token.clientID = pending.clientID
+        token.redirectURI = pending.redirectURI
+        try Task.checkCancellation()
+        let savedClientID = await settings.load().traktClientID
+        guard pendingPKCE?.state == pending.state, pending.revision == credentialsRevision,
+              savedClientID == pending.clientID else { throw TraktAccountError.credentialsChanged }
+        pendingPKCE = nil
+        try await save(token)
+    }
 
     public func saveClientSecret(_ value: String) async throws {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -116,13 +199,15 @@ public actor TraktAccount {
     }
 
     public func beginSignIn() async throws -> TraktDeviceCode {
-        let (clientID, _) = try await credentials()
+        let (clientID, clientSecret) = try await credentials()
+        guard !clientSecret.isEmpty else { throw TraktAccountError.needsClientSecret }
         return try await decode(TraktDeviceCode.self, path: "oauth/device/code", body: ["client_id": clientID])
     }
 
     public func checkAuthorization(_ code: TraktDeviceCode) async throws -> TraktAuthorizationResult {
         let revision = credentialsRevision
         let (clientID, clientSecret) = try await credentials()
+        guard !clientSecret.isEmpty else { throw TraktAccountError.needsClientSecret }
         let result = try await request(path: "oauth/device/token", clientID: clientID,
                                        body: ["code": code.deviceCode, "client_id": clientID, "client_secret": clientSecret])
         switch result.response.statusCode {
@@ -147,17 +232,22 @@ public actor TraktAccount {
         let token = try? await loadToken()
         let credentials = try? await credentials()
         credentialsRevision += 1
+        pendingPKCE = nil
         try? await secrets.remove(Keys.token)
         if let token, let (clientID, clientSecret) = credentials {
+            var body = ["token": token.accessToken, "client_id": clientID]
+            if token.redirectURI == nil { body["client_secret"] = clientSecret }
             _ = try? await request(path: "oauth/revoke", clientID: clientID,
-                                   body: ["token": token.accessToken, "client_id": clientID, "client_secret": clientSecret])
+                                   body: body)
         }
     }
 
     public func clearCredentials() async {
         credentialsRevision += 1
+        pendingPKCE = nil
         try? await secrets.remove(Keys.token)
         try? await secrets.remove(Keys.clientSecret)
+        try? await secrets.remove(Keys.redirectURI)
     }
 
     public func watchlist() async throws -> [MetaPreview] {
@@ -171,6 +261,21 @@ public actor TraktAccount {
             guard page < pageCount else { return items }
             page += 1
         }
+    }
+
+    /// Collected movies and shows map to saved titles; collection membership does not mark them watched.
+    public func collection() async throws -> [MetaPreview] {
+        var items: [MetaPreview] = []
+        var page = 1
+        while true {
+            let result = try await authorizedRequest(path: "sync/collection/movies?page=\(page)&limit=100&extended=full")
+            items += try decodeEntries(result.data).compactMap(\.watchlistPreview)
+            let pageCount = result.response.headers["x-pagination-page-count"].flatMap(Int.init) ?? 1
+            guard page < pageCount else { break }
+            page += 1
+        }
+        let shows = try await authorizedRequest(path: "sync/collection/shows?extended=full")
+        return items + (try decodeEntries(shows.data).compactMap(\.watchlistPreview))
     }
 
     public func watched() async throws -> [TraktWatchedItem] {
@@ -197,7 +302,7 @@ public actor TraktAccount {
     private func credentials() async throws -> (String, String) {
         let clientID = (await settings.load().traktClientID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let clientSecret = try await secrets.get(Keys.clientSecret) ?? ""
-        guard !clientID.isEmpty, !clientSecret.isEmpty else { throw TraktAccountError.needsCredentials }
+        guard !clientID.isEmpty else { throw TraktAccountError.needsCredentials }
         return (clientID, clientSecret)
     }
 
@@ -219,12 +324,14 @@ public actor TraktAccount {
 
     private func refreshed(_ old: Token, clientID: String, clientSecret: String) async throws -> Token {
         let revision = credentialsRevision
-        let result = try await request(path: "oauth/token", clientID: clientID, body: ["refresh_token": old.refreshToken,
-                                       "client_id": clientID, "client_secret": clientSecret, "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
-                                       "grant_type": "refresh_token"])
+        var body = ["refresh_token": old.refreshToken, "client_id": clientID,
+                    "redirect_uri": old.redirectURI ?? "urn:ietf:wg:oauth:2.0:oob", "grant_type": "refresh_token"]
+        if old.redirectURI == nil { body["client_secret"] = clientSecret }
+        let result = try await request(path: "oauth/token", clientID: clientID, body: body)
         try checkStatus(result)
         var token = try token(from: result.data)
         token.clientID = clientID
+        token.redirectURI = old.redirectURI
         try Task.checkCancellation()
         guard revision == credentialsRevision else { throw TraktAccountError.credentialsChanged }
         try await save(token)
@@ -261,6 +368,7 @@ public actor TraktAccount {
         request.httpMethod = body == nil ? "GET" : "POST"
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Blusion/1.0", forHTTPHeaderField: "User-Agent")
         request.setValue("2", forHTTPHeaderField: "trakt-api-version")
         if let clientID { request.setValue(clientID, forHTTPHeaderField: "trakt-api-key") }
         if let accessToken { request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization") }

@@ -1,9 +1,12 @@
 #if canImport(UIKit)
 import SwiftUI
+import AuthenticationServices
 import StremioKit
 
 struct TraktAccountView: View {
     @State private var model: TraktAccountViewModel
+    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
+    @Environment(\.openURL) private var openURL
 
     init(services: AppServices) { _model = State(initialValue: TraktAccountViewModel(services: services)) }
 
@@ -24,7 +27,6 @@ struct TraktAccountView: View {
         .navigationTitle("Trakt")
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
-        .task(id: model.deviceCode?.deviceCode) { await model.pollForSignIn() }
         .onDisappear { model.cancelSignIn() }
         .disabled(model.isWorking)
         .overlay { if model.isWorking { ProgressView().padding().glassEffect() } }
@@ -37,21 +39,21 @@ struct TraktAccountView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .accessibilityIdentifier("settings.traktClientID")
-            SecureField("Client Secret", text: $model.clientSecretText)
+            TextField("Redirect URI", text: $model.redirectURIText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .accessibilityIdentifier("trakt.clientSecret")
-            Button("Save credentials") { Task { await model.saveCredentials() } }
+                .accessibilityIdentifier("trakt.redirectURI")
+            Button("Save connection settings") { Task { await model.saveCredentials() } }
                 .accessibilityIdentifier("settings.traktClientID.save")
-            if let url = URL(string: "https://trakt.tv/oauth/applications") {
-                Link("Create a Trakt API app", destination: url).accessibilityIdentifier("trakt.apiApp")
+            if let url = URL(string: "https://app.trakt.tv/oauth/applications") {
+                Link("Trakt app settings", destination: url).accessibilityIdentifier("trakt.apiApp")
             }
         } header: {
-            Text("Your API app")
+            Text("Connection")
         } footer: {
-            Text("Enter your own API Client ID and Client Secret. Set your API app’s Redirect URI to urn:ietf:wg:oauth:2.0:oob so token refresh works. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets.")
+            Text("PKCE sign-in needs no Client Secret. Enter the exact Redirect URI from your Trakt app settings. The blusion://trakt/callback URI returns directly to this app when registered. Other callbacks can be pasted below after authorization. Sign-in tokens are stored in the Keychain.")
         }
-        .disabled(model.deviceCode != nil)
+        .disabled(model.authorizationURL != nil)
     }
 
     private var accountSection: some View {
@@ -61,17 +63,25 @@ struct TraktAccountView: View {
                     .accessibilityIdentifier("trakt.signedIn")
                 Button("Sign out", role: .destructive) { Task { await model.signOut() } }
                     .accessibilityIdentifier("trakt.signOut")
-            } else if let code = model.deviceCode {
-                Text("Enter this code on Trakt:").foregroundStyle(.secondary)
-                Text(code.userCode).font(.title2.monospaced().bold()).textSelection(.enabled)
-                    .accessibilityIdentifier("trakt.userCode")
-                Link("Open Trakt to authorize", destination: code.verificationURL)
+            } else if let url = model.authorizationURL {
+                Link("Open Trakt to authorize", destination: url)
                     .accessibilityIdentifier("trakt.authorize")
-                HStack { ProgressView(); Text("Waiting for authorization…").foregroundStyle(.secondary) }
+                if model.redirectURIText == "urn:ietf:wg:oauth:2.0:oob" {
+                    SecureField("Authorization code from Trakt", text: $model.authorizationCodeText)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                } else {
+                    Text("After allowing access, copy the redirected address from your browser and paste it here.")
+                        .foregroundStyle(.secondary)
+                    SecureField("Redirect URL", text: $model.authorizationCodeText)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                Button("Finish connecting") { Task { await model.finishPastedSignIn() } }
+                    .disabled(model.authorizationCodeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("trakt.finishSignIn")
                 Button("Cancel", role: .cancel) { model.cancelSignIn() }
                     .accessibilityIdentifier("trakt.cancel")
             } else {
-                Button("Sign in to Trakt") { Task { await model.startSignIn() } }
+                Button("Connect Trakt") { Task { await signIn() } }
                     .disabled(!model.canSignIn)
                     .accessibilityIdentifier("trakt.signIn")
             }
@@ -81,17 +91,36 @@ struct TraktAccountView: View {
     private var syncSection: some View {
         Section {
             Toggle("Watchlist", isOn: $model.syncWatchlist).accessibilityIdentifier("trakt.syncWatchlist")
+            Toggle("Collection / library", isOn: $model.syncCollection).accessibilityIdentifier("trakt.syncCollection")
             Toggle("Watched movies and episodes", isOn: $model.syncHistory).accessibilityIdentifier("trakt.syncHistory")
-            Button("Import from Trakt") { Task { await model.importFromTrakt() } }
-                .disabled(!model.syncWatchlist && !model.syncHistory)
+            Button("Refresh from Trakt") { Task { await model.importFromTrakt() } }
+                .disabled(!model.syncWatchlist && !model.syncCollection && !model.syncHistory)
                 .accessibilityIdentifier("trakt.import")
-            Button("Send to Trakt") { Task { await model.sendToTrakt() } }
-                .disabled(!model.syncWatchlist && !model.syncHistory)
-                .accessibilityIdentifier("trakt.export")
         } header: {
-            Text("Manual sync")
+            Text("Your Trakt library")
         } footer: {
-            Text("Adds missing items without deleting anything. Import puts your watchlist in Library and marks watched items. Send shares saved titles and watched marks with Trakt. Only titles with IMDb IDs can sync; playback positions stay on this device.")
+            Text("Your watchlist (watch later) and collection appear in Library → Saved. Watched history appears in Library → Watched. Connecting imports these automatically; Refresh adds newly saved titles without deleting local items. Only titles with IMDb IDs can import; playback positions stay on this device.")
+        }
+    }
+
+    private func signIn() async {
+        await model.startPKCESignIn()
+        guard let url = model.authorizationURL else { return }
+        let redirectURI = model.redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The existing blusion scheme supports a native return. Other registered callbacks use paste.
+        guard URL(string: redirectURI)?.scheme == "blusion" else {
+            openURL(url)
+            return
+        }
+        do {
+            let callback = try await TraktWebAuthentication.authenticate(using: webAuthenticationSession, url: url, redirectURI: redirectURI)
+            await model.finishPKCESignIn(callbackURL: callback)
+        } catch {
+            if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin || Task.isCancelled {
+                model.cancelSignIn()
+            } else {
+                model.authenticationFailed(error)
+            }
         }
     }
 }

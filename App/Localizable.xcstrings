@@ -133,6 +133,17 @@
         }
       }
     },
+    "After allowing access, copy the redirected address from your browser and paste it here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After allowing access, copy the redirected address from your browser and paste it here."
+          }
+        }
+      }
+    },
     "AirPlay": {
       "extractionState": "manual",
       "localizations": {
@@ -338,6 +349,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close"
+          }
+        }
+      }
+    },
+    "Collection / library": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collection / library"
+          }
+        }
+      }
+    },
+    "Connect Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect Trakt"
+          }
+        }
+      }
+    },
+    "Connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
           }
         }
       }
@@ -580,6 +624,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Find something to watch"
+          }
+        }
+      }
+    },
+    "Finish connecting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish connecting"
           }
         }
       }
@@ -1233,6 +1288,17 @@
         }
       }
     },
+    "PKCE sign-in needs no Client Secret. Enter the exact Redirect URI from your Trakt app settings. The blusion://trakt/callback URI returns directly to this app when registered. Other callbacks can be pasted below after authorization. Sign-in tokens are stored in the Keychain.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PKCE sign-in needs no Client Secret. Enter the exact Redirect URI from your Trakt app settings. The blusion://trakt/callback URI returns directly to this app when registered. Other callbacks can be pasted below after authorization. Sign-in tokens are stored in the Keychain."
+          }
+        }
+      }
+    },
     "Paste": {
       "extractionState": "manual",
       "localizations": {
@@ -1409,6 +1475,28 @@
         }
       }
     },
+    "Redirect URI": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redirect URI"
+          }
+        }
+      }
+    },
+    "Refresh from Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh from Trakt"
+          }
+        }
+      }
+    },
     "Remaining time": {
       "extractionState": "manual",
       "localizations": {
@@ -1548,6 +1636,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save address"
+          }
+        }
+      }
+    },
+    "Save connection settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save connection settings"
           }
         }
       }
@@ -1937,6 +2036,17 @@
         }
       }
     },
+    "Trakt app settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt app settings"
+          }
+        }
+      }
+    },
     "Trakt lists need a Trakt client ID in Settings.": {
       "extractionState": "manual",
       "localizations": {
@@ -2113,6 +2223,17 @@
         }
       }
     },
+    "Your Trakt library": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Trakt library"
+          }
+        }
+      }
+    },
     "Your addons have nothing for this title.": {
       "extractionState": "manual",
       "localizations": {
@@ -2131,6 +2252,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your library is empty"
+          }
+        }
+      }
+    },
+    "Your watchlist (watch later) and collection appear in Library → Saved. Watched history appears in Library → Watched. Connecting imports these automatically; Refresh adds newly saved titles without deleting local items. Only titles with IMDb IDs can import; playback positions stay on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your watchlist (watch later) and collection appear in Library → Saved. Watched history appears in Library → Watched. Connecting imports these automatically; Refresh adds newly saved titles without deleting local items. Only titles with IMDb IDs can import; playback positions stay on this device."
           }
         }
       }

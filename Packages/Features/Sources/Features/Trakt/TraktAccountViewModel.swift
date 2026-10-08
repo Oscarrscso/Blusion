@@ -9,11 +9,15 @@ import StremioKit
 public final class TraktAccountViewModel {
     public var clientIDText = ""
     public var clientSecretText = ""
+    public var redirectURIText = ""
+    public var authorizationCodeText = ""
     public var syncWatchlist = true
+    public var syncCollection = true
     public var syncHistory = true
     public private(set) var isSignedIn = false
     public private(set) var isWorking = false
     public private(set) var deviceCode: TraktDeviceCode?
+    public private(set) var authorizationURL: URL?
     public private(set) var message: String?
     public private(set) var errorMessage: String?
 
@@ -23,12 +27,14 @@ public final class TraktAccountViewModel {
 
     public var canSignIn: Bool {
         !clientIDText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !clientSecretText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     public func load() async {
-        clientIDText = await services.settings.load().traktClientID ?? ""
+        clientIDText = await services.settings.load().traktClientID ?? TraktAccount.defaultClientID
         clientSecretText = await services.traktAccount.clientSecret()
+        let redirectURI = await services.traktAccount.redirectURI()
+        redirectURIText = redirectURI.isEmpty ? "blusion://trakt/callback" : redirectURI
         isSignedIn = await services.traktAccount.isSignedIn()
     }
 
@@ -36,16 +42,64 @@ public final class TraktAccountViewModel {
         await perform {
             var settings = await self.services.settings.load()
             let clientID = self.clientIDText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.redirectURIText = self.redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines)
             if settings.traktClientID != clientID {
                 await self.services.traktAccount.signOut()
             }
             settings.traktClientID = clientID.isEmpty ? nil : clientID
             await self.services.settings.save(settings)
             try await self.services.traktAccount.saveClientSecret(self.clientSecretText)
+            try await self.services.traktAccount.saveRedirectURI(self.redirectURIText)
             self.isSignedIn = await self.services.traktAccount.isSignedIn()
             await self.services.widgetContent.invalidate()
             self.message = "Trakt credentials saved in the Keychain."
         }
+    }
+
+    public func startPKCESignIn() async {
+        await saveCredentials()
+        guard errorMessage == nil else { return }
+        #if canImport(CryptoKit)
+        await perform {
+            let proof = TraktWebAuthentication.proof()
+            self.authorizationCodeText = ""
+            self.authorizationURL = try await self.services.traktAccount.beginPKCESignIn(
+                redirectURI: self.redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines),
+                codeVerifier: proof.verifier, codeChallenge: proof.challenge)
+            self.message = nil
+        }
+        #endif
+    }
+
+    public func finishPKCESignIn(callbackURL: URL) async {
+        await perform {
+            try await self.services.traktAccount.finishPKCESignIn(callbackURL: callbackURL)
+            self.isSignedIn = true
+            self.authorizationURL = nil
+            self.authorizationCodeText = ""
+        }
+        if isSignedIn, errorMessage == nil { await importFromTrakt() }
+    }
+
+    public func finishPastedSignIn() async {
+        if redirectURIText == "urn:ietf:wg:oauth:2.0:oob" {
+            await perform {
+                try await self.services.traktAccount.finishPKCESignIn(code: self.authorizationCodeText)
+                self.isSignedIn = true
+                self.authorizationURL = nil
+                self.authorizationCodeText = ""
+            }
+            if isSignedIn, errorMessage == nil { await importFromTrakt() }
+        } else if let callback = URL(string: authorizationCodeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            await finishPKCESignIn(callbackURL: callback)
+        } else {
+            errorMessage = TraktAccountError.invalidCallback.message
+        }
+    }
+
+    public func authenticationFailed(_ error: Error) {
+        cancelSignIn()
+        errorMessage = "Couldn’t open Trakt sign-in. Try again."
     }
 
     public func startSignIn() async {
@@ -85,10 +139,16 @@ public final class TraktAccountViewModel {
         }
     }
 
-    public func cancelSignIn() { deviceCode = nil }
+    public func cancelSignIn() {
+        deviceCode = nil
+        authorizationURL = nil
+        authorizationCodeText = ""
+        Task { await services.traktAccount.cancelPKCESignIn() }
+    }
 
     public func signOut() async {
         deviceCode = nil
+        authorizationURL = nil
         await perform {
             await self.services.traktAccount.signOut()
             self.isSignedIn = false
@@ -97,14 +157,15 @@ public final class TraktAccountViewModel {
     }
 
     public func importFromTrakt() async {
-        guard syncWatchlist || syncHistory else { return }
+        guard syncWatchlist || syncCollection || syncHistory else { return }
         await perform {
             var savedCount = 0
             var watchedCount = 0
             let watchlist = self.syncWatchlist ? try await self.services.traktAccount.watchlist() : []
+            let collection = self.syncCollection ? try await self.services.traktAccount.collection() : []
             let watched = self.syncHistory ? try await self.services.traktAccount.watched() : []
-            if self.syncWatchlist {
-                for item in watchlist {
+            if self.syncWatchlist || self.syncCollection {
+                for item in watchlist + collection {
                     let libraryItem = LibraryItem(preview: item)
                     if !(await self.services.library.contains(libraryItem.id)) {
                         await self.services.library.add(libraryItem)

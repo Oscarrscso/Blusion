@@ -95,6 +95,30 @@ import StremioKitTestSupport
         #expect(watched.last?.watchedAt == Date(timeIntervalSince1970: 1700000000))
     }
 
+    @Test func collectionPagesMoviesAndMapsCollectedShowsWithoutWatchDates() async throws {
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            #expect(request.httpMethod == "GET")
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer access")
+            if request.url?.path == "/sync/collection/movies" {
+                let second = request.url?.query?.contains("page=2") == true
+                let json = second
+                    ? #"[{"movie":{"title":"Second","ids":{"imdb":"tt2"}}},{"movie":{"title":"No IMDb","ids":{"trakt":3}}}]"#
+                    : #"[{"movie":{"title":"First","year":2020,"ids":{"imdb":"tt1"}},"collected_at":"2023-11-14T22:13:20Z"}]"#
+                return StubTransport.response(Data(json.utf8), for: request, headers: ["x-pagination-page-count": "2"])
+            }
+            #expect(request.url?.path == "/sync/collection/shows")
+            return StubTransport.response(Data(#"[{"show":{"title":"Show","ids":{"imdb":"tt3"}},"seasons":[{"number":1,"episodes":[{"number":2,"collected_at":"2023-11-14T22:13:20Z"}]}]}]"#.utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let collection = try await account.collection()
+        #expect(collection.map(\.id) == ["tt1", "tt2", "tt3"])
+        #expect(collection.map(\.type) == ["movie", "movie", "series"])
+        #expect(collection.first?.releaseInfo == "2020")
+        #expect(transport.callCount == 4)
+    }
+
     @Test func expiredTokensRefreshBeforeReadingAndSignOutRevokes() async throws {
         let transport = StubTransport { request, call in
             if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }

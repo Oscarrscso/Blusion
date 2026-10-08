@@ -47,11 +47,12 @@ opens it. That is the only copy to open. A build product launched from `build/` 
 - **Title details:** IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons open their review pages or a labeled search.
   Links work without API keys. **Settings → Review services** accepts an optional OMDb API key for critic scores and a TMDb API Read Access Token
   for TMDb ratings; select **Save Review Services**. Credentials are stored in the Keychain.
-- **Settings → Accounts → Trakt:** register your Trakt API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`.
-  Enter its Client ID and Client Secret, save them, and select **Sign in to Trakt**.
-  Open the authorization link and enter the displayed code. Choose Watchlist and/or Watched movies and episodes, then use
-  **Import from Trakt** or **Send to Trakt**. Sync adds missing items without deleting anything; only titles with IMDb IDs sync.
-  Playback positions stay on the device. Credentials and sign-in tokens use the Keychain; a Client ID alone enables supported public list widgets.
+- **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that
+  Trakt API app, then select **Connect Trakt**. PKCE sign-in needs no Client Secret. A registered `blusion://trakt/callback`
+  returns through the native browser session; other registered callbacks can be pasted after authorization.
+  Connecting imports watchlist (watch later) and collection into **Library → Saved**, and history into **Library → Watched**.
+  Use **Refresh from Trakt** for later changes. Import adds missing IMDb titles without deleting local items or sending data to Trakt.
+  Playback positions stay on the device. Tokens and connection settings use the Keychain.
 
 ## Adding an addon
 
@@ -100,7 +101,7 @@ Snapshot builds carry the bundle id `app.blusion.player.snapshot`, so a run neve
 - Trakt sign-in/sync and optional OMDb/TMDb lookups have stub-based tests; live account checks require user credentials.
 - External-player progress depends on the player returning a callback. A canceled or missing callback cannot supply a new position.
 - SRT and WebVTT are supported by the built-in player; styled or bitmap subtitles need a player that supports them.
-- Trakt sync is manual and does not transfer playback positions or propagate removals. There is no automatic device sync or tvOS target.
+- Trakt imports on connection; later refreshes are manual. It does not transfer playback positions or propagate removals. There is no automatic device sync or tvOS target.
 - Addon manifest URLs containing query strings are rejected. English is the only completed localization.
 
 ## Project layout
