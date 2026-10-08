@@ -53,7 +53,6 @@ struct RootView: View {
             let settings = await environment.services.settings.load()
             environment.services.posterRatings.isEnabled = settings.showsPosterRatings
             await environment.services.posterRatings.setReviewServices(
-                omdb: settings.omdbAPIKey.map { OMDbRatings(client: environment.services.client, apiKey: $0) },
                 tmdb: settings.tmdbReadToken.map { TMDbRatings(client: environment.services.client, readAccessToken: $0) })
             await environment.seedDefaultAddons()
             #if DEBUG

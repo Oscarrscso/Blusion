@@ -211,7 +211,7 @@ Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so 
   - Updated README and Mac/reviewer notes to match current behavior. Every original agent is mapped in `docs/CLAUDE_HANDOFF.md`.
   - Validation: StremioKit 416, PlayerKit 84, Persistence 12, Features 273; 10 media-fixture skips, no failures. Mock addon 12 passed, 1 media skip. Generic iOS/Catalyst compilation and recorded Mac layout checks pass; no simulator runtime is installed.
 - v1.3 (requested follow-up, 2026-10-08):
-  - Separate subagents added Trakt device-code sign-in and explicit add-only watchlist/history sync, five review-site icons/links with optional OMDb/TMDB scores, and pointer/focus feedback.
+  - Separate subagents added Trakt device-code sign-in and explicit add-only watchlist/history sync, five review-site icons/links with optional TMDB scores, and pointer/focus feedback.
   - Fixed Home cancellation/re-entry, stale Settings overwriting new account credentials, launch navigation timing, and Settings Done contrast; regression tests and recorded route/layout checks pass. Live credentialed service checks need user API credentials.
   - Signed builds and installation succeed on the connected iPhone 17; an earlier build launched. Final launch verification awaits an unlocked phone. Full device playback checks and distribution remain open.
   - Removed 3.72 GiB of old Blusion build caches, retaining the checkpoint archive and current builds. No push.

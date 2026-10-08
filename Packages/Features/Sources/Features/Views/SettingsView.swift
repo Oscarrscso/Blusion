@@ -110,20 +110,16 @@ struct SettingsView: View {
 
     private var reviewServicesSection: some View {
         Section {
-            SecureField("OMDb API key", text: $model.omdbAPIKeyText)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .accessibilityIdentifier("settings.omdbAPIKey")
             SecureField("TMDB Read Access Token", text: $model.tmdbReadTokenText)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                 .accessibilityIdentifier("settings.tmdbReadToken")
             Button("Save Review Services") { Task { await model.commitReviewCredentials() } }
                 .accessibilityIdentifier("settings.reviews.save")
-            if let url = URL(string: "https://www.omdbapi.com/apikey.aspx") { Link("Get an OMDb key", destination: url) }
             if let url = URL(string: "https://www.themoviedb.org/settings/api") { Link("TMDB API settings", destination: url) }
         } header: {
             Text("Review services")
         } footer: {
-            Text("Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.")
+            Text("Optional. A TMDB Read Access Token adds TMDB scores and episode ratings. Credentials stay in the Keychain. Site links work without keys.")
         }
     }
 

@@ -409,7 +409,9 @@ private struct EpisodeRow: View {
 
     private var ratingText: String? {
         guard let rating = video.rating, rating > 0 else { return nil }
-        return "★ \(rating.formatted(.number.precision(.fractionLength(1))))"
+        let score = "★ \(rating.formatted(.number.precision(.fractionLength(1))))"
+        // TMDb's vote average is not IMDb's score, so a TMDb-filled rating names its source.
+        return video.ratingSource == .tmdb ? "\(score) TMDb" : score
     }
 }
 

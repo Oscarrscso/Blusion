@@ -9,6 +9,9 @@ import StremioKitTestSupport
     private let movie = MetaPreview(id: "tt0468569", type: "movie", name: "Film", imdbRating: 9)
     private let page = Data(#"<meta name="twitter:data2" content="4.5 out of 5">"#.utf8)
     private let when = Date(timeIntervalSince1970: 1_800_000_000)
+    private let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ0ZXN0In0.signature"
+    private let tmdbFindMovie = Data(#"{"movie_results":[{"id":155,"vote_average":9.1,"vote_count":20}],"tv_results":[]}"#.utf8)
+    private let tmdbFindTV = Data(#"{"movie_results":[],"tv_results":[{"id":1399,"vote_average":8.4,"vote_count":50}]}"#.utf8)
 
     private func store(_ transport: StubTransport, cache: any RatingsCache = InMemoryRatingsCache(), enabled: Bool = true,
                        now: @escaping @Sendable () -> Date = { Date() }) -> PosterRatingsStore {
@@ -174,18 +177,47 @@ import StremioKitTestSupport
         #expect(entry.letterboxd == nil && entry.imdb == 9)
     }
 
-    @Test func supplementalRatingsAreRequestedOnlyByTheDetailReviewRow() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"8.7","Metascore":"82","Ratings":[{"Source":"Rotten Tomatoes","Value":"91%"}]}"#.utf8))
-        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+    @Test func tmdbScoresAreRequestedOnlyByTheDetailReviewRow() async throws {
+        let transport = StubTransport(data: tmdbFindMovie)
+        let store = PosterRatingsStore(tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt))
         let entry = store.ratings(for: movie)
         try await Task.sleep(for: .milliseconds(20))
-        #expect(transport.callCount == 0 && entry.rottenTomatoes == nil)
+        #expect(transport.callCount == 0 && entry.tmdb == nil)
         _ = store.ratings(for: movie, includeReviews: true)
-        try await waitUntil { entry.metacritic == 82 }
-        #expect(entry.imdb == 9 && entry.rottenTomatoes == 91)
-        #expect(entry.text(for: .rottenTomatoes) == "91%" && entry.text(for: .metacritic) == "82/100")
+        try await waitUntil { entry.tmdb == 9.1 }
+        #expect(entry.imdb == 9 && entry.text(for: .tmdb) == "9.1/10")
+        #expect(entry.tmdbURL?.absoluteString == "https://www.themoviedb.org/movie/155")
         for _ in 0..<10 { _ = store.ratings(for: movie, includeReviews: true) }
-        #expect(transport.callCount == 1)
+        #expect(transport.callCount == 1 && store.reviewServiceIssue == nil)
+    }
+
+    @Test func aRefusedTokenIsLoggedWithItsReasonAndSaidInTheReviewRow() async throws {
+        let sink = MemoryLogSink()
+        let transport = StubTransport(data: Data(#"{"success":false,"status_code":7}"#.utf8), status: 401)
+        let store = PosterRatingsStore(tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt), logger: AddonLogger(sink: sink))
+        let entry = store.ratings(for: movie, includeReviews: true)
+        try await waitUntil { store.reviewServiceIssue != nil }
+        #expect(store.reviewServiceIssue == "TMDb refused the Read Access Token. Check it in Settings.")
+        #expect(entry.tmdb == nil)
+        #expect(sink.lines.contains { $0.contains("tmdb lookup failed") && $0.contains("Server error (401)") })
+        #expect(!sink.lines.joined().contains(jwt), "the token never reaches the log")
+    }
+
+    @Test func episodeScoresComeFromTMDbOnlyWithACredentialAndFailuresAreExplained() async throws {
+        let season = Data(#"{"episodes":[{"episode_number":2,"vote_average":7.6,"vote_count":30}]}"#.utf8)
+        let transport = StubTransport { request, call in
+            StubTransport.response(call == 1 ? tmdbFindTV : season, for: request)
+        }
+        let store = PosterRatingsStore(tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt))
+        #expect(await store.episodeRatings(seriesIMDbID: "tt0944947", season: 1) == [2: 7.6])
+        #expect(await PosterRatingsStore().episodeRatings(seriesIMDbID: "tt0944947", season: 1).isEmpty)
+
+        let sink = MemoryLogSink()
+        let limited = StubTransport(data: Data("{}".utf8), status: 429)
+        let failing = PosterRatingsStore(tmdb: TMDbRatings(client: makeClient(limited, retries: 0), readAccessToken: jwt), logger: AddonLogger(sink: sink))
+        #expect(await failing.episodeRatings(seriesIMDbID: "tt0944947", season: 1).isEmpty)
+        #expect(failing.reviewServiceIssue == "TMDb rate limit reached. Scores will return later.")
+        #expect(sink.lines.contains { $0.contains("episode lookup for season 1 failed") })
     }
 
     @Test func reviewScoresUseTheCacheAndRemainAvailableWithPosterBadgesDisabled() async throws {
@@ -202,18 +234,18 @@ import StremioKitTestSupport
         #expect(entry.tmdb == nil && entry.tmdbURL == nil)
     }
 
-    @Test func addingAndRemovingCredentialsStartsFreshLookupsAndClearsTheirVisibleScores() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","Metascore":"82"}"#.utf8))
+    @Test func addingAndRemovingTheTokenStartsFreshLookupsAndClearsTheirVisibleScores() async throws {
+        let transport = StubTransport(data: tmdbFindMovie)
         let store = PosterRatingsStore()
         let entry = store.ratings(for: movie, includeReviews: true)
-        #expect(entry.metacritic == nil && transport.callCount == 0)
-        await store.setReviewServices(omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"), tmdb: nil)
+        #expect(entry.tmdb == nil && transport.callCount == 0)
+        await store.setReviewServices(tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt))
         #expect(store.reviewServicesRevision == 1)
         _ = store.ratings(for: movie, includeReviews: true)
-        try await waitUntil { entry.metacritic == 82 }
-        await store.setReviewServices(omdb: nil, tmdb: nil)
+        try await waitUntil { entry.tmdb == 9.1 }
+        await store.setReviewServices(tmdb: nil)
         _ = store.ratings(for: movie, includeReviews: true)
-        #expect(entry.metacritic == nil && store.reviewServicesRevision == 2 && transport.callCount == 1)
+        #expect(entry.tmdb == nil && store.reviewServicesRevision == 2 && transport.callCount == 1)
     }
 
     @Test func openingReviewsResumesALetterboxdLookupPausedByThePosterSwitch() async throws {

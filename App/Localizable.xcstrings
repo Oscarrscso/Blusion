@@ -419,17 +419,6 @@
         }
       }
     },
-    "Critic scores supplied by OMDb.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Critic scores supplied by OMDb."
-          }
-        }
-      }
-    },
     "Customize": {
       "extractionState": "manual",
       "localizations": {
@@ -679,17 +668,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Get Infuse"
-          }
-        }
-      }
-    },
-    "Get an OMDb key": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Get an OMDb key"
           }
         }
       }
@@ -1240,17 +1218,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Trakt to authorize"
-          }
-        }
-      }
-    },
-    "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
           }
         }
       }

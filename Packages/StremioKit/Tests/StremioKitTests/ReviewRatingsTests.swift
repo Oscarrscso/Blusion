@@ -4,69 +4,107 @@ import Testing
 import StremioKitTestSupport
 
 @Suite struct ReviewRatingsTests {
-    private let omdb = Data(#"{"Response":"True","imdbRating":"8.7","Metascore":"82","Ratings":[{"Source":"Rotten Tomatoes","Value":"91%"}]}"#.utf8)
+    private let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ0ZXN0In0.signature"
+    private let findTV = Data(#"{"movie_results":[],"tv_results":[{"id":1399,"vote_average":8.4,"vote_count":50}]}"#.utf8)
 
-    @Test func omdbUsesTheIMDbIDAndReturnsNativeRatingScales() async throws {
-        let transport = StubTransport(data: omdb)
-        let ratings = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").ratings(imdbID: "tt0468569")
-        #expect(ratings == ReviewRatings(imdb: 8.7, rottenTomatoes: 91, metacritic: 82))
-        let url = try #require(transport.requests.first?.url)
-        let parameters = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-        #expect(url.host == "www.omdbapi.com" && url.scheme == "https")
-        #expect(parameters?.contains(URLQueryItem(name: "i", value: "tt0468569")) == true)
-        #expect(parameters?.contains(URLQueryItem(name: "apikey", value: "test-key")) == true)
-    }
-
-    @Test func invalidIDsOrMissingKeysDoNotSendRequests() async throws {
-        let transport = StubTransport(data: omdb)
-        let invalid = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").ratings(imdbID: "title/id")
-        let noKey = try await OMDbRatings(client: makeClient(transport), apiKey: "  ").ratings(imdbID: "tt0468569")
-        let noToken = try await TMDbRatings(client: makeClient(transport), readAccessToken: "").ratings(imdbID: "tt0468569", type: "movie")
-        #expect(invalid.isEmpty && noKey.isEmpty && noToken.isEmpty && transport.callCount == 0)
-    }
-
-    @Test func omdbRejectsInvalidScoresAndReadsTheRatingsArrayFallback() throws {
-        let bad = Data(#"""
-        {"Response":"True","imdbRating":"N/A","Metascore":"101","Ratings":[
-          {"Source":"Internet Movie Database","Value":"8.2/10"},
-          {"Source":"Rotten Tomatoes","Value":"-2%"},{"Source":"Metacritic","Value":"79/100"}]}
-        """#.utf8)
-        let ratings = try OMDbRatings.parse(bad)
-        #expect(ratings == ReviewRatings(imdb: 8.2, metacritic: 79))
-        let malformed = Data(#"{"Response":"True","Ratings":[{"Source":"Rotten Tomatoes","Value":"0.9/1"}]}"#.utf8)
-        #expect(try OMDbRatings.parse(malformed).rottenTomatoes == nil)
-    }
-
-    @Test func omdbMissingTitlesAreEmptyButInvalidKeysAndQuotasThrow() throws {
-        #expect(try OMDbRatings.parse(Data(#"{"Response":"False","Error":"Movie not found!"}"#.utf8)).isEmpty)
-        #expect(throws: AddonError.http(status: 401)) {
-            try OMDbRatings.parse(Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
-        }
-        #expect(throws: AddonError.http(status: 429)) {
-            try OMDbRatings.parse(Data(#"{"Response":"False","Error":"Request limit reached!"}"#.utf8))
-        }
-        #expect(throws: AddonError.invalidJSON) { try OMDbRatings.parse(Data("{}".utf8)) }
-    }
-
-    @Test func tmdbResolvesTheCorrectKindAndSendsTheTokenInAHeader() async throws {
-        let data = Data(#"{"movie_results":[{"id":155,"vote_average":9.1,"vote_count":20}],"tv_results":[{"id":1399,"vote_average":8.4,"vote_count":50}]}"#.utf8)
-        let transport = StubTransport(data: data)
-        let ratings = try await TMDbRatings(client: makeClient(transport), readAccessToken: "test-token").ratings(imdbID: "tt0944947", type: "series")
+    @Test func aReadAccessTokenGoesInTheBearerHeaderNeverInTheURL() async throws {
+        let transport = StubTransport(data: findTV)
+        let ratings = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).ratings(imdbID: "tt0944947", type: "series")
         #expect(ratings.tmdb == 8.4 && ratings.tmdbURL?.absoluteString == "https://www.themoviedb.org/tv/1399")
         let request = try #require(transport.requests.first)
         #expect(request.url?.absoluteString == "https://api.themoviedb.org/3/find/tt0944947?external_source=imdb_id")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
-        #expect(request.url?.absoluteString.contains("test-token") == false)
-        let movie = try TMDbRatings.parse(data, type: "movie")
-        #expect(movie.tmdb == 9.1 && movie.tmdbURL?.lastPathComponent == "155")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)")
+        #expect(request.url?.absoluteString.contains(jwt) == false)
     }
 
-    @Test func tmdbDoesNotInventRatingsForUnratedOrMissingTitles() throws {
-        let data = Data(#"{"movie_results":[{"id":155,"vote_average":0,"vote_count":0}],"tv_results":[]}"#.utf8)
+    @Test func aV3ApiKeyGoesInTheQueryInsteadOfAHeader() async throws {
+        let transport = StubTransport(data: findTV)
+        _ = try await TMDbRatings(client: makeClient(transport), readAccessToken: "0123456789abcdef0123456789abcdef").ratings(imdbID: "tt0944947", type: "series")
+        let request = try #require(transport.requests.first)
+        let items = URLComponents(url: try #require(request.url), resolvingAgainstBaseURL: false)?.queryItems
+        #expect(items?.contains(URLQueryItem(name: "api_key", value: "0123456789abcdef0123456789abcdef")) == true)
+        #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test func pastedTokensAreTrimmedAndAPastedBearerPrefixIsDropped() async throws {
+        let transport = StubTransport(data: findTV)
+        _ = try await TMDbRatings(client: makeClient(transport), readAccessToken: "  Bearer \(jwt)\n").ratings(imdbID: "tt0944947", type: "series")
+        #expect(transport.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)")
+    }
+
+    @Test func invalidIDsOrEmptyTokensDoNotSendRequests() async throws {
+        let transport = StubTransport(data: findTV)
+        let badID = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).ratings(imdbID: "title/id", type: "movie")
+        let noToken = try await TMDbRatings(client: makeClient(transport), readAccessToken: " \n ").ratings(imdbID: "tt0468569", type: "movie")
+        let badType = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).ratings(imdbID: "tt0468569", type: "anime")
+        let noEpisodes = try await TMDbRatings(client: makeClient(transport), readAccessToken: "").seasonEpisodeRatings(seriesIMDbID: "tt0944947", season: 1)
+        #expect(badID.isEmpty && noToken.isEmpty && badType.isEmpty && noEpisodes.isEmpty && transport.callCount == 0)
+    }
+
+    @Test func aRefusedTokenThrowsSoTheCallerCanSayWhy() async throws {
+        let transport = StubTransport(data: Data(#"{"success":false,"status_code":7,"status_message":"Invalid API key"}"#.utf8), status: 401)
+        let client = TMDbRatings(client: makeClient(transport), readAccessToken: jwt)
+        await #expect(throws: AddonError.http(status: 401)) {
+            try await client.ratings(imdbID: "tt0468569", type: "movie")
+        }
+        #expect(transport.callCount == 1, "a 401 is not retried")
+    }
+
+    @Test func tmdbResolvesTheCorrectKindAndNeverInventsRatingsForUnratedTitles() throws {
+        let data = Data(#"{"movie_results":[{"id":155,"vote_average":9.1,"vote_count":20}],"tv_results":[{"id":1399,"vote_average":8.4,"vote_count":50}]}"#.utf8)
+        #expect(try TMDbRatings.parse(data, type: "series").tmdb == 8.4)
         let movie = try TMDbRatings.parse(data, type: "movie")
-        #expect(movie.tmdb == nil && movie.tmdbURL != nil)
-        #expect(try TMDbRatings.parse(data, type: "series").isEmpty)
+        #expect(movie.tmdb == 9.1 && movie.tmdbURL?.lastPathComponent == "155")
+
+        let unrated = Data(#"{"movie_results":[{"id":155,"vote_average":0,"vote_count":0}],"tv_results":[]}"#.utf8)
+        let unratedMovie = try TMDbRatings.parse(unrated, type: "movie")
+        #expect(unratedMovie.tmdb == nil && unratedMovie.tmdbURL != nil)
+        #expect(try TMDbRatings.parse(unrated, type: "series").isEmpty)
         #expect(throws: AddonError.invalidJSON) { try TMDbRatings.parse(Data("{}".utf8), type: "movie") }
+        #expect(throws: AddonError.invalidJSON) { try TMDbRatings.parse(Data("not json".utf8), type: "movie") }
+    }
+
+    @Test func seasonEpisodeScoresComeFromTheSeriesFindThenTheSeasonEndpoint() async throws {
+        let season = Data(#"""
+        {"episodes":[
+          {"episode_number":1,"vote_average":8.1,"vote_count":12},
+          {"episode_number":2,"vote_average":0,"vote_count":0},
+          {"episode_number":3,"vote_average":11,"vote_count":4},
+          {"episode_number":4,"vote_average":7.25,"vote_count":3},
+          {"vote_average":9,"vote_count":9}
+        ]}
+        """#.utf8)
+        let transport = StubTransport { request, call in
+            call == 1 ? StubTransport.response(self.findTV, for: request) : StubTransport.response(season, for: request)
+        }
+        let scores = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt)
+            .seasonEpisodeRatings(seriesIMDbID: "tt0944947", season: 2)
+        #expect(scores == [1: 8.1, 4: 7.25])
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests[1].url?.absoluteString == "https://api.themoviedb.org/3/tv/1399/season/2")
+        #expect(transport.requests[1].value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)")
+    }
+
+    @Test func aSeriesOrSeasonTMDbDoesNotKnowIsEmptyNotAnError() async throws {
+        let unknownShow = StubTransport(data: Data(#"{"movie_results":[],"tv_results":[]}"#.utf8))
+        let none = try await TMDbRatings(client: makeClient(unknownShow), readAccessToken: jwt).seasonEpisodeRatings(seriesIMDbID: "tt0944947", season: 1)
+        #expect(none.isEmpty && unknownShow.callCount == 1)
+
+        let missingSeason = StubTransport { request, call in
+            call == 1 ? StubTransport.response(self.findTV, for: request) : StubTransport.response(Data("{}".utf8), status: 404, for: request)
+        }
+        let absent = try await TMDbRatings(client: makeClient(missingSeason), readAccessToken: jwt).seasonEpisodeRatings(seriesIMDbID: "tt0944947", season: 9)
+        #expect(absent.isEmpty)
+    }
+
+    @Test func aRefusedSeasonRequestThrowsWithTheStatus() async throws {
+        let transport = StubTransport { request, call in
+            call == 1 ? StubTransport.response(self.findTV, for: request) : StubTransport.response(Data("{}".utf8), status: 401, for: request)
+        }
+        let client = TMDbRatings(client: makeClient(transport), readAccessToken: jwt)
+        await #expect(throws: AddonError.http(status: 401)) {
+            try await client.seasonEpisodeRatings(seriesIMDbID: "tt0944947", season: 1)
+        }
     }
 
     @Test func linksUseKnownIDsAndSearchForUnknownSlugsWithoutLeakingQuerySyntax() throws {
@@ -88,7 +126,10 @@ import StremioKitTestSupport
         let legacy = Data(#"{"rating":4.5,"fetchedAt":100}"#.utf8)
         let decoded = try JSONDecoder().decode(CachedRating.self, from: legacy)
         #expect(decoded.rating == 4.5 && decoded.reviews == nil)
-        let current = CachedRating(rating: nil, fetchedAt: Date(), reviews: ReviewRatings(rottenTomatoes: 85, metacritic: 72))
+        // Answers an earlier build stored with OMDb scores still decode; the retired fields are ignored.
+        let retired = Data(#"{"rating":null,"fetchedAt":100,"reviews":{"imdb":8.7,"rottenTomatoes":91,"tmdb":8.4}}"#.utf8)
+        #expect(try JSONDecoder().decode(CachedRating.self, from: retired).reviews == ReviewRatings(tmdb: 8.4))
+        let current = CachedRating(rating: nil, fetchedAt: Date(), reviews: ReviewRatings(tmdb: 7.5, tmdbURL: URL(string: "https://www.themoviedb.org/movie/1")))
         #expect(try JSONDecoder().decode(CachedRating.self, from: JSONEncoder().encode(current)) == current)
     }
 }

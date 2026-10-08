@@ -12,8 +12,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var fallbackEngineEnabled: Bool
     /// The Trakt API client ID the user supplies, needed to read Trakt lists. Stored as a secret, never shipped with the app.
     public var traktClientID: String?
-    /// Optional review-service credentials, stored in the Keychain.
-    public var omdbAPIKey: String?
+    /// Optional TMDb credential (a v4 Read Access Token, or a v3 API key), stored in the Keychain.
     public var tmdbReadToken: String?
     /// Whether streams play in Blusion or are handed to another player app (Infuse).
     public var playerPreference: PlayerPreference
@@ -24,7 +23,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
 
     public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
                 traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
-                autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil) {
+                autoPlayBestStream: Bool = false, tmdbReadToken: String? = nil) {
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL
@@ -33,7 +32,6 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
         self.playerPreference = playerPreference
         self.showsPosterRatings = showsPosterRatings
         self.autoPlayBestStream = autoPlayBestStream
-        self.omdbAPIKey = omdbAPIKey
         self.tmdbReadToken = tmdbReadToken
     }
 

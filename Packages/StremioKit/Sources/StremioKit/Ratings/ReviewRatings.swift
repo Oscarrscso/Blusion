@@ -1,26 +1,21 @@
 import Foundation
 
-/// Supplemental scores keep each site's native scale: IMDb/TMDB out of 10, critics out of 100.
+/// Scores found by the review lookups. TMDb's score is out of 10. IMDb and Letterboxd scores come from the catalog or the
+/// Letterboxd page and are not stored here.
 public struct ReviewRatings: Sendable, Codable, Equatable {
-    public var imdb: Double?
-    public var rottenTomatoes: Double?
-    public var metacritic: Double?
     public var tmdb: Double?
     public var tmdbURL: URL?
 
-    public init(imdb: Double? = nil, rottenTomatoes: Double? = nil, metacritic: Double? = nil,
-                tmdb: Double? = nil, tmdbURL: URL? = nil) {
-        self.imdb = imdb
-        self.rottenTomatoes = rottenTomatoes
-        self.metacritic = metacritic
+    public init(tmdb: Double? = nil, tmdbURL: URL? = nil) {
         self.tmdb = tmdb
         self.tmdbURL = tmdbURL
     }
 
-    public var isEmpty: Bool { imdb == nil && rottenTomatoes == nil && metacritic == nil && tmdb == nil && tmdbURL == nil }
+    public var isEmpty: Bool { tmdb == nil && tmdbURL == nil }
 }
 
-/// Links never guess a review-page slug from the title. A search link says so in the UI.
+/// Links never guess a review-page slug from the title. A search link says so in the UI. Rotten Tomatoes and Metacritic have no
+/// keyless score source, so for them the app offers search links only.
 public enum ReviewSite: String, CaseIterable, Sendable, Identifiable {
     case imdb, letterboxd, rottenTomatoes, metacritic, tmdb
     public var id: String { rawValue }
