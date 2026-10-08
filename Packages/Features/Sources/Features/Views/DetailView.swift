@@ -34,10 +34,10 @@ struct DetailView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .screenBackground()
-        // The scroll view runs under the navigation bar, so the backdrop runs under it too. A soft edge fades the bar's blur
-        // into the artwork instead of stopping at a hard line.
+        // The scroll view runs under the navigation bar, so the backdrop runs under it too. The scroll-edge blur is off, so the
+        // artwork shows unblurred under the status bar and navigation bar.
         .ignoresSafeArea(.container, edges: .top)
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .scrollEdgeEffectHidden(true, for: .top)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onAppear { Task { await model.refreshUserState() } }
