@@ -50,7 +50,7 @@ struct DetailView: View {
     private var header: some View {
         BackdropLayout(isRegular: metrics.isRegular) {
             ZStack(alignment: metrics.isRegular ? .bottomLeading : .bottom) {
-                BlurredBackdrop(url: model.backdropURL, maxPixelSize: metrics.isRegular ? 1800 : 1200)
+                ArtworkImage(url: model.backdropURL, maxPixelSize: metrics.isRegular ? 1800 : 1200)
                 BottomFade(length: 0.65)
                 TitleArt(name: model.detail.name, logo: model.logoURL, alignment: metrics.isRegular ? .leading : .center)
                     .accessibilityElement(children: .ignore)
@@ -295,33 +295,6 @@ private struct BackdropLayout: Layout {
         for subview in subviews {
             subview.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
         }
-    }
-}
-
-/// The backdrop with a slightly blurred copy of the same picture underneath. The sharp picture is clear at the top, so the status
-/// bar and navigation bar sit on a soft version of the artwork, and it fades in over the band just below them.
-private struct BlurredBackdrop: View {
-    let url: URL?
-    let maxPixelSize: CGFloat
-
-    var body: some View {
-        ZStack {
-            // Scaled up so the blur does not thin out at the edges of the frame, which the clip would otherwise show.
-            ArtworkImage(url: url, maxPixelSize: 400)
-                .blur(radius: 5)
-                .scaleEffect(1.1)
-            ArtworkImage(url: url, maxPixelSize: maxPixelSize)
-                .mask { fade }
-        }
-        .clipped()
-    }
-
-    /// Clear over the bar, solid from just below it. Fractions of the backdrop's height: the bar ends near a fifth of the way down.
-    private var fade: some View {
-        LinearGradient(stops: [
-            .init(color: .clear, location: 0.20),
-            .init(color: .white, location: 0.32),
-        ], startPoint: .top, endPoint: .bottom)
     }
 }
 
