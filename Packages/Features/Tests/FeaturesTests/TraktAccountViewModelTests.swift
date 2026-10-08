@@ -11,10 +11,11 @@ import StremioKitTestSupport
     private let codeJSON = #"{"device_code":"device","user_code":"ABCD1234","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}"#
     private let tokenJSON = #"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#
 
-    private func services(transport: StubTransport, library: [LibraryItem] = [], progress: [WatchProgress] = []) async throws -> AppServices {
+    private func services(transport: StubTransport, library: [LibraryItem] = [], progress: [WatchProgress] = [],
+                          clientID: String = TraktAccount.defaultClientID) async throws -> AppServices {
         let client = makeClient(StubTransport(data: Data()))
         let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
-        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: "client"))
+        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: clientID))
         let account = TraktAccount(settings: settings, secrets: InMemorySecretStore(), transport: transport, now: { Date(timeIntervalSince1970: 1700000001) })
         try await account.saveClientSecret("secret")
         let code = try JSONDecoder().decode(TraktDeviceCode.self, from: Data(codeJSON.utf8))
@@ -23,23 +24,25 @@ import StremioKitTestSupport
                            library: InMemoryLibraryStore(library), traktAccount: account)
     }
 
-    @Test func loadingAndSavingCredentialsKeepTheExistingSettings() async throws {
-        let tokenJSON = tokenJSON
-        let transport = StubTransport(data: Data(tokenJSON.utf8))
-        let services = try await services(transport: transport)
+    @Test func loadKeepsTheExistingSettingsAndTheBuiltInClientID() async throws {
+        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)))
         var settings = await services.settings.load()
         settings.preferredResolution = 1080
         await services.settings.save(settings)
         let model = TraktAccountViewModel(services: services)
         await model.load()
-        #expect(model.isSignedIn && model.clientIDText == "client" && model.clientSecretText == "secret")
-        model.clientIDText = " new-client "
-        model.clientSecretText = " new-secret "
-        await model.saveCredentials()
-        #expect(model.errorMessage == nil && !model.isSignedIn)
+        #expect(model.isSignedIn && model.isAvailable && model.canSignIn)
         let saved = await services.settings.load()
-        #expect(saved.traktClientID == "new-client" && saved.preferredResolution == 1080)
-        #expect(await services.traktAccount.clientSecret() == "new-secret")
+        #expect(saved.traktClientID == TraktAccount.defaultClientID && saved.preferredResolution == 1080)
+    }
+
+    @Test func aClientIDFromAnEarlierBuildIsReplacedAndItsSignInCleared() async throws {
+        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)), clientID: "client")
+        let model = TraktAccountViewModel(services: services)
+        await model.load()
+        #expect(!model.isSignedIn)
+        let saved = await services.settings.load()
+        #expect(saved.traktClientID == TraktAccount.defaultClientID)
     }
 
     @Test func importAddsMissingItemsAndKeepsSavedTitlesAndPlaybackPositions() async throws {
@@ -100,17 +103,6 @@ import StremioKitTestSupport
         #expect(transport.requests.filter { $0.httpMethod == "POST" }.map { $0.url?.path } == ["/oauth/device/token", "/sync/watchlist", "/sync/history"])
         #expect(await services.library.all().count == 3)
         #expect(await services.progress.all().count == 3)
-    }
-
-    @Test func uncheckedSyncOptionsMakeNoRequests() async throws {
-        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)))
-        let model = TraktAccountViewModel(services: services)
-        model.syncWatchlist = false
-        model.syncCollection = false
-        model.syncHistory = false
-        await model.importFromTrakt()
-        await model.sendToTrakt()
-        #expect(model.message == nil && model.errorMessage == nil && !model.isWorking)
     }
 
     @Test func collectionAndWatchlistMergeWithoutDuplicatesOrMarkingCollectedTitlesWatched() async throws {

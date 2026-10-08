@@ -31,14 +31,12 @@ import StremioKitTestSupport
         let services = AppServices(registry: registry, client: client, settings: settings, traktAccount: account)
         let model = TraktAccountViewModel(services: services)
         await model.load()
-        #expect(model.clientIDText == TraktAccount.defaultClientID && model.redirectURIText == "blusion://trakt/callback")
-        model.redirectURIText = " blusion://trakt/callback "
-        #expect(model.canSignIn && model.clientSecretText.isEmpty)
+        #expect(await settings.load().traktClientID == TraktAccount.defaultClientID && model.canSignIn)
         await model.startPKCESignIn()
         #expect(model.errorMessage == nil && transport.callCount == 0)
         let authorizeURL = try #require(model.authorizationURL)
         let state = try #require(URLComponents(url: authorizeURL, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "state" })?.value)
-        var callback = URLComponents(string: model.redirectURIText)!
+        var callback = URLComponents(string: TraktAccountViewModel.redirectURI)!
         callback.queryItems = [URLQueryItem(name: "code", value: "approved"), URLQueryItem(name: "state", value: state)]
         await model.finishPKCESignIn(callbackURL: callback.url!)
         #expect(model.isSignedIn && model.errorMessage == nil && model.authorizationURL == nil)
@@ -46,7 +44,7 @@ import StremioKitTestSupport
         #expect(await services.progress.all().isEmpty)
         #expect(transport.requests.filter { $0.httpMethod == "POST" }.map { $0.url?.path } == ["/oauth/token"])
         await model.load()
-        #expect(model.isSignedIn && model.redirectURIText == "blusion://trakt/callback")
+        #expect(model.isSignedIn)
     }
 }
 #endif

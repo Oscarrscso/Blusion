@@ -24,9 +24,6 @@ public final class SettingsViewModel {
 
     public private(set) var settings = PlaybackSettings()
     public var serverURLText = ""
-    /// The Trakt client ID as typed. `commitTraktClientID()` saves it.
-    public var traktClientIDText = ""
-    public var omdbAPIKeyText = ""
     public var tmdbReadTokenText = ""
     /// Every installed addon, disabled ones included.
     public private(set) var installedAddonCount = 0
@@ -46,8 +43,6 @@ public final class SettingsViewModel {
     public func load() async {
         settings = await services.settings.load()
         serverURLText = settings.streamingServerURL ?? ""
-        traktClientIDText = settings.traktClientID ?? ""
-        omdbAPIKeyText = settings.omdbAPIKey ?? ""
         tmdbReadTokenText = settings.tmdbReadToken ?? ""
         services.posterRatings.isEnabled = settings.showsPosterRatings
         installedAddonCount = await services.registry.addons.count
@@ -91,23 +86,14 @@ public final class SettingsViewModel {
         await services.settings.save(settings)
     }
 
-    /// Saves the Trakt client ID as typed, without surrounding spaces. A blank field removes it.
-    public func commitTraktClientID() async {
-        settings = await services.settings.load()
-        let trimmed = traktClientIDText.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.traktClientID = trimmed.isEmpty ? nil : trimmed
-        await services.settings.save(settings)
-    }
-
     public func commitReviewCredentials() async {
         settings = await services.settings.load()
-        let omdb = omdbAPIKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
         let tmdb = tmdbReadTokenText.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.omdbAPIKey = omdb.isEmpty ? nil : omdb
         settings.tmdbReadToken = tmdb.isEmpty ? nil : tmdb
         await services.settings.save(settings)
+        // TODO(omdb-removal): drop `omdb: nil` once PosterRatings.setReviewServices loses its OMDb parameter.
         await services.posterRatings.setReviewServices(
-            omdb: settings.omdbAPIKey.map { OMDbRatings(client: services.client, apiKey: $0) },
+            omdb: nil,
             tmdb: settings.tmdbReadToken.map { TMDbRatings(client: services.client, readAccessToken: $0) })
         lastMessage = "Review services saved."
     }
