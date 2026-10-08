@@ -11,7 +11,7 @@ private let cinemeta = Manifest(
                                                                                    ExtraDescriptor(name: "skip")]),
                CatalogDescriptor(type: "series", id: "trending", name: "Trending")])
 
-/// A Fusion export: one row of Cinemeta's popular list, one genre collection, one unknown widget (skipped) and Continue Watching.
+/// A Fusion export: one row of Cinemeta's popular list, one genre collection, one unreadable widget with no type (skipped) and Continue Watching.
 private let fusionExport = #"""
 { "exportType": "fusionWidgets", "exportVersion": 1, "widgets": [
   { "id": "daily", "title": "Popular", "type": "row.classic", "limit": 12,
@@ -20,7 +20,7 @@ private let fusionExport = #"""
   { "id": "tiles", "title": "Genres", "type": "collection.row", "dataSource": { "kind": "collection", "payload": { "items": [
       { "id": "action", "title": "Action", "dataSources": [ { "kind": "addonCatalog",
           "payload": { "addonId": "blusion:test.cinemeta", "catalogId": "movie::top", "catalogType": "movie", "genre": "Action" } } ] } ] } } },
-  { "id": "broken", "title": "Broken", "type": "some.future.type" },
+  { "id": "broken", "title": "Broken" },
   { "id": "ctw", "title": "Continue", "type": "blusion.continueWatching" }
 ] }
 """#
@@ -443,7 +443,7 @@ private extension HomeWidget.Content {
     var rowSource: WidgetSource? {
         switch self {
         case .row(let row), .hero(let row): return row.source
-        case .collection, .continueWatching: return nil
+        case .collection, .continueWatching, .unsupported: return nil
         }
     }
 }

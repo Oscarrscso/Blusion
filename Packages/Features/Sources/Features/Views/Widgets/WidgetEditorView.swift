@@ -45,6 +45,12 @@ struct WidgetEditorView: View {
                 }
             case .continueWatching:
                 EmptyView()
+            case .unsupported:
+                Section {
+                    Text("Blusion can't show this kind of row yet, so it has no settings here. It is kept so your layout stays intact.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section {
                 Button("Remove Widget", role: .destructive) {
@@ -77,7 +83,7 @@ struct WidgetEditorView: View {
                     case .collection(var tiles):
                         tiles.append(CollectionItem(title: genre ?? choice.title, sources: [source]))
                         widget.content = .collection(tiles)
-                    case .continueWatching: break
+                    case .continueWatching, .unsupported: break
                     }
                     showsSource = false
                 }
@@ -125,6 +131,8 @@ struct WidgetEditorView: View {
                     ForEach(WidgetPresentation.CardStyle.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                 }
                 Toggle("Show ratings", isOn: row.presentation.showsRatings)
+                Toggle("Numbered (top list)", isOn: row.presentation.showsRank)
+                    .accessibilityIdentifier("widgetEditor.numbered")
             }
         }
         Section {

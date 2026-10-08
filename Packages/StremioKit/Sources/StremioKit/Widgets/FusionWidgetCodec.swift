@@ -86,12 +86,12 @@ public enum FusionWidgetCodec {
             }
             let content: HomeWidget.Content
             switch type {
-            case "row.classic", "blusion.hero":
-                guard let row = rowConfiguration(object) else {
+            case "row.classic", "row.classic.numbered", "blusion.hero":
+                guard let row = rowConfiguration(object, numbered: type == "row.classic.numbered") else {
                     skipped += 1
                     return nil
                 }
-                content = type == "row.classic" ? .row(row) : .hero(row)
+                content = type == "blusion.hero" ? .hero(row) : .row(row)
             case "collection.row":
                 guard let tiles = collection(object) else {
                     skipped += 1
@@ -101,17 +101,19 @@ public enum FusionWidgetCodec {
             case "blusion.continueWatching":
                 content = .continueWatching
             default:
-                skipped += 1
-                return nil
+                // A type this version cannot show is kept as a placeholder, so the layout round-trips and Home can say so.
+                content = .unsupported(type: type)
             }
             return HomeWidget(id: Read.text(object["id"]) ?? UUID().uuidString, title: Read.text(object["title"]) ?? "",
                               hideTitle: Read.flag(object["hideTitle"]) ?? false, content: content)
         }
 
         /// A row or hero needs a readable data source; everything else falls back to a default.
-        mutating func rowConfiguration(_ object: [String: Any]) -> RowConfiguration? {
+        mutating func rowConfiguration(_ object: [String: Any], numbered: Bool = false) -> RowConfiguration? {
             guard let source = source(object["dataSource"]) else { return nil }
-            return RowConfiguration(source: source, presentation: Read.presentation(object["presentation"]),
+            var presentation = Read.presentation(object["presentation"])
+            presentation.showsRank = numbered
+            return RowConfiguration(source: source, presentation: presentation,
                                     limit: Read.integer(object["limit"]) ?? 20, cacheTTL: Read.integer(object["cacheTTL"]) ?? 3600)
         }
 
@@ -291,11 +293,13 @@ public enum FusionWidgetCodec {
         var object: [String: Any] = ["id": widget.id, "title": widget.title, "hideTitle": widget.hideTitle]
         switch widget.content {
         case .row(let row):
-            object["type"] = "row.classic"
+            object["type"] = row.presentation.showsRank ? "row.classic.numbered" : "row.classic"
             encodeRow(row, into: &object)
         case .hero(let row):
             object["type"] = "blusion.hero"
             encodeRow(row, into: &object)
+        case .unsupported(let type):
+            object["type"] = type
         case .collection(let tiles):
             object["type"] = "collection.row"
             let payload: [String: Any] = ["items": tiles.map { encodeTile($0) }]

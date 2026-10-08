@@ -107,6 +107,8 @@ struct HomeView: View {
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
             ContinueWatchingRow(items: model.continueWatching, title: section.widget.title, hideTitle: section.widget.hideTitle)
+        case .unsupported:
+            UnsupportedWidgetRow(widget: section.widget)
         }
     }
 

@@ -51,7 +51,7 @@ public final class WatchProgressEntity {
     }
 }
 
-/// A saved title. Added in schema V2.
+/// A saved title. Added in schema V2; genres and rating added in V3.
 @Model
 public final class LibraryEntity {
     @Attribute(.unique) public var id: String
@@ -61,8 +61,11 @@ public final class LibraryEntity {
     public var posterURLString: String?
     public var releaseInfo: String?
     public var addedAt: Date
+    public var genres: [String] = []
+    public var imdbRating: Double?
 
-    public init(id: String, type: String, contentID: String, name: String, posterURLString: String?, releaseInfo: String?, addedAt: Date) {
+    public init(id: String, type: String, contentID: String, name: String, posterURLString: String?, releaseInfo: String?, addedAt: Date,
+                genres: [String] = [], imdbRating: Double? = nil) {
         self.id = id
         self.type = type
         self.contentID = contentID
@@ -70,6 +73,8 @@ public final class LibraryEntity {
         self.posterURLString = posterURLString
         self.releaseInfo = releaseInfo
         self.addedAt = addedAt
+        self.genres = genres
+        self.imdbRating = imdbRating
     }
 }
 
@@ -80,15 +85,45 @@ public enum BlusionSchemaV1: VersionedSchema {
 }
 
 /// V2 (M7): adds watch progress and the library. Existing addon rows are untouched, so the migration is lightweight.
+/// The library entity is frozen here as it was in V2, so the V2 store matches this definition during migration.
 public enum BlusionSchemaV2: VersionedSchema {
     public static let versionIdentifier = Schema.Version(2, 0, 0)
+    public static var models: [any PersistentModel.Type] { [AddonEntity.self, WatchProgressEntity.self, LibraryEntity.self] }
+
+    @Model
+    public final class LibraryEntity {
+        @Attribute(.unique) public var id: String
+        public var type: String
+        public var contentID: String
+        public var name: String
+        public var posterURLString: String?
+        public var releaseInfo: String?
+        public var addedAt: Date
+
+        public init(id: String, type: String, contentID: String, name: String, posterURLString: String?, releaseInfo: String?, addedAt: Date) {
+            self.id = id
+            self.type = type
+            self.contentID = contentID
+            self.name = name
+            self.posterURLString = posterURLString
+            self.releaseInfo = releaseInfo
+            self.addedAt = addedAt
+        }
+    }
+}
+
+/// V3: saved titles keep their genres and IMDb rating, so the Library can filter by them. A lightweight step from V2: both new
+/// attributes have defaults.
+public enum BlusionSchemaV3: VersionedSchema {
+    public static let versionIdentifier = Schema.Version(3, 0, 0)
     public static var models: [any PersistentModel.Type] { [AddonEntity.self, WatchProgressEntity.self, LibraryEntity.self] }
 }
 
 public enum BlusionMigrationPlan: SchemaMigrationPlan {
-    public static var schemas: [any VersionedSchema.Type] { [BlusionSchemaV1.self, BlusionSchemaV2.self] }
+    public static var schemas: [any VersionedSchema.Type] { [BlusionSchemaV1.self, BlusionSchemaV2.self, BlusionSchemaV3.self] }
     public static var stages: [MigrationStage] {
-        [.lightweight(fromVersion: BlusionSchemaV1.self, toVersion: BlusionSchemaV2.self)]
+        [.lightweight(fromVersion: BlusionSchemaV1.self, toVersion: BlusionSchemaV2.self),
+         .lightweight(fromVersion: BlusionSchemaV2.self, toVersion: BlusionSchemaV3.self)]
     }
 }
 #endif

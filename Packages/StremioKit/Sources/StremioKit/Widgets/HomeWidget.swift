@@ -23,6 +23,9 @@ public struct HomeWidget: Sendable, Codable, Equatable, Hashable, Identifiable {
         case collection([CollectionItem])
         /// The user's in-progress titles (Blusion only).
         case continueWatching
+        /// A Fusion widget type this version cannot show (for example a calendar). Kept, with its type, so an imported layout survives
+        /// and the UI can say so. Its contents are not kept: they may carry addon links.
+        case unsupported(type: String)
     }
 }
 
@@ -63,12 +66,28 @@ public struct WidgetPresentation: Sendable, Codable, Equatable, Hashable {
     public var cardStyle: CardStyle
     public var showsRatings: Bool
     public var showsProviders: Bool
+    /// A numbered (top-N) row: each card carries its position, 1 first. Fusion's `row.classic.numbered`.
+    public var showsRank: Bool
 
-    public init(aspectRatio: AspectRatio = .poster, cardStyle: CardStyle = .medium, showsRatings: Bool = true, showsProviders: Bool = false) {
+    public init(aspectRatio: AspectRatio = .poster, cardStyle: CardStyle = .medium, showsRatings: Bool = true, showsProviders: Bool = false,
+                showsRank: Bool = false) {
         self.aspectRatio = aspectRatio
         self.cardStyle = cardStyle
         self.showsRatings = showsRatings
         self.showsProviders = showsProviders
+        self.showsRank = showsRank
+    }
+
+    private enum CodingKeys: String, CodingKey { case aspectRatio, cardStyle, showsRatings, showsProviders, showsRank }
+
+    /// `showsRank` is missing from files written before numbered rows existed, so it defaults to off.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(aspectRatio: try container.decode(AspectRatio.self, forKey: .aspectRatio),
+                  cardStyle: try container.decode(CardStyle.self, forKey: .cardStyle),
+                  showsRatings: try container.decode(Bool.self, forKey: .showsRatings),
+                  showsProviders: try container.decode(Bool.self, forKey: .showsProviders),
+                  showsRank: try container.decodeIfPresent(Bool.self, forKey: .showsRank) ?? false)
     }
 }
 
