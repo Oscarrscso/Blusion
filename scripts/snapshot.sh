@@ -83,7 +83,7 @@ fi
 [[ -d "$APP" ]] || { echo "snapshot: no build at $APP (run without --no-build)" >&2; exit 1; }
 
 rm -f "$OUT"
-# A foreground window lets initial navigation and sheets finish presenting. -n starts a fresh instance.
+# Show the preview so Catalyst navigation animations finish. -n starts a fresh instance.
 open -n "$APP" \
   --env BLUSION_UITEST=1 --env BLUSION_SEED_DEFAULTS=1 \
   --env "BLUSION_ROUTE=$ROUTE" --env "BLUSION_SNAPSHOT=$OUT" --env "BLUSION_SNAPSHOT_DELAY=$DELAY" --env "BLUSION_WINDOW_SIZE=$SIZE" \

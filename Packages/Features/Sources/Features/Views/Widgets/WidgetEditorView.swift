@@ -60,9 +60,10 @@ struct WidgetEditorView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { Task { await model.update(widget); dismiss() } }
+                    .buttonStyle(.glass).foregroundStyle(.white)
                     .accessibilityIdentifier("widgetEditor.save")
             }
-            if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
+            if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton().buttonStyle(.glass).foregroundStyle(.white) } }
         }
         .sheet(isPresented: $showsSource) {
             NavigationStack {
@@ -164,6 +165,7 @@ private struct CollectionTileEditor: View {
                     tile.imageURL = text.isEmpty ? nil : URL(string: text)
                     save(tile)
                 }
+                .buttonStyle(.glass).foregroundStyle(.white)
             }
         }
     }

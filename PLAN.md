@@ -213,5 +213,5 @@ Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so 
 - v1.3 (requested follow-up, 2026-10-08):
   - Separate subagents added Trakt device-code sign-in and explicit add-only watchlist/history sync, five review-site icons/links with optional OMDb/TMDB scores, and pointer/focus feedback.
   - Fixed Home cancellation/re-entry, stale Settings overwriting new account credentials, launch navigation timing, and Settings Done contrast; regression tests and recorded route/layout checks pass. Live credentialed service checks need user API credentials.
-  - Signed, installed, and launched the current app on the connected iPhone 17; full device playback checks and distribution remain open.
+  - Signed builds and installation succeed on the connected iPhone 17; an earlier build launched. Final launch verification awaits an unlocked phone. Full device playback checks and distribution remain open.
   - Removed 3.72 GiB of old Blusion build caches, retaining the checkpoint archive and current builds. No push.
