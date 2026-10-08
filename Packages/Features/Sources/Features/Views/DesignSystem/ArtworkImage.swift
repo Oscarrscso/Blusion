@@ -8,18 +8,15 @@ struct ArtworkImage: View {
     let url: URL?
     let title: String
     let maxPixelSize: CGFloat
-    /// Where the picture is anchored when the frame crops it. `.top` keeps the top edge, `.center` splits the crop evenly.
-    let alignment: Alignment
 
     @State private var image: UIImage?
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
     @State private var imageURL: URL?
 
-    init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, alignment: Alignment = .center) {
+    init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
-        self.alignment = alignment
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
         let cached = url.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: maxPixelSize) }
         _image = State(initialValue: cached)
@@ -34,8 +31,7 @@ struct ArtworkImage: View {
                 if let image {
                     Image(uiImage: image)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                        .scaledToFill()
                         .transition(.opacity)
                 }
             }

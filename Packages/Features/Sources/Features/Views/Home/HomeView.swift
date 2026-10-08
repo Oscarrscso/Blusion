@@ -98,8 +98,8 @@ struct HomeView: View {
     /// It stays put while the spotlight scrolls, and the navigation bar takes over once the content moves past it.
     private var topBlurBar: some View {
         Rectangle()
-            .fill(.ultraThinMaterial)
-            .frame(height: 64)
+            .fill(.regularMaterial)
+            .frame(height: 80)
             .mask {
                 LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
             }
