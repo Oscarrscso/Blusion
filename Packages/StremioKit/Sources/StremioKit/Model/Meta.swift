@@ -87,9 +87,11 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var released: String?
     public var thumbnail: URL?
     public var overview: String?
+    /// Per-episode rating on a 0 to 10 scale, when the addon supplies one (`imdbRating` or `rating`). Never fetched from anywhere else.
+    public var rating: Double?
 
     public init(id: String, title: String? = nil, season: Int? = nil, episode: Int? = nil,
-                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil) {
+                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil, rating: Double? = nil) {
         self.id = id
         self.title = title ?? id
         self.season = season
@@ -97,9 +99,13 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.released = released
         self.thumbnail = thumbnail
         self.overview = overview
+        self.rating = rating.flatMap { (0...10).contains($0) && $0 > 0 ? $0 : nil }
     }
 
-    private enum Keys: String, CodingKey { case id, title, name, season, episode, number, released, thumbnail, overview, description }
+    /// `8.4`, or nil without a usable rating.
+    public var ratingText: String? { rating.map { String(format: "%.1f", $0) } }
+
+    private enum Keys: String, CodingKey { case id, title, name, season, episode, number, released, thumbnail, overview, description, imdbRating, rating }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: Keys.self)
@@ -110,7 +116,8 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
                   episode: container.int(.episode) ?? container.int(.number),
                   released: container.string(.released),
                   thumbnail: container.url(.thumbnail),
-                  overview: container.string(.overview) ?? container.string(.description))
+                  overview: container.string(.overview) ?? container.string(.description),
+                  rating: container.double(.imdbRating) ?? container.double(.rating))
     }
 }
 

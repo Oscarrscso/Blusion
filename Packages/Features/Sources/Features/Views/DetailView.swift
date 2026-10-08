@@ -112,6 +112,12 @@ struct DetailView: View {
                     Text("\(video.episode.map(String.init) ?? "•")").font(.headline).frame(minWidth: 28)
                     Text(video.title).multilineTextAlignment(.leading)
                     Spacer()
+                    if let rating = video.ratingText {
+                        Label(rating, systemImage: "star.fill")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel("IMDb rating \(rating) out of 10")
+                    }
                     if model.isWatched(model.request(for: video)) {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Watched")
                     }
