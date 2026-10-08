@@ -42,8 +42,7 @@ enum DebugSnapshot {
         guard let main = windows.first(where: \.isKeyWindow) ?? windows.first else { return false }
         // On the Mac a sheet lives in a window of its own (bridged to AppKit), which the main window's drawing leaves out:
         // when something is presented, draw the window that shows it instead.
-        var top = main.rootViewController
-        while let presented = top?.presentedViewController { top = presented }
+        let top = main.rootViewController.flatMap(presentedController)
         let window = top?.viewIfLoaded?.window ?? main
         let format = UIGraphicsImageRendererFormat()
         format.scale = 2
@@ -52,6 +51,17 @@ enum DebugSnapshot {
         }
         guard let data = image.pngData() else { return false }
         return (try? data.write(to: url, options: .atomic)) != nil
+    }
+
+    // SwiftUI can present a sheet from a child of the window's root controller.
+    private static func presentedController(in controller: UIViewController) -> UIViewController? {
+        if let presented = controller.presentedViewController {
+            return presentedController(in: presented) ?? presented
+        }
+        for child in controller.children.reversed() {
+            if let presented = presentedController(in: child) { return presented }
+        }
+        return nil
     }
 }
 #endif

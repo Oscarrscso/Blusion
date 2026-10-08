@@ -33,6 +33,7 @@ public final class AppRouter {
     func presentLaunchRoute(includeHomeDestinations: Bool = true) {
         guard let route = pendingLaunchRoute else { return }
         guard !includeHomeDestinations || route.tab == .home else { return }
+        guard !includeHomeDestinations || route.detail != nil || route.streams != nil || route.showsGallery else { return }
         tab = route.tab
         guard includeHomeDestinations || (route.detail == nil && route.streams == nil && !route.showsGallery) else { return }
         pendingLaunchRoute = nil

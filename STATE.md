@@ -4,8 +4,8 @@
 > agent directories preserved in `build/checkpoint-agent-work.tar.gz`. The continuation builds with Xcode and uses an
 > iOS 26.0 deployment target plus Mac Catalyst. Cinemeta is seeded once for metadata; Addons and Widgets live in Settings.
 > Infuse, review-site ratings/links, manual Trakt account sync, recent searches, widgets, and pointer feedback are wired into the app.
-> Package checks and iOS/Catalyst builds pass. The signed update is installed and launched on the connected iPhone 17;
-> the full playback/device checklist remains open. No simulator runtime is installed. See [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md).
+> Package checks and iOS/Catalyst builds pass. Signed updates install on the connected iPhone 17; an earlier build launched,
+> and the final launch check awaits an unlocked phone. The full playback/device checklist remains open. No simulator runtime is installed. See [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md).
 >
 > The milestone tree and handoff notes below describe the original Linux-era run. Its counts, unbuilt-Xcode claims, and `[d]`
 > markers are historical; the current validation record above takes precedence.

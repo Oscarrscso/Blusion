@@ -82,7 +82,7 @@ struct WidgetsManagerView: View {
         .navigationTitle("Widgets")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("widgets.manager")
-        .toolbar { EditButton() }
+        .toolbar { EditButton().buttonStyle(.glass).foregroundStyle(.white) }
         .task { await model.load() }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model) }
         .sheet(item: $adding) { kind in

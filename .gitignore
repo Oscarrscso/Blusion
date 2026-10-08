@@ -17,6 +17,7 @@ project.fallback.generated.yml
 Tools/MockAddon/fixtures/generated/
 
 # Local run artifacts
+.claude/worktrees/
 .mock-addon.pid
 .mock-addon.log
 coverage/
