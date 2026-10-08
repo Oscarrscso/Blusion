@@ -67,7 +67,11 @@ struct TraktAccountView: View {
         } header: {
             Text("Your Trakt library")
         } footer: {
-            Text("Sync sends your saved titles and watched items to Trakt, then imports Trakt’s collection. Your watchlist and collection appear in Library → Saved; watched history appears in Library → Watched. Nothing is removed.")
+            Text("""
+                Sync sends your saved titles and watched items to Trakt, then imports Trakt’s collection. \
+                Your watchlist and collection appear in Library → Saved; watched history appears in Library → Watched. \
+                Nothing is removed.
+                """)
         }
     }
 
