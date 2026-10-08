@@ -239,7 +239,8 @@ import StremioKitTestSupport
         let shows = Manifest(id: "shows", name: "Shows", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["series"],
                              catalogs: [CatalogDescriptor(type: "series", id: "top", extra: [ExtraDescriptor(name: "genre", options: ["Drama"])])])
         let films = Manifest(id: "films", name: "Films", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
-                             catalogs: [CatalogDescriptor(type: "movie", id: "films", extra: [ExtraDescriptor(name: "genre", options: ["Action", "Comedy", "Action", "  "])])])
+                             catalogs: [CatalogDescriptor(type: "movie", id: "films",
+                                 extra: [ExtraDescriptor(name: "genre", options: ["Action", "Comedy", "Action", "  "])])])
         let model = try await model(manifests: [shows, films], transport: stub())
         await model.refreshAvailability()
         #expect(model.browseGenres.map(\.name) == ["Action", "Comedy"], "the movie catalog wins over the series one listed before it")

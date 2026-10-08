@@ -51,7 +51,11 @@ struct TraktAccountView: View {
         } header: {
             Text("Connection")
         } footer: {
-            Text("PKCE sign-in needs no Client Secret. Enter the exact Redirect URI from your Trakt app settings. The blusion://trakt/callback URI returns directly to this app when registered. Other callbacks can be pasted below after authorization. Sign-in tokens are stored in the Keychain.")
+            Text("""
+                PKCE sign-in needs no Client Secret. Enter the exact Redirect URI from your Trakt app settings. The \
+                blusion://trakt/callback URI returns directly to this app when registered. Other callbacks can be pasted below after \
+                authorization. Sign-in tokens are stored in the Keychain.
+                """)
         }
         .disabled(model.authorizationURL != nil)
     }
@@ -99,7 +103,11 @@ struct TraktAccountView: View {
         } header: {
             Text("Your Trakt library")
         } footer: {
-            Text("Your watchlist (watch later) and collection appear in Library → Saved. Watched history appears in Library → Watched. Connecting imports these automatically; Refresh adds newly saved titles without deleting local items. Only titles with IMDb IDs can import; playback positions stay on this device.")
+            Text("""
+                Your watchlist (watch later) and collection appear in Library → Saved. Watched history appears in Library → Watched. \
+                Connecting imports these automatically; Refresh adds newly saved titles without deleting local items. Only titles with \
+                IMDb IDs can import; playback positions stay on this device.
+                """)
         }
     }
 

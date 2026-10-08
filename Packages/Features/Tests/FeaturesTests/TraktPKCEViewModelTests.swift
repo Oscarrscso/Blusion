@@ -12,7 +12,8 @@ import StremioKitTestSupport
             if request.url?.path == "/oauth/token" {
                 let body = try #require(try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String])
                 #expect(body["client_secret"] == nil && body["code_verifier"] != nil)
-                return StubTransport.response(Data(#"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#.utf8), for: request)
+                let payload = #"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
             if request.url?.path == "/sync/watchlist" {
                 return StubTransport.response(Data(#"[{"movie":{"title":"Watch later","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)

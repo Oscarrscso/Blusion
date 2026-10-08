@@ -102,8 +102,7 @@ struct WidgetEditorView: View {
             default: return RowConfiguration(source: .unsupported(kind: ""))
             }
         } set: { value in
-            if case .hero = widget.content { widget.content = .hero(value) }
-            else { widget.content = .row(value) }
+            if case .hero = widget.content { widget.content = .hero(value) } else { widget.content = .row(value) }
         }
     }
 

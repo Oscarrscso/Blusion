@@ -31,8 +31,7 @@ struct WidgetImportView: View {
             Section {
                 Button("Import") {
                     Task {
-                        if fromURL { await model.importFromURL(text, mode: mode) }
-                        else { await model.importJSON(text, mode: mode) }
+                        if fromURL { await model.importFromURL(text, mode: mode) } else { await model.importJSON(text, mode: mode) }
                         if !model.messageIsError { dismiss() }
                     }
                 }

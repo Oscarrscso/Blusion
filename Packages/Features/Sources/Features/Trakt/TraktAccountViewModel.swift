@@ -213,8 +213,7 @@ public final class TraktAccountViewModel {
         errorMessage = nil
         message = nil
         defer { isWorking = false }
-        do { try await operation() }
-        catch { errorMessage = Self.message(for: error) }
+        do { try await operation() } catch { errorMessage = Self.message(for: error) }
     }
 
     private static func traktItem(_ progress: WatchProgress) -> TraktWatchedItem? {
