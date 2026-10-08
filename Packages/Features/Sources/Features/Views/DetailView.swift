@@ -38,7 +38,6 @@ struct DetailView: View {
         // into the artwork instead of stopping at a hard line.
         .ignoresSafeArea(.container, edges: .top)
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .navigationTitle(model.detail.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onAppear { Task { await model.refreshUserState() } }
@@ -304,7 +303,7 @@ private struct BlurredBackdrop: View {
         ZStack {
             // Scaled up so the blur does not thin out at the edges of the frame, which the clip would otherwise show.
             ArtworkImage(url: url, maxPixelSize: 400)
-                .blur(radius: 28)
+                .blur(radius: 14)
                 .scaleEffect(1.3)
             ArtworkImage(url: url, maxPixelSize: maxPixelSize)
                 .mask { fade }
