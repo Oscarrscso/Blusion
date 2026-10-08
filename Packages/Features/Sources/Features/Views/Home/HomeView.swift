@@ -7,6 +7,9 @@ import SwiftUI
 struct HomeView: View {
     @State private var model: HomeViewModel
     @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(TitleActions.self) private var actions: TitleActions?
     /// True once the content has scrolled past the top of the spotlight, when the navigation bar takes a background and a title.
     @State private var isScrolled = false
 
@@ -22,6 +25,14 @@ struct HomeView: View {
             .task { await model.observeAddons() }
             .onAppear { Task { await model.refreshContinueWatching() } }
             .refreshable { await model.refresh() }
+            .onChange(of: actions?.watchedIdentities) { Task { await model.refreshContinueWatching() } }
+            .onChange(of: router.userStateRevision) { _, _ in Task { await model.refreshContinueWatching() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await model.refreshContinueWatching() } }
+            }
+            .onChange(of: router.isShowingSettings) { _, showing in
+                if !showing { Task { await model.load() } }
+            }
     }
 
     /// The spotlight covers the top of the screen until the content moves past it: the bar is then clear and has no title.
@@ -29,10 +40,10 @@ struct HomeView: View {
         !isScrolled && heroIsFirst
     }
 
-    /// The spotlight is the first section: the scroll view then runs under the status bar, so its artwork fills the top of the screen.
+    /// A spotlight without a heading can extend beneath the navigation bar; a visible heading stays below it.
     private var heroIsFirst: Bool {
         guard let first = model.sections.first, case .hero = first.widget.content else { return false }
-        return true
+        return first.widget.hideTitle
     }
 
     @ViewBuilder
@@ -56,13 +67,15 @@ struct HomeView: View {
 
     private var ready: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
                 if model.isOffline {
-                    ContinueWatchingRow(items: model.continueWatching)
+                    ForEach(model.sections) { section in
+                        if case .continueWatching = section.widget.content { sectionView(section) }
+                    }
                     OfflineBanner()
                 } else {
                     ForEach(model.sections) { section in
-                        sectionView(section)
+                        if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
                     }
                 }
                 customizeButton
@@ -70,9 +83,17 @@ struct HomeView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .accessibilityIdentifier("board.rows")
+        .contentMargins(.top, 0, for: .scrollContent)
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .scrollEdgeEffectHidden(spotlightIsAtTop, for: .top)
         .screenBackground()
         .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 160 }, action: { _, scrolled in isScrolled = scrolled })
-        .ignoresSafeArea(edges: heroIsFirst ? .top : [])
+        .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
+    }
+
+    private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {
+        guard case .row = section.widget.content, case .loaded(let items) = section.state else { return false }
+        return items.isEmpty && section.issue == nil
     }
 
     @ViewBuilder
@@ -85,7 +106,7 @@ struct HomeView: View {
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
-            ContinueWatchingRow(items: model.continueWatching)
+            ContinueWatchingRow(items: model.continueWatching, title: section.widget.title, hideTitle: section.widget.hideTitle)
         }
     }
 
@@ -101,7 +122,7 @@ struct HomeView: View {
             } label: {
                 Label("Customize Home", systemImage: "slider.horizontal.3")
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.glassCapsule)
             .accessibilityIdentifier("home.customize")
             Spacer(minLength: 0)
         }
@@ -121,6 +142,7 @@ private struct HomeLoadingView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .scrollDisabled(true)
+        .scrollEdgeEffectHidden(true, for: .top)
         .screenBackground()
         .ignoresSafeArea(edges: .top)
         .accessibilityElement(children: .ignore)

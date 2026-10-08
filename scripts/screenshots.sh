@@ -9,11 +9,19 @@ cd "$ROOT"
 [[ "$(uname -s)" == "Darwin" ]] || { echo "screenshots.sh needs macOS + Xcode" >&2; exit 2; }
 
 CATALOG_PORT="${CATALOG_PORT:-7001}"; STREAM_PORT="${STREAM_PORT:-7002}"
-./Tools/MockAddon/make-fixtures.sh >/dev/null
+if command -v ffmpeg >/dev/null 2>&1; then
+  ./Tools/MockAddon/make-fixtures.sh >/dev/null || exit 1
+else
+  echo "ffmpeg not installed: playback screenshots will skip unless media fixtures already exist"
+fi
+HAS_MEDIA_FIXTURES=0
+if [[ -f Tools/MockAddon/fixtures/generated/sample.mp4 && -f Tools/MockAddon/fixtures/generated/sample-ac3.mkv \
+      && -f Tools/MockAddon/fixtures/generated/hls/index.m3u8 && -f Tools/MockAddon/fixtures/generated/hls/seg000.ts ]]; then HAS_MEDIA_FIXTURES=1; fi
 node Tools/MockAddon/server.js --catalog-port "$CATALOG_PORT" --stream-port "$STREAM_PORT" >.mock-addon.log 2>&1 &
 MOCK_PID=$!
 trap 'kill $MOCK_PID 2>/dev/null || true' EXIT
 for _ in $(seq 1 50); do curl -sf "http://127.0.0.1:${CATALOG_PORT}/manifest.json" >/dev/null && break; sleep 0.2; done
+curl -sf "http://127.0.0.1:${CATALOG_PORT}/manifest.json" >/dev/null || { echo "screenshots: mock addon did not start" >&2; exit 1; }
 
 xcodegen generate --quiet || exit 1
 
@@ -34,17 +42,21 @@ sys.exit(1)' "$1" "$2"
 }
 
 status=0
+devices=0
 for spec in "small-phone|iPhone.*SE|" "pro-max-phone|iPhone.*Pro Max|" "ipad|iPad|mini"; do
   class="${spec%%|*}"; rest="${spec#*|}"; want="${rest%%|*}"; exclude="${rest#*|}"
   device="$(pick "$want" "$exclude")" || { echo "no simulator for $class, skipping"; continue; }
   udid="${device%%|*}"; name="${device#*|}"
+  devices=$((devices + 1))
   echo "== $class: $name"
   out="$ROOT/shots/$class"; mkdir -p "$out"
   xcrun simctl boot "$udid" 2>/dev/null || true
   TEST_RUNNER_UITEST_SHOT_DIR="$out" \
   TEST_RUNNER_MOCK_ADDON_CATALOG_URL="http://127.0.0.1:${CATALOG_PORT}" \
   TEST_RUNNER_MOCK_ADDON_STREAM_URL="http://127.0.0.1:${STREAM_PORT}" \
+  TEST_RUNNER_BLUSION_HAS_MEDIA_FIXTURES="$HAS_MEDIA_FIXTURES" \
   xcodebuild test -project Blusion.xcodeproj -scheme Blusion -destination "platform=iOS Simulator,id=$udid" \
     -only-testing:BlusionUITests CODE_SIGNING_ALLOWED=NO 2>&1 | tail -n 15 || status=1
 done
+[[ "$devices" -gt 0 ]] || { echo "screenshots: no matching iOS simulators; no screenshots were tested" >&2; exit 2; }
 exit $status

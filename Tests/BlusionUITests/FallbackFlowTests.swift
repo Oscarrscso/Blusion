@@ -10,6 +10,7 @@ final class FallbackFlowTests: XCTestCase {
         continueAfterFailure = false
         try XCTSkipIf(ProcessInfo.processInfo.environment["BLUSION_FALLBACK"]?.isEmpty ?? true, "built without the fallback engine")
         try XCTSkipIf(catalogURL.isEmpty || streamURL.isEmpty, "mock addon URLs are not set (run through scripts/verify.sh)")
+        try requireMediaFixtures()
     }
 
     @MainActor
@@ -17,7 +18,7 @@ final class FallbackFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["BLUSION_UITEST"] = "1"
         app.launch()
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         for url in ["\(catalogURL)/uitest/manifest.json", "\(streamURL)/uitest-streams/manifest.json"] {
             let field = app.textFields["addons.installField"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -26,7 +27,7 @@ final class FallbackFlowTests: XCTestCase {
             app.buttons["addons.installButton"].tap()
             XCTAssertTrue(app.staticTexts["addons.success"].waitForExistence(timeout: 15))
         }
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()
@@ -60,6 +61,7 @@ final class FallbackFlowTests: XCTestCase {
 
     @MainActor
     func testMKVWithDTSPlays() throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["BLUSION_HAS_DTS_FIXTURE"] != "1", "ffmpeg did not generate the optional DTS fixture")
         assertTimeAdvances(openStream("Mock MKV DTS"), shot: "M6-mkv-dts")
     }
 }

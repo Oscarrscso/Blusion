@@ -18,53 +18,67 @@ public final class AppRouter {
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
     var settingsPath = NavigationPath()
     var demoPlan: PlaybackPlan?
-    /// What the launch route asked to present. Presented once the tabs are on screen: a sheet whose flag is already true
-    /// when its presenter first appears is not shown.
-    private var pendingSheet: LaunchRoute.Sheet?
-    private var pendingPlayerDemo = false
+    var addonInstallText: String?
+    var userStateRevision = 0
+    /// Navigation values must wait until their stacks and destinations have appeared.
+    private var pendingLaunchRoute: LaunchRoute?
+    private var pendingSettingsSheet: LaunchRoute.Sheet?
 
     public init(route: LaunchRoute = .home) {
         tab = route.tab
+        pendingLaunchRoute = route
+    }
+
+    /// The root selects the launch tab; Home consumes its navigation values only after its stack appears.
+    func presentLaunchRoute(includeHomeDestinations: Bool = true) {
+        guard let route = pendingLaunchRoute else { return }
+        guard !includeHomeDestinations || route.tab == .home else { return }
+        tab = route.tab
+        guard includeHomeDestinations || (route.detail == nil && route.streams == nil && !route.showsGallery) else { return }
+        pendingLaunchRoute = nil
         if let detail = route.detail { homePath.append(detail) }
         if let streams = route.streams { homePath.append(streams) }
         if route.showsGallery { homePath.append(GalleryDestination(section: route.gallerySection)) }
-        pendingPlayerDemo = route.showsPlayerDemo
-        pendingSheet = route.sheet
-    }
-
-    /// Presents whatever the launch route asked for. Call once, after the first frame.
-    func presentLaunchRoute() {
-        if pendingPlayerDemo { demoPlan = .demo }
-        switch pendingSheet {
-        case .settings: showSettings()
-        case .addons: showAddons()
-        case .widgets: showWidgets()
-        case nil: break
-        }
-        pendingPlayerDemo = false
-        pendingSheet = nil
+        if route.showsPlayerDemo { demoPlan = .demo }
+        if let sheet = route.sheet, !isShowingSettings { showSettings(sheet) }
     }
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
-    public func showSettings() {
-        settingsPath = NavigationPath()
-        isShowingSettings = true
-    }
+    public func showSettings() { showSettings(.settings) }
 
     /// Settings, opened on the addons list.
-    public func showAddons() {
-        settingsPath = NavigationPath([SettingsDestination.addons])
-        isShowingSettings = true
-    }
+    public func showAddons() { showSettings(.addons) }
 
     /// Settings, opened on the Home widgets manager.
-    public func showWidgets() {
-        settingsPath = NavigationPath([SettingsDestination.widgets])
-        isShowingSettings = true
+    public func showWidgets() { showSettings(.widgets) }
+
+    private func showSettings(_ sheet: LaunchRoute.Sheet) {
+        let alreadyPresented = isShowingSettings && pendingSettingsSheet == nil
+        pendingSettingsSheet = sheet
+        if alreadyPresented {
+            presentSettingsRoute()
+        } else {
+            settingsPath = NavigationPath()
+            isShowingSettings = true
+        }
     }
 
-    public func dismissSettings() { isShowingSettings = false }
+    /// Called after the Settings stack appears, so its initial empty path cannot overwrite the requested screen.
+    func presentSettingsRoute() {
+        guard isShowingSettings, let sheet = pendingSettingsSheet else { return }
+        pendingSettingsSheet = nil
+        switch sheet {
+        case .settings: settingsPath = NavigationPath()
+        case .addons: settingsPath = NavigationPath([SettingsDestination.addons])
+        case .widgets: settingsPath = NavigationPath([SettingsDestination.widgets])
+        }
+    }
+
+    public func dismissSettings() {
+        isShowingSettings = false
+        pendingSettingsSheet = nil
+    }
 }
 
 /// The component gallery's place in a navigation stack (debug aid, see `DesignGalleryView`).
@@ -75,14 +89,21 @@ struct GalleryDestination: Hashable {
 public struct RootTabView: View {
     private let services: AppServices
     private let initialQuery: String?
+    private let userStateRevision: Int
+    @Binding private var addonLink: String?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var router: AppRouter
     @State private var resume: ContinueWatchingModel
+    @State private var titleActions: TitleActions
 
-    public init(services: AppServices, route: LaunchRoute = .home) {
+    public init(services: AppServices, route: LaunchRoute = .home, addonLink: Binding<String?> = .constant(nil), userStateRevision: Int = 0) {
         self.services = services
+        self.userStateRevision = userStateRevision
+        _addonLink = addonLink
         initialQuery = route.searchQuery
         _router = State(initialValue: AppRouter(route: route))
         _resume = State(initialValue: ContinueWatchingModel(services: services))
+        _titleActions = State(initialValue: TitleActions(services: services))
     }
 
     public var body: some View {
@@ -96,6 +117,11 @@ public struct RootTabView: View {
                         .settingsButton()
                 }
                 .zoomTransitions()
+                .task {
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    router.presentLaunchRoute()
+                }
             }
             Tab("Discover", systemImage: "square.grid.2x2.fill", value: LaunchRoute.Tab.discover) {
                 NavigationStack {
@@ -104,13 +130,15 @@ public struct RootTabView: View {
                 }
                 .zoomTransitions()
             }
-            Tab("Library", systemImage: "books.vertical.fill", value: LaunchRoute.Tab.library) {
-                NavigationStack {
-                    LibraryView(services: services) { router.open(.discover) }
-                        .appDestinations(services: services)
-                        .settingsButton()
+            TabSection("Library") {
+                Tab("Library", systemImage: "books.vertical.fill", value: LaunchRoute.Tab.library) {
+                    NavigationStack {
+                        LibraryView(services: services) { router.open(.discover) }
+                            .appDestinations(services: services)
+                            .settingsButton()
+                    }
+                    .zoomTransitions()
                 }
-                .zoomTransitions()
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack {
@@ -120,33 +148,81 @@ public struct RootTabView: View {
                 .zoomTransitions()
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(ResumeAccessoryModifier(model: resume))
-        .task(id: router.tab) { await resume.refresh() }
+        .task(id: router.tab) { await refreshUserState() }
+        .task(id: userStateRevision) {
+            router.userStateRevision = userStateRevision
+            await refreshUserState()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await refreshUserState() } }
+        }
+        .onChange(of: titleActions.watchedIdentities) { _, _ in
+            Task { await resume.refresh() }
+        }
+        .onChange(of: router.isShowingSettings) { _, showing in
+            if !showing { Task { await refreshUserState() } }
+        }
+        .onChange(of: addonLink, initial: true) { _, link in
+            guard let link else { return }
+            router.addonInstallText = link
+            router.showAddons()
+            addonLink = nil
+        }
         .sheet(isPresented: $router.isShowingSettings) {
             NavigationStack(path: $router.settingsPath) {
                 SettingsView(services: services)
-                    .navigationDestination(for: SettingsDestination.self) { destination in
-                        switch destination {
-                        case .addons: AddonsView(services: services)
-                        case .widgets: WidgetsManagerView(services: services)
-                        }
-                    }
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("Done") { router.dismissSettings() }.accessibilityIdentifier("settings.done")
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { router.dismissSettings() }
+                                .buttonStyle(.glass)
+                                .foregroundStyle(.white)
+                                .accessibilityIdentifier("settings.done")
                         }
                     }
+                    .navigationDestination(for: SettingsDestination.self) { destination in
+                        Group {
+                            switch destination {
+                            case .addons: AddonsView(services: services)
+                            case .widgets: WidgetsManagerView(services: services)
+                            }
+                        }
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { router.dismissSettings() }
+                                    .buttonStyle(.glass)
+                                    .foregroundStyle(.white)
+                                    .accessibilityIdentifier("settings.done")
+                            }
+                        }
+                    }
+            }
+            .task {
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                router.presentSettingsRoute()
             }
         }
         .fullScreenCover(item: $router.demoPlan) { PlayerScreen(plan: $0, services: services) }
         .task {
-            try? await Task.sleep(for: .milliseconds(350))
-            router.presentLaunchRoute()
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            router.presentLaunchRoute(includeHomeDestinations: false)
         }
         .environment(router)
         .environment(services.posterRatings)
+        .environment(titleActions)
+        .focusedSceneValue(router)
         .preferredColorScheme(.dark)
+    }
+
+    private func refreshUserState() async {
+        await resume.refresh()
+        await titleActions.refresh()
+        let settings = await services.settings.load()
+        services.posterRatings.isEnabled = settings.showsPosterRatings
     }
 }
 

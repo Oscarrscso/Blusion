@@ -1,136 +1,117 @@
 # Blusion
 
-An iPhone-first, iPad-compatible player for **Stremio-protocol addons**: install an addon by its manifest URL, browse its catalogs,
-search, open a title, pick a stream and play it with resume, subtitles, Picture in Picture and AirPlay.
+Blusion is an iPhone/iPad media browser and player for Stremio-protocol addons, with a Mac Catalyst app from the same target.
+It supports search, configurable Home rows, saved titles, resume, subtitles, manual Trakt sync, and playback in Blusion or Infuse.
 
-Blusion is a **neutral client**. It ships **no content addons, no catalogs and no default sources**; users add their own by URL. It has
-no accounts, no backend and no analytics. Addon links often contain secrets, so they are kept in the Keychain and never written to a log.
+Cinemeta, Stremio's official metadata addon, is installed once on first launch for catalogs, search, and title details.
+It supplies **no streams**. You can disable or remove it in **Settings → Addons**; removal does not cause it to be installed again.
+Blusion bundles no media or stream sources and operates no content server. Addon links are stored in the Keychain because they can contain tokens.
 
-> **Status: written and tested on Linux, not yet built with Xcode.** The protocol core, view models, playback coordinator, stores'
-> contracts and the mock addon are compiled and tested for real (about 400 tests). The SwiftUI views, SwiftData/Keychain stores, AVPlayer
-> engine, app target and UI tests were only syntax-checked, because the agent that wrote them had no Mac. Start with
-> [`docs/MAC_FIRST_RUN.md`](docs/MAC_FIRST_RUN.md). See [Known limitations](#known-limitations) and `STATE.md` for exact status.
-
-## Requirements
-
-| To... | You need |
-|---|---|
-| build and run the app | macOS, Xcode 16+ (Swift 6 language mode, iOS 17 SDK), [XcodeGen](https://github.com/yonaskolb/XcodeGen) |
-| run the host tests and the mock addon | Swift 6 toolchain (macOS or Linux), Node 18+, `ffmpeg` (optional: only for the media fixtures) |
-| lint | SwiftLint (optional on Linux: a basic whitespace check runs instead) |
-
-```bash
-brew install xcodegen swiftlint ffmpeg node
-```
+The current app has been built with Xcode and rendered locally through Mac Catalyst. This checkout has no installed iOS simulator runtime;
+iPhone-sized Catalyst snapshots are layout checks, not iPhone or simulator testing. Final validation results are recorded in
+[the Claude handoff](docs/CLAUDE_HANDOFF.md). The older milestone records in `STATE.md` remain historical.
 
 ## Build and run
 
-The Xcode project is generated and never committed (`project.yml` is the source of truth).
+Use a Mac with Xcode providing the iOS 26 SDK or newer, Swift 6, and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+The app's deployment target is iOS 26.0. Node 18+ runs the mock addon; ffmpeg generates playback fixtures.
 
 ```bash
-xcodegen generate            # writes Blusion.xcodeproj
-open Blusion.xcodeproj       # pick an iPhone simulator, Run
+brew install xcodegen
+cd ~/Blusion
+xcodegen generate
+open Blusion.xcodeproj
 ```
 
-Before it runs on a device, set your own bundle id and team in `project.yml` (the bundle id `app.blusion.player` is a placeholder);
-see [`docs/RELEASE.md`](docs/RELEASE.md).
+Select **Blusion → My Mac (Mac Catalyst)** and press **⌘R**. To test on an iPhone, choose a connected compatible device;
+to use a simulator, first install its runtime in Xcode. Review the bundle ID and development team in `project.yml` before signing for your own device.
+The generated Xcode project is ignored by Git; edit `project.yml` for persistent project settings.
 
-On first launch the app is empty by design. Home explains how to add an addon.
+[First Mac run](docs/MAC_FIRST_RUN.md) gives the short testing path.
+
+## Using the app
+
+- **Home:** featured titles, Continue Watching, and catalog shelves. Use **Customize Home** or **Settings → Widgets** to add, edit,
+  reorder, remove, import, or export rows. Fusion widget exports can be pasted as JSON or imported from a URL.
+- **Search:** searches every supported content type across enabled searchable addons. Recent successful searches are kept locally;
+  genre tiles let you browse before typing. Discover provides content-type, catalog, and genre filters.
+- **Library:** saved titles, Continue Watching, and watched items. Long-press or right-click a poster for library and watched actions.
+- **Pointer and keyboard:** cards and controls highlight on hover and keyboard focus. In Blusion's player, Space plays or pauses,
+  Left/Right skips 10 seconds, and Esc closes. Reduce Motion keeps cards still.
+- **Settings → Playback:** choose Blusion, Infuse, or Infuse only when Blusion cannot play a format. Automatic best-stream playback is optional.
+  Infuse handoff includes the resume position and records progress when its callback returns.
+- **Settings → Appearance:** toggle poster ratings. IMDb ratings come from catalog metadata; movie Letterboxd ratings are fetched and cached when available.
+- **Title details:** IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons open their review pages or a labeled search.
+  Links work without API keys. **Settings → Review services** accepts an optional OMDb API key for critic scores and a TMDb API Read Access Token
+  for TMDb ratings; select **Save Review Services**. Credentials are stored in the Keychain.
+- **Settings → Accounts → Trakt:** register your Trakt API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`.
+  Enter its Client ID and Client Secret, save them, and select **Sign in to Trakt**.
+  Open the authorization link and enter the displayed code. Choose Watchlist and/or Watched movies and episodes, then use
+  **Import from Trakt** or **Send to Trakt**. Sync adds missing items without deleting anything; only titles with IMDb IDs sync.
+  Playback positions stay on the device. Credentials and sign-in tokens use the Keychain; a Client ID alone enables supported public list widgets.
 
 ## Adding an addon
 
-1. Get an addon's **manifest URL** from whoever runs it. It looks like `https://example.com/<anything>/manifest.json`
-   or `stremio://example.com/<anything>/manifest.json`. Treat it like a password: it often embeds a personal token.
-2. In Blusion open the **Addons** tab, paste the link and tap **Install**. Blusion downloads and checks the manifest and shows what the
-   addon offers (catalogs, streams, subtitles). A malformed or unsupported manifest is rejected with a plain explanation.
-3. Catalogs appear on **Home** and **Discover**, titles are found by **Search**, and **Detail** lists streams from every installed
-   stream addon at once, best first. Addons can be reordered, disabled or removed on the same tab; removing one also deletes its saved link.
+1. Get its manifest link, such as `https://example.com/path/manifest.json` or `stremio://example.com/path/manifest.json`.
+2. Open **Home gear → Settings → Addons**, paste the link, and select **Install**. A `stremio://` install link can also open this field for you to review.
+3. Enable, reorder, or remove addons on the same screen. Removing one also removes its saved link.
 
-Streams: direct `http(s)` video plays in the system player. Streams that need request headers are supported through a documented
-`AVAssetResourceLoader` path (`docs/decisions/005-proxy-headers-and-media-keys.md`). Torrent (`infoHash`) streams need a streaming server **you run
-yourself**, set under *Settings > Streaming server*; Blusion contains none. MKV and some audio formats need the optional fallback player (below).
+Catalog addons provide browsing and search; stream addons provide playback choices. Direct HTTP(S) media can play in Blusion.
+Infuse can handle additional formats, including MKV and DTS. Streams needing request headers stay in Blusion because an external player
+cannot receive those headers. Torrent streams require a compatible streaming server you run and configure in **Settings → Streaming server**.
 
-## Running the mock addon
-
-A zero-dependency Node server plays both roles (catalog addon and stream addon) with generated test media. It is what every integration
-and UI test runs against.
+## Local mock addon and verification
 
 ```bash
-./Tools/MockAddon/make-fixtures.sh        # needs ffmpeg; generates MP4, HLS, MKV (AC3, DTS), SRT, VTT into a git-ignored folder
-node Tools/MockAddon/server.js            # catalog on :7001, stream addon on :7002
+brew install node ffmpeg             # optional until you need mock playback fixtures
+./Tools/MockAddon/make-fixtures.sh
+node Tools/MockAddon/server.js
 ```
 
-In the app, install `http://127.0.0.1:7001/anything/manifest.json` (simulator) for catalogs and `http://127.0.0.1:7002/anything/manifest.json`
-for streams. Any path segment before `manifest.json` is treated as a user token, which is how the privacy tests prove tokens never reach logs.
-Segments like `flag-slow`, `flag-err500`, `flag-badjson`, `flag-big`, `flag-redirect` or `flag-nulls` make that addon misbehave on purpose; the full list is
-at the top of `Tools/MockAddon/server.js`.
-
-## Verifying
+Install `http://127.0.0.1:7001/demo/manifest.json` for mock catalogs and `http://127.0.0.1:7002/demo/manifest.json` for mock streams
+when the app runs on this Mac or a simulator. A physical phone needs the Mac's LAN address. Generated media is ignored by Git.
 
 ```bash
-./scripts/verify.sh              # per change: package tests (warnings are errors), project spec + syntax check, mock addon tests, lint
-./scripts/verify.sh milestone    # adds, on macOS: xcodegen, xcodebuild test (unit + UI on a simulator), swiftlint --strict, unsigned archive
-./scripts/coverage.sh StremioKit 90          # line-coverage gate for the protocol core
-./scripts/screenshots.sh         # UI screenshots at three device sizes (macOS)
-./scripts/leaks.sh               # simulator leak sampling (macOS)
-FALLBACK=1 ./scripts/verify.sh milestone     # the same, with the opt-in fallback player built in
+./scripts/verify.sh
+./scripts/verify.sh milestone
 ```
 
-On Linux `verify.sh` prints exactly which steps it skipped, and `milestone` refuses to pass there unless you set `ALLOW_HOST_ONLY=1`, so a
-Linux green is never mistaken for a full green (`docs/decisions/002-verification-topology.md`). `.github/workflows/ci.yml` runs both layers on
-GitHub-hosted runners when the branch is pushed.
+Media-dependent tests are explicitly skipped when their generated fixtures are absent. When no iPhone simulator is installed,
+verification reports skipped simulator tests and builds for generic iOS and Mac Catalyst instead. A milestone run still requires
+simulator tests unless `ALLOW_HOST_ONLY=1` is explicitly supplied; that override retains the skipped-check summary.
 
-## Layout
-
-```
-App/                    @main, dependency wiring, privacy manifest, string catalogs, app icon
-Packages/
-  StremioKit/           models, URL normaliser and builder, lenient decoding, AddonClient, registry, browse and stream services, settings/library contracts
-  PlayerKit/            PlaybackEngine protocol, coordinator (failover, resume), subtitles, progress, AVPlayer engine, fallback-engine adapter
-  Persistence/          SwiftData stores (schema V1 to V2 migration), Keychain secret store
-  Features/             view models (no UI imports, tested on Linux) and the thin SwiftUI views on top
-  FallbackPlayer/       OPT-IN MPV (LGPL) backend; not part of the default build
-Tools/MockAddon/        zero-dependency Node server and fixture generator
-scripts/                verify, coverage, archive, screenshots, leaks, enable-fallback, lint, project-spec checks
-docs/                   decisions (ADRs 001-007), licenses, device checklist, review notes, release steps, first Mac run, localization
-PLAN.md  STATE.md  BLOCKERS.md
+```bash
+scripts/snapshot.sh home build/shots/home.png
+scripts/snapshot.sh home build/shots/home-mac.png --mac
 ```
 
-Design rules worth knowing before changing anything:
-
-- Logic lives in packages and view models so it can be tested without a simulator; SwiftUI views stay thin.
-- Addon URLs are secrets: only the Keychain stores them, and every log line goes through `Redactor`. `PrivacyTests` runs a whole session and greps every log
-  and every store for the mock's token.
-- Decoding is lenient and per-item: one broken item or addon never blanks a screen.
-- Anything the Linux host or the simulator cannot prove is marked `[d]` in `STATE.md` and listed in `docs/DEVICE_CHECKLIST.md`; it is never silently "done".
-
-## Optional fallback player
-
-AVPlayer cannot open MKV or DTS. An opt-in engine built on MPVKit (LGPL build) plays them behind the same `PlaybackEngine` protocol. It is off by
-default because it adds third-party code, binary size and license obligations (`docs/decisions/006-fallback-player.md`, `docs/licenses.md`).
-`./scripts/enable-fallback.sh` generates a project that includes it; the MPVKit version pin and the libmpv glue were never compiled by the agent
-that wrote them.
+The first command renders an iPhone-sized Catalyst layout; `--mac` uses the Mac layout. Neither is a simulator test.
 
 ## Known limitations
 
-- **Never built with Xcode by its author.** Expect a short round of compile fixes in the Apple-only files on the first Mac run (`docs/MAC_FIRST_RUN.md`
-  lists them in order of likelihood). The GitHub Actions workflow has not run either: pushing was denied (`BLOCKERS.md` B-002).
-- **Needs a person on a real device** for Picture in Picture, AirPlay, lock-screen controls, background audio, hardware decode, the local-network
-  prompt, and VoiceOver / largest Dynamic Type passes: `docs/DEVICE_CHECKLIST.md`.
-- **Streaming server route is unverified** (`docs/decisions/004-streaming-server-route.md`): it was written from documentation, not tested against a real server.
-- **Subtitles:** SRT and WebVTT from addons are supported. Styled formats (ASS) and bitmap subtitles (PGS) need the fallback player.
-- **Header-protected streams** use `AVAssetResourceLoader`; HLS playlists are rewritten to carry headers. Exotic DRM or token schemes are out of scope.
-- **Addon manifests whose URL carries a query string are rejected** (the protocol builds paths by appending to the manifest's base).
-- **English only.** The string-catalog scaffolding is in place (`docs/LOCALIZATION.md`).
-- **iPhone-first.** iPad runs the same layout adapted by SwiftUI; there is no tvOS or macOS target and no sync between devices.
-- **Distribution is not set up.** No signing, bundle id or App Store Connect record exists; the steps are in `docs/RELEASE.md`, and reviewer notes
-  (neutral client, how users add content) are drafted in `docs/APP_REVIEW_NOTES.md`. Legal and licensing questions are flagged for a human in `docs/licenses.md`.
+- Device checks remain open for PiP, AirPlay, lock-screen controls, background playback, hardware decoding, local-network prompts,
+  VoiceOver, and accessibility text sizes. See [the device checklist](docs/DEVICE_CHECKLIST.md).
+- A real streaming-server route, the optional MPV fallback build, distribution signing, and App Store submission are not validated by local layout snapshots.
+- Letterboxd lookup depends on its public page format and availability; a missing rating leaves the poster badge absent.
+- Trakt sign-in/sync and optional OMDb/TMDb lookups have stub-based tests; live account checks require user credentials.
+- External-player progress depends on the player returning a callback. A canceled or missing callback cannot supply a new position.
+- SRT and WebVTT are supported by the built-in player; styled or bitmap subtitles need a player that supports them.
+- Trakt sync is manual and does not transfer playback positions or propagate removals. There is no automatic device sync or tvOS target.
+- Addon manifest URLs containing query strings are rejected. English is the only completed localization.
 
-## Project documents
+## Project layout
 
-| File | What it is |
-|---|---|
-| `PLAN.md` | the plan this repo was built from (only its Changelog is edited) |
-| `STATE.md` | milestone tree with status markers and per-milestone handoff notes |
-| `BLOCKERS.md` | what blocked the work, what was tried, what is still open |
-| `docs/decisions/` | ADRs: stack, verification topology, protocol facts, streaming server, proxy headers and ATS, fallback player, offline and privacy manifest |
+```text
+App/                    app entry point, dependency wiring, privacy manifest, string catalogs, assets
+Packages/StremioKit/     addon protocol, catalogs, streams, widgets, settings, ratings, cache contracts
+Packages/PlayerKit/      playback engines, coordinator, subtitles, progress
+Packages/Persistence/   SwiftData and Keychain stores
+Packages/Features/      view models and SwiftUI screens
+Packages/FallbackPlayer/ optional MPV backend
+Tools/MockAddon/        local addon server and fixture generator
+scripts/                verification, project generation checks, snapshots, archives, lint
+```
+
+The fallback backend is opt-in through `scripts/enable-fallback.sh`; its licensing and release checks are in
+[docs/licenses.md](docs/licenses.md). See [the handoff](docs/CLAUDE_HANDOFF.md) for every original agent brief,
+[STATE.md](STATE.md) for historical milestones, and [docs/RELEASE.md](docs/RELEASE.md) for distribution work.

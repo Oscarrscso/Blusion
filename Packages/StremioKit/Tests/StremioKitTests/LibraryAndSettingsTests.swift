@@ -53,7 +53,7 @@ import Testing
 
         let settings = PlaybackSettings(preferredResolution: 1080, subtitleLanguage: "eng", streamingServerURL: "http://user:pw@192.168.1.9:11470",
                                         fallbackEngineEnabled: false, traktClientID: "client-abc", playerPreference: .infuse,
-                                        showsPosterRatings: false, autoPlayBestStream: true)
+                                        showsPosterRatings: false, autoPlayBestStream: true, omdbAPIKey: "omdb-test-key", tmdbReadToken: "tmdb-test-token")
         await store.save(settings)
         #expect(await store.load() == settings)
         #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.serverSecret] == "http://user:pw@192.168.1.9:11470")
@@ -61,16 +61,21 @@ import Testing
         let stored = String(describing: defaults.dictionaryRepresentation().filter { $0.key.hasPrefix("settings.") })
         #expect(!stored.contains("192.168.1.9") && !stored.contains("pw@"), "the server URL is never written to UserDefaults")
         #expect(!stored.contains("client-abc"), "the Trakt client ID is never written to UserDefaults")
+        #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.omdbAPIKey] == "omdb-test-key")
+        #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.tmdbReadToken] == "tmdb-test-token")
+        #expect(!stored.contains("omdb-test-key") && !stored.contains("tmdb-test-token"), "review credentials stay out of UserDefaults")
     }
 
     @Test func clearingValuesRemovesThem() async {
         let defaults = isolatedDefaults()
         let secrets = InMemorySecretStore()
         let store = DefaultsSettingsStore(defaults: defaults, secrets: secrets)
-        await store.save(PlaybackSettings(preferredResolution: 720, subtitleLanguage: "fre", streamingServerURL: "http://nas:11470", traktClientID: "client"))
+        await store.save(PlaybackSettings(preferredResolution: 720, subtitleLanguage: "fre", streamingServerURL: "http://nas:11470", traktClientID: "client",
+                                         omdbAPIKey: "omdb-key", tmdbReadToken: "tmdb-token"))
         await store.save(PlaybackSettings(preferredResolution: nil, subtitleLanguage: nil, streamingServerURL: "   ", traktClientID: "  "))
         let loaded = await store.load()
         #expect(loaded.preferredResolution == nil && loaded.subtitleLanguage == nil && loaded.streamingServerURL == nil && loaded.traktClientID == nil)
+        #expect(loaded.omdbAPIKey == nil && loaded.tmdbReadToken == nil)
         #expect(await secrets.snapshot.isEmpty, "blank values delete their secrets")
         #expect(loaded.fallbackEngineEnabled, "the fallback toggle defaults to on")
     }

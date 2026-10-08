@@ -1,53 +1,68 @@
 # First run on a Mac
 
-The Linux agent that wrote this repo could not run Xcode (BLOCKERS B-001) and could not push to GitHub to use CI (B-002). Everything
-under `Packages/*/Sources/**` that builds on Linux was compiled and tested for real (Swift 6.3.3, about 400 tests). **Apple-only code was
-only syntax-checked.** That is: SwiftUI views, SwiftData stores, the Keychain store, `AVEngine`, the resource loader, Now Playing,
-the `App/` target, the XCUITests and the optional MPV glue. Expect a short round of compile fixes. This page makes that round quick.
+The project now builds with Xcode for Mac Catalyst; its deployment target is iOS 26.0.
+The original Linux-only build notes are historical. This Mac currently has no iOS simulator runtime, so local Catalyst screenshots
+and package tests do not establish iPhone or simulator playback results.
 
-## Commands, in order
+## Run the current app
 
 ```bash
-brew install xcodegen swiftlint ffmpeg xcbeautify node     # node 18+, ffmpeg for the media fixtures
-git checkout claude/blusion-github-e2e-sqx5r4
-./scripts/verify.sh                 # host layer first: must be green exactly as on Linux
-xcodegen generate                   # writes Blusion.xcodeproj (git-ignored)
-open Blusion.xcodeproj              # or: ./scripts/verify.sh milestone for the whole gate
+cd ~/Blusion
+brew install xcodegen
+xcodegen generate
+open Blusion.xcodeproj
 ```
 
-`./scripts/verify.sh milestone` runs, on a Mac: package tests, `xcodegen`, `xcodebuild test` on the newest iPhone simulator (unit and UI tests
-against the mock addon), `swiftlint --strict`, then an unsigned `xcodebuild archive` with checks on what was archived (`scripts/archive.sh`).
-Optional afterwards: `./scripts/screenshots.sh` (layouts at three sizes), `./scripts/leaks.sh` (leak sampling), `FALLBACK=1 ./scripts/verify.sh milestone`
-(the opt-in MPV engine), `./scripts/size-report.sh` (binary size delta).
+Select **Blusion → My Mac (Mac Catalyst)** and press **⌘R**. Review the development team and bundle ID in `project.yml` before using your own device.
+For a simulator, install a compatible runtime through Xcode and select an iPhone destination.
 
-If you push the branch, `.github/workflows/ci.yml` does the same on GitHub-hosted runners; read failures with the job log.
+Cinemeta is seeded once for browsing and search. To test real playback, install your stream addon in **Home gear → Settings → Addons**.
+Choose the preferred player in **Settings → Playback**. Infuse must be installed if you select it.
 
-## Where compile errors are most likely (most likely first)
+Cards and controls highlight under the pointer and keyboard focus. In Blusion's player, use Space to play/pause,
+Left/Right to skip 10 seconds, and Esc to close. Reduce Motion disables card movement.
 
-1. **Swift 6 strict concurrency in Apple-only files.** `@Observable` view models used from `@State`, `Binding(get:set:)` closures that touch a
-   `@MainActor` model (`SettingsView`, `DetailView`), `Task { await model... }` inside view builders. Fix by marking the closure `@MainActor` or hopping
-   with `MainActor.assumeIsolated` only where the call is provably on the main thread.
-2. **`PlayerKit/AV/AVEngine.swift`, `HeaderResourceLoader.swift`, `NowPlayingController`.** AVFoundation's async/KVO APIs and
-   `MPRemoteCommandCenter` handlers are the most version-sensitive code in the repo. The portable logic (HLS rewriting, header tables,
-   command mapping) is separate and tested; only the glue can fail.
-3. **`Persistence/*`.** SwiftData `@Model` under Swift 6, the `VersionedSchema` / `SchemaMigrationPlan` pair (`BlusionSchemaV1` to `V2`, lightweight
-   stage) and `ModelContainer` creation. `SwiftDataStoreTests` contains the V1 to V2 migration test: run it first.
-4. **`Features/Views/PlayerSurface.swift`.** `AVPlayerLayer` hosting, `AVPictureInPictureController`, `AVRoutePickerView`.
-5. **`App/`.** `AppEnvironment` wiring (`SwiftData*` stores, `KeychainSecretStore`, `DefaultsSettingsStore`).
-6. **XCUITests.** Identifier typos or elements that are `otherElements` instead of `buttons` on a given iOS version. The accessibility
-   identifiers are all `screen.element` strings set in the views.
-7. **`Packages/FallbackPlayer`** (opt-in): the MPVKit version pin (`from: "0.40.0"`) and the libmpv calls were never compiled. Ignore unless you build with `FALLBACK=1`.
+## Quick manual check
 
-The host tests already pin the behaviour the Apple glue must keep (view models, coordinator, header-loader helpers, store contracts), so
-fixing a compile error should never require changing a test. If it does, that is a design bug worth a note in `STATE.md`.
+1. Open Home, search for a known title, and open its detail page.
+2. Save the title, check it appears in Library, and try the poster context menu.
+3. Open **Settings → Widgets**, edit a Home row, return Home, and check the change.
+4. Open the IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons on a title page. Links work without keys;
+   optional scores use an OMDb API key and TMDb API Read Access Token saved in **Settings → Review services**.
+5. Register your Trakt API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`. Open **Settings → Accounts → Trakt**,
+   save its Client ID and Client Secret, and select **Sign in to Trakt**.
+   Authorize the displayed code in the browser. Choose the watchlist/history switches, then **Import from Trakt** or **Send to Trakt**.
+   This manual sync adds missing saved titles and watched movies/episodes with IMDb IDs; it never deletes items and keeps playback positions local.
+6. Check player selection, automatic playback, and poster ratings in Settings. With a stream addon, play, return, and check Continue Watching.
+   For Infuse, also check the callback updates progress.
 
-## What the simulator still cannot prove
+Trakt credentials, sign-in tokens, and review API credentials stay in the Keychain. Account sync and optional review lookups
+have stub-based tests; live checks need your credentials.
 
-`docs/DEVICE_CHECKLIST.md`: Picture in Picture, AirPlay, lock-screen controls, background audio, real hardware decode, the local-network
-prompt, and a Dynamic Type / VoiceOver pass by a person.
+## Local mock playback
 
-## Known unknowns
+```bash
+brew install node ffmpeg
+./Tools/MockAddon/make-fixtures.sh
+node Tools/MockAddon/server.js
+```
 
-- `StreamingServerRoute` (ADR-004) was written from documentation only. Test it against a streaming server you run.
-- Binary size delta of the fallback engine is unmeasured.
-- The `UserDefaults` privacy-manifest reason (`CA92.1`) and the ATS keys are chosen from Apple's documentation, not from an App Review round trip.
+On the Mac or simulator, install `http://127.0.0.1:7001/demo/manifest.json` for catalogs and
+`http://127.0.0.1:7002/demo/manifest.json` for streams. A phone needs the Mac's LAN address.
+Generated media is ignored by Git. Without it, media-dependent tests skip with an explanation.
+
+## Verification commands
+
+```bash
+./scripts/verify.sh
+./scripts/verify.sh milestone
+scripts/snapshot.sh home build/shots/home.png
+scripts/snapshot.sh home build/shots/home-mac.png --mac
+```
+
+When no iPhone simulator exists, `verify.sh` reports skipped simulator tests and builds generic iOS and Mac Catalyst instead.
+`milestone` rejects that incomplete gate unless `ALLOW_HOST_ONLY=1` is supplied explicitly. The override does not turn skipped checks into completed checks.
+Snapshot output is rendered through Catalyst; its phone-sized mode is a layout stand-in.
+
+Final counts and build results belong in [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md).
+Real-device checks remain in [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md); the streaming-server route and optional fallback player also need separate validation.

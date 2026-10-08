@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// Artwork that fills whatever frame it is given (aspect fill, clipped). While loading, or when there is no image, it shows a
-/// dark placeholder with `title` centred in small secondary text; the image fades in. The caller sizes and clips it.
+/// flat grey placeholder with `title` centred in small secondary text; the image fades in. The caller sizes and clips it.
 struct ArtworkImage: View {
     let url: URL?
     let title: String
@@ -40,16 +40,18 @@ struct ArtworkImage: View {
             .task(id: url) { await load() }
     }
 
+    /// Flat grey like the TV app's loading cards. No gradient: it is drawn once per card and must be cheap.
     private var placeholder: some View {
         ZStack {
-            LinearGradient(colors: [Color(red: 0.15, green: 0.15, blue: 0.19), Color(red: 0.06, green: 0.06, blue: 0.09)],
-                           startPoint: .top, endPoint: .bottom)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(4)
-                .padding(8)
+            Theme.placeholder
+            if !title.isEmpty {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .padding(8)
+            }
         }
     }
 

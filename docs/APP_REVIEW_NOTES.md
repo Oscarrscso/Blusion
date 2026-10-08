@@ -1,47 +1,51 @@
 # App Review notes
 
-Draft material for App Store Connect (**not legal advice**; the human decides the distribution route and answers every form themselves,
-PLAN §8/§9). Blusion is prepared as a *neutral client*: it plays what the user's own addons return and ships nothing to play.
+Draft submission material. Distribution, signing, licensing, privacy answers, and reviewer access still need the owner's review;
+local builds and screenshots do not establish App Store acceptance.
 
-## What to tell the reviewer (paste into "Notes for the reviewer")
+## Draft notes for the reviewer
 
-> Blusion is a media player and browser for addons that the user adds by URL, using the public addon protocol that several open-source
-> media centres implement. **The app contains no content, no catalogs and no addons.** On first launch it is empty and explains how to add
-> an addon. It has no accounts, no backend of ours, no analytics and no advertising.
+> Blusion is a media browser and player for Stremio-protocol addons. It bundles no media or stream sources and operates no content server.
+> On first launch it installs Cinemeta, Stremio's official metadata addon, for catalogs, search, and title details; Cinemeta provides no playback streams.
+> The user can disable or remove it in Settings → Addons. Users install additional addons by manifest URL.
 >
-> To review: open the Addons tab and install the demo addon at `<DEMO ADDON URL, supplied by the human>`; it serves openly licensed films
-> (Blender Foundation open movies). Home, Discover, Search, Detail, stream selection and playback then work. Library and Settings need no setup.
+> For playback review, open Home's gear → Settings → Addons and install `<DEMO ADDON URL supplied by the owner>`.
+> The demo addon should provide media the developer has permission to distribute. Home, Discover, Search, title details, stream selection,
+> and playback can then be reviewed. Library and Home customization under Settings → Widgets are available without a stream source.
+>
+> Playback can use Blusion or Infuse, selected in Settings → Playback. Infuse is an external app; Blusion can hand over a stream and receive
+> its playback position through a callback. Poster ratings can be disabled in Settings → Appearance. Title pages link to IMDb,
+> Letterboxd, Rotten Tomatoes, Metacritic, and TMDb using their icons; unmatched titles open a labeled site search.
+>
+> Optional Trakt authorization is under Settings → Accounts → Trakt. Users register an API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`,
+> supply its Client ID and Client Secret, and authorize a device code in their browser. Import from Trakt and Send to Trakt add missing watchlist and watched-history items;
+> they do not delete items or sync playback positions. Optional review API credentials are under Settings → Review services.
 
-The demo addon URL is the one thing this repo cannot supply. `Tools/MockAddon` shows the protocol end to end and can be hosted with
-openly licensed media (for example Blender Foundation's open movies, which are Creative Commons licensed) for the review. Do **not** point
-reviewers at a third-party addon that serves other people's copyrighted work.
+The reviewer demo URL is not supplied by this repository. `Tools/MockAddon` demonstrates the protocol and can serve generated test media
+or media the owner is authorized to make available. A public review endpoint needs separate hosting and access checks.
 
-## Guidelines the reviewer will care about
+## Current implementation facts to review before submission
 
-| Topic | Position | Where it shows |
-|---|---|---|
-| **5.2 Intellectual property** | The app hosts, bundles and links to no content. Like a web browser, podcast app or RSS reader, it fetches only what the user's own addon URLs return. The developer operates no server. | empty state on Home; `README.md` |
-| **Trademark** | The name, bundle id and icon contain no third-party marks (`scripts/check-project-spec.py` enforces "Stremio" absent from the name and bundle id). The in-app empty-state text refers to "Stremio addons" only to say which addon format is compatible. If a reviewer objects, replace that sentence with "addons that follow the open addon protocol" (one string in `EmptyAddonsView`, plus `Localizable.xcstrings`). | `Components.swift`, `docs/decisions/003-protocol-verification.md` |
-| **5.1.1 Privacy** | Nothing is collected. `PrivacyInfo.xcprivacy` declares no tracking, no collected data, and one required-reason API (UserDefaults, `CA92.1`). Addon links can contain secrets, so they live in the Keychain and are redacted from every log line (test: `PrivacyTests`). | `App/PrivacyInfo.xcprivacy`, M7 acceptance test |
-| **2.5.4 Background audio** | `UIBackgroundModes: audio`, used only while a video or audio stream the user started is playing (PiP, lock-screen controls). | `Info.plist` via `project.yml` |
-| **ATS exceptions** | `NSAllowsLocalNetworking` so addons on the user's LAN work over `http`; `NSAllowsArbitraryLoadsForMedia` only because many direct stream URLs are plain `http` and AVFoundation loads them itself. `NSAllowsArbitraryLoads` is never set. | ADR-005 |
-| **Local network prompt** | `NSLocalNetworkUsageDescription` explains it appears only for addons on the home network. | `project.yml` |
-| **Encryption export** | `ITSAppUsesNonExemptEncryption = false`: only the operating system's HTTPS is used. | `project.yml` |
-| **Open source (LGPL)** | The default build links no third-party code. The optional fallback player (MPVKit, LGPL) is **off** unless built with `FALLBACK=1`; shipping it needs the sign-off in `docs/licenses.md`. | ADR-006 |
+| Area | Current behavior |
+|---|---|
+| Sources | Cinemeta is installed once for metadata; no stream addon or media file is bundled. |
+| Network | Enabled addons supply catalogs, metadata, streams, and subtitles. Letterboxd ratings use public pages; optional OMDb and TMDb credentials enable extra scores. Review icons open external sites. Configured Trakt widgets and manual account sync contact Trakt. |
+| Local storage | Addon links, streaming-server address, Trakt API credentials/tokens, OMDb API key, and TMDb API Read Access Token use the Keychain. Library, progress, widget layouts, recent searches, and caches stay on the device; users can manually share saved titles and watched marks with Trakt. |
+| Account sync | Device-code Trakt sign-in; manual import/export of selected watchlist and watched movie/episode data with IMDb IDs. Sync only adds missing items. Playback positions and removals are not transferred. |
+| External playback | The app registers `blusion://` callback URLs, accepts addon install links through `stremio://`, and checks the `infuse` scheme. |
+| Privacy | There is no app-operated analytics or account service. Review `App/PrivacyInfo.xcprivacy` and every external service used when completing submission answers. |
+| Media features | PiP, AirPlay, background audio, local-network access, and lock-screen controls need the real-device checklist. |
+| Interaction | Custom cards and controls provide pointer highlights and keyboard focus feedback. The built-in player supports Space, Left/Right, and Esc; Reduce Motion disables card movement. |
+| Optional fallback | MPVKit is excluded from the default build. Including it requires the release and licensing checks in `docs/licenses.md`. |
 
-## App Store Connect answers to prepare (the human enters these)
+The old statement that the first launch is empty with no catalogs or addons is no longer accurate.
+Submission descriptions and screenshots must disclose the default metadata addon and match the actual shipped build.
+Trakt account flows and optional review APIs have stub-based tests; live account checks still need user credentials.
 
-- **App Privacy ("nutrition label"):** "Data Not Collected". Re-check this if analytics, crash reporting or any server is ever added.
-- **Age rating:** the questionnaire asks about content the app can show. Blusion shows whatever the user's addons return, so answer
-  for unfiltered, user-supplied content, not for a fixed catalog. Decide consciously; a too-low rating is a rejection risk.
-- **Category:** Entertainment or Photo & Video.
-- **Screenshots:** `scripts/screenshots.sh` produces iPhone (small and Pro Max) and iPad sets from the mock addon. They show only the mock's
-  generated test pattern content, never real titles.
-- **Support URL and privacy policy URL:** required by App Store Connect and not in this repo. A one-paragraph policy is enough
-  ("Blusion collects no data; addon links are stored on your device in the Keychain").
+## Remaining submission work
 
-## Things that would change this note
-
-- Adding any default or recommended addon, catalog, or "browse popular" content: this breaks the neutral-client position. Don't.
-- Adding accounts, sync, analytics or crash reporting: the privacy manifest, nutrition label and policy all change.
-- Linking the fallback player: the license notices, size, and the open LGPL question in `docs/licenses.md` become release blockers.
+- Complete signing, App Store Connect setup, support/privacy URLs, and accurate content/privacy questionnaires.
+- Supply and verify reviewer playback access using authorized media.
+- Produce release screenshots from the intended devices; Catalyst layout snapshots are development evidence only.
+- Complete [DEVICE_CHECKLIST.md](DEVICE_CHECKLIST.md) and [RELEASE.md](RELEASE.md).
+- Revisit these notes if default sources, network services, storage, tracking, accounts, or the optional fallback build change.

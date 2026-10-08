@@ -4,47 +4,58 @@ import StremioKit
 
 struct SearchView: View {
     @State private var model: SearchViewModel
+    @State private var selectedGroup: String?
+    @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
     private let initialQuery: String?
 
-    /// `initialQuery` is searched for on arrival (launch routes and UI tests).
     init(services: AppServices, initialQuery: String? = nil) {
-        _model = State(initialValue: SearchViewModel(services: services))
+        _model = State(initialValue: SearchViewModel(services: services, history: services.searchHistory))
         self.initialQuery = initialQuery
     }
 
     var body: some View {
         @Bindable var model = model
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
                 if model.isOffline {
                     OfflineBanner()
                 } else if !model.failures.isEmpty {
-                    WrappingStack {
-                        ForEach(model.failures) { ErrorChip(text: $0.text) }
-                    }
-                    .padding(.horizontal)
-                    .accessibilityIdentifier("search.failures")
+                    WrappingStack { ForEach(model.failures) { ErrorChip(text: $0.text) } }
+                        .padding(.horizontal, metrics.pageMargin)
+                        .accessibilityIdentifier("search.failures")
                 }
-                ForEach(model.groups) { group in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(group.title).font(.title3.bold()).padding(.horizontal).accessibilityAddTraits(.isHeader)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(alignment: .top, spacing: 12) {
-                                ForEach(group.items, id: \.identity) { PosterLink(item: $0) }
-                            }
-                            .padding(.horizontal)
-                        }
+                if model.showsNoSearchableAddons {
+                    EmptyStateView("No addon can search", systemImage: "magnifyingglass",
+                                   message: "Add a catalog addon, such as Cinemeta, in Settings.",
+                                   actionTitle: "Open Addons", action: { router.showAddons() })
+                        .accessibilityIdentifier("search.noSearchableAddons")
+                } else if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    browse
+                } else {
+                    results
+                    if model.phase == .searching {
+                        Text("Searching…").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, metrics.pageMargin)
+                        SkeletonRow()
+                    } else if model.showsNoResults {
+                        ContentUnavailableView.search(text: model.query)
                     }
                 }
-                status
             }
-            .padding(.vertical)
+            .padding(.vertical, Theme.Spacing.l)
         }
+        .screenBackground()
         .navigationTitle("Search")
-        .searchable(text: $model.query, prompt: "Movies, series and more")
-        .onChange(of: model.query) { model.queryDidChange() }
+        .searchable(text: $model.query, prompt: "Shows, Movies, and More")
+        .onChange(of: model.query) {
+            selectedGroup = nil
+            model.queryDidChange()
+        }
         .onSubmit(of: .search) { Task { await model.submit() } }
         .task { await model.refreshAvailability() }
+        .onChange(of: router.isShowingSettings) { _, showing in
+            if !showing { Task { await model.refreshAvailability() } }
+        }
         .task {
             guard let initialQuery, model.query.isEmpty else { return }
             model.query = initialQuery
@@ -53,22 +64,66 @@ struct SearchView: View {
         .accessibilityIdentifier("search.results")
     }
 
+    private var browse: some View {
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            if !model.recentQueries.isEmpty {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    HStack {
+                        SectionHeader("Recent Searches")
+                        Button("Clear") { model.clearRecents() }
+                            .accessibilityIdentifier("search.clearRecents")
+                    }
+                    ForEach(model.recentQueries, id: \.self) { query in
+                        Button {
+                            model.query = query
+                            Task { await model.submit() }
+                        } label: {
+                            Label(query, systemImage: "clock")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("search.recent.\(query)")
+                        .contextMenu {
+                            Button("Remove", role: .destructive) { model.removeRecent(query) }
+                        }
+                    }
+                }
+                .padding(.horizontal, metrics.pageMargin)
+            }
+            if model.browseGenres.isEmpty {
+                EmptyStateView("Search your addons", systemImage: "magnifyingglass", message: "Find something to watch by title.")
+            } else {
+                SectionHeader("Browse Categories").padding(.horizontal, metrics.pageMargin)
+                LazyVGrid(columns: metrics.wideGridColumns, spacing: metrics.cardSpacing) {
+                    ForEach(model.browseGenres) { genre in
+                        NavigationLink(value: CatalogListRequest(title: genre.name, sources: [genre.source])) {
+                            CollectionTile(title: genre.name).stretched()
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .accessibilityIdentifier("search.genre.\(genre.name)")
+                    }
+                }
+                .padding(.horizontal, metrics.pageMargin)
+            }
+        }
+    }
+
     @ViewBuilder
-    private var status: some View {
-        if model.showsNoSearchableAddons {
-            ContentUnavailableView("No addon can search", systemImage: "magnifyingglass",
-                                   description: Text("Search asks your catalog addons. Add one, such as Cinemeta, in Settings."))
-                .accessibilityIdentifier("search.noSearchableAddons")
-        } else {
-            switch model.phase {
-            case .idle:
-                ContentUnavailableView("Search your addons", systemImage: "magnifyingglass",
-                                       description: Text("Type a title. Every addon that supports search is asked at once."))
-            case .searching:
-                ProgressView().frame(maxWidth: .infinity)
-            case .done:
-                if model.showsNoResults {
-                    ContentUnavailableView.search(text: model.query)
+    private var results: some View {
+        if model.groups.count > 1 {
+            ChipRow {
+                GlassChip("All", isSelected: selectedGroup == nil) { selectedGroup = nil }
+                ForEach(model.groups) { group in
+                    GlassChip(group.title, isSelected: selectedGroup == group.id) { selectedGroup = group.id }
+                }
+            }
+        }
+        ForEach(model.groups) { group in
+            if model.groups.count == 1 || selectedGroup == group.id {
+                MediaGrid(items: group.items)
+            } else if selectedGroup == nil {
+                MediaRow(group.title, onSeeAll: { selectedGroup = group.id }) {
+                    ForEach(group.items, id: \.identity) { MediaCardLink(item: $0) }
                 }
             }
         }

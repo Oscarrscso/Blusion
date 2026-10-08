@@ -34,20 +34,44 @@ public final class SearchViewModel {
         case done
     }
 
+    /// A genre of one catalog, offered on the idle Search page. `source` opens that catalog filtered to the genre.
+    public struct GenreShortcut: Identifiable, Hashable, Sendable {
+        public let name: String
+        public let source: WidgetSource
+        public var id: String { name }
+
+        public init(name: String, source: WidgetSource) {
+            self.name = name
+            self.source = source
+        }
+    }
+
     public var query = ""
     public private(set) var sections: [Section] = []
     public private(set) var failures: [Failure] = []
     public private(set) var phase: Phase = .idle
     /// False when no enabled addon offers a searchable catalog. A search then does no network work. See `refreshAvailability()`.
     public private(set) var hasSearchableAddons = true
+    /// Genres to browse from the idle Search page. Filled by `refreshAvailability()`.
+    public private(set) var browseGenres: [GenreShortcut] = []
+    /// The last searches that returned something, newest first, at most 8. Kept in the history store.
+    public private(set) var recentQueries: [String]
+
+    private static let maxRecents = 8
+    private static let maxGenres = 16
 
     private let services: AppServices
     private let debounce: Duration
+    private let history: any SearchHistoryStore
     private var task: Task<Void, Never>?
 
-    public init(services: AppServices, debounce: Duration = .milliseconds(300)) {
+    /// `history` keeps the recent searches. Without one they live only as long as this model.
+    public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil) {
+        let store = history ?? InMemorySearchHistoryStore()
         self.services = services
         self.debounce = debounce
+        self.history = store
+        self.recentQueries = Self.normalised(store.load())
     }
 
     public var hasResults: Bool { sections.contains { !$0.items.isEmpty } }
@@ -75,10 +99,25 @@ public final class SearchViewModel {
         return types.map { Group(type: $0, title: ContentTypeName.plural($0), items: itemsByType[$0] ?? []) }
     }
 
-    /// Asks whether any enabled addon can search. Call when the Search screen appears; every search checks again.
+    /// Asks whether any enabled addon can search, and reads the browse genres. Call when the Search screen appears; every search checks again.
     public func refreshAvailability() async {
+        recentQueries = Self.normalised(history.load())
         let addons = await services.browse.searchableAddons()
         hasSearchableAddons = !addons.isEmpty
+        let sources = await services.browse.catalogSources()
+        browseGenres = Self.genreShortcuts(in: sources)
+    }
+
+    /// Forgets one recent search. Case-insensitive, like the de-duplication.
+    public func removeRecent(_ query: String) {
+        let key = Self.key(query)
+        recentQueries.removeAll { Self.key($0) == key }
+        history.save(recentQueries)
+    }
+
+    public func clearRecents() {
+        recentQueries = []
+        history.save([])
     }
 
     /// Call whenever `query` changes. Cancels the previous search and starts a new debounced one.
@@ -100,11 +139,21 @@ public final class SearchViewModel {
 
     /// Runs a search immediately (the keyboard's Search button) and waits for it.
     public func submit() async {
+        guard !Task.isCancelled else { return }
         task?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return reset() }
         phase = .searching
-        await run(term)
+        let search = Task { [weak self] in
+            guard let self else { return }
+            await self.run(term)
+        }
+        task = search
+        await withTaskCancellationHandler {
+            await search.value
+        } onCancel: {
+            search.cancel()
+        }
     }
 
     /// Waits for the in-flight debounced search (used by tests and by accessibility announcements).
@@ -119,6 +168,7 @@ public final class SearchViewModel {
     }
 
     private func run(_ term: String) async {
+        guard !Task.isCancelled else { return }
         sections = []
         failures = []
         await refreshAvailability()
@@ -140,6 +190,13 @@ public final class SearchViewModel {
         }
         guard !Task.isCancelled else { return }
         phase = .done
+        if hasResults { remember(term) }
+    }
+
+    /// Puts a query that found something at the top of the recents, in place of an older copy of it.
+    private func remember(_ term: String) {
+        recentQueries = Self.normalised([term] + recentQueries)
+        history.save(recentQueries)
     }
 
     /// Keeps sections in the user's addon order, whatever order the addons answer in.
@@ -153,5 +210,38 @@ public final class SearchViewModel {
     private static func groupType(_ type: String) -> String {
         let key = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return key.isEmpty ? "other" : key
+    }
+
+    /// Up to 16 genres of one catalog: the first movie catalog that has genre options, else the first catalog that has any.
+    /// Blank and repeated genres are left out, since each one is an id in the Search page.
+    static func genreShortcuts(in sources: [CatalogSource]) -> [GenreShortcut] {
+        let withGenres = sources.filter { !$0.catalog.genreOptions.isEmpty }
+        guard let source = withGenres.first(where: { $0.catalog.type == "movie" }) ?? withGenres.first else { return [] }
+        var seen = Set<String>()
+        let names = source.catalog.genreOptions.filter { name in
+            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && seen.insert(name).inserted
+        }
+        return names.prefix(maxGenres).map { name in
+            GenreShortcut(name: name, source: .addonCatalog(AddonCatalogReference(
+                manifestID: nil, host: source.addon.host, catalogType: source.catalog.type, catalogID: source.catalog.id, genre: name)))
+        }
+    }
+
+    /// Recent searches as stored: trimmed, no blanks, one copy of each (the first one kept), at most 8.
+    private static func normalised(_ queries: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for query in queries {
+            let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty, seen.insert(key(term)).inserted else { continue }
+            result.append(term)
+            if result.count == maxRecents { break }
+        }
+        return result
+    }
+
+    /// How two recent searches are compared: case-insensitively.
+    private static func key(_ query: String) -> String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

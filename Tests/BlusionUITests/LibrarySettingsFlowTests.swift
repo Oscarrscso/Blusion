@@ -19,7 +19,7 @@ final class LibrarySettingsFlowTests: XCTestCase {
 
     @MainActor
     private func install(_ app: XCUIApplication, _ urls: [String]) {
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         for url in urls {
             let field = app.textFields["addons.installField"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -43,7 +43,7 @@ final class LibrarySettingsFlowTests: XCTestCase {
         try XCTSkipIf(catalogURL.isEmpty, "MOCK_ADDON_CATALOG_URL is not set (run through scripts/verify.sh)")
         let app = launch()
         install(app, ["\(catalogURL)/uitest/manifest.json"])
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()
@@ -74,10 +74,11 @@ final class LibrarySettingsFlowTests: XCTestCase {
 
     @MainActor
     func testStoppedPlaybackAppearsUnderContinueWatching() throws {
+        try requireMediaFixtures()
         try XCTSkipIf(catalogURL.isEmpty || streamURL.isEmpty, "mock addon URLs are not set (run through scripts/verify.sh)")
         let app = launch()
         install(app, ["\(catalogURL)/uitest/manifest.json", "\(streamURL)/uitest-streams/manifest.json"])
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()
@@ -115,8 +116,7 @@ final class LibrarySettingsFlowTests: XCTestCase {
     @MainActor
     func testSettingsPersistAndDataCanBeCleared() throws {
         let app = launch()
-        app.tabBars.buttons["Home"].tap()
-        app.buttons["settings.open"].tap()
+        openSettings(app)
         XCTAssertTrue(app.otherElements["settings.form"].waitForExistence(timeout: 10) || app.tables["settings.form"].waitForExistence(timeout: 2))
         captureScreenshot(app, named: "M7-settings")
 

@@ -5,6 +5,8 @@ import StremioKit
 
 struct LibraryView: View {
     @State private var model: LibraryViewModel
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(TitleActions.self) private var actions: TitleActions?
     let onOpenAddons: () -> Void
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
@@ -13,104 +15,92 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        content
-            .navigationTitle("Library")
-            .onAppear { Task { await model.load() } }
-            .refreshable { await model.load() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if !model.hasLoaded {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.isEmpty {
-            ContentUnavailableView {
-                Label("Your library is empty", systemImage: "books.vertical")
-            } description: {
-                Text("Titles you save, and anything you start watching, show up here. Open a title and choose Save to Library.")
-            } actions: {
-                Button("Find something to watch", action: onOpenAddons)
-                    .accessibilityIdentifier("library.empty.action")
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                if !model.hasLoaded {
+                    SkeletonRow()
+                } else if model.isEmpty {
+                    EmptyStateLayout(title: "Your library is empty", systemImage: "books.vertical",
+                                     message: "Titles you save, and anything you start watching, show up here.") {
+                        Button("Find something to watch", action: onOpenAddons)
+                            .buttonStyle(.primaryActionCompact)
+                            .accessibilityIdentifier("library.empty.action")
+                    }
+                    .accessibilityIdentifier("library.empty")
+                } else {
+                    if !model.continueWatching.isEmpty { continueSection }
+                    if !model.saved.isEmpty { savedSection }
+                    if !model.watched.isEmpty { watchedSection }
+                }
             }
-            .accessibilityIdentifier("library.empty")
-        } else {
-            List {
-                if !model.continueWatching.isEmpty { continueSection }
-                if !model.saved.isEmpty { savedSection }
-                if !model.watched.isEmpty { watchedSection }
-            }
-            .accessibilityIdentifier("library.list")
+            .padding(.vertical, Theme.Spacing.l)
         }
+        .screenBackground()
+        .navigationTitle("Library")
+        .onAppear { Task { await model.load() } }
+        .refreshable { await model.load() }
+        .onChange(of: actions?.savedIdentities) { Task { await model.load() } }
+        .onChange(of: actions?.watchedIdentities) { Task { await model.load() } }
+        .accessibilityIdentifier("library.list")
     }
 
     private var continueSection: some View {
-        Section("Continue Watching") {
+        MediaRow("Continue Watching") {
             ForEach(model.continueWatching) { item in
-                NavigationLink(value: LibraryViewModel.request(for: item)) { ProgressRow(item: item) }
-                    .accessibilityIdentifier("library.continue.\(item.id)")
-                    .swipeActions(edge: .trailing) {
-                        Button("Remove", role: .destructive) { Task { await model.removeFromContinueWatching(item) } }
-                        Button("Watched") { Task { await model.markWatched(item) } }.tint(.green)
-                    }
+                NavigationLink(value: LibraryViewModel.request(for: item)) {
+                    ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster, fraction: item.fraction)
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("library.continue.\(item.id)")
+                .contextMenu {
+                    Button("Mark as Watched") { Task { await model.markWatched(item); await actions?.refresh() } }
+                    Button("Remove from Continue Watching", role: .destructive) { Task { await model.removeFromContinueWatching(item) } }
+                }
             }
         }
     }
 
     private var savedSection: some View {
-        Section("Saved") {
-            ForEach(model.saved) { item in
-                NavigationLink(value: item.preview) {
-                    HStack(spacing: 12) {
-                        PosterImage(url: item.poster, title: item.name).frame(width: 44)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name).font(.body)
-                            if let year = item.releaseInfo { Text(year).font(.caption).foregroundStyle(.secondary) }
-                        }
-                    }
-                }
-                .accessibilityIdentifier("library.saved.\(item.id)")
-                .swipeActions(edge: .trailing) {
-                    Button("Remove", role: .destructive) { Task { await model.removeSaved(item) } }
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            SectionHeader("Saved").padding(.horizontal, metrics.pageMargin)
+            LazyVGrid(columns: metrics.posterGridColumns, spacing: metrics.gridRowSpacing) {
+                ForEach(model.saved) { item in
+                    MediaCardLink(item: item.preview).stretched()
+                        .accessibilityIdentifier("library.saved.\(item.id)")
                 }
             }
+            .padding(.horizontal, metrics.pageMargin)
         }
     }
 
     private var watchedSection: some View {
-        Section("Watched") {
-            ForEach(model.watched) { item in
-                HStack {
-                    Text(item.title)
-                    Spacer()
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityHidden(true)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(item.title), watched")
-                .accessibilityIdentifier("library.watched.\(item.id)")
-                .swipeActions(edge: .trailing) {
-                    Button("Not watched") { Task { await model.markUnwatched(item) } }
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            SectionHeader("Watched").padding(.horizontal, metrics.pageMargin)
+            LazyVGrid(columns: metrics.posterGridColumns, spacing: metrics.gridRowSpacing) {
+                ForEach(model.watched) { item in
+                    let preview = MetaPreview(id: item.seriesID ?? item.contentID, type: item.type, name: item.title, poster: item.poster)
+                    MediaCardLink(item: preview).stretched()
+                        .overlay(alignment: .topTrailing) { Badge("Watched", systemImage: "checkmark").padding(6) }
+                        .accessibilityIdentifier("library.watched.\(item.id)")
+                        .contextMenu { Button("Mark as Unwatched") { Task { await model.markUnwatched(item); await actions?.refresh() } } }
                 }
             }
+            .padding(.horizontal, metrics.pageMargin)
         }
+    }
+
+    private func progressSubtitle(_ item: WatchProgress) -> String {
+        let remaining = "\(max(0, Int((item.duration - item.position) / 60))) min left"
+        if let season = item.season, let episode = item.episode { return "S\(season), E\(episode) · \(remaining)" }
+        return remaining
     }
 }
 
-/// A title with a bar showing how far through it the viewer got.
 struct ProgressRow: View {
     let item: WatchProgress
 
     var body: some View {
-        HStack(spacing: 12) {
-            PosterImage(url: item.poster, title: item.title).frame(width: 44)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.title).font(.body).lineLimit(2)
-                ProgressView(value: item.fraction)
-                Text("\(PlayerTime.format(item.position)) of \(PlayerTime.format(item.duration))")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.title), \(Int(item.fraction * 100)) percent watched")
+        ProgressCard(title: item.title, artwork: item.poster, fraction: item.fraction)
     }
 }
 #endif

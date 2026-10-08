@@ -4,6 +4,7 @@ import StremioKit
 
 struct DiscoverView: View {
     @State private var model: DiscoverViewModel
+    @Environment(\.layoutMetrics) private var metrics
     let onOpenAddons: () -> Void
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
@@ -12,74 +13,76 @@ struct DiscoverView: View {
     }
 
     var body: some View {
-        content
-            .navigationTitle("Discover")
-            .task { await model.loadSources() }
-            .refreshable { await model.reload() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if !model.hasSources {
-            if model.state == .idle {
-                EmptyAddonsView(onOpenAddons: onOpenAddons)
-            }
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                if model.hasSources {
                     filters
                     results
+                } else {
+                    EmptyAddonsView(onOpenAddons: onOpenAddons)
                 }
-                .padding(.vertical)
             }
-            .accessibilityIdentifier("discover.scroll")
+            .padding(.vertical, Theme.Spacing.l)
         }
+        .screenBackground()
+        .navigationTitle("Discover")
+        .task { await model.loadSources() }
+        .refreshable { await model.reload() }
+        .accessibilityIdentifier("discover.scroll")
     }
 
     private var filters: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            if model.types.count > 1 {
+                ChipRow {
+                    ForEach(model.types, id: \.self) { type in
+                        GlassChip(ContentTypeName.plural(type), isSelected: model.selectedType == type) {
+                            Task { await model.select(type: type) }
+                        }
+                    }
+                }
+            }
             Menu {
-                ForEach(model.sources) { source in
+                ForEach(model.visibleSources) { source in
                     Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
                 }
             } label: {
-                Label(model.selectedSource.map { "\($0.title) · \($0.addon.name)" } ?? "Catalog", systemImage: "square.stack")
+                HStack { Text(model.selectedSource?.title ?? "Catalog"); Image(systemName: "chevron.down") }
             }
+            .buttonStyle(.glassCapsule)
+            .padding(.horizontal, metrics.pageMargin)
             .accessibilityIdentifier("discover.catalogMenu")
-
             if !model.genres.isEmpty {
-                Menu {
-                    Button("All genres") { Task { await model.select(genre: nil) } }
+                ChipRow {
+                    GlassChip("All", isSelected: model.selectedGenre == nil) { Task { await model.select(genre: nil) } }
                     ForEach(model.genres, id: \.self) { genre in
-                        Button(genre) { Task { await model.select(genre: genre) } }
+                        GlassChip(genre, isSelected: model.selectedGenre == genre) { Task { await model.select(genre: genre) } }
                     }
-                } label: {
-                    Label(model.selectedGenre ?? "All genres", systemImage: "line.3.horizontal.decrease.circle")
                 }
                 .accessibilityIdentifier("discover.genreMenu")
             }
         }
-        .padding(.horizontal)
     }
 
     @ViewBuilder
     private var results: some View {
+        if !model.items.isEmpty {
+            MediaGrid(items: model.items, onLastAppear: { Task { await model.loadMore() } })
+        }
         switch model.state {
         case .idle, .loadingFirstPage:
-            ProgressView().frame(maxWidth: .infinity)
+            if model.items.isEmpty { SkeletonRow() }
         case .failed(let error):
             if model.isOffline {
                 OfflineBanner()
             } else {
-                WrappingStack {
-                    ErrorChip(text: error.shortDescription)
-                    Button("Try again") { Task { await model.reload() } }
-                }
-                .padding(.horizontal)
+                InlineErrorView(error.shortDescription, retry: { Task { await model.reload() } })
+                    .padding(.horizontal, metrics.pageMargin)
             }
-        case .loaded, .loadingMore:
-            PosterGrid(items: model.items) { Task { await model.loadMore() } }
-            if model.state == .loadingMore { ProgressView().frame(maxWidth: .infinity) }
+        case .loaded:
+            if model.items.isEmpty { EmptyStateView("Nothing here yet", systemImage: "film", message: "Try another category or genre.") }
+        case .loadingMore:
+            ProgressView().frame(maxWidth: .infinity)
         }
     }
 }

@@ -22,7 +22,7 @@ public struct DataResetService: Sendable {
             switch self {
             case .history: return "Removes your watch progress and watched marks. Continue Watching will be empty."
             case .library: return "Removes every saved title from your library."
-            case .settings: return "Resets subtitle language, preferred quality and the streaming server."
+            case .settings: return "Resets playback and ratings preferences, account credentials and the streaming server."
             case .widgets: return "Puts Home back to the automatic layout. Your widgets are removed."
             case .addons: return "Removes every installed addon and its saved link. You'll need to add them again."
             case .everything: return "Removes watch history, saved titles, settings, your Home layout and all addons."
@@ -46,6 +46,10 @@ public struct DataResetService: Sendable {
             await services.library.clear()
         case .settings:
             await services.settings.save(PlaybackSettings())
+            await services.traktAccount.clearCredentials()
+            await services.posterRatings.setReviewServices(omdb: nil, tmdb: nil)
+            await MainActor.run { services.posterRatings.isEnabled = PlaybackSettings().showsPosterRatings }
+            await services.widgetContent.invalidate()
         case .widgets:
             await services.widgets.save(nil)
             await services.widgetContent.forgetEverything()
@@ -54,6 +58,9 @@ public struct DataResetService: Sendable {
             await services.widgetContent.forgetEverything()
         case .everything:
             for each in [Scope.history, .library, .settings, .widgets, .addons] { await clear(each) }
+            services.searchHistory.save([])
+            await services.posterRatings.forgetAll()
+            await services.handoffs.clear()
         }
         return "\(scope.title) cleared."
     }

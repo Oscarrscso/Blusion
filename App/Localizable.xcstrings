@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    " ": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " "
+          }
+        }
+      }
+    },
     "About": {
       "extractionState": "manual",
       "localizations": {
@@ -8,6 +19,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "About"
+          }
+        }
+      }
+    },
+    "Account": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "Accounts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts"
           }
         }
       }
@@ -23,6 +56,28 @@
         }
       }
     },
+    "Add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        }
+      }
+    },
+    "Add Tile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Tile"
+          }
+        }
+      }
+    },
     "Add an addon": {
       "extractionState": "manual",
       "localizations": {
@@ -30,6 +85,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add an addon"
+          }
+        }
+      }
+    },
+    "Add to My Widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to My Widgets"
+          }
+        }
+      }
+    },
+    "Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share."
           }
         }
       }
@@ -45,6 +122,17 @@
         }
       }
     },
+    "Adds missing items without deleting anything. Import puts your watchlist in Library and marks watched items. Send shares saved titles and watched marks with Trakt. Only titles with IMDb IDs can sync; playback positions stay on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adds missing items without deleting anything. Import puts your watchlist in Library and marks watched items. Send shares saved titles and watched marks with Trakt. Only titles with IMDb IDs can sync; playback positions stay on this device."
+          }
+        }
+      }
+    },
     "AirPlay": {
       "extractionState": "manual",
       "localizations": {
@@ -56,6 +144,17 @@
         }
       }
     },
+    "All Genres": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Genres"
+          }
+        }
+      }
+    },
     "All genres": {
       "extractionState": "manual",
       "localizations": {
@@ -63,6 +162,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "All genres"
+          }
+        }
+      }
+    },
+    "Appearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
           }
         }
       }
@@ -111,6 +221,17 @@
         }
       }
     },
+    "Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › Addons. Blusion isn’t affiliated with any addon or service.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › Addons. Blusion isn’t affiliated with any addon or service."
+          }
+        }
+      }
+    },
     "Blusion is a player for content you have the right to watch. It includes no content and no addons, and it isn't affiliated with any addon or service.": {
       "extractionState": "manual",
       "localizations": {
@@ -155,6 +276,17 @@
         }
       }
     },
+    "Choose Source": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Source"
+          }
+        }
+      }
+    },
     "Choose which rows appear on Home.": {
       "extractionState": "manual",
       "localizations": {
@@ -162,6 +294,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose which rows appear on Home."
+          }
+        }
+      }
+    },
+    "Clear": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
           }
         }
       }
@@ -177,6 +320,17 @@
         }
       }
     },
+    "Client ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client ID"
+          }
+        }
+      }
+    },
     "Close": {
       "extractionState": "manual",
       "localizations": {
@@ -188,6 +342,17 @@
         }
       }
     },
+    "Content": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content"
+          }
+        }
+      }
+    },
     "Continue Watching": {
       "extractionState": "manual",
       "localizations": {
@@ -195,6 +360,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue Watching"
+          }
+        }
+      }
+    },
+    "Create a Trakt API app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a Trakt API app"
+          }
+        }
+      }
+    },
+    "Critic scores supplied by OMDb.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critic scores supplied by OMDb."
+          }
+        }
+      }
+    },
+    "Customize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customize"
           }
         }
       }
@@ -276,6 +474,28 @@
         }
       }
     },
+    "Edit Tile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Tile"
+          }
+        }
+      }
+    },
+    "Edit Widget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Widget"
+          }
+        }
+      }
+    },
     "Elapsed time": {
       "extractionState": "manual",
       "localizations": {
@@ -294,6 +514,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enabled"
+          }
+        }
+      }
+    },
+    "Enter this code on Trakt:": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter this code on Trakt:"
+          }
+        }
+      }
+    },
+    "Enter your own API Client ID and Client Secret. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your own API Client ID and Client Secret. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets."
+          }
+        }
+      }
+    },
+    "Enter your own API Client ID and Client Secret. Set your API app’s Redirect URI to urn:ietf:wg:oauth:2.0:oob so token refresh works. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your own API Client ID and Client Secret. Set your API app’s Redirect URI to urn:ietf:wg:oauth:2.0:oob so token refresh works. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets."
           }
         }
       }
@@ -342,6 +595,17 @@
         }
       }
     },
+    "From URL": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From URL"
+          }
+        }
+      }
+    },
     "Gallery": {
       "extractionState": "manual",
       "localizations": {
@@ -349,6 +613,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gallery"
+          }
+        }
+      }
+    },
+    "Get Infuse": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get Infuse"
+          }
+        }
+      }
+    },
+    "Get an OMDb key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get an OMDb key"
+          }
+        }
+      }
+    },
+    "Hide title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide title"
           }
         }
       }
@@ -364,6 +661,17 @@
         }
       }
     },
+    "Home rows": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home rows"
+          }
+        }
+      }
+    },
     "Host": {
       "extractionState": "manual",
       "localizations": {
@@ -371,6 +679,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Host"
+          }
+        }
+      }
+    },
+    "IMDb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMDb"
           }
         }
       }
@@ -386,6 +705,127 @@
         }
       }
     },
+    "If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as MKV and DTS, and returns your progress when you come back.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as MKV and DTS, and returns your progress when you come back."
+          }
+        }
+      }
+    },
+    "Image URL (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image URL (optional)"
+          }
+        }
+      }
+    },
+    "Import": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        }
+      }
+    },
+    "Import & export": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import & export"
+          }
+        }
+      }
+    },
+    "Import Widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Widgets"
+          }
+        }
+      }
+    },
+    "Import Widgets…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Widgets…"
+          }
+        }
+      }
+    },
+    "Import Without Them": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import Without Them"
+          }
+        }
+      }
+    },
+    "Import from": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from"
+          }
+        }
+      }
+    },
+    "Import from Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from Trakt"
+          }
+        }
+      }
+    },
+    "Import mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import mode"
+          }
+        }
+      }
+    },
+    "Infuse isn’t installed on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Infuse isn’t installed on this device."
+          }
+        }
+      }
+    },
     "Install": {
       "extractionState": "manual",
       "localizations": {
@@ -397,6 +837,39 @@
         }
       }
     },
+    "Install Missing Addons?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Missing Addons?"
+          }
+        }
+      }
+    },
+    "Install an addon with catalogs to add more rows.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install an addon with catalogs to add more rows."
+          }
+        }
+      }
+    },
+    "Install and Import": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install and Import"
+          }
+        }
+      }
+    },
     "Installed": {
       "extractionState": "manual",
       "localizations": {
@@ -404,6 +877,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Installed"
+          }
+        }
+      }
+    },
+    "Large": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Large"
           }
         }
       }
@@ -459,6 +943,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manifest"
+          }
+        }
+      }
+    },
+    "Manual sync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manual sync"
+          }
+        }
+      }
+    },
+    "Mark as Unwatched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as Unwatched"
+          }
+        }
+      }
+    },
+    "Mark as Watched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as Watched"
+          }
+        }
+      }
+    },
+    "More Info": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More Info"
           }
         }
       }
@@ -650,6 +1178,28 @@
         }
       }
     },
+    "Open Trakt to authorize": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Trakt to authorize"
+          }
+        }
+      }
+    },
+    "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
+          }
+        }
+      }
+    },
     "Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion doesn't include one. Leave this empty if you don't use any.": {
       "extractionState": "manual",
       "localizations": {
@@ -657,6 +1207,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion doesn't include one. Leave this empty if you don't use any."
+          }
+        }
+      }
+    },
+    "Optional. Trakt list widgets need your own API Client ID, stored in the Keychain. Create an API app at trakt.tv/oauth/applications.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Trakt list widgets need your own API Client ID, stored in the Keychain. Create an API app at trakt.tv/oauth/applications."
           }
         }
       }
@@ -679,6 +1240,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste"
+          }
+        }
+      }
+    },
+    "Paste JSON": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste JSON"
+          }
+        }
+      }
+    },
+    "Paste a link above, or add Cinemeta for catalogs and search.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a link above, or add Cinemeta for catalogs and search."
           }
         }
       }
@@ -716,6 +1299,17 @@
         }
       }
     },
+    "Play best stream automatically": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play best stream automatically"
+          }
+        }
+      }
+    },
     "Play in Blusion": {
       "extractionState": "manual",
       "localizations": {
@@ -723,6 +1317,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Play in Blusion"
+          }
+        }
+      }
+    },
+    "Play with": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play with"
           }
         }
       }
@@ -793,6 +1398,17 @@
         }
       }
     },
+    "Ratings on posters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ratings on posters"
+          }
+        }
+      }
+    },
     "Remaining time": {
       "extractionState": "manual",
       "localizations": {
@@ -815,6 +1431,17 @@
         }
       }
     },
+    "Remove Widget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Widget"
+          }
+        }
+      }
+    },
     "Remove addon": {
       "extractionState": "manual",
       "localizations": {
@@ -822,6 +1449,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove addon"
+          }
+        }
+      }
+    },
+    "Remove from Continue Watching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from Continue Watching"
+          }
+        }
+      }
+    },
+    "Replace My Widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace My Widgets"
           }
         }
       }
@@ -848,6 +1497,17 @@
         }
       }
     },
+    "Review services": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review services"
+          }
+        }
+      }
+    },
     "Save": {
       "extractionState": "manual",
       "localizations": {
@@ -859,6 +1519,28 @@
         }
       }
     },
+    "Save Client ID": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Client ID"
+          }
+        }
+      }
+    },
+    "Save Review Services": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Review Services"
+          }
+        }
+      }
+    },
     "Save address": {
       "extractionState": "manual",
       "localizations": {
@@ -866,6 +1548,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save address"
+          }
+        }
+      }
+    },
+    "Save credentials": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save credentials"
           }
         }
       }
@@ -925,6 +1618,17 @@
         }
       }
     },
+    "Searching…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching…"
+          }
+        }
+      }
+    },
     "Season": {
       "extractionState": "manual",
       "localizations": {
@@ -947,6 +1651,17 @@
         }
       }
     },
+    "Send to Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send to Trakt"
+          }
+        }
+      }
+    },
     "Settings": {
       "extractionState": "manual",
       "localizations": {
@@ -954,6 +1669,105 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
+          }
+        }
+      }
+    },
+    "Shape": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shape"
+          }
+        }
+      }
+    },
+    "Show Details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Details"
+          }
+        }
+      }
+    },
+    "Show ratings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show ratings"
+          }
+        }
+      }
+    },
+    "Sign in to Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to Trakt"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out"
+          }
+        }
+      }
+    },
+    "Signed in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size"
+          }
+        }
+      }
+    },
+    "Small": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Small"
           }
         }
       }
@@ -976,6 +1790,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speed"
+          }
+        }
+      }
+    },
+    "Stream Details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stream Details"
           }
         }
       }
@@ -1013,6 +1838,28 @@
         }
       }
     },
+    "TMDB": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDB"
+          }
+        }
+      }
+    },
+    "TMDB API settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDB API settings"
+          }
+        }
+      }
+    },
     "This format isn't supported yet": {
       "extractionState": "manual",
       "localizations": {
@@ -1024,6 +1871,28 @@
         }
       }
     },
+    "Tiles": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiles"
+          }
+        }
+      }
+    },
+    "Title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title"
+          }
+        }
+      }
+    },
     "Titles you save, and anything you start watching, show up here. Open a title and choose Save to Library.": {
       "extractionState": "manual",
       "localizations": {
@@ -1031,6 +1900,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Titles you save, and anything you start watching, show up here. Open a title and choose Save to Library."
+          }
+        }
+      }
+    },
+    "Trailer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trailer"
+          }
+        }
+      }
+    },
+    "Trakt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt"
+          }
+        }
+      }
+    },
+    "Trakt lists need a Trakt client ID in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt lists need a Trakt client ID in Settings."
           }
         }
       }
@@ -1079,6 +1981,28 @@
         }
       }
     },
+    "Use Automatic Layout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Automatic Layout"
+          }
+        }
+      }
+    },
+    "Use the automatic layout?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the automatic layout?"
+          }
+        }
+      }
+    },
     "Use the fallback player": {
       "extractionState": "manual",
       "localizations": {
@@ -1101,6 +2025,17 @@
         }
       }
     },
+    "Waiting for authorization…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for authorization…"
+          }
+        }
+      }
+    },
     "Watched": {
       "extractionState": "manual",
       "localizations": {
@@ -1112,6 +2047,28 @@
         }
       }
     },
+    "Watched movies and episodes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watched movies and episodes"
+          }
+        }
+      }
+    },
+    "Watchlist": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watchlist"
+          }
+        }
+      }
+    },
     "Widgets": {
       "extractionState": "manual",
       "localizations": {
@@ -1119,6 +2076,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Widgets"
+          }
+        }
+      }
+    },
+    "Works with widget exports from Fusion and with links to a JSON file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Works with widget exports from Fusion and with links to a JSON file."
+          }
+        }
+      }
+    },
+    "Your API app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your API app"
           }
         }
       }
@@ -1163,6 +2142,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "https:// or stremio:// link"
+          }
+        }
+      }
+    },
+    "https://example.com/widgets.json": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "https://example.com/widgets.json"
           }
         }
       }

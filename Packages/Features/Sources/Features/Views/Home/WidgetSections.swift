@@ -106,10 +106,12 @@ struct CollectionRow: View {
 /// The titles to resume, as wide cards with their progress. Each opens its streams, where the player resumes.
 struct ContinueWatchingRow: View {
     let items: [WatchProgress]
+    var title = "Continue Watching"
+    var hideTitle = false
 
     var body: some View {
         if !items.isEmpty {
-            MediaRow("Continue Watching") {
+            MediaRow(title, hideTitle: hideTitle) {
                 ForEach(items) { item in
                     NavigationLink(value: LibraryViewModel.request(for: item)) {
                         ProgressCard(title: item.title, subtitle: Self.remaining(item), artwork: item.poster, fraction: item.fraction)

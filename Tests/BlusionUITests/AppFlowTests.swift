@@ -20,7 +20,7 @@ final class AppFlowTests: XCTestCase {
     @MainActor
     private func installMockCatalogAddon(_ app: XCUIApplication, token: String = "uitest") throws {
         try XCTSkipIf(catalogURL.isEmpty, "MOCK_ADDON_CATALOG_URL is not set (run through scripts/verify.sh)")
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         let field = app.textFields["addons.installField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
@@ -46,8 +46,9 @@ final class AppFlowTests: XCTestCase {
         try installMockCatalogAddon(app)
         captureScreenshot(app, named: "M3-addons-installed")
 
-        app.tabBars.buttons["Home"].tap()
-        XCTAssertTrue(app.otherElements["board.row.mock-top"].waitForExistence(timeout: 15))
+        dismissSettings(app)
+        XCTAssertTrue(app.scrollViews["board.rows"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["poster.mock:movie1"].firstMatch.waitForExistence(timeout: 15))
         captureScreenshot(app, named: "M3-home")
 
         let poster = app.buttons["poster.mock:movie1"].firstMatch
@@ -63,7 +64,7 @@ final class AppFlowTests: XCTestCase {
     func testPreviewOnlyTitleStillOpensDetailWithAFallbackNote() throws {
         let app = launch()
         try installMockCatalogAddon(app)
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:nometa1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()
@@ -75,6 +76,7 @@ final class AppFlowTests: XCTestCase {
     func testSearchFindsAMovieAcrossAddons() throws {
         let app = launch()
         try installMockCatalogAddon(app)
+        dismissSettings(app)
         app.tabBars.buttons["Search"].tap()
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -88,6 +90,7 @@ final class AppFlowTests: XCTestCase {
     func testDiscoverShowsAGridAndAGenreMenu() throws {
         let app = launch()
         try installMockCatalogAddon(app)
+        dismissSettings(app)
         app.tabBars.buttons["Discover"].tap()
         XCTAssertTrue(app.buttons["discover.catalogMenu"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["poster.mock:movie1"].firstMatch.waitForExistence(timeout: 15))
@@ -100,7 +103,7 @@ final class AppFlowTests: XCTestCase {
     @MainActor
     func testBadAddonURLShowsAReadableError() throws {
         let app = launch()
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         let field = app.textFields["addons.installField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
@@ -114,7 +117,7 @@ final class AppFlowTests: XCTestCase {
         let app = launch()
         try installMockCatalogAddon(app)
         try app.performAccessibilityAudit()
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         XCTAssertTrue(app.buttons["poster.mock:movie1"].firstMatch.waitForExistence(timeout: 15))
         try app.performAccessibilityAudit()
         app.buttons["poster.mock:movie1"].firstMatch.tap()
@@ -128,7 +131,7 @@ final class AppFlowTests: XCTestCase {
         try installMockCatalogAddon(app)
         captureScreenshot(app, named: "M3-addons-AX5")
         try app.performAccessibilityAudit(for: .textClipped)
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         XCTAssertTrue(app.buttons["poster.mock:movie1"].firstMatch.waitForExistence(timeout: 15))
         captureScreenshot(app, named: "M3-home-AX5")
         try app.performAccessibilityAudit(for: .textClipped)

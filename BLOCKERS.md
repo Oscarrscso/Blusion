@@ -1,5 +1,14 @@
 # BLOCKERS
 
+> Historical record — 2026-10-08: B-001 and B-002 below describe the original Linux-hosted run, not the current Mac checkout.
+> Xcode and Mac Catalyst are now available and the app has compiled locally. This Mac has no iOS simulator runtime;
+> simulator UI tests and physical-device checks remain unverified. The earlier GitHub write denial has not been retried
+> during this continuation, so it is not a statement about current credentials. The repository was cloned from GitHub;
+> the old “nothing is on GitHub” statement applies only to that earlier agent session.
+>
+> Saved starting point: `7331a0e` (`checkpoint`) and local `build/checkpoint-agent-work.tar.gz`.
+> See [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) for current coverage and the pending final validation record.
+
 Entry format: node / tried / error / hypotheses / the one question / resolution.
 
 ## B-001 · M0 · No macOS, Xcode or iOS simulator on the agent host — ROUTED AROUND

@@ -38,13 +38,14 @@ struct EmptyStateLayout<Action: View>: View {
     @ViewBuilder let action: () -> Action
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.m) {
+        VStack(spacing: Theme.Spacing.s) {
             Image(systemName: systemImage)
-                .font(.system(size: 44, weight: .light))
+                .padding(.bottom, Theme.Spacing.xs)
+                .font(.system(size: 46, weight: .regular))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
             if let message {
@@ -89,75 +90,120 @@ struct InlineErrorView: View {
             }
         }
         .padding(Theme.Spacing.m)
-        .cardSurface(cornerRadius: Theme.Radius.poster)
+        .cardSurface(cornerRadius: Theme.Radius.card)
     }
 }
 
-/// A grey placeholder shaped like one card, shown while its content loads. It does not shimmer itself: put `shimmering()` on the
-/// container of a group, as `SkeletonRow` does, so a long grid does not run one highlight per item.
+/// A grey placeholder shaped like one card, shown while its content loads: the same width, height and caption lines as the real
+/// card, so nothing moves when the content arrives. It does not shimmer itself: put `shimmering()` on the container of a group,
+/// as `SkeletonRow` does, so a long grid does not run one highlight per item. `showsTitle` follows `MediaCard`: nil means the
+/// aspect's default (no caption lines for a poster).
 struct SkeletonCard: View {
     let aspect: CardAspect
     let size: CardSize
+    let showsTitle: Bool?
 
-    init(aspect: CardAspect = .poster, size: CardSize = .medium) {
+    init(aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil) {
         self.aspect = aspect
         self.size = size
+        self.showsTitle = showsTitle
     }
 
     var body: some View {
-        SkeletonShapes(aspect: aspect, size: size)
+        SkeletonShapes(aspect: aspect, size: size, showsTitle: showsTitle)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Loading")
     }
 }
 
-/// A row of grey card placeholders with the same margins as `MediaRow`. One shimmer sweeps the whole row.
+/// A row of grey card placeholders with the same margins and gaps as `MediaRow`. One shimmer sweeps the whole row.
 struct SkeletonRow: View {
     let aspect: CardAspect
     let size: CardSize
     let count: Int
+    let showsTitle: Bool?
+    @Environment(\.layoutMetrics) private var metrics
 
-    init(aspect: CardAspect = .poster, size: CardSize = .medium, count: Int = 6) {
+    init(aspect: CardAspect = .poster, size: CardSize = .medium, count: Int = 6, showsTitle: Bool? = nil) {
         self.aspect = aspect
         self.size = size
         self.count = count
+        self.showsTitle = showsTitle
     }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: Theme.cardSpacing) {
+            HStack(alignment: .top, spacing: metrics.cardSpacing) {
                 ForEach(0..<max(count, 0), id: \.self) { _ in
-                    SkeletonShapes(aspect: aspect, size: size)
+                    SkeletonShapes(aspect: aspect, size: size, showsTitle: showsTitle)
                 }
             }
             .shimmering()
         }
         .scrollDisabled(true)
-        .contentMargins(.horizontal, Theme.screenPadding, for: .scrollContent)
+        .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
         .scrollClipDisabled()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading")
     }
 }
 
-/// The grey shapes of one card without any motion, so a row can share a single shimmer across them.
+/// A whole shelf while it loads: a header bar and a `SkeletonRow`, laid out like `MediaRow` so the page keeps its structure.
+struct SkeletonShelf: View {
+    let aspect: CardAspect
+    let size: CardSize
+    let showsTitle: Bool?
+    @Environment(\.layoutMetrics) private var metrics
+
+    init(aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil) {
+        self.aspect = aspect
+        self.size = size
+        self.showsTitle = showsTitle
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            Text(" ")
+                .font(Theme.Typography.shelfTitle)
+                .frame(width: 150)
+                .background { RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Theme.surface).padding(.vertical, 4) }
+                .padding(.horizontal, metrics.pageMargin)
+                .shimmering()
+            SkeletonRow(aspect: aspect, size: size, showsTitle: showsTitle)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+
+/// The grey shapes of one card without any motion, so a row can share a single shimmer across them. The caption lines are real
+/// (hidden) text, so their height follows Dynamic Type exactly as the card's does.
 private struct SkeletonShapes: View {
     let aspect: CardAspect
     let size: CardSize
+    let showsTitle: Bool?
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        let width = size.width(for: aspect)
+        let width = size.width(for: aspect, metrics: metrics)
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous)
-                .fill(Theme.surfaceStrong)
+                .fill(Theme.surface)
                 .frame(width: width, height: width / aspect.ratio)
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.surfaceStrong)
-                .frame(width: width * 0.8, height: 10)
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.surfaceStrong)
-                .frame(width: width * 0.45, height: 8)
+            if showsTitle ?? aspect.showsCaptionByDefault {
+                VStack(alignment: .leading, spacing: 2) {
+                    line(font: Theme.Typography.cardTitle, width: width * 0.78)
+                    line(font: Theme.Typography.cardSubtitle, width: width * 0.46)
+                }
+            }
         }
+    }
+
+    private func line(font: Font, width: CGFloat) -> some View {
+        Text(" ")
+            .font(font)
+            .frame(width: width)
+            .background { RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Theme.surface).padding(.vertical, 3) }
     }
 }
 

@@ -389,4 +389,56 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         try await waitUntil { model.phase == .ready && model.sections.allSatisfy { !$0.state.isLoading } }
         observing.cancel()
     }
+
+    @Test func returningToHomeReloadsAfterItsObservationWasCancelled() async throws {
+        let gate = Gate()
+        let transport = StubTransport { request, call in
+            if call == 1 {
+                await gate.wait()
+                try Task.checkCancellation()
+            }
+            return StubTransport.response(twoMovies, for: request)
+        }
+        let model = HomeViewModel(services: try await services([cinemeta], transport: transport, widgets: [catalogRow("a", catalog: "top")]))
+        let firstObservation = Task { await model.observeAddons() }
+        try await waitUntil { transport.callCount == 1 }
+        firstObservation.cancel()
+        await gate.open()
+        await firstObservation.value
+        #expect(model.sections[0].state.isLoading, "leaving Home does not turn an unfinished row into a cancellation error")
+        #expect(model.sections[0].state.error == nil)
+
+        let returningObservation = Task { await model.observeAddons() }
+        defer { returningObservation.cancel() }
+        try await waitUntil { model.sections.first?.state.value?.count == 2 }
+        #expect(model.sections[0].state.value?.map(\.id) == ["tt1", "tt2"])
+        #expect(transport.callCount == 2, "the unchanged addon is asked again when Home returns")
+        returningObservation.cancel()
+        await returningObservation.value
+    }
+
+    @Test func aCancelledRetryDoesNotShowACancellationErrorAndCanBeRetriedAgain() async throws {
+        let gate = Gate()
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(), status: 404, for: request) }
+            if call == 2 {
+                await gate.wait()
+                try Task.checkCancellation()
+            }
+            return StubTransport.response(twoMovies, for: request)
+        }
+        let model = HomeViewModel(services: try await services([cinemeta], transport: transport, widgets: [catalogRow("a", catalog: "top")]))
+        await model.load()
+        #expect(model.sections[0].state.error == .notFound)
+        let retrying = Task { await model.retry(sectionID: "a") }
+        try await waitUntil { transport.callCount == 2 }
+        retrying.cancel()
+        await gate.open()
+        await retrying.value
+        #expect(model.sections[0].state.error == nil)
+
+        await model.retry(sectionID: "a")
+        #expect(model.sections[0].state.value?.map(\.id) == ["tt1", "tt2"])
+        #expect(transport.callCount == 3)
+    }
 }

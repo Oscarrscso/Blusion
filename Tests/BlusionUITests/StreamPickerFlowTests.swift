@@ -17,8 +17,7 @@ final class StreamPickerFlowTests: XCTestCase {
         field.tap()
         field.typeText(url)
         app.buttons["addons.installButton"].tap()
-        XCTAssertTrue(app.staticTexts["addons.success"].waitForExistence(timeout: 15), "installing \(url) should succeed")
-        app.buttons["addons.installButton"].tap()   // no-op if disabled; keeps the field state predictable
+        XCTAssertTrue(app.staticTexts["addons.success"].waitForExistence(timeout: 15), "installing the mock addon should succeed")
     }
 
     @MainActor
@@ -26,13 +25,13 @@ final class StreamPickerFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["BLUSION_UITEST"] = "1"
         app.launch()
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         install(app, "\(catalogURL)/uitest/manifest.json")
         // The slow addon is listed first; the fast one second. The mock delays `flag-slow` resources by 3 s by default.
         install(app, "\(streamURL)/flag-slow/uitest-slow/manifest.json")
         install(app, "\(streamURL)/uitest-fast/manifest.json")
 
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()
@@ -59,10 +58,10 @@ final class StreamPickerFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["BLUSION_UITEST"] = "1"
         app.launch()
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         install(app, "\(catalogURL)/uitest/manifest.json")
         install(app, "\(streamURL)/uitest-streams/manifest.json")
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()

@@ -12,7 +12,10 @@ final class LaunchTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.tabBars.buttons["Addons"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Discover"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Library"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Search"].exists)
+        XCTAssertTrue(app.buttons["settings.open"].exists)
         captureScreenshot(app, named: "M0-launch")
     }
 }

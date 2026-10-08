@@ -10,6 +10,8 @@ struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @Environment(\.openURL) private var openURL
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(TitleActions.self) private var titleActions
 
     init(preview: MetaPreview, services: AppServices) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services))
@@ -17,15 +19,16 @@ struct DetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 header
                 info
-                    .padding(.horizontal, Theme.screenPadding)
+                    .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
+                    .padding(.horizontal, metrics.pageMargin)
                 if model.isSeries {
                     episodesSection
                 }
                 credits
-                    .padding(.horizontal, Theme.screenPadding)
+                    .padding(.horizontal, metrics.pageMargin)
                     .padding(.top, Theme.Spacing.xxl)
             }
             .padding(.bottom, Theme.Spacing.xxl)
@@ -46,17 +49,16 @@ struct DetailView: View {
 
     /// The backdrop runs under the navigation bar. The logo, or the name, sits low on it, over a fade into the page.
     private var header: some View {
-        BackdropLayout {
-            ZStack(alignment: .bottomLeading) {
-                ArtworkImage(url: model.backdropURL, maxPixelSize: 900)
-                LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: Theme.background, location: 1)],
-                               startPoint: .top, endPoint: .bottom)
-                TitleArt(name: model.detail.name, logo: model.logoURL)
+        BackdropLayout(isRegular: metrics.isRegular) {
+            ZStack(alignment: metrics.isRegular ? .bottomLeading : .bottom) {
+                ArtworkImage(url: model.backdropURL, maxPixelSize: metrics.isRegular ? 1800 : 1200)
+                BottomFade(length: 0.65)
+                TitleArt(name: model.detail.name, logo: model.logoURL, alignment: metrics.isRegular ? .leading : .center)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(model.detail.name)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("detail.title")
-                    .padding(.horizontal, Theme.screenPadding)
+                    .padding(.horizontal, metrics.pageMargin)
                     .padding(.bottom, Theme.Spacing.l)
             }
             .clipped()
@@ -67,12 +69,15 @@ struct DetailView: View {
 
     /// The part inside the screen margins: from the metadata line down to the synopsis.
     private var info: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            MetaLine(model.metaParts)
-            genres
+        VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.l) {
+            MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
+                .multilineTextAlignment(metrics.isRegular ? .leading : .center)
             primaryAction
+                .frame(maxWidth: metrics.isRegular ? 380 : .infinity)
             secondaryActions
             synopsis
+                .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+            ReviewSitesRow(item: model.detail.preview)
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -81,18 +86,6 @@ struct DetailView: View {
             }
         }
         .padding(.top, Theme.Spacing.s)
-    }
-
-    @ViewBuilder
-    private var genres: some View {
-        let names = model.detail.preview.genres
-        if !names.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Theme.Spacing.s) {
-                    ForEach(names, id: \.self) { Badge($0) }
-                }
-            }
-        }
     }
 
     /// The one main action. A movie plays itself; a series plays its next episode. While a series' episodes are still arriving,
@@ -126,36 +119,42 @@ struct DetailView: View {
                 if !model.isSeries { watchedAction }
                 if let trailer = model.trailerURL { trailerAction(trailer) }
             }
+            .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
         }
     }
 
     private var saveAction: some View {
-        RoundAction(title: model.isInLibrary ? "Saved" : "Save",
-                    systemImage: model.isInLibrary ? "bookmark.fill" : "bookmark",
-                    value: model.isInLibrary ? "Saved" : "Not saved",
-                    identifier: "detail.libraryButton") {
-            Task { await model.toggleLibrary() }
+        CircleActionButton(title: "Add", systemImage: "plus", isOn: model.isInLibrary, onTitle: "Added", onSystemImage: "checkmark") {
+            Task {
+                await model.toggleLibrary()
+                await titleActions.refresh()
+            }
         }
+        .accessibilityValue(model.isInLibrary ? "Saved" : "Not saved")
+        .accessibilityIdentifier("detail.libraryButton")
         .sensoryFeedback(.success, trigger: model.isInLibrary)
     }
 
     private var watchedAction: some View {
         let request = model.movieRequest
         let watched = model.isWatched(request)
-        return RoundAction(title: "Watched",
-                           systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle",
-                           value: watched ? "Watched" : "Not watched",
-                           identifier: "detail.watchedButton") {
-            Task { await model.setWatched(!watched, for: request) }
+        return CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+            Task {
+                await model.setWatched(!watched, for: request)
+                await titleActions.refresh()
+            }
         }
+        .accessibilityValue(watched ? "Watched" : "Not watched")
+        .accessibilityIdentifier("detail.watchedButton")
         .sensoryFeedback(.success, trigger: watched)
     }
 
     /// Opens the trailer on YouTube, in the YouTube app when it is installed.
     private func trailerAction(_ url: URL) -> some View {
-        RoundAction(title: "Trailer", systemImage: "play.rectangle", value: nil, identifier: "detail.trailerButton") {
+        CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {
             openURL(url)
         }
+        .accessibilityIdentifier("detail.trailerButton")
     }
 
     @ViewBuilder
@@ -165,7 +164,7 @@ struct DetailView: View {
                 Text(description)
                     .font(.body)
                     .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(isDescriptionExpanded ? nil : 4)
+                    .lineLimit(isDescriptionExpanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
                 // A rough test: four lines of body text hold about 150 characters at phone width, so anything longer may be cut off.
                 if description.count > 120 {
@@ -186,26 +185,31 @@ struct DetailView: View {
     /// The season chips and the episodes of the selected season, each a row with its still, progress and watched mark.
     private var episodesSection: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            SectionHeader("Episodes")
-                .padding(.horizontal, Theme.screenPadding)
-            if model.seasons.count > 1 {
-                ChipRow {
-                    ForEach(model.seasons, id: \.self) { season in
-                        GlassChip(season == 0 ? "Specials" : "Season \(season)", isSelected: model.selectedSeason == season) {
-                            model.selectedSeason = season
-                        }
-                    }
+            Menu {
+                ForEach(model.seasons, id: \.self) { season in
+                    Button(season == 0 ? "Specials" : "Season \(season)") { model.selectedSeason = season }
                 }
-                .accessibilityIdentifier("detail.seasonPicker")
+            } label: {
+                HStack(spacing: 6) {
+                    Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.shelfTitle)
+                    Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                }
             }
+            .buttonStyle(.plain)
+            .padding(.horizontal, metrics.pageMargin)
+            .accessibilityIdentifier("detail.seasonPicker")
             if model.isLoading && model.episodes.isEmpty {
-                EpisodeSkeleton()
-                    .padding(.horizontal, Theme.screenPadding)
+                SkeletonRow(aspect: .wide)
             }
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                ForEach(model.episodes) { episodeRow($0) }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                    ForEach(model.episodes) { episodeRow($0) }
+                }
+                .scrollTargetLayout()
             }
-            .padding(.horizontal, Theme.screenPadding)
+            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollClipDisabled()
         }
         .padding(.top, Theme.Spacing.xxl)
     }
@@ -219,7 +223,10 @@ struct DetailView: View {
         .contextMenu {
             let watched = model.isWatched(video)
             Button(watched ? "Mark as not watched" : "Mark as watched", systemImage: watched ? "xmark.circle" : "checkmark.circle") {
-                Task { await model.setWatched(!watched, for: model.request(for: video)) }
+                Task {
+                    await model.setWatched(!watched, for: model.request(for: video))
+                    await titleActions.refresh()
+                }
             }
         }
         .accessibilityIdentifier("detail.episode.\(video.id)")
@@ -228,36 +235,55 @@ struct DetailView: View {
     // MARK: - Credits
 
     private var credits: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            credit("Cast", model.detail.cast)
-            credit("Director", model.detail.director)
-            credit("Writers", model.detail.writers)
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            if !model.detail.cast.isEmpty {
+                SectionHeader("Cast & Crew")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                        ForEach(model.detail.cast, id: \.self) { name in
+                            VStack(spacing: 8) {
+                                Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
+                                    .font(.title2.weight(.medium))
+                                    .frame(width: metrics.avatarSize, height: metrics.avatarSize)
+                                    .background(Theme.surfaceStrong, in: Circle())
+                                Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
+                            }
+                            .frame(width: metrics.avatarSize + 12)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(name)
+                        }
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                SectionHeader("Information")
+                information("Released", model.detail.preview.releaseInfo)
+                information("Runtime", model.detail.preview.runtime)
+                information("Genres", model.detail.preview.genres.joined(separator: ", "))
+                information("Director", model.detail.director.joined(separator: ", "))
+                information("Writers", model.detail.writers.joined(separator: ", "))
+            }
+            .frame(maxWidth: metrics.readableWidth, alignment: .leading)
         }
     }
 
     @ViewBuilder
-    private func credit(_ title: LocalizedStringKey, _ names: [String]) -> some View {
-        if !names.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(title)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text(names.joined(separator: ", "))
-                    .font(.subheadline)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
+    private func information(_ title: String, _ value: String?) -> some View {
+        if let value, !value.isEmpty {
+            LabeledContent(title) { Text(value).foregroundStyle(.primary) }
+                .font(.footnote)
         }
     }
 }
 
 // MARK: - Pieces
 
-/// The backdrop's frame: the full width it is offered, and 1.25 times that as height, never more than 420 pt.
+/// Keeps artwork tall on a phone and wide in a Mac window without measuring every child.
 private struct BackdropLayout: Layout {
+    let isRegular: Bool
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? 0
-        return CGSize(width: width, height: min(width * 1.25, 420))
+        return CGSize(width: width, height: min(width * (isRegular ? 0.56 : 1.25), isRegular ? 600 : 480))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -272,11 +298,13 @@ private struct BackdropLayout: Layout {
 private struct TitleArt: View {
     let name: String
     let logo: URL?
+    let alignment: Alignment
     @State private var image: UIImage?
 
-    init(name: String, logo: URL?) {
+    init(name: String, logo: URL?, alignment: Alignment) {
         self.name = name
         self.logo = logo
+        self.alignment = alignment
     }
 
     var body: some View {
@@ -285,11 +313,12 @@ private struct TitleArt: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 280, maxHeight: 90, alignment: .leading)
+                    .frame(maxWidth: 280, maxHeight: 90, alignment: alignment)
                     .transition(.opacity)
             } else {
                 Text(name)
                     .font(.largeTitle.bold())
+                    .multilineTextAlignment(alignment == .center ? .center : .leading)
                     .foregroundStyle(.white)
                     .lineLimit(3)
                     .minimumScaleFactor(0.6)
@@ -308,41 +337,6 @@ private struct TitleArt: View {
     }
 }
 
-/// A round glass button with a symbol and its short name under it. VoiceOver reads the name and its value, never the symbol.
-private struct RoundAction: View {
-    let title: LocalizedStringKey
-    let systemImage: String
-    let value: String?
-    let identifier: String
-    let action: () -> Void
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            Button(action: action) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 52, height: 52)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .accessibilityLabel(Text(title))
-            .accessibilityValue(value ?? "")
-            .accessibilityIdentifier(identifier)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-        }
-    }
-}
-
-/// The size of an episode still: 16:9, at a width that leaves the text room beside it.
-private enum EpisodeStill {
-    static let width: CGFloat = 132
-    static let height: CGFloat = 74
-}
-
 /// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the
 /// overview in a few lines.
 private struct EpisodeRow: View {
@@ -350,12 +344,16 @@ private struct EpisodeRow: View {
     let fraction: Double?
     let watched: Bool
     let artwork: URL?
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             still
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(numberedTitle)
+                if let episode = video.episode {
+                    Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(.secondary)
+                }
+                Text(video.title)
                     .font(.headline)
                     .lineLimit(2)
                 MetaLine([AirDate.text(video.released), ratingText])
@@ -368,14 +366,15 @@ private struct EpisodeRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(width: metrics.episodeWidth, alignment: .leading)
         .multilineTextAlignment(.leading)
         .accessibilityElement(children: .combine)
     }
 
     /// The episode's own still, or the series' backdrop when the addon sent none.
     private var still: some View {
-        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: 300)
-            .frame(width: EpisodeStill.width, height: EpisodeStill.height)
+        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: metrics.episodeWidth * 3)
+            .frame(width: metrics.episodeWidth, height: metrics.episodeWidth / CardAspect.wide.ratio)
             .overlay(alignment: .bottom) { progressBar }
             .overlay(alignment: .topTrailing) {
                 if watched { checkmark }
@@ -389,11 +388,11 @@ private struct EpisodeRow: View {
         if let fraction, !watched {
             Rectangle()
                 .fill(.white.opacity(0.25))
-                .frame(width: EpisodeStill.width, height: 3)
+                .frame(width: metrics.episodeWidth, height: 3)
                 .overlay(alignment: .leading) {
                     Rectangle()
-                        .fill(Theme.brandGradient)
-                        .frame(width: EpisodeStill.width * min(max(fraction, 0), 1), height: 3)
+                        .fill(.white)
+                        .frame(width: metrics.episodeWidth * min(max(fraction, 0), 1), height: 3)
                 }
         }
     }
@@ -408,40 +407,9 @@ private struct EpisodeRow: View {
             .accessibilityHidden(true)
     }
 
-    private var numberedTitle: String {
-        guard let episode = video.episode else { return video.title }
-        return "\(episode). \(video.title)"
-    }
-
     private var ratingText: String? {
         guard let rating = video.rating, rating > 0 else { return nil }
         return "★ \(rating.formatted(.number.precision(.fractionLength(1))))"
-    }
-}
-
-/// Grey stand-ins for episode rows while the addon's episodes arrive. One shimmer sweeps all of them.
-private struct EpisodeSkeleton: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            ForEach(0..<3, id: \.self) { _ in
-                HStack(alignment: .top, spacing: Theme.Spacing.m) {
-                    RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
-                        .fill(Theme.surfaceStrong)
-                        .frame(width: EpisodeStill.width, height: EpisodeStill.height)
-                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Theme.surfaceStrong)
-                            .frame(width: 150, height: 12)
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Theme.surfaceStrong)
-                            .frame(width: 110, height: 9)
-                    }
-                }
-            }
-        }
-        .shimmering()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading episodes")
     }
 }
 

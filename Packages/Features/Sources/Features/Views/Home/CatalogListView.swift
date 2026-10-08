@@ -20,7 +20,7 @@ struct CatalogListView: View {
             content
                 .padding(.vertical, Theme.Spacing.l)
         }
-        .refreshable { await model.load() }
+        .refreshable { await model.refresh() }
         .screenBackground()
         .navigationTitle(request.title)
         .navigationBarTitleDisplayMode(.large)

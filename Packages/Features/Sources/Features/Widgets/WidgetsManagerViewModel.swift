@@ -20,7 +20,7 @@ public final class WidgetsManagerViewModel {
         public var id: String { "\(reference.manifestID ?? "")/\(reference.catalogType)/\(reference.catalogID)" }
     }
 
-    public enum ImportMode: Sendable { case append, replace }
+    public enum ImportMode: Sendable, Hashable { case append, replace }
 
     /// An import that refers to addons which are not installed, waiting for the user's decision.
     public struct PendingImport: Equatable, Sendable {
@@ -256,8 +256,8 @@ public final class WidgetsManagerViewModel {
     }
 
     /// The large paging spotlight of one catalog, as the automatic layout makes it.
-    public static func makeHero(choice: CatalogChoice) -> HomeWidget {
-        let row = RowConfiguration(source: .addonCatalog(choice.reference), limit: 8)
+    public static func makeHero(choice: CatalogChoice, genre: String? = nil) -> HomeWidget {
+        let row = RowConfiguration(source: .addonCatalog(catalogReference(choice, genre: genre)), limit: 8)
         return HomeWidget(title: choice.title, hideTitle: true, content: .hero(row))
     }
 

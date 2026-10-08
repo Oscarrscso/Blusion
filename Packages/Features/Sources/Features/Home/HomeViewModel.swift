@@ -35,8 +35,6 @@ public final class HomeViewModel {
     public private(set) var isCustomised = false
 
     private let services: AppServices
-    /// nil until the first emission, so an empty initial registry still triggers the first load.
-    private var signature: [String]?
     private var generation = 0
 
     public init(services: AppServices) {
@@ -57,7 +55,7 @@ public final class HomeViewModel {
         let addons = await services.registry.addons
         let saved = await services.widgets.load()
         let inProgress = LibraryViewModel.continueWatching(from: await services.progress.all())
-        guard current == generation else { return }
+        guard current == generation, !Task.isCancelled else { return }
         continueWatching = inProgress
         isCustomised = saved != nil
         guard !addons.isEmpty else {
@@ -67,7 +65,7 @@ public final class HomeViewModel {
         }
         let widgets = saved ?? DefaultWidgets.make(for: addons)
         let known = await lastKnownItems(for: widgets)
-        guard current == generation else { return }
+        guard current == generation, !Task.isCancelled else { return }
         let previous = sections
         sections = widgets.map { HomeViewModel.startingSection(for: $0, previous: previous, known: known) }
         phase = (saved == nil && widgets.isEmpty) ? .noCatalogs : .ready
@@ -89,7 +87,7 @@ public final class HomeViewModel {
         sections[index].isRefreshing = false
         sections[index].issue = nil
         let result = await HomeViewModel.fetch(id: sectionID, row: row, from: services.widgetContent)
-        guard current == generation else { return }
+        guard current == generation, !Task.isCancelled else { return }
         apply(result)
     }
 
@@ -100,7 +98,10 @@ public final class HomeViewModel {
 
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.
     public func observeAddons() async {
+        // A returning view starts fresh even when its previous observation was cancelled during a row load.
+        var signature: [String]?
         for await addons in await services.registry.updates() {
+            guard !Task.isCancelled else { break }
             let newSignature = addons.map { "\($0.id.uuidString):\($0.isEnabled)" }
             guard newSignature != signature else { continue }
             signature = newSignature
@@ -149,7 +150,8 @@ public final class HomeViewModel {
     /// Applies a finished row load. A failure keeps the items the row already shows (stale content beats an error), but an issue
     /// (the source cannot load at all) always replaces them, so a removed addon's items do not linger.
     private func apply(_ result: RowResult) {
-        guard let index = sections.firstIndex(where: { $0.id == result.id }) else { return }
+        guard !Task.isCancelled, result.state.error != .cancelled,
+              let index = sections.firstIndex(where: { $0.id == result.id }) else { return }
         sections[index].isRefreshing = false
         if result.issue == nil, result.state.error != nil, let shown = sections[index].state.value, !shown.isEmpty { return }
         sections[index].state = result.state

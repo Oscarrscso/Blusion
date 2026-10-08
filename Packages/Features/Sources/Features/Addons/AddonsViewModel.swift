@@ -84,6 +84,24 @@ public final class AddonsViewModel {
         lastInstalledName = nil
     }
 
+    /// Puts a link the app was opened with into the install field, for the user to confirm, and clears old messages.
+    public func prefill(link: String) {
+        installText = link
+        clearMessages()
+    }
+
+    /// What an addon offers, as short labels in a fixed order. Only what is true is listed.
+    public func capabilities(of addon: InstalledAddon) -> [String] {
+        let manifest = addon.manifest
+        var labels: [String] = []
+        if !manifest.catalogs.isEmpty { labels.append("Catalogs") }
+        if !manifest.searchableCatalogs.isEmpty { labels.append("Search") }
+        if manifest.provides(.meta) { labels.append("Metadata") }
+        if manifest.provides(.stream) { labels.append("Streams") }
+        if manifest.provides(.subtitles) { labels.append("Subtitles") }
+        return labels
+    }
+
     public func remove(id: UUID) async {
         await perform { try await $0.remove(id: id) }
     }

@@ -27,6 +27,9 @@ struct ResumeAccessoryModifier: ViewModifier {
     let model: ContinueWatchingModel
 
     func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content
+        #else
         if #available(iOS 26.1, *) {
             content.tabViewBottomAccessory(isEnabled: model.newest != nil) {
                 if let newest = model.newest {
@@ -36,6 +39,7 @@ struct ResumeAccessoryModifier: ViewModifier {
         } else {
             content
         }
+        #endif
     }
 }
 

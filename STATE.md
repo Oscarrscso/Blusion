@@ -1,5 +1,15 @@
 # STATE
 
+> Current status — 2026-10-08: the interrupted work was checkpointed as `7331a0e` (`checkpoint`), with the original
+> agent directories preserved in `build/checkpoint-agent-work.tar.gz`. The continuation builds with Xcode and uses an
+> iOS 26.0 deployment target plus Mac Catalyst. Cinemeta is seeded once for metadata; Addons and Widgets live in Settings.
+> Infuse, review-site ratings/links, manual Trakt account sync, recent searches, widgets, and pointer feedback are wired into the app.
+> Package checks and iOS/Catalyst builds pass. The signed update is installed and launched on the connected iPhone 17;
+> the full playback/device checklist remains open. No simulator runtime is installed. See [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md).
+>
+> The milestone tree and handoff notes below describe the original Linux-era run. Its counts, unbuilt-Xcode claims, and `[d]`
+> markers are historical; the current validation record above takes precedence.
+
 Markers: `[ ]` TODO, `[~]` DOING, `[x]` DONE, `[d]` done pending device/macOS check, `[!]` BLOCKED.
 
 Verification topology (see ADR-002): host packages and the mock addon are verified on the

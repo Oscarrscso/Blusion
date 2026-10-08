@@ -26,12 +26,14 @@ public struct AppServices: Sendable {
     public let fallbackEngineLinked: Bool
     /// Streams handed to another player app, waiting for its callback to record where the viewer stopped.
     public let handoffs: any HandoffStore
+    public let searchHistory: any SearchHistoryStore
+    public let traktAccount: TraktAccount
 
     public init(registry: AddonRegistry, client: AddonClient, browse: BrowseService? = nil, streams: StreamService? = nil,
                 subtitles: SubtitleService? = nil, settings: (any SettingsStore)? = nil, progress: (any ProgressStore)? = nil,
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
-                handoffs: (any HandoffStore)? = nil) {
+                handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -45,6 +47,8 @@ public struct AppServices: Sendable {
         self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings)
         self.posterRatings = posterRatings ?? PosterRatingsStore()
         self.handoffs = handoffs ?? InMemoryHandoffStore()
+        self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
+        self.traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
     }

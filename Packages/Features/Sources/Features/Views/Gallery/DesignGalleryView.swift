@@ -4,15 +4,19 @@ import SwiftUI
 
 /// Every shared component on one screen, for looking at the design system in one place.
 /// Reached with the launch route `gallery` or `gallery:<section>` (`scripts/snapshot.sh gallery:cards out.png`); not linked from
-/// the app's own UI. A section name shows only that section, so each one fits a phone-sized picture.
+/// the app's own UI. A section name shows only that section, so each one fits a picture. It lays out with the metrics of the
+/// window it is in, so the phone picture shows the phone layout and `--mac` the Mac one.
 struct DesignGalleryView: View {
     var section: String?
+    @Environment(\.layoutMetrics) private var metrics
+    @State private var ratings = PosterRatingsStore()
 
     private static let sectionNames = ["cards", "rows", "chips", "states"]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+            VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                layoutCaption
                 if shows("cards") { cards }
                 if shows("rows") { rows }
                 if shows("chips") { chips }
@@ -21,7 +25,7 @@ struct DesignGalleryView: View {
                     Text("No gallery section named \"\(section)\". Sections: \(Self.sectionNames.joined(separator: ", ")).")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, Theme.screenPadding)
+                        .padding(.horizontal, metrics.pageMargin)
                 }
             }
             .padding(.vertical, Theme.Spacing.l)
@@ -29,6 +33,8 @@ struct DesignGalleryView: View {
         .screenBackground()
         .navigationTitle("Gallery")
         .navigationBarTitleDisplayMode(.inline)
+        .environment(ratings)
+        .task { Sample.fillLetterboxd(in: ratings) }
     }
 
     private func shows(_ name: String) -> Bool {
@@ -36,47 +42,83 @@ struct DesignGalleryView: View {
         return section.lowercased() == name
     }
 
+    private var layoutCaption: some View {
+        let layout = metrics.isRegular ? "regular" : "compact"
+        return caption("Layout \(layout): poster \(Int(metrics.posterWidth)) pt, wide card \(Int(metrics.wideCardWidth)) pt, "
+            + "margin \(Int(metrics.pageMargin)) pt, shelf gap \(Int(metrics.shelfSpacing)) pt")
+    }
+
     // MARK: - Cards
 
-    /// Each row is either all titled or all untitled, and lists its tallest card first: a row takes its height from its first card.
+    /// Each row is either all captioned or all uncaptioned, and lists its tallest card first: a row takes its height from its
+    /// first card.
     private var cards: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
             sectionTitle("Cards")
-            caption("Posters with title: large, medium with rating, small")
-            MediaRow("Posters", hideTitle: true) {
-                MediaCard(item: Sample.interstellar, aspect: .poster, size: .large)
-                MediaCard(item: Sample.inception, aspect: .poster, size: .medium, showsRating: true)
-                MediaCard(item: Sample.oppenheimer, aspect: .poster, size: .small)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Poster shelf: no caption, IMDb and Letterboxd ratings, See All header")
+                MediaRow("Top Movies", onSeeAll: {}) {
+                    ForEach(Sample.all) { MediaCard(item: $0) }
+                }
             }
-            caption("Posters without title: large, medium with rating, small")
-            MediaRow("Posters without title", hideTitle: true) {
-                MediaCard(item: Sample.interstellar, aspect: .poster, size: .large, showsTitle: false)
-                MediaCard(item: Sample.inception, aspect: .poster, size: .medium, showsTitle: false, showsRating: true)
-                MediaCard(item: Sample.darkKnight, aspect: .poster, size: .small, showsTitle: false)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Poster sizes: large, medium, small")
+                MediaRow("Sizes", hideTitle: true) {
+                    MediaCard(item: Sample.interstellar, size: .large)
+                    MediaCard(item: Sample.inception, size: .medium)
+                    MediaCard(item: Sample.oppenheimer, size: .small)
+                }
             }
-            caption("Wide with title: large, medium with rating, small without title")
-            MediaRow("Wide", hideTitle: true) {
-                MediaCard(item: Sample.breakingBad, aspect: .wide, size: .large)
-                MediaCard(item: Sample.darkKnight, aspect: .wide, size: .medium, showsRating: true)
-                MediaCard(item: Sample.inception, aspect: .wide, size: .small, showsTitle: false)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Poster with a forced caption, and without ratings")
+                MediaRow("Captioned", hideTitle: true) {
+                    MediaCard(item: Sample.darkKnight, showsTitle: true)
+                    MediaCard(item: Sample.breakingBad, showsTitle: true, showsRating: false)
+                    MediaCard(item: Sample.gameOfThrones, showsTitle: true)
+                }
             }
-            caption("Square: large with title and rating, medium and small without title")
-            MediaRow("Square", hideTitle: true) {
-                MediaCard(item: Sample.gameOfThrones, aspect: .square, size: .large, showsRating: true)
-                MediaCard(item: Sample.oppenheimer, aspect: .square, size: .medium, showsTitle: false)
-                MediaCard(item: Sample.interstellar, aspect: .square, size: .small, showsTitle: false)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Landscape cards: title and a grey line")
+                MediaRow("Landscape", hideTitle: true) {
+                    ForEach(Sample.all) { MediaCard(item: $0, aspect: .wide) }
+                }
             }
-            caption("Progress cards")
-            MediaRow("Progress", hideTitle: true) {
-                ProgressCard(title: "Inception", subtitle: "Resume at 52 min", artwork: Sample.artwork("tt1375666", "background"), fraction: 0.35)
-                ProgressCard(title: "Breaking Bad", subtitle: "S2 E5 · 21 min left", artwork: Sample.artwork("tt0903747", "background"), fraction: 0.82)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Square cards")
+                MediaRow("Square", hideTitle: true) {
+                    MediaCard(item: Sample.gameOfThrones, aspect: .square)
+                    MediaCard(item: Sample.oppenheimer, aspect: .square)
+                    MediaCard(item: Sample.interstellar, aspect: .square)
+                }
             }
-            caption("Collection tiles: poster, square with image, wide without and with image")
-            MediaRow("Collections", hideTitle: true) {
-                CollectionTile(title: "Crime", aspect: .poster)
-                CollectionTile(title: "2010s", imageURL: Sample.artwork("tt1375666", "poster"), aspect: .square, hideTitle: true)
-                CollectionTile(title: "Action")
-                CollectionTile(title: "Drama", imageURL: Sample.artwork("tt0944947", "background"))
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Up Next: progress inside the art, grey line under")
+                MediaRow("Up Next", onSeeAll: {}) {
+                    ProgressCard(title: "Breaking Bad", subtitle: "S2, E5 · 21 min left",
+                                 artwork: Sample.artwork("tt0903747", "background"), fraction: 0.82)
+                    ProgressCard(title: "Inception", subtitle: "1 hr 3 min left",
+                                 artwork: Sample.artwork("tt1375666", "background"), fraction: 0.35)
+                    ProgressCard(title: "Oppenheimer", subtitle: "2 hr 55 min left",
+                                 artwork: Sample.artwork("tt15398776", "background"), fraction: 0.04)
+                }
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Category tiles: gradient, with a picture, and without a title")
+                MediaRow("Categories", hideTitle: true) {
+                    CollectionTile(title: "Action")
+                    CollectionTile(title: "Drama", imageURL: Sample.artwork("tt0944947", "background"))
+                    CollectionTile(title: "Sci-Fi")
+                    CollectionTile(title: "Documentary")
+                    CollectionTile(title: "Thriller", imageURL: Sample.artwork("tt0468569", "background"), hideTitle: true)
+                }
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Tiles in other shapes")
+                MediaRow("Shapes", hideTitle: true) {
+                    CollectionTile(title: "Crime", aspect: .poster)
+                    CollectionTile(title: "2010s", imageURL: Sample.artwork("tt1375666", "poster"), aspect: .square)
+                    CollectionTile(title: "Comedy", aspect: .square)
+                }
             }
         }
     }
@@ -84,21 +126,34 @@ struct DesignGalleryView: View {
     // MARK: - Rows
 
     private var rows: some View {
-        VStack(alignment: .leading, spacing: Theme.rowSpacing) {
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
             sectionTitle("Rows")
             MediaRow("Popular", subtitle: "Most watched this week", onSeeAll: {}) {
                 ForEach(Sample.all) { MediaCardLink(item: $0) }
             }
-            MediaRow("Recently added") {
-                ForEach(Sample.all) { MediaCardLink(item: $0, aspect: .wide, showsRating: true) }
+            MediaRow("Recently Added") {
+                ForEach(Sample.all) { MediaCardLink(item: $0, aspect: .wide) }
+            }
+            MediaRow("A Header Without See All") {
+                ForEach(Sample.all) { MediaCardLink(item: $0, size: .small) }
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                caption("SkeletonRow while a row loads")
-                SkeletonRow()
+                caption("Skeleton shelves while rows load: poster, landscape")
+                SkeletonShelf()
+                SkeletonShelf(aspect: .wide)
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                caption("MediaGrid, six titles")
+                caption("MediaGrid of posters")
                 MediaGrid(items: Sample.all)
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Grid of category tiles")
+                LazyVGrid(columns: metrics.wideGridColumns, spacing: metrics.cardSpacing) {
+                    ForEach(["Action", "Comedy", "Drama", "Horror", "Romance", "Documentary"], id: \.self) {
+                        CollectionTile(title: $0).stretched()
+                    }
+                }
+                .padding(.horizontal, metrics.pageMargin)
             }
         }
     }
@@ -106,56 +161,90 @@ struct DesignGalleryView: View {
     // MARK: - Chips
 
     private var chips: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            sectionTitle("Chips")
-            caption("Glass chips: the selected one is tinted")
-            ChipRow {
-                GlassChip("All", isSelected: true) {}
-                GlassChip("Movies", systemImage: "film") {}
-                GlassChip("Series", systemImage: "tv") {}
-                GlassChip("Documentary") {}
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            sectionTitle("Chips, badges and buttons")
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                caption("Filter chips: the selected one is a white capsule")
+                ChipRow {
+                    GlassChip("All", isSelected: true) {}
+                    GlassChip("Movies", systemImage: "film") {}
+                    GlassChip("Series", systemImage: "tv") {}
+                    GlassChip("Documentary") {}
+                }
             }
-            block("Badges") {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            block("Capability badges, and other badges") {
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    CapabilityBadges(["4K", "Dolby Vision", "HDR10"])
                     HStack(spacing: Theme.Spacing.s) {
                         Badge("Watched", systemImage: "checkmark")
                         Badge("New", style: .accent)
                         Badge("Slow addon", style: .warning)
                     }
-                    HStack(spacing: Theme.Spacing.s) {
-                        Badge("4K", style: .quality)
-                        Badge("HDR", style: .quality)
-                        Badge("Dolby Vision", style: .quality)
-                    }
                 }
             }
-            block("Rating on artwork") {
-                ZStack(alignment: .topLeading) {
-                    ArtworkImage(url: Sample.artwork("tt0468569", "background"), title: "The Dark Knight")
-                        .frame(width: 240, height: 135)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                    RatingBadge(9.0).padding(Theme.Spacing.s)
+            block("Ratings on artwork: both, IMDb only, and the one-number badge") {
+                HStack(alignment: .bottom, spacing: Theme.Spacing.m) {
+                    ratingSwatch(imdb: "9.0", letterboxd: "9.0")
+                    ratingSwatch(imdb: "8.3", letterboxd: nil)
+                    ratingSwatch(imdb: nil, letterboxd: "3.8")
+                    ZStack(alignment: .bottomLeading) {
+                        Theme.placeholder.frame(width: 80, height: 40)
+                        RatingBadge(9.0).padding(Theme.Spacing.s)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                 }
             }
             block("Metadata line: nil parts are skipped") {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    MetaLine(["2023", "2 h 49 min", "★ 8.4"])
-                    MetaLine(["2008–2013", nil, "★ 9.5"])
+                    MetaLine(["Drama", "2023", "2 hr 49 min"])
+                    MetaLine(["2008–2013", nil, "Crime"])
                 }
             }
-            block("Buttons: one primary action per screen, glass for the rest") {
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            block("Buttons: one white primary action per screen") {
+                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                     Button {} label: { Label("Play", systemImage: "play.fill") }
                         .buttonStyle(.primaryAction)
+                        .frame(maxWidth: metrics.isRegular ? 320 : .infinity)
                     HStack(spacing: Theme.Spacing.m) {
                         Button {} label: { Label("Resume", systemImage: "play.fill") }
                             .buttonStyle(.primaryActionCompact)
-                        Button {} label: { Label("Save", systemImage: "bookmark") }
+                        Button("Trailer") {}
+                            .buttonStyle(.glassCapsule)
+                        Button("Customize") {}
                             .buttonStyle(.glass)
+                    }
+                    HStack(spacing: Theme.Spacing.m) {
+                        Button("Small") {}
+                            .buttonStyle(.primaryActionCompact)
+                            .controlSize(.small)
+                        Button("Large") {}
+                            .buttonStyle(.primaryActionCompact)
+                            .controlSize(.large)
                     }
                 }
             }
+            block("Round action buttons with captions: off and on") {
+                CircleActionRow {
+                    CircleActionButton(title: "Add", systemImage: "plus", isOn: false, onTitle: "Added", onSystemImage: "checkmark") {}
+                    CircleActionButton(title: "Add", systemImage: "plus", isOn: true, onTitle: "Added", onSystemImage: "checkmark") {}
+                    CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: true) {}
+                    CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {}
+                }
+            }
         }
+    }
+
+    private func ratingSwatch(imdb: String?, letterboxd: String?) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Theme.placeholder
+            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.62)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 30)
+            RatingsLine(imdb: imdb, letterboxd: letterboxd)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 7)
+        }
+        .frame(width: metrics.posterWidth, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.poster, style: .continuous))
     }
 
     // MARK: - States
@@ -168,13 +257,13 @@ struct DesignGalleryView: View {
                            actionTitle: "Browse", action: {})
             caption("Inline error with retry")
             InlineErrorView("Cinemeta did not answer in time.", retry: {})
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
             caption("Error chips")
             WrappingStack {
                 ErrorChip(text: "Torrentio: 503 Service Unavailable")
                 ErrorChip(text: "Cinemeta: timed out")
             }
-            .padding(.horizontal, Theme.screenPadding)
+            .padding(.horizontal, metrics.pageMargin)
             caption("Offline")
             OfflineBanner()
             caption("No addons yet")
@@ -188,7 +277,7 @@ struct DesignGalleryView: View {
         Text(text)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, Theme.screenPadding)
+            .padding(.horizontal, metrics.pageMargin)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -196,15 +285,15 @@ struct DesignGalleryView: View {
         Text(text)
             .font(.caption2)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, Theme.screenPadding)
+            .padding(.horizontal, metrics.pageMargin)
     }
 
-    /// A caption over content that is inset to the screen margin. The caption insets itself, so only the content is padded here.
+    /// A caption over content that is inset to the page margin. The caption insets itself, so only the content is padded here.
     private func block<Content: View>(_ text: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             caption(text)
             content()
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 }
@@ -219,6 +308,15 @@ private enum Sample {
     static let gameOfThrones = title("tt0944947", "series", "Game of Thrones", "2011–2019", 9.2, ["Fantasy", "Drama"], nil)
 
     static let all = [darkKnight, inception, interstellar, breakingBad, oppenheimer, gameOfThrones]
+
+    /// Letterboxd for four of the six, so the gallery shows posters with both ratings and with IMDb alone.
+    @MainActor
+    static func fillLetterboxd(in store: PosterRatingsStore) {
+        store.ratings(for: darkKnight).letterboxd = 4.4
+        store.ratings(for: inception).letterboxd = 4.2
+        store.ratings(for: interstellar).letterboxd = 4.3
+        store.ratings(for: oppenheimer).letterboxd = 4.1
+    }
 
     static func title(_ id: String, _ type: String, _ name: String, _ year: String, _ rating: Double, _ genres: [String],
                       _ runtime: String?) -> MetaPreview {

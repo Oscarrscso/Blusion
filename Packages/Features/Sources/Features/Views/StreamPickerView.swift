@@ -9,12 +9,15 @@ import UIKit
 struct StreamPickerView: View {
     @State private var model: StreamPickerViewModel
     @State private var plan: PlaybackPlan?
+    @State private var expandedDetails: RankedStream?
     /// A stream whose format Blusion can't play: the alert offers another player, or the next stream.
     @State private var unsupported: RankedStream?
     /// A hand-off whose player app is not installed: the alert offers its App Store page, or playing the stream in Blusion.
     @State private var missing: MissingPlayer?
     private let services: AppServices
     @Environment(\.openURL) private var openURL
+    @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
 
     init(request: StreamRequest, services: AppServices) {
         self.services = services
@@ -23,7 +26,7 @@ struct StreamPickerView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 header
                 playBestButton
                 failures
@@ -44,7 +47,26 @@ struct StreamPickerView: View {
         .task {
             // Asked once, here: routing hands streams to these players only, and the menus offer only these.
             model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
-            if !model.hasLoaded { await model.load() }
+            if !model.hasLoaded {
+                await model.load()
+                let settings = await services.settings.load()
+                if settings.autoPlayBestStream, model.listing.best != nil { playBest() }
+            }
+        }
+        .sheet(item: $expandedDetails) { item in
+            NavigationStack {
+                ScrollView {
+                    Text(item.stream.description ?? item.title)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle("Stream Details")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { expandedDetails = nil } } }
+            }
+            .preferredColorScheme(.dark)
         }
         .fullScreenCover(item: $plan) { PlayerScreen(plan: $0, services: services) }
         .alert("This format isn't supported yet", isPresented: isShowingUnsupported, presenting: unsupported) { item in
@@ -75,7 +97,7 @@ struct StreamPickerView: View {
         HStack(alignment: .bottom, spacing: Theme.Spacing.l) {
             if let poster = model.request.poster {
                 PosterImage(url: poster, title: model.request.title)
-                    .frame(width: 96)
+                    .frame(width: 60)
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 Text(model.request.title)
@@ -85,7 +107,7 @@ struct StreamPickerView: View {
                 status
             }
         }
-        .padding(.horizontal, Theme.screenPadding)
+        .padding(.horizontal, metrics.pageMargin)
     }
 
     @ViewBuilder
@@ -108,8 +130,7 @@ struct StreamPickerView: View {
     }
 
     private var waitingText: String {
-        let pending = model.listing.pending.map(\.name)
-        return pending.isEmpty ? "Checking…" : "Waiting for \(pending.joined(separator: ", "))…"
+        "Checking for streams…"
     }
 
     private var summary: String {
@@ -126,7 +147,7 @@ struct StreamPickerView: View {
             Button(playBestTitle(for: best)) { playBest() }
                 .buttonStyle(.primaryAction)
                 .accessibilityIdentifier("streams.playBest")
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -157,7 +178,7 @@ struct StreamPickerView: View {
         if !model.listing.failures.isEmpty {
             InlineErrorView(failureText) { Task { await model.retry() } }
                 .accessibilityIdentifier("streams.failures")
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -169,14 +190,15 @@ struct StreamPickerView: View {
     private var emptyState: some View {
         if model.nobodyCanAnswer {
             EmptyStateView("No stream addons", systemImage: "puzzlepiece.extension",
-                           message: "None of your addons provides streams for this title. Install one on the Addons tab.")
-                .padding(.horizontal, Theme.screenPadding)
+                           message: "Add a stream addon in Settings to watch this title.",
+                           actionTitle: "Open Addons", action: { router.showAddons() })
+                .padding(.horizontal, metrics.pageMargin)
                 .accessibilityIdentifier("streams.nobody")
         } else if model.isOffline {
             OfflineBanner()
         } else if model.showsNothingFound {
             EmptyStateView("No streams found", systemImage: "film.stack", message: "Your addons have nothing for this title.")
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
                 .accessibilityIdentifier("streams.none")
         }
     }
@@ -185,7 +207,7 @@ struct StreamPickerView: View {
     private var loadingRows: some View {
         if model.isLoading && model.listing.isEmpty {
             StreamRowsSkeleton()
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -194,12 +216,13 @@ struct StreamPickerView: View {
     private var groups: some View {
         ForEach(model.addonSections) { section in
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SectionHeader(section.addon.name)
+                if model.addonSections.count > 1 { SectionHeader(section.addon.name) }
                 ForEach(section.streams) { item in
                     streamButton(item)
+                    Divider()
                 }
             }
-            .padding(.horizontal, Theme.screenPadding)
+            .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -207,13 +230,11 @@ struct StreamPickerView: View {
     @ViewBuilder
     private var links: some View {
         if !model.links.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                SectionHeader("Links")
-                ForEach(model.links) { item in
-                    streamButton(item)
-                }
+            DisclosureGroup("Notes from your addons") {
+                ForEach(model.links) { item in streamButton(item) }
             }
-            .padding(.horizontal, Theme.screenPadding)
+            .font(.footnote)
+            .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -231,6 +252,9 @@ struct StreamPickerView: View {
 
     @ViewBuilder
     private func contextActions(for item: RankedStream) -> some View {
+        if item.stream.description != nil {
+            Button("Show Details", systemImage: "info.circle") { expandedDetails = item }
+        }
         ForEach(model.alternativePlayers(for: item), id: \.self) { player in
             Button("Open in \(player.displayName)", systemImage: "arrow.up.forward.app") { openIn(player, item) }
         }
@@ -249,7 +273,7 @@ struct StreamPickerView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, Theme.screenPadding)
+            .padding(.horizontal, metrics.pageMargin)
             .accessibilityIdentifier("streams.hidden")
         }
     }

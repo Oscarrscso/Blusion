@@ -10,7 +10,7 @@ struct StreamRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                Text(item.title)
+                Text(headline)
                     .font(.headline)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
@@ -40,10 +40,19 @@ struct StreamRow: View {
                 .foregroundStyle(glyphColor)
                 .accessibilityHidden(true)
         }
-        .padding(Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        .cardSurface()
+        .help(item.route.handoffTarget.map { "Play in \($0.player.displayName)" } ?? "Choose this stream")
+    }
+
+    private var headline: String {
+        var parts: [String] = []
+        if let resolution = item.quality.resolutionLabel { parts.append(resolution) }
+        if item.quality.isDolbyVision { parts.append("Dolby Vision") } else if item.quality.isHDR { parts.append("HDR") }
+        if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
+        if let target = item.route.handoffTarget { parts.append("Play in \(target.player.displayName)") }
+        return parts.isEmpty ? item.title : parts.joined(separator: " · ")
     }
 
     /// The facts a viewer picks a stream by, as small badges: the other player, resolution, HDR, size and container. They sit in a row
@@ -64,9 +73,9 @@ struct StreamRow: View {
             Badge(resolution, style: .quality)
         }
         if item.quality.isDolbyVision {
-            Badge("Dolby Vision")
+            Badge("Dolby Vision", style: .quality)
         } else if item.quality.isHDR {
-            Badge("HDR")
+            Badge("HDR", style: .quality)
         }
         if let size = item.quality.sizeBytes {
             Badge(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
@@ -84,7 +93,7 @@ struct StreamRow: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         if item.stream.name == nil, !lines.isEmpty { lines.removeFirst() }
-        return Array(lines.prefix(6))
+        return Array(lines.prefix(3))
     }
 
     private var glyph: String {
@@ -98,7 +107,7 @@ struct StreamRow: View {
 
     private var glyphColor: Color {
         switch item.route {
-        case .native, .fallback: return .accentColor
+        case .native, .fallback: return .primary
         case .handoff, .external, .unsupported, .hidden: return .secondary
         }
     }

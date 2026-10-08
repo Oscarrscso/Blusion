@@ -118,9 +118,18 @@ final class AppEnvironment {
             snapshots = FileWidgetSnapshotStore(directory: caches.appendingPathComponent("WidgetSnapshots", isDirectory: true))
         }
         let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, snapshots: snapshots)
+        let ratingsCache: any RatingsCache
+        if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            ratingsCache = FileRatingsCache(fileURL: caches.appendingPathComponent("poster-ratings.json"))
+        } else {
+            ratingsCache = InMemoryRatingsCache()
+        }
+        let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache)
+        let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
+        let traktAccount = TraktAccount(settings: settings, secrets: secrets)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,
-                                   handoffs: handoffs)
+                                   posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount)
         let seedsDefaults = !uiTesting || environment["BLUSION_SEED_DEFAULTS"] == "1"
         let seeder = seedsDefaults ? DefaultAddonSeeder(registry: registry, flags: DefaultsFlagStore(defaults: settingsDefaults)) : nil
         return AppEnvironment(services: services, isUITesting: uiTesting, launchRoute: LaunchRoute.parse(environment["BLUSION_ROUTE"]) ?? .home,

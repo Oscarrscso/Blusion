@@ -176,6 +176,90 @@ import StremioKitTestSupport
         #expect(!SettingsViewModel.appVersion.isEmpty)
     }
 
+    @Test func playerAndAutoPlayChoicesAreSaved() async {
+        let services = services()
+        let model = SettingsViewModel(services: services)
+        await model.load()
+        #expect(model.settings.playerPreference == .infuseWhenNeeded && !model.settings.autoPlayBestStream)
+        await model.setPlayerPreference(.infuse)
+        await model.setAutoPlayBestStream(true)
+        #expect(model.settings.playerPreference == .infuse && model.settings.autoPlayBestStream)
+        let stored = await services.settings.load()
+        #expect(stored.playerPreference == .infuse && stored.autoPlayBestStream)
+        await model.setPlayerPreference(.builtIn)
+        await model.setAutoPlayBestStream(false)
+        let reverted = await services.settings.load()
+        #expect(reverted.playerPreference == .builtIn && !reverted.autoPlayBestStream)
+    }
+
+    @Test func changingPlaybackAfterAccountSetupKeepsTheNewTraktClientID() async {
+        let services = services(settings: PlaybackSettings(preferredResolution: 720, traktClientID: "old-client"))
+        let settingsModel = SettingsViewModel(services: services)
+        await settingsModel.load()
+        let accountModel = TraktAccountViewModel(services: services)
+        accountModel.clientIDText = "new-client"
+        accountModel.clientSecretText = "new-secret"
+        await accountModel.saveCredentials()
+        #expect(accountModel.errorMessage == nil)
+        await settingsModel.setPlayerPreference(.infuse)
+        let stored = await services.settings.load()
+        #expect(stored.traktClientID == "new-client")
+        #expect(stored.playerPreference == .infuse && stored.preferredResolution == 720)
+    }
+
+    @Test func posterRatingsSwitchDrivesTheStoreAndIsSaved() async {
+        let services = services()
+        let model = SettingsViewModel(services: services)
+        await model.load()
+        #expect(services.posterRatings.isEnabled, "on by default")
+        await model.setShowsPosterRatings(false)
+        #expect(!services.posterRatings.isEnabled && !model.settings.showsPosterRatings)
+        let stored = await services.settings.load()
+        #expect(!stored.showsPosterRatings)
+        // Loading takes the stored value back into the store the posters read.
+        services.posterRatings.isEnabled = true
+        await model.load()
+        #expect(!services.posterRatings.isEnabled)
+    }
+
+    @Test func posterRatingsStartOffWhenTheStoredValueIsOff() async {
+        let services = services(settings: PlaybackSettings(showsPosterRatings: false))
+        let model = SettingsViewModel(services: services)
+        await model.load()
+        #expect(!services.posterRatings.isEnabled && !model.settings.showsPosterRatings)
+    }
+
+    @Test func traktClientIDIsLoadedAndSavedTrimmed() async {
+        let services = services(settings: PlaybackSettings(traktClientID: "client-abc"))
+        let model = SettingsViewModel(services: services)
+        await model.load()
+        #expect(model.traktClientIDText == "client-abc")
+        model.traktClientIDText = "  key-1 \n"
+        await model.commitTraktClientID()
+        let saved = await services.settings.load()
+        #expect(saved.traktClientID == "key-1")
+        model.traktClientIDText = "   "
+        await model.commitTraktClientID()
+        let cleared = await services.settings.load()
+        #expect(cleared.traktClientID == nil, "a blank field removes the ID")
+        await model.load()
+        #expect(model.traktClientIDText.isEmpty)
+    }
+
+    @Test func installedAddonCountComesFromTheRegistry() async throws {
+        let empty = SettingsViewModel(services: services())
+        await empty.load()
+        #expect(empty.installedAddonCount == 0)
+        let manifests = ["one", "two"].map { name in
+            Manifest(id: name, name: name, version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                     catalogs: [CatalogDescriptor(type: "movie", id: "top")])
+        }
+        let (registry, client) = try await makeStubbedRegistry(manifests: manifests, transport: StubTransport(data: Data()))
+        let model = SettingsViewModel(services: AppServices(registry: registry, client: client))
+        await model.load()
+        #expect(model.installedAddonCount == 2)
+    }
+
     // MARK: clearing data
 
     @Test func eachScopeClearsOnlyItsOwnData() async throws {

@@ -2,18 +2,18 @@
 # One command gates every node (PLAN §3).
 #
 #   ./scripts/verify.sh              per-node run (skips the UI test target)
-#   ./scripts/verify.sh milestone    milestone run (includes UI tests; FAILS on hosts without Xcode, see ADR-002)
+#   ./scripts/verify.sh milestone    milestone run (requires simulator UI tests unless ALLOW_HOST_ONLY=1)
 #
 # Steps, in order, stopping at the first failure:
 #   1. swift test for StremioKit, PlayerKit, Persistence, Features (host-side, warnings as errors)
 #   2. generate media, run the mock addon's own tests, start the mock and wait for its manifest, stop it on exit
 #   3. xcodegen generate                         (macOS only)
-#   4. xcodebuild test on the newest iPhone simulator, warnings as errors   (macOS only)
+#   4. xcodebuild test on the newest iPhone simulator, or iOS + Mac Catalyst builds when no runtime is installed
 #   5. swiftlint --strict (if installed)
 #   6. one-line summary, non-zero exit on failure
 #
 # Environment:
-#   ALLOW_HOST_ONLY=1   let `milestone` pass on a host without Xcode (host layer only; never claims a full green)
+#   ALLOW_HOST_ONLY=1   let `milestone` pass without simulator tests (skipped checks remain in the summary)
 #   SHOT=<node id>      after the app tests, save shots/<id>.png from the booted simulator
 #   FALLBACK=1          build with the opt-in fallback engine (MPVKit, ADR-006) and run the MKV UI tests
 #   CATALOG_PORT / STREAM_PORT   mock ports (default 7001 / 7002)
@@ -21,6 +21,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+mkdir -p build
 
 MODE="${1:-node}"
 case "$MODE" in node|milestone) ;; *) echo "usage: $0 [node|milestone]" >&2; exit 64;; esac
@@ -59,7 +60,7 @@ log "1/6 swift test (host)"
 command -v swift >/dev/null 2>&1 || fail "swift toolchain missing"
 for pkg in "${PACKAGES[@]}"; do
   echo "-- $pkg"
-  swift test --package-path "Packages/$pkg" -Xswiftc -warnings-as-errors || fail "swift test $pkg"
+  swift test --package-path "Packages/$pkg" -j 2 -Xswiftc -warnings-as-errors || fail "swift test $pkg"
 done
 SUMMARY+=("swift:${#PACKAGES[@]}pkgs")
 
@@ -85,9 +86,9 @@ else
   echo "ffmpeg not installed: media fixtures not generated (media-dependent tests will skip)"
   SKIPPED+=("fixtures(no ffmpeg)")
 fi
-(cd Tools/MockAddon && node --test test/server.test.js) >/tmp/mock-node-test.log 2>&1 \
-  || { cat /tmp/mock-node-test.log; fail "mock addon node tests"; }
-grep -E '^# (tests|pass|fail|skipped)' /tmp/mock-node-test.log | tr '\n' ' '; echo
+(cd Tools/MockAddon && node --test --test-reporter=tap test/server.test.js) >build/mock-node-test.log 2>&1 \
+  || { cat build/mock-node-test.log; fail "mock addon node tests"; }
+grep -E '^# (tests|pass|fail|skipped)' build/mock-node-test.log | tr '\n' ' '; echo
 
 node Tools/MockAddon/server.js --catalog-port "$CATALOG_PORT" --stream-port "$STREAM_PORT" >.mock-addon.log 2>&1 &
 MOCK_PID=$!
@@ -103,6 +104,11 @@ done
 echo "mock addon up: catalog :$CATALOG_PORT, stream :$STREAM_PORT (pid $MOCK_PID)"
 export MOCK_ADDON_CATALOG_URL="http://127.0.0.1:${CATALOG_PORT}"
 export MOCK_ADDON_STREAM_URL="http://127.0.0.1:${STREAM_PORT}"
+HAS_MEDIA_FIXTURES=0
+if [[ -f Tools/MockAddon/fixtures/generated/sample.mp4 && -f Tools/MockAddon/fixtures/generated/sample-ac3.mkv \
+      && -f Tools/MockAddon/fixtures/generated/hls/index.m3u8 && -f Tools/MockAddon/fixtures/generated/hls/seg000.ts ]]; then HAS_MEDIA_FIXTURES=1; fi
+HAS_DTS_FIXTURE=0
+[[ -f Tools/MockAddon/fixtures/generated/sample-dts.mkv ]] && HAS_DTS_FIXTURE=1
 SUMMARY+=("mock:up")
 
 # ---- 3 + 4. Xcode ---------------------------------------------------------------
@@ -125,38 +131,58 @@ d = json.load(sys.stdin)["devices"]
 def ver(k):
     try: return tuple(int(x) for x in k.split("iOS-")[1].split("-"))
     except Exception: return ()
-runtimes = sorted((k for k in d if "iOS" in k and any("iPhone" in s["name"] for s in d[k])), key=ver, reverse=True)
-if not runtimes: sys.exit(1)
+runtimes = sorted((k for k in d if "iOS" in k and any("iPhone" in s["name"] and s.get("isAvailable", True) for s in d[k])), key=ver, reverse=True)
+if not runtimes: sys.exit(0)
 phones = [s for s in d[runtimes[0]] if "iPhone" in s["name"] and s.get("isAvailable", True)]
 pick = next((s for s in phones if "Pro" in s["name"] and "Max" not in s["name"]), phones[0])
 print(pick["udid"])
-')" || fail "no available iPhone simulator"
-  echo "simulator: $UDID"
-  xcrun simctl boot "$UDID" 2>/dev/null || true
+')" || fail "listing iPhone simulators"
+  if [[ -z "$UDID" ]]; then
+    echo "SKIPPED (no iOS simulator runtime installed)"
+    SKIPPED+=("simulator-tests")
+    for target in device catalyst; do
+      if [[ "$target" == "device" ]]; then DESTINATION='generic/platform=iOS'; else DESTINATION='platform=macOS,variant=Mac Catalyst'; fi
+      echo "building: $DESTINATION"
+      xcodebuild build -project Blusion.xcodeproj -scheme Blusion -destination "$DESTINATION" -jobs 2 CODE_SIGNING_ALLOWED=NO \
+        >"build/verify-$target.log" 2>&1 || {
+          grep -E 'error:' "build/verify-$target.log" | tail -n 30
+          fail "xcodebuild $target (build/verify-$target.log)"
+        }
+      SUMMARY+=("build:$target")
+    done
+    if [[ "$MODE" == "milestone" && "${ALLOW_HOST_ONLY:-}" != "1" ]]; then
+      fail "milestone needs simulator tests; no iOS simulator runtime installed (set ALLOW_HOST_ONLY=1 to accept skipped checks)"
+    fi
+  else
+    echo "simulator: $UDID"
+    xcrun simctl boot "$UDID" 2>/dev/null || true
 
-  SKIP=()
-  [[ "$MODE" == "node" ]] && SKIP=(-skip-testing:BlusionUITests)
-  mkdir -p shots build
-  RESULT="build/verify.xcresult"; rm -rf "$RESULT"
-  # TEST_RUNNER_* variables are forwarded to the (simulator) test runner process.
-  TEST_RUNNER_UITEST_SHOT_DIR="$ROOT/shots" \
-  TEST_RUNNER_MOCK_ADDON_CATALOG_URL="$MOCK_ADDON_CATALOG_URL" \
-  TEST_RUNNER_MOCK_ADDON_STREAM_URL="$MOCK_ADDON_STREAM_URL" \
-  TEST_RUNNER_BLUSION_FALLBACK="${FALLBACK:-}" \
-  xcodebuild test \
-    -project Blusion.xcodeproj -scheme Blusion \
-    -destination "platform=iOS Simulator,id=$UDID" \
-    -resultBundlePath "$RESULT" \
-    "${SKIP[@]}" \
-    SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES \
-    CODE_SIGNING_ALLOWED=NO \
-    | tee build/xcodebuild.log | (command -v xcbeautify >/dev/null 2>&1 && xcbeautify --quieter || tail -n 60)
-  [[ "${PIPESTATUS[0]}" == 0 ]] || fail "xcodebuild test"
-  if [[ -n "${SHOT:-}" ]]; then
-    xcrun simctl io "$UDID" screenshot "shots/${SHOT}.png" >/dev/null 2>&1 \
-      && echo "screenshot: shots/${SHOT}.png" || echo "screenshot skipped (simulator not booted)"
+    SKIP=()
+    [[ "$MODE" == "node" ]] && SKIP=(-skip-testing:BlusionUITests)
+    mkdir -p shots build
+    RESULT="build/verify.xcresult"; rm -rf "$RESULT"
+    # TEST_RUNNER_* variables are forwarded to the (simulator) test runner process.
+    TEST_RUNNER_UITEST_SHOT_DIR="$ROOT/shots" \
+    TEST_RUNNER_MOCK_ADDON_CATALOG_URL="$MOCK_ADDON_CATALOG_URL" \
+    TEST_RUNNER_MOCK_ADDON_STREAM_URL="$MOCK_ADDON_STREAM_URL" \
+    TEST_RUNNER_BLUSION_HAS_MEDIA_FIXTURES="$HAS_MEDIA_FIXTURES" \
+    TEST_RUNNER_BLUSION_HAS_DTS_FIXTURE="$HAS_DTS_FIXTURE" \
+    TEST_RUNNER_BLUSION_FALLBACK="${FALLBACK:-}" \
+    xcodebuild test \
+      -project Blusion.xcodeproj -scheme Blusion -jobs 2 \
+      -destination "platform=iOS Simulator,id=$UDID" \
+      -resultBundlePath "$RESULT" \
+      ${SKIP[@]+"${SKIP[@]}"} \
+      SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+      CODE_SIGNING_ALLOWED=NO \
+      | tee build/xcodebuild.log | (command -v xcbeautify >/dev/null 2>&1 && xcbeautify --quieter || tail -n 60)
+    [[ "${PIPESTATUS[0]}" == 0 ]] || fail "xcodebuild test"
+    if [[ -n "${SHOT:-}" ]]; then
+      xcrun simctl io "$UDID" screenshot "shots/${SHOT}.png" >/dev/null 2>&1 \
+        && echo "screenshot: shots/${SHOT}.png" || echo "screenshot skipped (simulator not booted)"
+    fi
+    SUMMARY+=("xcodebuild:$MODE")
   fi
-  SUMMARY+=("xcodebuild:$MODE")
 
   if [[ "$MODE" == "milestone" ]]; then
     log "4b/6 xcodebuild archive (unsigned)"
@@ -167,7 +193,7 @@ else
   log "3-4/6 xcodegen + xcodebuild"
   echo "SKIPPED (no Xcode on this host: $OS). Apple-only code is verified by the macOS CI job (ADR-002)."
   SKIPPED+=("xcodegen" "xcodebuild")
-  if [[ "$MODE" == "milestone" && -z "${ALLOW_HOST_ONLY:-}" ]]; then
+  if [[ "$MODE" == "milestone" && "${ALLOW_HOST_ONLY:-}" != "1" ]]; then
     fail "milestone run needs Xcode (set ALLOW_HOST_ONLY=1 for a host-layer-only run)"
   fi
 fi

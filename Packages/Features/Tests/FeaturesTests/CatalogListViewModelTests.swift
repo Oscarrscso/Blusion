@@ -147,4 +147,15 @@ private func source(_ catalogID: String) -> WidgetSource {
         await model.load()
         #expect(model.items.count == 50 && model.canLoadMore, "a reload starts again from the first page")
     }
+
+    @Test func pullToRefreshAsksForANewPageInsteadOfReusingTheCache() async throws {
+        let transport = catalogs(total: 120)
+        let model = grid("All", [source("all")], try await services(transport))
+        await model.load()
+        await model.load()
+        #expect(transport.callCount == 1)
+        await model.refresh()
+        #expect(transport.callCount == 2)
+        #expect(model.items.count == 50)
+    }
 }

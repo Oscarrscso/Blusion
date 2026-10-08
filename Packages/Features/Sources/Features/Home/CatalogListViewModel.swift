@@ -46,6 +46,12 @@ public final class CatalogListViewModel {
         self.services = services
     }
 
+    /// Pull to refresh must ask the sources again, even when their cached page has not expired.
+    public func refresh() async {
+        await services.widgetContent.invalidate()
+        await load()
+    }
+
     /// Loads the first page, or the merged list for several sources. Items already on screen stay until the new ones arrive.
     public func load() async {
         generation += 1

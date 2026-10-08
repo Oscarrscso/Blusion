@@ -8,7 +8,9 @@ PKG="${1:?package name, e.g. StremioKit}"
 THRESHOLD="${2:-90}"
 DIR="$ROOT/Packages/$PKG"
 
-LOG="$(mktemp)"
+mkdir -p "$ROOT/build"
+LOG="$(mktemp "$ROOT/build/coverage-$PKG.XXXXXX")"
+trap 'rm -f "$LOG"' EXIT
 swift test --package-path "$DIR" --enable-code-coverage -Xswiftc -warnings-as-errors >"$LOG" 2>&1 || { cat "$LOG"; echo "coverage: tests failed" >&2; exit 1; }
 rm -f "$LOG"
 PROFDATA="$(swift test --package-path "$DIR" --show-codecov-path | sed 's/\.json$/.profdata/')"

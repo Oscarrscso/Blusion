@@ -113,7 +113,8 @@ private struct CountingSniffer: ContainerSniffing {
 
     // MARK: sniffing
 
-    @Test func sniffingIdentifiesContainersBehindExtensionlessURLs() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func sniffingIdentifiesContainersBehindExtensionlessURLs() async throws {
         let rig = try makeRig()
         let base = rig.server.stream.appendingPathComponent("media/blob")
         let targets = ["mp4", "mkv", "hls"].map { StreamListing.SniffTarget(key: $0, url: base.appendingPathComponent($0), headers: [:]) }
@@ -124,7 +125,8 @@ private struct CountingSniffer: ContainerSniffing {
         #expect(results["hls"] == .some(.hls))
     }
 
-    @Test func sniffingCarriesProxyHeaders() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func sniffingCarriesProxyHeaders() async throws {
         let rig = try makeRig()
         let url = rig.server.stream.appendingPathComponent("media/protected.mp4")
         var withoutHeader: MediaContainer?? = nil
@@ -171,7 +173,8 @@ private struct CountingSniffer: ContainerSniffing {
         #expect(await counter.peak == 1)
     }
 
-    @Test func sniffedResultsFlowBackIntoTheListing() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func sniffedResultsFlowBackIntoTheListing() async throws {
         let rig = try makeRig()
         _ = try await rig.registry.install(from: rig.server.streamManifestURL().absoluteString)
         let (asked, responses) = await rig.service.fetch(movie)

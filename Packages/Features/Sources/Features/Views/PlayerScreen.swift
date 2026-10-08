@@ -41,7 +41,9 @@ struct PlayerContent: View {
             surface
             SubtitleOverlay(text: model.cueText, controlsVisible: model.controlsVisible)
             if model.isBuffering && model.failureMessage == nil {
-                ProgressView().tint(.white).scaleEffect(1.5).accessibilityIdentifier("player.buffering")
+                ProgressView().tint(.white).controlSize(.large)
+                    .frame(width: 64, height: 64).glassEffect(.regular, in: .circle)
+                    .accessibilityIdentifier("player.buffering")
             }
             gestureLayer
             if model.controlsVisible && model.failureMessage == nil {
@@ -51,7 +53,7 @@ struct PlayerContent: View {
             if let notice = model.notice, model.failureMessage == nil, !model.isPlaying || model.coordinator?.failedAttempts.isEmpty == false {
                 VStack {
                     Spacer()
-                    Text(notice).font(.footnote).padding(10).background(.black.opacity(0.7), in: Capsule()).foregroundStyle(.white).padding(.bottom, 120)
+                    Text(notice).font(.footnote).padding(10).glassEffect(.regular, in: .capsule).foregroundStyle(.white).padding(.bottom, 120)
                 }
                 .accessibilityIdentifier("player.notice")
             }
@@ -187,7 +189,6 @@ struct SubtitleOverlay: View {
                     .shadow(color: .black, radius: 2, x: 0, y: 1)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
                     .padding(.horizontal, 24)
                     .padding(.bottom, controlsVisible ? 140 : 40)
                     .accessibilityIdentifier("player.subtitle")
@@ -206,10 +207,10 @@ struct FailureOverlay: View {
             Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(.orange)
             Text("Can't play this").font(.title2.bold())
             Text(message).font(.callout).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("Close", action: onClose).buttonStyle(.borderedProminent).accessibilityIdentifier("player.failure.close")
+            Button("Close", action: onClose).buttonStyle(.primaryActionCompact).accessibilityIdentifier("player.failure.close")
         }
         .padding(24)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular, in: .rect(cornerRadius: 28))
         .padding(24)
         .foregroundStyle(.white)
         .accessibilityElement(children: .contain)

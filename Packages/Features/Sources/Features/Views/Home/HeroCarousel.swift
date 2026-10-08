@@ -7,8 +7,19 @@ import SwiftUI
 struct HeroSection: View {
     let section: HomeViewModel.Section
     let onRetry: () -> Void
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            if !section.widget.hideTitle {
+                SectionHeader(section.widget.title).padding(.horizontal, metrics.pageMargin)
+            }
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch section.state {
         case .idle, .loading:
             HeroPlaceholder()
@@ -29,6 +40,7 @@ struct HeroSection: View {
 /// line and a "Details" button over the bottom of it.
 struct HeroCarousel: View {
     let items: [MetaPreview]
+    @Environment(\.layoutMetrics) private var metrics
     /// The page on screen, counted from 0, read from the scroll position.
     @State private var index = 0
 
@@ -37,7 +49,7 @@ struct HeroCarousel: View {
         // later made the list above jump.
         Color.clear
             .frame(maxWidth: .infinity)
-            .aspectRatio(HeroPage.aspect, contentMode: .fit)
+            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
             .overlay {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
@@ -77,10 +89,11 @@ struct HeroCarousel: View {
 
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
+    @Environment(\.layoutMetrics) private var metrics
     var body: some View {
         Color.clear
             .frame(maxWidth: .infinity)
-            .aspectRatio(HeroPage.aspect, contentMode: .fit)
+            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)
@@ -91,14 +104,13 @@ struct HeroPlaceholder: View {
 /// One page of the spotlight. The artwork is the link to the title and the place its screen zooms out of. The title block and the
 /// "Details" button sit over it as a second link, so a tap on the button and a tap on the picture open the same title.
 private struct HeroPage: View {
-    /// Width over height: the page is about 1.2 times as tall as it is wide.
-    static let aspect: CGFloat = 0.84
-
     /// The zoom source of this page's artwork: the title's screen zooms out of it.
     static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
 
     let item: MetaPreview
     @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(TitleActions.self) private var actions: TitleActions?
 
     var body: some View {
         let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item))
@@ -116,8 +128,6 @@ private struct HeroPage: View {
         Color.clear
             .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400) }
             .overlay { scrim }
-            // Mirrors the picture up under the status bar and the navigation bar, so the spotlight reaches the top of the screen.
-            .backgroundExtensionEffect()
             .contentShape(Rectangle())
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
@@ -136,23 +146,31 @@ private struct HeroPage: View {
     }
 
     private func caption(_ destination: TitleDestination) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
             MetaLine(metaParts)
                 .allowsHitTesting(false)
-            NavigationLink(value: destination) {
-                Text("Details")
+            HStack(spacing: Theme.Spacing.m) {
+                NavigationLink(value: destination) { Text("More Info") }
+                    .buttonStyle(.primaryActionCompact)
+                    .accessibilityIdentifier("hero.details.\(item.id)")
+                if let actions {
+                    Button { Task { await actions.toggleSaved(item) } } label: {
+                        Image(systemName: actions.isSaved(item) ? "checkmark" : "plus").frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel(actions.isSaved(item) ? "Remove from Library" : "Add to Library")
+                }
             }
-            .buttonStyle(.primaryActionCompact)
             .padding(.top, Theme.Spacing.s)
-            .accessibilityIdentifier("hero.details.\(item.id)")
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, Theme.screenPadding)
+        .padding(.horizontal, metrics.pageMargin)
         // Room for the page dots under the button.
         .padding(.bottom, 44)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
     }
 
     @ViewBuilder
@@ -163,7 +181,7 @@ private struct HeroPage: View {
             Text(item.name)
                 .font(.largeTitle.bold())
                 .lineLimit(2)
-                .multilineTextAlignment(.leading)
+                .multilineTextAlignment(metrics.isRegular ? .leading : .center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         }

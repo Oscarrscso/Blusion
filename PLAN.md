@@ -202,3 +202,16 @@ Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so 
   - Added beyond the plan: `scripts/check-project-spec.py` (ATS, trademark, GPL and privacy-manifest guards), `scripts/archive.sh`, `scripts/leaks.sh`, `scripts/extract-strings.py`,
     ADRs 001-007, `docs/MAC_FIRST_RUN.md`, `docs/RELEASE.md`, `docs/APP_REVIEW_NOTES.md`, `docs/LOCALIZATION.md`.
   - Final host counts: StremioKit 213 tests (96.45% line coverage), PlayerKit 76, Persistence 5, Features 100, mock addon 13.
+- v1.2 (continuation, 2026-10-08; sections 0-10 above remain unchanged):
+  - Saved interrupted work first as `7331a0e` (`checkpoint`); preserved original agent directories and briefs in local `build/checkpoint-agent-work.tar.gz`.
+  - Reviewed all 20 original agent briefs; combined overlapping work and completed the remaining widget, settings, search, rating, and UI wiring using existing patterns.
+  - Current target is iOS 26.0 with Mac Catalyst. Cinemeta is installed once for metadata; stream addons remain user-supplied under Settings → Addons.
+  - Added adaptive TV-style screens, Infuse handoff/progress updates, customizable Home widgets and Fusion import/export, poster ratings, persistent recent searches, and title context actions.
+  - Fixed cache invalidation/refresh behavior and made missing-fixture and missing-simulator verification explicit. A simulator-free run cannot silently satisfy the full milestone gate.
+  - Updated README and Mac/reviewer notes to match current behavior. Every original agent is mapped in `docs/CLAUDE_HANDOFF.md`.
+  - Validation: StremioKit 416, PlayerKit 84, Persistence 12, Features 273; 10 media-fixture skips, no failures. Mock addon 12 passed, 1 media skip. Generic iOS/Catalyst compilation and recorded Mac layout checks pass; no simulator runtime is installed.
+- v1.3 (requested follow-up, 2026-10-08):
+  - Separate subagents added Trakt device-code sign-in and explicit add-only watchlist/history sync, five review-site icons/links with optional OMDb/TMDB scores, and pointer/focus feedback.
+  - Fixed Home cancellation/re-entry, stale Settings overwriting new account credentials, launch navigation timing, and Settings Done contrast; regression tests and recorded route/layout checks pass. Live credentialed service checks need user API credentials.
+  - Signed, installed, and launched the current app on the connected iPhone 17; full device playback checks and distribution remain open.
+  - Removed 3.72 GiB of old Blusion build caches, retaining the checkpoint archive and current builds. No push.

@@ -12,6 +12,8 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let autoPlayBestStream = "settings.autoPlayBestStream"
         public static let serverSecret = "settings.streamingServerURL"
         public static let traktClientSecret = "settings.traktClientID"
+        public static let omdbAPIKey = "settings.omdbAPIKey"
+        public static let tmdbReadToken = "settings.tmdbReadToken"
     }
 
     private let defaults: UserDefaults
@@ -28,11 +30,14 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         let fallback = defaults.object(forKey: Keys.fallbackEngineEnabled) as? Bool ?? true
         let server = try? await secrets.get(Keys.serverSecret)
         let traktClientID = try? await secrets.get(Keys.traktClientSecret)
+        let omdbAPIKey = try? await secrets.get(Keys.omdbAPIKey)
+        let tmdbReadToken = try? await secrets.get(Keys.tmdbReadToken)
         let player = defaults.string(forKey: Keys.playerPreference).flatMap(PlayerPreference.init(rawValue:)) ?? PlaybackSettings().playerPreference
         let posterRatings = defaults.object(forKey: Keys.showsPosterRatings) as? Bool ?? true
         return PlaybackSettings(preferredResolution: resolution > 0 ? resolution : nil, subtitleLanguage: language?.isEmpty == false ? language : nil,
                                 streamingServerURL: server, fallbackEngineEnabled: fallback, traktClientID: traktClientID, playerPreference: player,
-                                showsPosterRatings: posterRatings, autoPlayBestStream: defaults.bool(forKey: Keys.autoPlayBestStream))
+                                showsPosterRatings: posterRatings, autoPlayBestStream: defaults.bool(forKey: Keys.autoPlayBestStream),
+                                omdbAPIKey: omdbAPIKey, tmdbReadToken: tmdbReadToken)
     }
 
     public func save(_ settings: PlaybackSettings) async {
@@ -59,6 +64,13 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
             try? await secrets.set(traktClientID, for: Keys.traktClientSecret)
         } else {
             try? await secrets.remove(Keys.traktClientSecret)
+        }
+        for (key, value) in [(Keys.omdbAPIKey, settings.omdbAPIKey), (Keys.tmdbReadToken, settings.tmdbReadToken)] {
+            if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+                try? await secrets.set(value, for: key)
+            } else {
+                try? await secrets.remove(key)
+            }
         }
     }
 }

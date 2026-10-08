@@ -22,9 +22,11 @@ import StremioKitTestSupport
         }
     }
 
-    private func model(manifests: [Manifest], transport: StubTransport, debounce: Duration = .milliseconds(40)) async throws -> SearchViewModel {
+    private func model(manifests: [Manifest], transport: StubTransport, debounce: Duration = .milliseconds(40),
+                       history: (any SearchHistoryStore)? = nil) async throws -> SearchViewModel {
         let (registry, client) = try await makeStubbedRegistry(manifests: manifests, transport: transport)
-        return SearchViewModel(services: AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: client)), debounce: debounce)
+        return SearchViewModel(services: AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: client)),
+                               debounce: debounce, history: history)
     }
 
     @Test func typingIsDebouncedIntoOneSearch() async throws {
@@ -177,5 +179,184 @@ import StremioKitTestSupport
         await model.waitUntilDone()
         #expect(model.sections.first?.items.first?.name == "second")
         #expect(model.sections.count == 1)
+    }
+
+    @Test func typingCancelsAnAlreadySubmittedSearchWithoutRestoringItsResults() async throws {
+        let transport = submittedSearchTransport()
+        let model = try await model(manifests: [manifest("a")], transport: transport, debounce: .zero)
+        model.query = "first"
+        let submitted = Task { await model.submit() }
+        try await waitUntil { transport.callCount == 1 }
+        model.query = "second"
+        model.queryDidChange()
+        await model.waitUntilDone()
+        await submitted.value
+        #expect(model.sections.first?.items.first?.name == "second")
+        #expect(model.sections.count == 1 && model.phase == .done)
+        #expect(model.recentQueries == ["second"])
+    }
+
+    @Test func clearingTheFieldCancelsAnAlreadySubmittedSearch() async throws {
+        let transport = submittedSearchTransport()
+        let model = try await model(manifests: [manifest("a")], transport: transport)
+        model.query = "first"
+        let submitted = Task { await model.submit() }
+        try await waitUntil { transport.callCount == 1 }
+        model.query = ""
+        model.queryDidChange()
+        await submitted.value
+        #expect(model.phase == .idle && model.sections.isEmpty && model.failures.isEmpty)
+        #expect(model.recentQueries.isEmpty)
+    }
+
+    @Test func cancellingTheSubmitCallerAlsoCancelsItsSearch() async throws {
+        let transport = submittedSearchTransport()
+        let model = try await model(manifests: [manifest("a")], transport: transport)
+        model.query = "first"
+        let submitted = Task { await model.submit() }
+        try await waitUntil { transport.callCount == 1 }
+        submitted.cancel()
+        await submitted.value
+        #expect(model.sections.isEmpty && model.recentQueries.isEmpty)
+    }
+
+    private func submittedSearchTransport() -> StubTransport {
+        StubTransport { request, _ in
+            let term = request.url?.path.components(separatedBy: "search=").last?.replacingOccurrences(of: ".json", with: "") ?? ""
+            if term == "first" { try? await Task.sleep(for: .milliseconds(200)) }
+            return StubTransport.response(Data(#"{"metas":[{"id":"\#(term)","name":"\#(term)"}]}"#.utf8), for: request)
+        }
+    }
+
+    // MARK: browse genres
+
+    private func genreManifest(_ options: [String], type: String = "movie") -> Manifest {
+        Manifest(id: "genres.\(type)", name: "Genres", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: [type],
+                 catalogs: [CatalogDescriptor(type: type, id: "films", extra: [ExtraDescriptor(name: "genre", options: options)])])
+    }
+
+    @Test func browseGenresComeFromTheMovieCatalogAndSkipBlanksAndRepeats() async throws {
+        let shows = Manifest(id: "shows", name: "Shows", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["series"],
+                             catalogs: [CatalogDescriptor(type: "series", id: "top", extra: [ExtraDescriptor(name: "genre", options: ["Drama"])])])
+        let films = Manifest(id: "films", name: "Films", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                             catalogs: [CatalogDescriptor(type: "movie", id: "films", extra: [ExtraDescriptor(name: "genre", options: ["Action", "Comedy", "Action", "  "])])])
+        let model = try await model(manifests: [shows, films], transport: stub())
+        await model.refreshAvailability()
+        #expect(model.browseGenres.map(\.name) == ["Action", "Comedy"], "the movie catalog wins over the series one listed before it")
+        let first = try #require(model.browseGenres.first)
+        #expect(first.source == .addonCatalog(AddonCatalogReference(manifestID: nil, host: "stub1.example.com", catalogType: "movie",
+                                                                    catalogID: "films", genre: "Action")))
+    }
+
+    @Test func aSeriesCatalogIsUsedWhenNoMovieCatalogHasGenres() async throws {
+        let shows = Manifest(id: "shows", name: "Shows", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["series"],
+                             catalogs: [CatalogDescriptor(type: "series", id: "top", extra: [ExtraDescriptor(name: "genre", options: ["Drama", "Crime"])])])
+        let model = try await model(manifests: [shows], transport: stub())
+        await model.refreshAvailability()
+        #expect(model.browseGenres.map(\.name) == ["Drama", "Crime"])
+        #expect(model.browseGenres.last?.source == .addonCatalog(AddonCatalogReference(manifestID: nil, host: "stub0.example.com", catalogType: "series",
+                                                                                       catalogID: "top", genre: "Crime")))
+    }
+
+    @Test func browseGenresAreCappedAtSixteen() async throws {
+        let model = try await model(manifests: [genreManifest((1...20).map { "Genre \($0)" })], transport: stub())
+        await model.refreshAvailability()
+        #expect(model.browseGenres.count == 16)
+        #expect(model.browseGenres.last?.name == "Genre 16")
+    }
+
+    @Test func noShortcutsWithoutGenresOrWithOnlyRequiredGenreCatalogs() async throws {
+        let plain = Manifest(id: "plain", name: "Plain", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                             catalogs: [CatalogDescriptor(type: "movie", id: "top")])
+        let model = try await model(manifests: [plain], transport: stub())
+        await model.refreshAvailability()
+        #expect(model.browseGenres.isEmpty)
+        // A catalog that needs a genre to open cannot be browsed as a plain row, so it offers no shortcuts either.
+        var required = genreManifest(["Action"])
+        required.catalogs[0].extra[0].isRequired = true
+        let other = try await self.model(manifests: [required], transport: stub())
+        await other.refreshAvailability()
+        #expect(other.browseGenres.isEmpty)
+    }
+
+    // MARK: recent searches
+
+    @Test func aSearchWithResultsIsRememberedTrimmed() async throws {
+        let store = InMemorySearchHistoryStore()
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        #expect(model.recentQueries.isEmpty)
+        model.query = "  Dune  "
+        await model.submit()
+        #expect(model.recentQueries == ["Dune"])
+        #expect(store.load() == ["Dune"], "and saved to the store")
+    }
+
+    @Test func aSearchThatFoundNothingOrFailedIsNotRemembered() async throws {
+        let store = InMemorySearchHistoryStore()
+        let empty = try await model(manifests: [manifest("a")], transport: StubTransport(data: Data(#"{"metas":[]}"#.utf8)), history: store)
+        empty.query = "zzz"
+        await empty.submit()
+        #expect(empty.recentQueries.isEmpty)
+        let failing = try await model(manifests: [manifest("a")], transport: StubTransport(data: Data(), status: 500), history: store)
+        failing.query = "dune"
+        await failing.submit()
+        #expect(failing.recentQueries.isEmpty && store.load().isEmpty)
+    }
+
+    @Test func recentsAreNewestFirstWithOneCopyOfEachQuery() async throws {
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: InMemorySearchHistoryStore())
+        for query in ["dune", "arrival", "Dune"] {
+            model.query = query
+            await model.submit()
+        }
+        #expect(model.recentQueries == ["Dune", "arrival"], "a repeat moves to the top, in its newest spelling")
+    }
+
+    @Test func recentsAreCappedAtEight() async throws {
+        let store = InMemorySearchHistoryStore()
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        for index in 1...9 {
+            model.query = "q\(index)"
+            await model.submit()
+        }
+        #expect(model.recentQueries.count == 8)
+        #expect(model.recentQueries.first == "q9" && model.recentQueries.last == "q2")
+        #expect(store.load() == model.recentQueries)
+    }
+
+    @Test func recentsAreLoadedFromTheStoreAndCleanedUp() async throws {
+        let store = InMemorySearchHistoryStore(["a", " ", "B", "A ", "c"])
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        #expect(model.recentQueries == ["a", "B", "c"])
+    }
+
+    @Test func recentsSurviveANewScreen() async throws {
+        let store = InMemorySearchHistoryStore()
+        let first = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        first.query = "heat"
+        await first.submit()
+        let second = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        #expect(second.recentQueries == ["heat"])
+    }
+
+    @Test func clearingHistoryOutsideSearchDoesNotRestoreOldQueries() async throws {
+        let store = InMemorySearchHistoryStore(["Old search"])
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        store.save([])
+        await model.refreshAvailability()
+        #expect(model.recentQueries.isEmpty)
+        model.query = "New search"
+        await model.submit()
+        #expect(store.load() == ["New search"])
+    }
+
+    @Test func aRecentCanBeRemovedWhateverItsCase() async throws {
+        let store = InMemorySearchHistoryStore(["Dune", "Arrival", "Heat"])
+        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+        model.removeRecent("dune")
+        #expect(model.recentQueries == ["Arrival", "Heat"])
+        #expect(store.load() == ["Arrival", "Heat"], "the removal is saved")
+        model.clearRecents()
+        #expect(model.recentQueries.isEmpty && store.load().isEmpty)
     }
 }

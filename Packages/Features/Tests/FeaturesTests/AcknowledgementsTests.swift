@@ -4,7 +4,7 @@ import Testing
 @Suite struct AcknowledgementsTests {
     @Test func theDefaultBuildListsNoThirdPartyCode() {
         let list = Acknowledgement.all(fallbackEngineLinked: false)
-        #expect(list.map(\.name) == ["Apple frameworks"])
+        #expect(list.map(\.name) == ["Apple frameworks", "TMDB", "Review site icons"])
         #expect(!list.contains { $0.name.contains("mpv") || $0.name.contains("FFmpeg") })
     }
 

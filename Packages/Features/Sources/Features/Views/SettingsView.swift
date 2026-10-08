@@ -1,34 +1,52 @@
 #if canImport(UIKit)
 import SwiftUI
 import StremioKit
+import UIKit
 
 struct SettingsView: View {
     @State private var model: SettingsViewModel
+    @State private var infuseInstalled = true
     @State private var pendingScope: DataResetService.Scope?
+    private let services: AppServices
     let fallbackEngineLinked: Bool
 
     init(services: AppServices) {
         _model = State(initialValue: SettingsViewModel(services: services))
+        self.services = services
         fallbackEngineLinked = services.fallbackEngineLinked
     }
 
     var body: some View {
         Form {
-            Section {
-                NavigationLink(value: SettingsDestination.addons) { Label("Addons", systemImage: "puzzlepiece.extension") }
+            Section("Content") {
+                NavigationLink(value: SettingsDestination.addons) {
+                    HStack {
+                        Label("Addons", systemImage: "puzzlepiece.extension")
+                        Spacer()
+                        Text("\(model.installedAddonCount)").foregroundStyle(.secondary)
+                    }
+                }
                     .accessibilityIdentifier("settings.addons")
                 NavigationLink(value: SettingsDestination.widgets) { Label("Widgets", systemImage: "rectangle.3.group") }
                     .accessibilityIdentifier("settings.widgets")
             }
             playbackSection
+            appearanceSection
+            reviewServicesSection
+            traktSection
             serverSection
             if fallbackEngineLinked { fallbackSection }
             dataSection
             aboutSection
         }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.load() }
+        .task {
+            await model.load()
+            if let url = URL(string: "infuse://") { infuseInstalled = UIApplication.shared.canOpenURL(url) }
+        }
         .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "", isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
                             titleVisibility: .visible, presenting: pendingScope) { scope in
             Button("Clear \(scope.title.lowercased())", role: .destructive) { Task { await model.clear(scope) } }
@@ -42,6 +60,23 @@ struct SettingsView: View {
 
     private var playbackSection: some View {
         Section {
+            Picker("Play with", selection: Binding(get: { model.settings.playerPreference }, set: { value in
+                Task { await model.setPlayerPreference(value) }
+            })) {
+                ForEach(PlayerPreference.allCases) { Text($0.title).tag($0) }
+            }
+            .accessibilityIdentifier("settings.player")
+            if model.settings.playerPreference.externalPlayer != nil && !infuseInstalled {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Infuse isn’t installed on this device.").font(.footnote).foregroundStyle(.secondary)
+                    if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url) }
+                }
+                .accessibilityIdentifier("settings.player.missing")
+            }
+            Toggle("Play best stream automatically", isOn: Binding(get: { model.settings.autoPlayBestStream }, set: { value in
+                Task { await model.setAutoPlayBestStream(value) }
+            }))
+            .accessibilityIdentifier("settings.autoPlay")
             Picker("Preferred quality", selection: Binding(get: { model.settings.preferredResolution }, set: { value in Task { await model.setPreferredResolution(value) } })) {
                 ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
             }
@@ -53,7 +88,42 @@ struct SettingsView: View {
         } header: {
             Text("Playback")
         } footer: {
-            Text("Quality is a preference, not a rule: if nothing matches, the best available stream is used. Subtitles turn on by themselves when an addon has them in your language.")
+            Text("If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as MKV and DTS, and returns your progress when you come back.")
+        }
+    }
+
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Toggle("Ratings on posters", isOn: Binding(get: { model.settings.showsPosterRatings }, set: { value in
+                Task { await model.setShowsPosterRatings(value) }
+            }))
+            .accessibilityIdentifier("settings.posterRatings")
+        }
+    }
+
+    private var traktSection: some View {
+        Section("Accounts") {
+            NavigationLink { TraktAccountView(services: services) } label: { Label("Trakt", systemImage: "person.crop.circle") }
+                .accessibilityIdentifier("settings.trakt")
+        }
+    }
+
+    private var reviewServicesSection: some View {
+        Section {
+            SecureField("OMDb API key", text: $model.omdbAPIKeyText)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityIdentifier("settings.omdbAPIKey")
+            SecureField("TMDB Read Access Token", text: $model.tmdbReadTokenText)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                .accessibilityIdentifier("settings.tmdbReadToken")
+            Button("Save Review Services") { Task { await model.commitReviewCredentials() } }
+                .accessibilityIdentifier("settings.reviews.save")
+            if let url = URL(string: "https://www.omdbapi.com/apikey.aspx") { Link("Get an OMDb key", destination: url) }
+            if let url = URL(string: "https://www.themoviedb.org/settings/api") { Link("TMDB API settings", destination: url) }
+        } header: {
+            Text("Review services")
+        } footer: {
+            Text("Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.")
         }
     }
 
@@ -110,7 +180,7 @@ struct SettingsView: View {
         } header: {
             Text("Clear data")
         } footer: {
-            Text("Everything Blusion knows stays on this device. Addon links are kept in the Keychain and are removed with their addon.")
+            Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
         }
     }
 
@@ -119,7 +189,7 @@ struct SettingsView: View {
             LabeledContent("Version", value: SettingsViewModel.appVersion)
             NavigationLink("Acknowledgements") { AcknowledgementsView(fallbackEngineLinked: fallbackEngineLinked) }
                 .accessibilityIdentifier("settings.acknowledgements")
-            Text("Blusion is a player for content you have the right to watch. It includes no content and no addons, and it isn't affiliated with any addon or service.")
+            Text("Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › Addons. Blusion isn’t affiliated with any addon or service.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -132,6 +202,11 @@ struct AcknowledgementsView: View {
     var body: some View {
         List(Acknowledgement.all(fallbackEngineLinked: fallbackEngineLinked)) { item in
             VStack(alignment: .leading, spacing: 4) {
+                if item.name == "TMDB" {
+                    Image("ReviewTMDB").resizable().scaledToFit()
+                        .frame(width: 80, height: 35)
+                        .accessibilityLabel("TMDB")
+                }
                 Text(item.name).font(.headline)
                 Text(item.license).font(.subheadline).foregroundStyle(.secondary)
                 Text(item.detail).font(.footnote)
@@ -139,6 +214,8 @@ struct AcknowledgementsView: View {
             }
             .accessibilityElement(children: .contain)
         }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
         .navigationTitle("Acknowledgements")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("acknowledgements.list")

@@ -32,7 +32,8 @@ import Testing
         }
     }
 
-    @Test func playsTheMockMP4AndTheClockAdvances() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func playsTheMockMP4AndTheClockAdvances() async throws {
         let engine = AVEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4"))
         engine.play()
@@ -44,7 +45,8 @@ import Testing
         engine.stop()
     }
 
-    @Test func seekLandsWithinOneSecond() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func seekLandsWithinOneSecond() async throws {
         let engine = AVEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4"))
         engine.play()
@@ -55,7 +57,8 @@ import Testing
         engine.stop()
     }
 
-    @Test func startPositionIsApplied() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func startPositionIsApplied() async throws {
         let engine = AVEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4", startPosition: 4))
         engine.play()
@@ -64,7 +67,8 @@ import Testing
         engine.stop()
     }
 
-    @Test func playsHLS() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func playsHLS() async throws {
         let engine = AVEngine()
         engine.load(PlaybackItem(url: try media("hls/index.m3u8"), title: "hls"))
         engine.play()
@@ -72,7 +76,8 @@ import Testing
         engine.stop()
     }
 
-    @Test func reachesTheEnd() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func reachesTheEnd() async throws {
         let engine = AVEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4", startPosition: 8.5))
         engine.play()
@@ -90,7 +95,8 @@ import Testing
         engine.stop()
     }
 
-    @Test func aProtectedStreamPlaysOnlyWithItsHeader() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func aProtectedStreamPlaysOnlyWithItsHeader() async throws {
         let url = try media("protected.mp4")
         let withHeader = AVEngine()
         withHeader.load(PlaybackItem(url: url, headers: ["X-Mock-Token": "abc"], title: "protected"))

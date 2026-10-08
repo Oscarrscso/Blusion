@@ -9,6 +9,7 @@ final class PlaybackFlowTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         try XCTSkipIf(catalogURL.isEmpty || streamURL.isEmpty, "mock addon URLs are not set (run through scripts/verify.sh)")
+        try requireMediaFixtures()
     }
 
     @MainActor
@@ -16,7 +17,7 @@ final class PlaybackFlowTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["BLUSION_UITEST"] = "1"
         app.launch()
-        app.tabBars.buttons["Addons"].tap()
+        openAddons(app)
         for url in ["\(catalogURL)/uitest/manifest.json", "\(streamURL)/uitest-streams/manifest.json"] {
             let field = app.textFields["addons.installField"]
             XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -25,7 +26,7 @@ final class PlaybackFlowTests: XCTestCase {
             app.buttons["addons.installButton"].tap()
             XCTAssertTrue(app.staticTexts["addons.success"].waitForExistence(timeout: 15))
         }
-        app.tabBars.buttons["Home"].tap()
+        dismissSettings(app)
         let poster = app.buttons["poster.mock:movie1"].firstMatch
         XCTAssertTrue(poster.waitForExistence(timeout: 15))
         poster.tap()

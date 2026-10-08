@@ -172,7 +172,8 @@ import StremioKitTestSupport
         #expect(data.count == 4096, "the 6 MB body was cut at the limit, not rejected")
     }
 
-    @Test func mediaPrefixesIdentifyTheContainers() async throws {
+    @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
+    func mediaPrefixesIdentifyTheContainers() async throws {
         let server = try server()
         let client = client(server)
         let media = server.stream.appendingPathComponent("media")

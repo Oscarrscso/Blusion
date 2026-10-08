@@ -19,7 +19,12 @@ public struct Acknowledgement: Sendable, Equatable, Identifiable {
     public static func all(fallbackEngineLinked: Bool) -> [Acknowledgement] {
         var list = [
             Acknowledgement(name: "Apple frameworks", license: "Apple SDK terms",
-                            detail: "SwiftUI, SwiftData, AVFoundation, AVKit and the Security framework come with iOS. Nothing else is bundled in this build."),
+                            detail: "SwiftUI, SwiftData, AVFoundation, AVKit and the Security framework come with iOS."),
+            Acknowledgement(name: "TMDB", license: "TMDB API attribution",
+                            detail: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                            sourceURL: URL(string: "https://www.themoviedb.org")),
+            Acknowledgement(name: "Review site icons", license: "Respective service trademarks",
+                            detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic and TMDB marks identify links to their services. Blusion is not affiliated with them."),
         ]
         if fallbackEngineLinked {
             list += [

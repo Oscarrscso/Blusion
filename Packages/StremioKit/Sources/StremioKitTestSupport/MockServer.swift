@@ -38,6 +38,27 @@ public final class MockServer: @unchecked Sendable {
         return server
     }
 
+    /// True when `Tools/MockAddon/make-fixtures.sh` (needs ffmpeg) has written the media the tests stream or sniff. Tests that play
+    /// real containers gate on this with `.enabled(if:)`, so a host without ffmpeg skips them instead of failing or hanging.
+    /// Subtitles are served from `subtitles.js` and the DTS file is optional, so neither is required.
+    public static var hasMediaFixtures: Bool {
+        let fixtures = repoRoot.appendingPathComponent("Tools/MockAddon/fixtures/generated")
+        guard ["sample.mp4", "sample-ac3.mkv", "hls/index.m3u8"].allSatisfy({
+            FileManager.default.fileExists(atPath: fixtures.appendingPathComponent($0).path)
+        }), let playlist = try? String(contentsOf: fixtures.appendingPathComponent("hls/index.m3u8"), encoding: .utf8) else { return false }
+        let segments = playlist.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("#") }
+        return !segments.isEmpty && segments.allSatisfy {
+            FileManager.default.fileExists(atPath: fixtures.appendingPathComponent("hls/\($0)").path)
+        }
+    }
+
+    /// The repo root, found from this file's path: …/Packages/StremioKit/Sources/StremioKitTestSupport/MockServer.swift.
+    private static var repoRoot: URL {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        return root
+    }
+
     private static func launch() throws -> MockServer {
         let env = ProcessInfo.processInfo.environment
         if let c = env["MOCK_ADDON_CATALOG_URL"], let s = env["MOCK_ADDON_STREAM_URL"], let catalog = URL(string: c), let stream = URL(string: s) {
@@ -45,10 +66,7 @@ public final class MockServer: @unchecked Sendable {
             return MockServer(catalog: catalog, stream: stream, slowDelay: delay, process: nil, stdin: nil)
         }
 
-        // …/Packages/StremioKit/Sources/StremioKitTestSupport/MockServer.swift -> the repo root is five path components up.
-        var root = URL(fileURLWithPath: #filePath)
-        for _ in 0..<5 { root.deleteLastPathComponent() }
-        let script = root.appendingPathComponent("Tools/MockAddon/server.js")
+        let script = repoRoot.appendingPathComponent("Tools/MockAddon/server.js")
         guard FileManager.default.fileExists(atPath: script.path) else { throw LaunchError(description: "mock server script not found at \(script.path)") }
 
         let process = Process()

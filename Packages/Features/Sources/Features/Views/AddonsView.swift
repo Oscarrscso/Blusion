@@ -7,6 +7,7 @@ import UIKit
 
 struct AddonsView: View {
     @State private var model: AddonsViewModel
+    @Environment(AppRouter.self) private var router
 
     init(services: AppServices) {
         _model = State(initialValue: AddonsViewModel(services: services))
@@ -22,7 +23,10 @@ struct AddonsView: View {
                 installedSection
             }
         }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
         .navigationTitle("Addons")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton() } }
         }
@@ -32,6 +36,12 @@ struct AddonsView: View {
             }
         }
         .task { await model.observe() }
+        .onChange(of: router.addonInstallText, initial: true) {
+            if let link = router.addonInstallText {
+                model.prefill(link: link)
+                router.addonInstallText = nil
+            }
+        }
         .accessibilityIdentifier("addons.list")
     }
 
@@ -56,7 +66,7 @@ struct AddonsView: View {
                 } label: {
                     if model.isInstalling { ProgressView() } else { Text("Install") }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.primaryActionCompact)
                 .disabled(!model.canInstall)
                 .accessibilityIdentifier("addons.installButton")
             }
@@ -67,7 +77,7 @@ struct AddonsView: View {
             }
             if let name = model.lastInstalledName {
                 Label("Installed \(name)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(.secondary)
                     .accessibilityIdentifier("addons.success")
             }
         } header: {
@@ -79,13 +89,13 @@ struct AddonsView: View {
 
     private var emptySection: some View {
         Section {
-            Text("Blusion doesn't include any addons. Paste a link above to add your first one.")
+            Text("Paste a link above, or add Cinemeta for catalogs and search.")
                 .accessibilityIdentifier("addons.emptyText")
             VStack(alignment: .leading, spacing: 6) {
                 Text("Suggested: \(AddonsViewModel.suggestion.name)").font(.headline)
                 Text(AddonsViewModel.suggestion.detail).font(.footnote).foregroundStyle(.secondary)
                 Button("Install \(AddonsViewModel.suggestion.name)") { Task { await model.installSuggested() } }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.glassCapsule)
                     .accessibilityIdentifier("addons.installSuggested")
             }
         } header: {
@@ -96,13 +106,26 @@ struct AddonsView: View {
     private var installedSection: some View {
         Section {
             ForEach(model.addons) { addon in
-                HStack {
+                HStack(spacing: Theme.Spacing.m) {
                     NavigationLink(value: addon.id) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(addon.name).font(.headline)
-                            Text("\(addon.manifest.version.isEmpty ? "" : "v\(addon.manifest.version) · ")\(addon.displayHost)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        HStack(spacing: Theme.Spacing.m) {
+                            if let logo = addon.manifest.logo {
+                                ArtworkImage(url: logo, maxPixelSize: 132)
+                                    .frame(width: 44, height: 44)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                            } else {
+                                Image(systemName: "puzzlepiece.extension")
+                                    .frame(width: 44, height: 44)
+                                    .background(Theme.surfaceStrong, in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(addon.name).font(.headline)
+                                Text("\(addon.manifest.version.isEmpty ? "" : "v\(addon.manifest.version) · ")\(addon.displayHost)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(model.capabilities(of: addon).joined(separator: " · "))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     Toggle("Enabled", isOn: Binding(get: { addon.isEnabled }, set: { value in Task { await model.setEnabled(value, id: addon.id) } }))
@@ -167,6 +190,8 @@ struct AddonDetailView: View {
                 .accessibilityIdentifier("addonDetail.remove")
             }
         }
+        .scrollContentBackground(.hidden)
+        .screenBackground()
         .navigationTitle(details.name)
         .navigationBarTitleDisplayMode(.inline)
     }

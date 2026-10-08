@@ -12,6 +12,9 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var fallbackEngineEnabled: Bool
     /// The Trakt API client ID the user supplies, needed to read Trakt lists. Stored as a secret, never shipped with the app.
     public var traktClientID: String?
+    /// Optional review-service credentials, stored in the Keychain.
+    public var omdbAPIKey: String?
+    public var tmdbReadToken: String?
     /// Whether streams play in Blusion or are handed to another player app (Infuse).
     public var playerPreference: PlayerPreference
     /// IMDb and Letterboxd ratings on posters.
@@ -21,7 +24,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
 
     public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
                 traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
-                autoPlayBestStream: Bool = false) {
+                autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil) {
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL
@@ -30,6 +33,8 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
         self.playerPreference = playerPreference
         self.showsPosterRatings = showsPosterRatings
         self.autoPlayBestStream = autoPlayBestStream
+        self.omdbAPIKey = omdbAPIKey
+        self.tmdbReadToken = tmdbReadToken
     }
 
     public var serverURL: URL? {

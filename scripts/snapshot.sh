@@ -71,8 +71,8 @@ fi
 [[ -d "$APP" ]] || { echo "snapshot: no build at $APP (run without --no-build)" >&2; exit 1; }
 
 rm -f "$OUT"
-# -g: do not bring the window to the front. -n: a fresh instance, even if another snapshot is running.
-open -n -g "$APP" \
+# A foreground window lets initial navigation and sheets finish presenting. -n starts a fresh instance.
+open -n "$APP" \
   --env BLUSION_UITEST=1 --env BLUSION_SEED_DEFAULTS=1 \
   --env "BLUSION_ROUTE=$ROUTE" --env "BLUSION_SNAPSHOT=$OUT" --env "BLUSION_SNAPSHOT_DELAY=$DELAY" --env "BLUSION_WINDOW_SIZE=$SIZE" \
   ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} || { echo "snapshot: could not launch $APP" >&2; exit 1; }

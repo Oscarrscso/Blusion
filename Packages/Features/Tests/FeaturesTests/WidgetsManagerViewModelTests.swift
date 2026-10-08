@@ -418,6 +418,12 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
             return
         }
         #expect(hero.hideTitle && spotlight.limit == 8 && spotlight.source == .addonCatalog(popular.reference))
+        let actionHero = WidgetsManagerViewModel.makeHero(choice: popular, genre: "Action")
+        guard case .hero(let filteredSpotlight) = actionHero.content else {
+            Issue.record("Expected spotlight")
+            return
+        }
+        #expect(filteredSpotlight.source == .addonCatalog(actionReference))
 
         let genres = WidgetsManagerViewModel.makeGenreCollection(title: "Genres", choice: popular)
         guard case .collection(let tiles) = genres.content else {
