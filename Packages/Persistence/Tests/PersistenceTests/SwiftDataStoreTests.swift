@@ -68,6 +68,21 @@ import Testing
         #expect(await library.contains("movie/tt1"))
     }
 
+    #if targetEnvironment(macCatalyst) || os(macOS)
+    /// `Application Support/default.store` belongs to whichever unsandboxed Mac app made it first. The Mac app once opened such
+    /// a file, could not read it and ran from memory.
+    @Test func onTheMacTheStoreLivesInAFolderOfItsOwn() async throws {
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent("blusion-support-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let url = try #require(PersistenceContainer.defaultStoreURL(bundleID: "example.blusion", support: support))
+        #expect(url == support.appendingPathComponent("example.blusion/Blusion.store"))
+
+        let record = AddonRecord(id: UUID(), manifestData: Data("m".utf8), isEnabled: true, order: 0, installedAt: Date(timeIntervalSince1970: 1))
+        try await SwiftDataAddonStore(container: try PersistenceContainer.make(url: url)).save([record])
+        #expect(try await SwiftDataAddonStore(container: try PersistenceContainer.make(url: url)).loadAll() == [record])
+    }
+    #endif
+
     @Test func theSchemaVersionsAreOrdered() {
         #expect(BlusionSchemaV1.versionIdentifier < BlusionSchemaV2.versionIdentifier)
         #expect(BlusionMigrationPlan.schemas.count == 2)

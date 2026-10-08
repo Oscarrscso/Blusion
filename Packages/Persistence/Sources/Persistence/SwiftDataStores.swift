@@ -6,18 +6,35 @@ import SwiftData
 
 public enum PersistenceContainer {
     /// The app's container at the current schema (V2), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
-    /// at `url` (default: SwiftData's default location).
+    /// at `url` (default: `defaultStoreURL()`, or SwiftData's default location where that is nil).
     public static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
         let schema = Schema(versionedSchema: BlusionSchemaV2.self)
         let configuration: ModelConfiguration
         if inMemory {
             configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-        } else if let url {
+        } else if let url = url ?? defaultStoreURL() {
             configuration = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
         } else {
             configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         }
         return try ModelContainer(for: schema, migrationPlan: BlusionMigrationPlan.self, configurations: [configuration])
+    }
+
+    /// SwiftData's default location is `Application Support/default.store`. On iOS that is the app's own file. A Mac app that is
+    /// not sandboxed shares the folder with every other such app and would open whichever one's store got there first, so on
+    /// the Mac the store goes into a folder named after the bundle id. Nil means SwiftData's default.
+    static func defaultStoreURL(
+        bundleID: String? = Bundle.main.bundleIdentifier,
+        support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    ) -> URL? {
+        #if targetEnvironment(macCatalyst) || os(macOS)
+        guard let bundleID, let support else { return nil }
+        let folder = support.appendingPathComponent(bundleID, isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent("Blusion.store")
+        #else
+        return nil
+        #endif
     }
 }
 

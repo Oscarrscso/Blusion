@@ -16,6 +16,9 @@ open Blusion.xcodeproj
 Select **Blusion → My Mac (Mac Catalyst)** and press **⌘R**. Review the development team and bundle ID in `project.yml` before using your own device.
 For a simulator, install a compatible runtime through Xcode and select an iPhone destination.
 
+To use the app outside Xcode, run `scripts/install-mac.sh`. It puts a Release build in `/Applications/Blusion.app` and is the way
+to update it; do not copy a build product there by hand or open one from `build/`.
+
 Cinemeta is seeded once for browsing and search. To test real playback, install your stream addon in **Home gear → Settings → Addons**.
 Choose the preferred player in **Settings → Playback**. Infuse must be installed if you select it.
 

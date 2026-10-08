@@ -27,6 +27,9 @@ Select **Blusion → My Mac (Mac Catalyst)** and press **⌘R**. To test on an i
 to use a simulator, first install its runtime in Xcode. Review the bundle ID and development team in `project.yml` before signing for your own device.
 The generated Xcode project is ignored by Git; edit `project.yml` for persistent project settings.
 
+To keep the Mac app in `/Applications`, run `scripts/install-mac.sh`: it builds a Release copy, replaces the installed one and
+opens it. That is the only copy to open. A build product launched from `build/` becomes one more "Blusion" in Spotlight.
+
 [First Mac run](docs/MAC_FIRST_RUN.md) gives the short testing path.
 
 ## Using the app
@@ -86,6 +89,7 @@ scripts/snapshot.sh home build/shots/home-mac.png --mac
 ```
 
 The first command renders an iPhone-sized Catalyst layout; `--mac` uses the Mac layout. Neither is a simulator test.
+Snapshot builds carry the bundle id `app.blusion.player.snapshot`, so a run never touches the installed app or its settings.
 
 ## Known limitations
 

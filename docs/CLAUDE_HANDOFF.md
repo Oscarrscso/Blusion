@@ -86,7 +86,8 @@ For deterministic playback, generate the local mock fixtures as described in [MA
 
 On the connected iPhone, tap **Blusion**. To rebuild later, open `Blusion.xcodeproj`, choose **Blusion → Oscar**, and press **⌘R**.
 The current signed app is in `build/iphone/Build/Products/Debug-iphoneos/Blusion.app`.
-The current runnable Mac app is in `build/catalyst-mac/Build/Products/Debug-maccatalyst/Blusion.app`.
+The Mac app is `/Applications/Blusion.app`; `scripts/install-mac.sh` rebuilds and replaces it. Open that copy and no other:
+snapshot builds have their own bundle id and live in `build/catalyst*.noindex`, out of Spotlight's sight.
 
 Old agent/build caches (3.32 GiB) and two old Blusion Xcode DerivedData folders (0.40 GiB) were removed.
 The checkpoint archive, original sources/briefs, screenshots, and current iPhone/Mac builds were kept. Nothing was pushed.

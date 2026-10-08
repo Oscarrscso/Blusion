@@ -42,11 +42,22 @@ if [[ "$MAC" == 1 ]]; then FLAVOR="catalyst-mac"; FAMILY="1,2,6"; : "${SIZE:=128
 mkdir -p "$(dirname "$OUT")" "build/$FLAVOR-proj"
 
 PROJECT="build/$FLAVOR-proj/Blusion.xcodeproj"
-APP="$ROOT/build/$FLAVOR/Build/Products/Debug-maccatalyst/Blusion.app"
+# Spotlight skips folders named *.noindex, so the build product is never listed as one more Blusion app.
+DERIVED="build/$FLAVOR.noindex"
+APP="$ROOT/$DERIVED/Build/Products/Debug-maccatalyst/Blusion.app"
 LOG="build/$FLAVOR-build.log"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+# Builds used to land in build/$FLAVOR under the real bundle id. Carry the cache over once and drop that product.
+if [[ -d "build/$FLAVOR" && ! -d "$DERIVED" ]]; then
+  "$LSREGISTER" -u "$ROOT/build/$FLAVOR/Build/Products/Debug-maccatalyst/Blusion.app" >/dev/null 2>&1 || true
+  mv "build/$FLAVOR" "$DERIVED" && rm -rf "$DERIVED/Build/Products"
+fi
 
 if [[ "$BUILD" == 1 ]]; then
-  # The real project.yml with ad-hoc signing and this flavour's device families. A throwaway overlay.
+  # The real project.yml with ad-hoc signing and this flavour's device families. A throwaway overlay. A bundle id of its own
+  # keeps a snapshot run away from the installed app (scripts/install-mac.sh): the two would otherwise share preferences, and
+  # the window size forced below would become the size the real app opens at.
   cat > "build/$FLAVOR-proj/project.catalyst.yml" <<YAML
 include:
   - path: ../../project.yml
@@ -54,6 +65,7 @@ targets:
   Blusion:
     settings:
       base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.blusion.player.snapshot
         TARGETED_DEVICE_FAMILY: "$FAMILY"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
@@ -61,7 +73,7 @@ targets:
 YAML
   xcodegen generate --spec "build/$FLAVOR-proj/project.catalyst.yml" --project "build/$FLAVOR-proj" --quiet || { echo "snapshot: xcodegen failed" >&2; exit 1; }
   xcodebuild -project "$PROJECT" -scheme Blusion -configuration Debug -destination 'platform=macOS,variant=Mac Catalyst' \
-    -derivedDataPath "build/$FLAVOR" -jobs 4 build >"$LOG" 2>&1
+    -derivedDataPath "$DERIVED" -jobs 4 build >"$LOG" 2>&1
   if ! grep -q '\*\* BUILD SUCCEEDED \*\*' "$LOG"; then
     echo "snapshot: BUILD FAILED (full log: $LOG)" >&2
     grep -E 'error:' "$LOG" | sed -E "s#$ROOT/##g" | sort -u | head -40 >&2
@@ -82,6 +94,8 @@ DEADLINE=$(( $(date +%s) + ${DELAY%.*} + 30 ))
 while [[ ! -s "$OUT" && $(date +%s) -lt $DEADLINE ]]; do sleep 0.5; done
 sleep 0.5
 pkill -f "$APP/Contents/MacOS/Blusion" >/dev/null 2>&1 || true
+# Launching registered this build with LaunchServices. Take it out again, so it is not offered as an app or for blusion:// links.
+"$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
 if [[ -s "$OUT" ]]; then
   echo "snapshot: $OUT ($(sips -g pixelWidth -g pixelHeight "$OUT" 2>/dev/null | awk '/pixel/{printf "%s ", $2}'| sed 's/ $//; s/ /x/'))"
 else
