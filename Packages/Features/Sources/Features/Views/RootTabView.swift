@@ -2,7 +2,7 @@
 import SwiftUI
 import StremioKit
 
-/// Screens reachable from the Settings sheet's stack.
+/// Screens reachable from the Settings tab's stack.
 enum SettingsDestination: Hashable {
     case addons
     case widgets
@@ -14,7 +14,6 @@ enum SettingsDestination: Hashable {
 public final class AppRouter {
     public var tab: LaunchRoute.Tab
     public var homePath = NavigationPath()
-    var isShowingSettings = false
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
     var settingsPath = NavigationPath()
     var demoPlan: PlaybackPlan?
@@ -22,7 +21,6 @@ public final class AppRouter {
     var userStateRevision = 0
     /// Navigation values must wait until their stacks and destinations have appeared.
     private var pendingLaunchRoute: LaunchRoute?
-    private var pendingSettingsSheet: LaunchRoute.Sheet?
 
     public init(route: LaunchRoute = .home) {
         tab = route.tab
@@ -41,44 +39,27 @@ public final class AppRouter {
         if let streams = route.streams { homePath.append(streams) }
         if route.showsGallery { homePath.append(GalleryDestination(section: route.gallerySection)) }
         if route.showsPlayerDemo { demoPlan = .demo }
-        if let sheet = route.sheet, !isShowingSettings { showSettings(sheet) }
+        if let screen = route.sheet { showSettings(screen) }
     }
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
+    /// The Settings tab, on its first screen.
     public func showSettings() { showSettings(.settings) }
 
-    /// Settings, opened on the addons list.
+    /// The Settings tab, opened on the addons list.
     public func showAddons() { showSettings(.addons) }
 
-    /// Settings, opened on the Home widgets manager.
+    /// The Settings tab, opened on the Home widgets manager.
     public func showWidgets() { showSettings(.widgets) }
 
-    private func showSettings(_ sheet: LaunchRoute.Sheet) {
-        let alreadyPresented = isShowingSettings && pendingSettingsSheet == nil
-        pendingSettingsSheet = sheet
-        if alreadyPresented {
-            presentSettingsRoute()
-        } else {
-            settingsPath = NavigationPath()
-            isShowingSettings = true
-        }
-    }
-
-    /// Called after the Settings stack appears, so its initial empty path cannot overwrite the requested screen.
-    func presentSettingsRoute() {
-        guard isShowingSettings, let sheet = pendingSettingsSheet else { return }
-        pendingSettingsSheet = nil
-        switch sheet {
+    private func showSettings(_ screen: LaunchRoute.Sheet) {
+        switch screen {
         case .settings: settingsPath = NavigationPath()
         case .addons: settingsPath = NavigationPath([SettingsDestination.addons])
         case .widgets: settingsPath = NavigationPath([SettingsDestination.widgets])
         }
-    }
-
-    public func dismissSettings() {
-        isShowingSettings = false
-        pendingSettingsSheet = nil
+        tab = .settings
     }
 }
 
@@ -115,7 +96,6 @@ public struct RootTabView: View {
                     HomeView(services: services)
                         .appDestinations(services: services)
                         .navigationDestination(for: GalleryDestination.self) { DesignGalleryView(section: $0.section) }
-                        .settingsButton()
                 }
                 .zoomTransitions()
                 .task {
@@ -136,9 +116,22 @@ public struct RootTabView: View {
                     NavigationStack {
                         LibraryView(services: services) { router.open(.discover) }
                             .appDestinations(services: services)
-                            .settingsButton()
                     }
                     .zoomTransitions()
+                }
+            }
+            // Settings is a tab like the rest, so there is no sheet to dismiss and no Done button.
+            Tab("Settings", systemImage: "gearshape.fill", value: LaunchRoute.Tab.settings) {
+                NavigationStack(path: $router.settingsPath) {
+                    SettingsView(services: services)
+                        .navigationDestination(for: SettingsDestination.self) { destination in
+                            Group {
+                                switch destination {
+                                case .addons: AddonsView(services: services)
+                                case .widgets: WidgetsManagerView(services: services)
+                                }
+                            }
+                        }
                 }
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {
@@ -163,40 +156,11 @@ public struct RootTabView: View {
         .onChange(of: titleActions.watchedIdentities) { _, _ in
             Task { await resume.refresh() }
         }
-        .onChange(of: router.isShowingSettings) { _, showing in
-            if !showing { Task { await refreshUserState() } }
-        }
         .onChange(of: addonLink, initial: true) { _, link in
             guard let link else { return }
             router.addonInstallText = link
             router.showAddons()
             addonLink = nil
-        }
-        .sheet(isPresented: $router.isShowingSettings) {
-            NavigationStack(path: $router.settingsPath) {
-                SettingsView(services: services)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { router.dismissSettings() }
-                                .buttonStyle(.glass)
-                                .foregroundStyle(.white)
-                                .accessibilityIdentifier("settings.done")
-                        }
-                    }
-                    .navigationDestination(for: SettingsDestination.self) { destination in
-                        Group {
-                            switch destination {
-                            case .addons: AddonsView(services: services)
-                            case .widgets: WidgetsManagerView(services: services)
-                            }
-                        }
-                    }
-            }
-            .task {
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                router.presentSettingsRoute()
-            }
         }
         .fullScreenCover(item: $router.demoPlan) { PlayerScreen(plan: $0, services: services) }
         .task {
@@ -225,26 +189,6 @@ private extension PlaybackPlan {
         guard let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8") else { return nil }
         return PlaybackPlan(request: StreamRequest(type: "series", id: "demo:1:2", title: "Sample Show · Test Pattern", season: 1, episode: 2),
                             candidates: [PlaybackCandidate(id: "demo", title: "Sample stream", addonName: "Demo", route: .native(url))])
-    }
-}
-
-/// The gear that opens Settings as a sheet. The sheet itself is presented once, by `RootTabView`.
-private struct SettingsButton: ViewModifier {
-    @Environment(AppRouter.self) private var router
-
-    func body(content: Content) -> some View {
-        content.toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { router.showSettings() } label: { Label("Settings", systemImage: "gearshape") }
-                    .accessibilityIdentifier("settings.open")
-            }
-        }
-    }
-}
-
-extension View {
-    func settingsButton() -> some View {
-        modifier(SettingsButton())
     }
 }
 #endif

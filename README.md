@@ -65,7 +65,7 @@ opens it. That is the only copy to open. A build product launched from `build/` 
 ## Adding an addon
 
 1. Get its manifest link, such as `https://example.com/path/manifest.json` or `stremio://example.com/path/manifest.json`.
-2. Open **Home gear → Settings → Addons**, paste the link, and select **Install**. A `stremio://` install link can also open this field for you to review.
+2. Open the **Settings** tab → **Addons**, paste the link, and select **Install**. A `stremio://` install link can also open this field for you to review.
 3. Enable, reorder, or remove addons on the same screen. Removing one also removes its saved link.
 
 Catalog addons provide browsing and search; stream addons provide playback choices. Direct HTTP(S) media can play in Blusion.

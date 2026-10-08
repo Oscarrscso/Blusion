@@ -72,11 +72,13 @@ Three subagents separately added Trakt account support, review-site support, and
   The season endpoint is parsed from OMDb's documented format and covered by stub tests; it has not been run against a live key.
 - **Detail page:** ratings are small icon-then-score glass buttons (`RatingButtonsRow`) under the hero title, replacing the five large review links.
   "Watched" now exists for shows (every aired episode; specials aside), per season (season menu), and from a poster's long-press menu.
-- **Stream picker:** restyled as cards (resolution tile, quality headline, formatted facts, the addon's notes underneath), an ambient poster header,
-  a Play Best caption, and resolution filter chips when the list holds more than one sharpness.
-- **Settings Done:** the two hand-styled `.glass` Done buttons drew a glass capsule inside the toolbar's own glass capsule; one system-styled
-  `SettingsDoneButton` replaces them. The cause is inferred from the code, not seen on screen (Mac Catalyst draws toolbars differently from
-  iOS 26/27): confirm on the iPhone that Settings and its Addons and Widgets pages each show one Done.
+- **Stream picker:** restyled as cards (resolution tile, quality headline, formatted facts, the addon's notes underneath), an ambient poster
+  header, and resolution filter chips when the list holds more than one sharpness. The "Play Best" bar is unchanged.
+- **Settings is a tab:** the tab bar is Home, Discover, Library, Settings, Search. There is no gear, sheet or Done button any more
+  (`AppRouter.showSettings/showAddons/showWidgets` select the tab and set its stack's path), which ends the doubled Done for good.
+  Home and Search reload when the viewer leaves the Settings tab, as they did when the sheet closed.
+- **One branch:** work from 2026-10-08 on lands on `claude/blusion-github-e2e-sqx5r4`. The title page keeps the inline Play row
+  (Play with Save, Watched and Trailer on one line) from `worktree-detail-backdrop-blur`, which this work was merged with.
 - **Home:** Returning after a cancelled load starts a fresh observation; cancellation no longer replaces rows with errors. Two regression tests cover reload and retry. Home launch routes wait for their navigation stack; a stale Settings model preserves account credentials when changing playback.
 
 ## Test the current app
@@ -88,7 +90,7 @@ open Blusion.xcodeproj
 ```
 
 Run **Blusion → My Mac (Mac Catalyst)** with **⌘R**. Cinemeta provides browsing/search without setup.
-Use **Home gear → Settings → Addons** for stream sources, **Settings → Playback** for Infuse preferences,
+Use **Settings tab → Addons** for stream sources, **Settings → Playback** for Infuse preferences,
 and **Settings → Widgets** to customize Home.
 
 Check search → title → stream → playback → return → Continue Watching; also test saving/removing a title and editing a Home row.

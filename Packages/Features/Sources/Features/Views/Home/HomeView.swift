@@ -30,8 +30,9 @@ struct HomeView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await model.refreshContinueWatching() } }
             }
-            .onChange(of: router.isShowingSettings) { _, showing in
-                if !showing { Task { await model.load() } }
+            // Coming back from Settings: addons or widgets may have changed.
+            .onChange(of: router.tab) { old, _ in
+                if old == .settings { Task { await model.load() } }
             }
     }
 

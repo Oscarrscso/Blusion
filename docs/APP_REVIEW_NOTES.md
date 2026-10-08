@@ -9,7 +9,7 @@ local builds and screenshots do not establish App Store acceptance.
 > On first launch it installs Cinemeta, Stremio's official metadata addon, for catalogs, search, and title details; Cinemeta provides no playback streams.
 > The user can disable or remove it in Settings → Addons. Users install additional addons by manifest URL.
 >
-> For playback review, open Home's gear → Settings → Addons and install `<DEMO ADDON URL supplied by the owner>`.
+> For playback review, open the Settings tab → Addons and install `<DEMO ADDON URL supplied by the owner>`.
 > The demo addon should provide media the developer has permission to distribute. Home, Discover, Search, title details, stream selection,
 > and playback can then be reviewed. Library and Home customization under Settings → Widgets are available without a stream source.
 >

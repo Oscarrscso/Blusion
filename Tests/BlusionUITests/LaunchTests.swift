@@ -15,7 +15,7 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Discover"].exists)
         XCTAssertTrue(app.tabBars.buttons["Library"].exists)
         XCTAssertTrue(app.tabBars.buttons["Search"].exists)
-        XCTAssertTrue(app.buttons["settings.open"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
         captureScreenshot(app, named: "M0-launch")
     }
 }

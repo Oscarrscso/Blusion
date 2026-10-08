@@ -3,8 +3,7 @@ import XCTest
 extension XCTestCase {
     @MainActor
     func openSettings(_ app: XCUIApplication) {
-        app.tabBars.buttons["Home"].tap()
-        let settings = app.buttons["settings.open"]
+        let settings = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
         XCTAssertTrue(app.buttons["settings.addons"].waitForExistence(timeout: 5))
@@ -18,12 +17,11 @@ extension XCTestCase {
     }
 
     @MainActor
+    /// Settings is a tab, so leaving it is a tap on Home. (The name stayed from when it was a sheet.)
     func dismissSettings(_ app: XCUIApplication) {
-        let done = app.buttons["settings.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5))
-        done.tap()
-        let dismissed = NSPredicate(format: "exists == false")
-        wait(for: [XCTNSPredicateExpectation(predicate: dismissed, object: done)], timeout: 5)
+        let home = app.tabBars.buttons["Home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 5))
+        home.tap()
     }
 
     func requireMediaFixtures() throws {

@@ -53,8 +53,8 @@ struct SearchView: View {
         }
         .onSubmit(of: .search) { Task { await model.submit() } }
         .task { await model.refreshAvailability() }
-        .onChange(of: router.isShowingSettings) { _, showing in
-            if !showing { Task { await model.refreshAvailability() } }
+        .onChange(of: router.tab) { old, _ in
+            if old == .settings { Task { await model.refreshAvailability() } }
         }
         .task {
             guard let initialQuery, model.query.isEmpty else { return }

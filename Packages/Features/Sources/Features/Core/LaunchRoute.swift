@@ -8,11 +8,12 @@ import StremioKit
 /// `home`, `discover`, `library`, `search`, `search:<query>`, `detail:<type>:<id>`, `streams:<type>:<id>`,
 /// `settings`, `addons`, `widgets`, `gallery`, `gallery:<section>`, `player`.
 public struct LaunchRoute: Sendable, Equatable {
+    /// The tab bar, in order: Home, Discover, Library, Settings, Search.
     public enum Tab: String, Sendable, Hashable, CaseIterable {
-        case home, discover, library, search
+        case home, discover, library, settings, search
     }
 
-    /// Settings, or one of the screens inside it.
+    /// Settings, or one of the screens inside it. They open on the Settings tab.
     public enum Sheet: String, Sendable, Equatable {
         case settings, addons, widgets
     }
