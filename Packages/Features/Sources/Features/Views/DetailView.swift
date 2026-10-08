@@ -130,7 +130,7 @@ struct DetailView: View {
     }
 
     private var saveAction: some View {
-        CircleActionButton(title: "Add", systemImage: "plus", isOn: model.isInLibrary, onTitle: "Added", onSystemImage: "checkmark") {
+        CircleActionButton(title: "Save", systemImage: "bookmark", isOn: model.isInLibrary, onTitle: "Saved", onSystemImage: "bookmark.fill") {
             Task {
                 await model.toggleLibrary()
                 await titleActions.refresh()
@@ -144,7 +144,7 @@ struct DetailView: View {
     private var watchedAction: some View {
         let request = model.movieRequest
         let watched = model.isWatched(request)
-        return CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+        return CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched) {
             Task {
                 await model.setWatched(!watched, for: request)
                 await titleActions.refresh()
