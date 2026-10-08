@@ -28,12 +28,12 @@ import StremioKitTestSupport
     @Test func homeIsReleasedAfterItsObservationIsCancelled() async throws {
         expectNoLeaks(try await survivors {
             let services = try await mockServices()
-            let model = BoardViewModel(services: services)
+            let model = HomeViewModel(services: services)
             let observing = Task { await model.observeAddons() }
             try await waitUntil { model.phase == .ready }
             observing.cancel()
             await observing.value
-            return [("BoardViewModel", model), ("AddonRegistry", services.registry)]
+            return [("HomeViewModel", model), ("AddonRegistry", services.registry)]
         })
     }
 
@@ -76,7 +76,7 @@ import StremioKitTestSupport
         expectNoLeaks(try await survivors {
             let model = StreamPickerViewModel(request: StreamRequest(type: "movie", id: "mock:movie1", title: "Mock Movie 1"), services: try await mockServices())
             await model.load()
-            _ = model.playBest()
+            _ = await model.playBest()
             return [("StreamPickerViewModel", model)]
         })
     }

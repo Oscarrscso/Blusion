@@ -155,6 +155,47 @@ import StremioKitTestSupport
         #expect(l.best?.title == "plain")
     }
 
+    // MARK: hand-offs
+
+    @Test func bestIsAHandOffWhenItRanksFirst() {
+        var l = listing([a], config: PolicyConfiguration(playerPreference: .infuse, installedPlayers: [.infuse]))
+        l.apply(S.response(a, [S.direct("1080 mp4", "https://a.example.com/1.mp4", description: "1080p"),
+                               S.direct("4K mkv", "https://a.example.com/2.mkv", description: "2160p")]))
+        #expect(l.items.map(\.title) == ["4K mkv", "1080 mp4"], "with Infuse both are hand-offs, so quality decides")
+        #expect(l.best?.title == "4K mkv")
+        #expect(l.best?.route.handoffTarget?.player == .infuse)
+        #expect(l.playable.isEmpty, "nothing is left for Blusion's own player")
+    }
+
+    @Test func infuseWhenNeededLeavesPlayableStreamsForTheAutoAdvanceList() {
+        var l = listing([a], config: PolicyConfiguration(playerPreference: .infuseWhenNeeded, installedPlayers: [.infuse]))
+        l.apply(S.response(a, [S.direct("1080 mp4", "https://a.example.com/1.mp4", description: "1080p"),
+                               S.direct("4K mkv", "https://a.example.com/2.mkv", description: "2160p")]))
+        #expect(l.best?.title == "4K mkv", "the hand-off ranks first")
+        #expect(l.playable.map(\.title) == ["1080 mp4"], "auto-advance only uses what Blusion plays itself")
+    }
+
+    @Test func withoutAnInstalledPlayerTheMKVIsUnsupportedAndNotWatchable() {
+        var l = listing([a], config: PolicyConfiguration(playerPreference: .infuseWhenNeeded))
+        l.apply(S.response(a, [S.direct("4K mkv", "https://a.example.com/2.mkv", description: "2160p")]))
+        #expect(l.items.first?.route == .unsupported(.matroska))
+        #expect(l.best == nil)
+    }
+
+    @Test func bestIsTheNativeStreamWhenItRanksFirst() {
+        var l = listing([a], config: PolicyConfiguration(playerPreference: .infuseWhenNeeded, installedPlayers: [.infuse]))
+        l.apply(S.response(a, [S.direct("1080 mp4", "https://a.example.com/1.mp4", description: "1080p"),
+                               S.direct("720 mkv", "https://a.example.com/2.mkv", description: "720p")]))
+        #expect(l.best?.title == "1080 mp4")
+        #expect(l.best?.route.isPlayable == true)
+    }
+
+    @Test func bestIsNilWhenOnlyExternalOrUnsupportedStreamsRemain() {
+        var l = listing([a])
+        l.apply(S.response(a, [S.direct("mkv", "https://a.example.com/1.mkv", description: "2160p"), S.external("page")]))
+        #expect(l.best == nil, "unsupported and external streams are not watchable in Blusion's default setup")
+    }
+
     @Test func bingeContextComesFromTheStream() {
         var l = listing([a])
         l.apply(S.response(a, [S.direct("x", "https://a.example.com/1.mp4", bingeGroup: "grp-1080")]))

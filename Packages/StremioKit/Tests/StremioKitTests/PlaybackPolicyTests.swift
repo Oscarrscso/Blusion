@@ -115,11 +115,104 @@ import StremioKitTestSupport
 
     @Test func routeClassesOrderNativeFirstAndHiddenLast() {
         let u = url("https://e.com/a.mp4")
-        let routes: [PlaybackRoute] = [.hidden(.usenetOrArchive), .unsupported(nil), .external(u), .fallback(u, .audioCodec), .native(u)]
-        #expect(routes.sorted { $0.sortClass < $1.sortClass } == routes.reversed())
+        let routes: [PlaybackRoute] = [.hidden(.usenetOrArchive), .external(u), .unsupported(nil), .fallback(u, .audioCodec), .native(u)]
+        #expect(routes.sorted { $0.sortClass < $1.sortClass } == routes.reversed(), "native, fallback, unsupported, external, hidden")
+        #expect(PlaybackRoute.handoff(.infuse, u).sortClass == PlaybackRoute.native(u).sortClass)
         #expect(PlaybackRoute.native(u).isPlayable && PlaybackRoute.fallback(u, .audioCodec).isPlayable)
         #expect(!PlaybackRoute.external(u).isPlayable && !PlaybackRoute.unsupported(nil).isPlayable)
         #expect(PlaybackRoute.hidden(.needsStreamingServer).isHidden && !PlaybackRoute.native(u).isHidden)
         #expect(HiddenReason.needsStreamingServer.hint.contains("streaming server"))
+    }
+
+    // MARK: player preference
+
+    /// Infuse counts as installed unless a test says otherwise: hand-offs need it.
+    private func routed(_ stream: AddonStream, as preference: PlayerPreference, fallback: Bool = false, server: URL? = nil,
+                        installed: Set<ExternalPlayer> = [.infuse]) -> PlaybackRoute {
+        PlaybackPolicy.route(for: stream, container: nil, quality: StreamQuality.parse(stream),
+                             config: PolicyConfiguration(fallbackEngineAvailable: fallback, streamingServerURL: server, playerPreference: preference,
+                                                         installedPlayers: installed))
+    }
+
+    @Test func aPreferenceForAPlayerThatIsNotInstalledChangesNothing() {
+        let mkv = S.direct("x", "https://cdn.example.com/a.mkv")
+        let mp4 = S.direct("x", "https://cdn.example.com/a.mp4")
+        #expect(routed(mkv, as: .infuseWhenNeeded, installed: []) == .unsupported(.matroska), "no Infuse, so nothing to hand off to")
+        #expect(routed(mkv, as: .infuse, installed: []) == .unsupported(.matroska))
+        #expect(routed(mp4, as: .infuse, installed: []) == .native(url("https://cdn.example.com/a.mp4")))
+        #expect(routed(mkv, as: .infuseWhenNeeded, installed: [.infuse]) == .handoff(.infuse, url("https://cdn.example.com/a.mkv")))
+        #expect(PolicyConfiguration().installedPlayers.isEmpty, "nothing is assumed installed")
+    }
+
+    @Test func builtInIsTheDefaultAndChangesNothing() {
+        let mp4 = S.direct("x", "https://cdn.example.com/a.mp4")
+        let mkv = S.direct("x", "https://cdn.example.com/a.mkv")
+        #expect(routed(mp4, as: .builtIn) == .native(url("https://cdn.example.com/a.mp4")))
+        #expect(routed(mkv, as: .builtIn) == .unsupported(.matroska))
+        #expect(routed(mkv, as: .builtIn, fallback: true) == .fallback(url("https://cdn.example.com/a.mkv"), .container(.matroska)))
+        #expect(PolicyConfiguration().playerPreference == .builtIn)
+    }
+
+    @Test func infuseTakesEveryStreamItCanPlay() {
+        let mp4 = S.direct("x", "https://cdn.example.com/a.mp4")
+        let mkv = S.direct("x", "https://cdn.example.com/a.mkv")
+        #expect(routed(mp4, as: .infuse) == .handoff(.infuse, url("https://cdn.example.com/a.mp4")), "an MP4 AVPlayer could play still goes to Infuse")
+        #expect(routed(mkv, as: .infuse) == .handoff(.infuse, url("https://cdn.example.com/a.mkv")))
+        #expect(routed(mkv, as: .infuse, fallback: true) == .handoff(.infuse, url("https://cdn.example.com/a.mkv")), "Infuse comes before the fallback engine")
+    }
+
+    @Test func infuseKeepsStreamsWithRequestHeadersInBlusion() {
+        let proxied = S.direct("x", "https://cdn.example.com/a.mkv", proxy: ["Referer": "https://example.com"])
+        #expect(routed(proxied, as: .infuse) == .unsupported(.matroska))
+        #expect(routed(proxied, as: .infuse, fallback: true) == .fallback(url("https://cdn.example.com/a.mkv"), .container(.matroska)))
+    }
+
+    @Test func infuseWhenNeededOnlyTakesWhatBlusionCannotPlay() {
+        let mp4 = S.direct("x", "https://cdn.example.com/a.mp4")
+        let mkv = S.direct("x", "https://cdn.example.com/a.mkv")
+        let dts = S.direct("1080p DTS", "https://cdn.example.com/a.mp4")
+        #expect(routed(mp4, as: .infuseWhenNeeded) == .native(url("https://cdn.example.com/a.mp4")))
+        #expect(routed(mkv, as: .infuseWhenNeeded) == .handoff(.infuse, url("https://cdn.example.com/a.mkv")))
+        #expect(routed(dts, as: .infuseWhenNeeded) == .handoff(.infuse, url("https://cdn.example.com/a.mp4")), "DTS audio that AVPlayer can't decode")
+        #expect(routed(mkv, as: .infuseWhenNeeded, fallback: true) == .fallback(url("https://cdn.example.com/a.mkv"), .container(.matroska)),
+                "the fallback engine plays it, so Infuse is not needed")
+        let proxied = S.direct("x", "https://cdn.example.com/a.mkv", proxy: ["Referer": "https://example.com"])
+        #expect(routed(proxied, as: .infuseWhenNeeded) == .unsupported(.matroska))
+    }
+
+    @Test func torrentsReachInfuseOnlyThroughAStreamingServer() {
+        let torrent = S.torrent("t", hash: "0123456789abcdef0123456789abcdef01234567", index: 3)
+        let server = url("http://192.168.1.2:11470")
+        let playable = url("http://192.168.1.2:11470/0123456789abcdef0123456789abcdef01234567/3")
+        #expect(routed(torrent, as: .infuse) == .hidden(.needsStreamingServer))
+        #expect(routed(torrent, as: .infuse, server: server) == .handoff(.infuse, playable))
+        #expect(routed(torrent, as: .infuseWhenNeeded, server: server) == .native(playable), "the server's file is an unknown format, which AVPlayer tries first")
+        #expect(routed(torrent, as: .builtIn, server: server) == .native(playable))
+    }
+
+    @Test func externalAndYouTubeStreamsNeverChange() {
+        for preference in PlayerPreference.allCases {
+            #expect(routed(S.youtube("x", "abc123"), as: preference) == .external(url("https://www.youtube.com/watch?v=abc123")), "\(preference)")
+            #expect(routed(S.external("x", "https://example.com/w"), as: preference) == .external(url("https://example.com/w")), "\(preference)")
+            #expect(routed(S.archive("x"), as: preference) == .hidden(.usenetOrArchive), "\(preference)")
+        }
+    }
+
+    @Test func aHandoffIsWatchableButNotPlayableInBlusion() {
+        let handoff = PlaybackRoute.handoff(.infuse, url("https://cdn.example.com/a.mkv"))
+        #expect(handoff.isWatchable && !handoff.isPlayable && handoff.playableURL == nil)
+        #expect(handoff.handoffTarget?.player == .infuse && handoff.handoffTarget?.url == url("https://cdn.example.com/a.mkv"))
+        #expect(PlaybackRoute.native(url("https://e.com/a.mp4")).handoffTarget == nil)
+        #expect(handoff.sortClass == PlaybackRoute.native(url("https://e.com/a.mp4")).sortClass, "quality decides between a hand-off and a native stream")
+        #expect(!PlaybackRoute.external(url("https://e.com/w")).isWatchable && !PlaybackRoute.unsupported(.avi).isWatchable)
+        #expect(PlaybackRoute.fallback(url("https://e.com/a.mkv"), .audioCodec).isWatchable)
+    }
+
+    @Test func playbackURLIsTheStreamItselfWhenBlusionCanReachIt() {
+        let direct = S.direct("x", "https://cdn.example.com/a.mkv")
+        #expect(PlaybackPolicy.playbackURL(for: direct, config: PolicyConfiguration()) == url("https://cdn.example.com/a.mkv"))
+        #expect(PlaybackPolicy.playbackURL(for: S.youtube("x"), config: PolicyConfiguration()) == nil)
+        #expect(PlaybackPolicy.playbackURL(for: S.external("x"), config: PolicyConfiguration()) == nil)
+        #expect(PlaybackPolicy.playbackURL(for: S.torrent("x"), config: PolicyConfiguration()) == nil, "no streaming server")
     }
 }

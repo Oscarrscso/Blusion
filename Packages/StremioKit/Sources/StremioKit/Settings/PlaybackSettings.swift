@@ -10,12 +10,26 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var streamingServerURL: String?
     /// Lets the user turn the fallback engine off (it is also off when no engine is linked).
     public var fallbackEngineEnabled: Bool
+    /// The Trakt API client ID the user supplies, needed to read Trakt lists. Stored as a secret, never shipped with the app.
+    public var traktClientID: String?
+    /// Whether streams play in Blusion or are handed to another player app (Infuse).
+    public var playerPreference: PlayerPreference
+    /// IMDb and Letterboxd ratings on posters.
+    public var showsPosterRatings: Bool
+    /// Play starts the best stream at once instead of showing the list of streams first.
+    public var autoPlayBestStream: Bool
 
-    public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true) {
+    public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
+                traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
+                autoPlayBestStream: Bool = false) {
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL
         self.fallbackEngineEnabled = fallbackEngineEnabled
+        self.traktClientID = traktClientID
+        self.playerPreference = playerPreference
+        self.showsPosterRatings = showsPosterRatings
+        self.autoPlayBestStream = autoPlayBestStream
     }
 
     public var serverURL: URL? {
@@ -38,7 +52,8 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var rankingPreferences: RankingPreferences { RankingPreferences(preferredResolution: preferredResolution) }
 
     public func policy(fallbackEngineLinked: Bool) -> PolicyConfiguration {
-        PolicyConfiguration(fallbackEngineAvailable: fallbackEngineLinked && fallbackEngineEnabled, streamingServerURL: serverURL)
+        PolicyConfiguration(fallbackEngineAvailable: fallbackEngineLinked && fallbackEngineEnabled, streamingServerURL: serverURL,
+                            playerPreference: playerPreference)
     }
 }
 

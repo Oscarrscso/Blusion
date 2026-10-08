@@ -1,0 +1,130 @@
+#if canImport(UIKit)
+import StremioKit
+import SwiftUI
+
+/// Home: the spotlight, then one section per widget of the user's layout (or the automatic one). Each section fills in as its addon
+/// answers, and every state (loading, nothing installed, nothing to browse, an issue, offline) has a look of its own.
+struct HomeView: View {
+    @State private var model: HomeViewModel
+    @Environment(AppRouter.self) private var router
+    /// True once the content has scrolled past the top of the spotlight, when the navigation bar takes a background and a title.
+    @State private var isScrolled = false
+
+    init(services: AppServices) {
+        _model = State(initialValue: HomeViewModel(services: services))
+    }
+
+    var body: some View {
+        content
+            .navigationTitle(spotlightIsAtTop ? "" : "Home")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackgroundVisibility(spotlightIsAtTop ? .hidden : .automatic, for: .navigationBar)
+            .task { await model.observeAddons() }
+            .onAppear { Task { await model.refreshContinueWatching() } }
+            .refreshable { await model.refresh() }
+    }
+
+    /// The spotlight covers the top of the screen until the content moves past it: the bar is then clear and has no title.
+    private var spotlightIsAtTop: Bool {
+        !isScrolled && heroIsFirst
+    }
+
+    /// The spotlight is the first section: the scroll view then runs under the status bar, so its artwork fills the top of the screen.
+    private var heroIsFirst: Bool {
+        guard let first = model.sections.first, case .hero = first.widget.content else { return false }
+        return true
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.phase {
+        case .loading:
+            HomeLoadingView()
+        case .noAddons:
+            EmptyAddonsView(onOpenAddons: { router.showAddons() })
+                .screenBackground()
+        case .noCatalogs:
+            EmptyStateView("Nothing to browse", systemImage: "rectangle.stack",
+                           message: "None of your addons offers catalogs. Install one that does, or search by title.",
+                           actionTitle: "Open Addons", action: { router.showAddons() })
+                .accessibilityIdentifier("board.noCatalogs")
+                .screenBackground()
+        case .ready:
+            ready
+        }
+    }
+
+    private var ready: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.rowSpacing) {
+                if model.isOffline {
+                    ContinueWatchingRow(items: model.continueWatching)
+                    OfflineBanner()
+                } else {
+                    ForEach(model.sections) { section in
+                        sectionView(section)
+                    }
+                }
+                customizeButton
+            }
+            .padding(.bottom, Theme.Spacing.xxl)
+        }
+        .accessibilityIdentifier("board.rows")
+        .screenBackground()
+        .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 160 }, action: { _, scrolled in isScrolled = scrolled })
+        .ignoresSafeArea(edges: heroIsFirst ? .top : [])
+    }
+
+    @ViewBuilder
+    private func sectionView(_ section: HomeViewModel.Section) -> some View {
+        switch section.widget.content {
+        case .hero:
+            HeroSection(section: section, onRetry: { retry(section) })
+        case .row(let row):
+            WidgetRow(section: section, row: row, onRetry: { retry(section) })
+        case .collection(let items):
+            CollectionRow(widget: section.widget, items: items)
+        case .continueWatching:
+            ContinueWatchingRow(items: model.continueWatching)
+        }
+    }
+
+    private func retry(_ section: HomeViewModel.Section) {
+        Task { await model.retry(sectionID: section.id) }
+    }
+
+    private var customizeButton: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button {
+                router.showWidgets()
+            } label: {
+                Label("Customize Home", systemImage: "slider.horizontal.3")
+            }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("home.customize")
+            Spacer(minLength: 0)
+        }
+        .padding(.top, Theme.Spacing.s)
+    }
+}
+
+/// What Home shows before its layout is known: the spotlight and two rows of placeholders, where the real sections will go.
+private struct HomeLoadingView: View {
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Theme.rowSpacing) {
+                HeroPlaceholder()
+                RowPlaceholder(header: .bar, aspect: .poster, size: .medium)
+                RowPlaceholder(header: .bar, aspect: .wide, size: .large)
+            }
+            .padding(.bottom, Theme.Spacing.xxl)
+        }
+        .scrollDisabled(true)
+        .screenBackground()
+        .ignoresSafeArea(edges: .top)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+#endif

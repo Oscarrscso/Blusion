@@ -16,6 +16,12 @@ public struct RankedStream: Sendable, Equatable, Identifiable {
 
     public var title: String { stream.displayName }
     public var bingeContext: BingeContext? { stream.behaviorHints.bingeGroup.map { BingeContext(bingeGroup: $0, addonID: addon.id) } }
+
+    /// The same stream with another route: what the picker would do with it in Blusion's own player, for instance.
+    public func rerouted(_ route: PlaybackRoute) -> RankedStream {
+        RankedStream(id: id, stream: stream, addon: addon, alsoProvidedBy: alsoProvidedBy, quality: quality, container: container, route: route,
+                     addonIndex: addonIndex, indexInAddon: indexInAddon)
+    }
 }
 
 public struct RankingPreferences: Sendable, Equatable {
@@ -37,6 +43,14 @@ public enum StreamIdentity {
         case .external(let url): return "external:" + normalised(url)
         case .archive(let kind): return "archive:\(kind)"
         }
+    }
+
+    /// The key of a whole stream. Playable sources are the same stream whenever the source is the same. Links are different:
+    /// aggregating addons send many notes (statistics, removal reasons, errors) that all point at one web page, and each note is
+    /// worth keeping, so a link's name is part of its identity.
+    public static func key(for stream: AddonStream) -> String {
+        guard case .external = stream.source else { return key(for: stream.source) }
+        return key(for: stream.source) + "|" + stream.displayName
     }
 
     private static func normalised(_ url: URL) -> String {

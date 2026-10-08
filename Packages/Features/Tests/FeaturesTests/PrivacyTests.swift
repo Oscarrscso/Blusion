@@ -53,8 +53,8 @@ import StremioKitTestSupport
         #expect(addons.lastInstalledName != nil || addons.errorMessage != nil)
 
         // Browse, search, detail.
-        let board = BoardViewModel(services: services)
-        await board.load()
+        let home = HomeViewModel(services: services)
+        await home.load()
         let discover = DiscoverViewModel(services: services)
         await discover.loadSources()
         await discover.loadMore()
@@ -69,7 +69,7 @@ import StremioKitTestSupport
         // Streams and playback with subtitles.
         let picker = StreamPickerViewModel(request: detail.movieRequest, services: services)
         await picker.load()
-        guard case .play(let plan)? = picker.playBest() else { Issue.record("expected a playable stream"); return }
+        guard case .play(let plan)? = await picker.playBest() else { Issue.record("expected a playable stream"); return }
         let player = PlayerViewModel(plan: plan, services: services)
         await player.start()
         engines.made.last?.simulate(position: 25)

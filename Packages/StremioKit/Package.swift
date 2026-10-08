@@ -4,7 +4,7 @@ import PackageDescription
 // Foundation-only. Builds for iOS, macOS and Linux so `swift test` runs on the host (PLAN §1).
 let package = Package(
     name: "StremioKit",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.iOS("26.0"), .macOS(.v14)],
     products: [
         .library(name: "StremioKit", targets: ["StremioKit"]),
         // Mock addon launcher, stub transport and sample addons for test targets of this and other packages. Never linked into the app.

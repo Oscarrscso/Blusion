@@ -76,7 +76,18 @@ import StremioKit
         #expect(ProgressRecorder.resumePosition(for: progress(60)) == 60)
         #expect(ProgressRecorder.resumePosition(for: progress(96)) == 0, "nearly finished: start over")
         #expect(ProgressRecorder.resumePosition(for: progress(60, watched: true)) == 0)
-        #expect(ProgressRecorder.resumePosition(for: progress(60, 0)) == 0)
+        #expect(ProgressRecorder.resumePosition(for: progress(60, 0)) == 60, "an unknown length no longer means start over: see anUnknownLength...")
+        #expect(ProgressRecorder.resumePosition(for: progress(30), policy: ProgressPolicy(minimumResume: 60)) == 0)
+    }
+
+    @Test func anUnknownLengthResumesWhereTheViewerStopped() {
+        func progress(_ position: TimeInterval, watched: Bool = false) -> WatchProgress {
+            WatchProgress(id: "x", type: "movie", contentID: "x", title: "", position: position, duration: 0, isWatched: watched, updatedAt: t0)
+        }
+        #expect(ProgressRecorder.resumePosition(for: progress(60)) == 60, "a hand-off reported a position but no length")
+        #expect(ProgressRecorder.resumePosition(for: progress(4)) == 0, "barely started")
+        #expect(ProgressRecorder.resumePosition(for: progress(5)) == 5)
+        #expect(ProgressRecorder.resumePosition(for: progress(60, watched: true)) == 0, "watched starts over")
         #expect(ProgressRecorder.resumePosition(for: progress(30), policy: ProgressPolicy(minimumResume: 60)) == 0)
     }
 

@@ -128,4 +128,29 @@ private let expectations: [ManifestExpectation] = [
         let issue = try #require(m.validate().first)
         #expect(issue.description.hasPrefix("error:"))
     }
+
+    @Test func declaredCatalogsAreInstallableWithoutAResourcesList() throws {
+        let json = #"{"id":"org.example.catalogsonly","name":"Catalogs Only","version":"1","catalogs":[{"type":"movie","id":"top","name":"Top"}]}"#
+        let m = try ResponseDecoder.manifest(from: Data(json.utf8))
+        #expect(m.resources.isEmpty)
+        #expect(m.isInstallable)
+        #expect(m.validate().isEmpty)
+        #expect(m.browsableCatalogs().map(\.key) == ["movie/top"])
+    }
+
+    @Test func declaredCatalogsStayInstallableWhenResourcesListNothingUsable() {
+        let m = Manifest(id: "c", name: "C", version: "1", resources: [ResourceDescriptor(name: "addon_catalog")], types: ["movie"],
+                         catalogs: [CatalogDescriptor(type: "movie", id: "top")])
+        #expect(m.isInstallable)
+        #expect(m.validate().isEmpty)
+    }
+
+    @Test func noResourcesAndNoCatalogsStayUninstallable() {
+        let nothing = Manifest(id: "a", name: "A", version: "1")
+        #expect(Set(nothing.validate().map(\.code)) == [.noResources])
+        #expect(!nothing.isInstallable)
+        let addonCatalogOnly = Manifest(id: "b", name: "B", version: "1", resources: [ResourceDescriptor(name: "addon_catalog")])
+        #expect(Set(addonCatalogOnly.validate().map(\.code)) == [.noUsableResources])
+        #expect(!addonCatalogOnly.isInstallable)
+    }
 }

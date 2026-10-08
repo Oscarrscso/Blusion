@@ -5,10 +5,17 @@ public struct PolicyConfiguration: Sendable, Equatable {
     public var fallbackEngineAvailable: Bool
     /// A user-supplied Stremio-compatible streaming server. Without one, `infoHash` streams are hidden (ADR-004).
     public var streamingServerURL: URL?
+    /// Whether streams go to Blusion's own player or are handed to another player app.
+    public var playerPreference: PlayerPreference
+    /// The player apps installed on this device. Streams are only handed to one of these: the app itself can't be asked from here.
+    public var installedPlayers: Set<ExternalPlayer>
 
-    public init(fallbackEngineAvailable: Bool = false, streamingServerURL: URL? = nil) {
+    public init(fallbackEngineAvailable: Bool = false, streamingServerURL: URL? = nil, playerPreference: PlayerPreference = .builtIn,
+                installedPlayers: Set<ExternalPlayer> = []) {
         self.fallbackEngineAvailable = fallbackEngineAvailable
         self.streamingServerURL = streamingServerURL
+        self.playerPreference = playerPreference
+        self.installedPlayers = installedPlayers
     }
 }
 
@@ -35,6 +42,8 @@ public enum PlaybackRoute: Sendable, Equatable {
     case native(URL)
     /// The fallback engine (MKV, DTS, …).
     case fallback(URL, FallbackReason)
+    /// Plays in another app the user chose (Infuse). The URL is the stream itself.
+    case handoff(ExternalPlayer, URL)
     /// Opened outside the app (YouTube, external links).
     case external(URL)
     /// Playable in principle, but no engine for it is available: shown as "unsupported format", with the next stream offered.
@@ -42,6 +51,7 @@ public enum PlaybackRoute: Sendable, Equatable {
     /// Not shown at all (a hint is shown instead).
     case hidden(HiddenReason)
 
+    /// The URL Blusion plays itself. nil for a hand-off: another app plays that one (see `handoffTarget`).
     public var playableURL: URL? {
         switch self {
         case .native(let url), .fallback(let url, _): return url
@@ -49,19 +59,35 @@ public enum PlaybackRoute: Sendable, Equatable {
         }
     }
 
+    /// The app and the stream of a hand-off.
+    public var handoffTarget: (player: ExternalPlayer, url: URL)? {
+        if case .handoff(let player, let url) = self { return (player, url) }
+        return nil
+    }
+
+    /// Blusion or another app the user chose can play it: the streams the picker offers as "play".
+    public var isWatchable: Bool {
+        switch self {
+        case .native, .fallback, .handoff: return true
+        case .external, .unsupported, .hidden: return false
+        }
+    }
+
+    /// Blusion's own player can play it. Auto-advance and binge selection only use in-app playable streams.
     public var isPlayable: Bool { playableURL != nil }
     public var isHidden: Bool {
         if case .hidden = self { return true }
         return false
     }
 
-    /// Lower sorts first: native, fallback, external, unsupported, hidden.
+    /// Lower sorts first: native and hand-offs (quality decides between them), fallback, unsupported, external, hidden. Links to web pages
+    /// (aggregators' summaries, for instance) sort below the streams the user can actually play.
     public var sortClass: Int {
         switch self {
-        case .native: return 0
+        case .native, .handoff: return 0
         case .fallback: return 1
-        case .external: return 2
-        case .unsupported: return 3
+        case .unsupported: return 2
+        case .external: return 3
         case .hidden: return 4
         }
     }
@@ -73,10 +99,8 @@ public enum PlaybackPolicy {
         switch stream.source {
         case .direct(let url):
             return directRoute(url, stream: stream, container: container, quality: quality, config: config)
-        case .torrent(let hash, let index, _):
-            guard let server = config.streamingServerURL, let url = StreamingServerRoute.url(server: server, infoHash: hash, fileIndex: index) else {
-                return .hidden(.needsStreamingServer)
-            }
+        case .torrent:
+            guard let url = playbackURL(for: stream, config: config) else { return .hidden(.needsStreamingServer) }
             return directRoute(url, stream: stream, container: container, quality: quality, config: config)
         case .youtube(let id):
             guard let url = URL(string: "https://www.youtube.com/watch?v=\(id)") else { return .hidden(.usenetOrArchive) }
@@ -88,8 +112,44 @@ public enum PlaybackPolicy {
         }
     }
 
+    /// The URL a stream plays from, when Blusion can hand it on: a direct link, or a torrent file on the configured streaming server.
+    /// nil for YouTube, external pages, archives and torrents without a server.
+    public static func playbackURL(for stream: AddonStream, config: PolicyConfiguration) -> URL? {
+        switch stream.source {
+        case .direct(let url):
+            return url
+        case .torrent(let hash, let index, _):
+            guard let server = config.streamingServerURL else { return nil }
+            return StreamingServerRoute.url(server: server, infoHash: hash, fileIndex: index)
+        case .youtube, .external, .archive:
+            return nil
+        }
+    }
+
+    /// Blusion's own route comes first. The preference may then hand the stream to Infuse, when Infuse is installed. Infuse fetches the
+    /// stream itself and cannot send request headers, so a stream that needs them stays in Blusion.
     private static func directRoute(_ url: URL, stream: AddonStream, container sniffed: MediaContainer?, quality: StreamQuality,
                                     config: PolicyConfiguration) -> PlaybackRoute {
+        let inApp = inAppRoute(url, stream: stream, container: sniffed, quality: quality, config: config)
+        let wantsHandoff: Bool
+        switch config.playerPreference {
+        case .builtIn:
+            wantsHandoff = false
+        case .infuse:
+            wantsHandoff = true
+        case .infuseWhenNeeded:
+            if case .unsupported = inApp { wantsHandoff = true } else { wantsHandoff = false }
+        }
+        let headers = stream.behaviorHints.proxyHeaders?.request ?? [:]
+        guard wantsHandoff, let player = config.playerPreference.externalPlayer, config.installedPlayers.contains(player),
+              player.canPlay(streamURL: url, headers: headers) else {
+            return inApp
+        }
+        return .handoff(player, url)
+    }
+
+    private static func inAppRoute(_ url: URL, stream: AddonStream, container sniffed: MediaContainer?, quality: StreamQuality,
+                                   config: PolicyConfiguration) -> PlaybackRoute {
         let known = sniffed ?? ContainerSniffer.container(url: url, filename: stream.behaviorHints.filename)
         if let known {
             if known.isNativelyPlayable && !quality.audioNeedsFallbackEngine { return .native(url) }

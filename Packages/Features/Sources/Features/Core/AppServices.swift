@@ -15,21 +15,36 @@ public struct AppServices: Sendable {
     public let settings: any SettingsStore
     public let progress: any ProgressStore
     public let library: any LibraryStore
+    /// The user's Home layout (nil inside means "automatic").
+    public let widgets: any WidgetStore
+    /// Loads the items of Home widgets, with an in-memory cache.
+    public let widgetContent: WidgetContentService
+    /// IMDb and Letterboxd ratings for poster badges.
+    public let posterRatings: PosterRatingsStore
     public let makeEngine: EngineFactory
     /// True once a fallback engine (M6) is linked into the app.
     public let fallbackEngineLinked: Bool
+    /// Streams handed to another player app, waiting for its callback to record where the viewer stopped.
+    public let handoffs: any HandoffStore
 
     public init(registry: AddonRegistry, client: AddonClient, browse: BrowseService? = nil, streams: StreamService? = nil,
                 subtitles: SubtitleService? = nil, settings: (any SettingsStore)? = nil, progress: (any ProgressStore)? = nil,
-                library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false) {
+                library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
+                widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
+                handoffs: (any HandoffStore)? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
         self.streams = streams ?? StreamService(registry: registry, client: client)
         self.subtitles = subtitles ?? SubtitleService(registry: registry, client: client)
-        self.settings = settings ?? InMemorySettingsStore()
+        let settings = settings ?? InMemorySettingsStore()
+        self.settings = settings
         self.progress = progress ?? InMemoryProgressStore()
         self.library = library ?? InMemoryLibraryStore()
+        self.widgets = widgets ?? InMemoryWidgetStore()
+        self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings)
+        self.posterRatings = posterRatings ?? PosterRatingsStore()
+        self.handoffs = handoffs ?? InMemoryHandoffStore()
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
     }

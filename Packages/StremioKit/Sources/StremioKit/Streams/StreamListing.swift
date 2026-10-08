@@ -67,10 +67,10 @@ public struct StreamListing: Sendable, Equatable {
         }
     }
 
-    /// Best playable stream overall (native first).
-    public var best: RankedStream? { items.first { $0.route.isPlayable } }
+    /// The best stream the user can start, in Blusion or in the app they chose. Ranking decides between the two kinds.
+    public var best: RankedStream? { items.first { $0.route.isWatchable } }
 
-    /// Every playable stream, best first: the coordinator's auto-advance list.
+    /// Every stream Blusion's own player can play, best first: the coordinator's auto-advance list.
     public var playable: [RankedStream] { items.filter { $0.route.isPlayable } }
 
     // MARK: Updates
@@ -87,7 +87,7 @@ public struct StreamListing: Sendable, Equatable {
             entries.removeAll { $0.addon.id == response.addon.id }
             for (index, stream) in streams.enumerated() {
                 entries.append(Entry(addon: response.addon, addonIndex: addonIndex, indexInAddon: index, stream: stream,
-                                     key: StreamIdentity.key(for: stream.source)))
+                                     key: StreamIdentity.key(for: stream)))
             }
         }
         rebuild()

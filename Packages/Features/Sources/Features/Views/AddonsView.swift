@@ -1,4 +1,4 @@
-#if canImport(SwiftUI)
+#if canImport(UIKit)
 import SwiftUI
 import StremioKit
 #if canImport(UIKit)

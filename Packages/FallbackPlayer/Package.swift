@@ -5,7 +5,7 @@ import PackageDescription
 // Keeping the third-party binary dependency out of the default build means a version or API mismatch here can never break the main app.
 let package = Package(
     name: "FallbackPlayer",
-    platforms: [.iOS(.v17)],
+    platforms: [.iOS("26.0")],
     products: [
         .library(name: "FallbackPlayer", targets: ["FallbackPlayer"]),
     ],

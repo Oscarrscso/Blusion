@@ -16,6 +16,8 @@ public final class DiscoverViewModel {
 
     public private(set) var sources: [CatalogSource] = []
     public private(set) var selectedSource: CatalogSource?
+    /// The content type of `selectedSource`; nil until a source is selected.
+    public private(set) var selectedType: String?
     public private(set) var selectedGenre: String?
     public private(set) var items: [MetaPreview] = []
     public private(set) var state: State = .idle
@@ -34,12 +36,30 @@ public final class DiscoverViewModel {
     public var genres: [String] { selectedSource?.catalog.genreOptions ?? [] }
     public var hasSources: Bool { !sources.isEmpty }
 
+    /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
+    public var types: [String] {
+        var order: [String] = []
+        for source in sources where !order.contains(source.type) { order.append(source.type) }
+        return order.enumerated().sorted { lhs, rhs in
+            let (left, right) = (ContentTypeName.sortRank(lhs.element), ContentTypeName.sortRank(rhs.element))
+            return left != right ? left < right : lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    /// The sources of the selected type; every source when no type is selected.
+    public var visibleSources: [CatalogSource] {
+        guard let selectedType else { return sources }
+        return sources.filter { $0.type == selectedType }
+    }
+
     /// Refreshes the catalog list, keeping the current selection when it still exists.
+    /// Otherwise the first type (by `types`) and its first source are selected.
     public func loadSources() async {
         sources = await services.browse.catalogSources()
         if let current = selectedSource, sources.contains(current) { return }
-        guard let first = sources.first else {
+        guard let type = types.first, let first = sources.first(where: { $0.type == type }) else {
             selectedSource = nil
+            selectedType = nil
             items = []
             state = .idle
             return
@@ -47,8 +67,15 @@ public final class DiscoverViewModel {
         await select(source: first)
     }
 
+    /// Switches to a content type: selects that type's first source and reloads. Unknown types change nothing.
+    public func select(type: String) async {
+        guard let first = sources.first(where: { $0.type == type }) else { return }
+        await select(source: first)
+    }
+
     public func select(source: CatalogSource) async {
         selectedSource = source
+        selectedType = source.type
         if let genre = selectedGenre, !source.catalog.genreOptions.contains(genre) { selectedGenre = nil }
         await reload()
     }

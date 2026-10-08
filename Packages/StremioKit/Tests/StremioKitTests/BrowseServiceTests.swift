@@ -10,7 +10,7 @@ import StremioKitTestSupport
         let server: MockServer
     }
 
-    private func makeRig(visibleTypes: Set<String> = ["movie"]) throws -> Rig {
+    private func makeRig(visibleTypes: Set<String>? = nil) throws -> Rig {
         let server = try MockServer.shared()
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: server.slowDelay + 4, maxRetries: 0, retryBackoff: 0.01))
         let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
@@ -18,7 +18,7 @@ import StremioKitTestSupport
     }
 
     @Test func catalogSourcesFollowAddonOrderAndHideUnsupportedTypes() async throws {
-        let rig = try makeRig()
+        let rig = try makeRig(visibleTypes: ["movie"])
         let first = try await rig.registry.install(from: rig.server.catalogManifestURL(token: "one").absoluteString)
         _ = try await rig.registry.install(from: rig.server.streamManifestURL().absoluteString)
         let second = try await rig.registry.install(from: rig.server.catalogManifestURL(token: "two").absoluteString)
@@ -94,7 +94,7 @@ import StremioKitTestSupport
             else { body = #"{"metas":[{"id":"never"}]}"# }
             return StubTransport.response(Data(body.utf8), for: request)
         }
-        let browse = try await stubbedService(manifests: [manifest], transport: transport)
+        let browse = try await stubbedService(manifests: [manifest], transport: transport, visibleTypes: ["movie", "series"])
         let response = try #require(await browse.search("x").collect().first)
         #expect(response.value?.map(\.id) == ["tt1", "tt2", "tt3"], "catalog order kept, tt2 only once, the genre-requiring catalog skipped")
         #expect(transport.callCount == 2)
@@ -109,11 +109,11 @@ import StremioKitTestSupport
             let isGood = request.url?.path.contains("/good/") == true
             return StubTransport.response(isGood ? Data(#"{"metas":[{"id":"tt1"}]}"#.utf8) : Data(), status: isGood ? 200 : 500, for: request)
         }
-        let browse = try await stubbedService(manifests: [manifest], transport: transport)
+        let browse = try await stubbedService(manifests: [manifest], transport: transport, visibleTypes: ["movie", "series"])
         #expect(await browse.search("x").collect().first?.value?.map(\.id) == ["tt1"])
 
         let allBad = StubTransport(data: Data(), status: 500)
-        let failing = try await stubbedService(manifests: [manifest], transport: allBad)
+        let failing = try await stubbedService(manifests: [manifest], transport: allBad, visibleTypes: ["movie", "series"])
         #expect(await failing.search("x").collect().first?.error == .http(status: 500))
     }
 
@@ -175,8 +175,8 @@ import StremioKitTestSupport
         #expect(!CatalogDescriptor(type: "movie", id: "a", extra: [ExtraDescriptor(name: "skip")]).isSearchable)
     }
 
-    /// A browse service over hand-written manifests answered by `transport`.
-    private func stubbedService(manifests: [Manifest], transport: StubTransport) async throws -> BrowseService {
+    /// A browse service over hand-written manifests answered by `transport`. Every type is visible unless `visibleTypes` narrows it.
+    private func stubbedService(manifests: [Manifest], transport: StubTransport, visibleTypes: Set<String>? = nil) async throws -> BrowseService {
         let store = InMemoryAddonStore()
         let secrets = InMemorySecretStore()
         var records: [AddonRecord] = []
@@ -189,6 +189,66 @@ import StremioKitTestSupport
         let client = makeClient(transport, retries: 0)
         let registry = AddonRegistry(store: store, secrets: secrets, client: client)
         try await registry.load()
-        return BrowseService(registry: registry, client: client, visibleTypes: ["movie", "series"])
+        return BrowseService(registry: registry, client: client, visibleTypes: visibleTypes)
+    }
+
+    @Test func everyContentTypeIsListedByDefault() async throws {
+        let rig = try makeRig()
+        _ = try await rig.registry.install(from: rig.server.catalogManifestURL().absoluteString)
+        let sources = await rig.browse.catalogSources()
+        #expect(sources.map(\.catalog.id) == ["mock-movies", "mock-top", "mock-series"], "the series catalog is listed by default")
+        let series = await rig.browse.catalogSources(type: "series")
+        #expect(series.map(\.catalog.id) == ["mock-series"])
+    }
+
+    @Test func seriesCatalogsAreSearchedByDefault() async throws {
+        let manifest = Manifest(id: "shows", name: "Shows", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["series"],
+                                catalogs: [CatalogDescriptor(type: "series", id: "top", name: "Top Shows", extra: [ExtraDescriptor(name: "search")])])
+        let transport = StubTransport { request, _ in
+            let isSeriesSearch = request.url?.path.contains("/catalog/series/top/") == true
+            let body = isSeriesSearch ? #"{"metas":[{"id":"tt0903747","name":"Breaking Bad"}]}"# : #"{"metas":[]}"#
+            return StubTransport.response(Data(body.utf8), for: request)
+        }
+        let browse = try await stubbedService(manifests: [manifest], transport: transport)
+        let listed = await browse.catalogSources()
+        #expect(listed.map(\.catalog.id) == ["top"])
+        let response = try #require(await browse.search("breaking").collect().first)
+        #expect(response.value?.map(\.name) == ["Breaking Bad"])
+        #expect(response.value?.first?.type == "series", "items take the catalog's type when the addon omits it")
+    }
+
+    @Test func catalogsWithoutTheCatalogResourceAreListedAndSearched() async throws {
+        let manifest = Manifest(id: "no-resource", name: "No Resource", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["movie"],
+                                catalogs: [CatalogDescriptor(type: "movie", id: "found", name: "Found", extra: [ExtraDescriptor(name: "search")])])
+        let transport = StubTransport(data: Data(#"{"metas":[{"id":"tt1","name":"Found It"}]}"#.utf8))
+        let browse = try await stubbedService(manifests: [manifest], transport: transport)
+        let listed = await browse.catalogSources()
+        #expect(listed.map(\.catalog.id) == ["found"])
+        let addons = await browse.searchableAddons()
+        #expect(addons.map(\.name) == ["No Resource"])
+        let response = try #require(await browse.search("found").collect().first)
+        #expect(response.value?.map(\.id) == ["tt1"])
+    }
+
+    @Test func streamOnlyAddonsAreNeverSearchable() async throws {
+        let rig = try makeRig()
+        _ = try await rig.registry.install(from: rig.server.streamManifestURL().absoluteString)
+        let none = await rig.browse.searchableAddons()
+        #expect(none.isEmpty)
+        #expect(await rig.browse.search("movie 12").collect().isEmpty, "no addon is asked")
+        let catalog = try await rig.registry.install(from: rig.server.catalogManifestURL().absoluteString)
+        let found = await rig.browse.searchableAddons()
+        #expect(found == [catalog.summary])
+    }
+
+    @Test func visibleTypesNarrowListingAndSearching() async throws {
+        let seriesOnly = try makeRig(visibleTypes: ["series"])
+        _ = try await seriesOnly.registry.install(from: seriesOnly.server.catalogManifestURL().absoluteString)
+        let searchable = await seriesOnly.browse.searchableAddons()
+        #expect(searchable.isEmpty, "the mock's only searchable catalog is a movie catalog")
+        let results = await seriesOnly.browse.search("movie 1").collect()
+        #expect(results.isEmpty)
+        let sources = await seriesOnly.browse.catalogSources()
+        #expect(sources.map(\.catalog.id) == ["mock-series"])
     }
 }

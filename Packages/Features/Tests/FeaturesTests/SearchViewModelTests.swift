@@ -102,7 +102,68 @@ import StremioKitTestSupport
         model.query = "x"
         await model.submit()
         #expect(transport.callCount == 0)
-        #expect(model.showsNoResults)
+        #expect(model.showsNoSearchableAddons)
+        #expect(!model.showsNoResults, "no addon could have answered, so 'no results' would mislead")
+    }
+
+    @Test func resultsAreGroupedByTypeAndDeduplicatedAcrossAddons() async throws {
+        // Addon "a" has one movie catalog. Addon "b" has the same movie plus a movie, a channel, a series and an anime catalog, in that order.
+        let movies = Manifest(id: "a", name: "A", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                              catalogs: [CatalogDescriptor(type: "movie", id: "movies", extra: [ExtraDescriptor(name: "search")])])
+        let mixed = Manifest(id: "b", name: "B", version: "1", resources: [ResourceDescriptor(name: "catalog")],
+                             types: ["movie", "tv", "series", "anime"],
+                             catalogs: [CatalogDescriptor(type: "movie", id: "films", extra: [ExtraDescriptor(name: "search")]),
+                                        CatalogDescriptor(type: "tv", id: "channels", extra: [ExtraDescriptor(name: "search")]),
+                                        CatalogDescriptor(type: "series", id: "shows", extra: [ExtraDescriptor(name: "search")]),
+                                        CatalogDescriptor(type: "anime", id: "kitsu", extra: [ExtraDescriptor(name: "search")])])
+        let bodies = [
+            "movie/movies": #"{"metas":[{"id":"tt1","name":"Dune"},{"id":"tt2","name":"Arrival"}]}"#,
+            "movie/films": #"{"metas":[{"id":"tt1","name":"Dune"},{"id":"tt3","name":"Heat"}]}"#,
+            "tv/channels": #"{"metas":[{"id":"ch1","name":"Channel One"}]}"#,
+            "series/shows": #"{"metas":[{"id":"tt9","name":"The Wire"}]}"#,
+            "anime/kitsu": #"{"metas":[{"id":"kitsu:1","name":"Akira"}]}"#,
+        ]
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            let body = bodies.first { path.contains("/catalog/\($0.key)/") }?.value ?? #"{"metas":[]}"#
+            return StubTransport.response(Data(body.utf8), for: request)
+        }
+        let model = try await model(manifests: [movies, mixed], transport: transport)
+        model.query = "x"
+        await model.submit()
+        #expect(model.groups.map(\.type) == ["movie", "series", "tv", "anime"], "movies, then series, then other types in order of first appearance")
+        #expect(model.groups.map(\.title) == ["Movies", "Series", "Live TV", "Anime"])
+        #expect(model.groups.first?.items.map(\.name) == ["Dune", "Arrival", "Heat"], "Dune from both addons appears once, in addon order")
+        #expect(model.groups.first { $0.type == "tv" }?.items.map(\.name) == ["Channel One"])
+    }
+
+    @Test func aSeriesResultLandsInTheSeriesGroup() async throws {
+        let shows = Manifest(id: "shows", name: "Shows", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["series"],
+                             catalogs: [CatalogDescriptor(type: "series", id: "top", extra: [ExtraDescriptor(name: "search")])])
+        let model = try await model(manifests: [shows], transport: stub())
+        model.query = "wire"
+        await model.submit()
+        #expect(model.groups.map(\.title) == ["Series"])
+        #expect(model.groups.first?.items.first?.type == "series")
+        #expect(model.hasResults)
+        #expect(!model.showsNoResults)
+    }
+
+    @Test func aRegistryWithOnlyStreamAddonsSaysSoWithoutAskingAnyone() async throws {
+        let streams = Manifest(id: "streams", name: "Streams", version: "1", resources: [ResourceDescriptor(name: "stream", types: ["movie"])],
+                               types: ["movie"])
+        let transport = stub()
+        let model = try await model(manifests: [streams], transport: transport)
+        await model.refreshAvailability()
+        #expect(!model.hasSearchableAddons)
+        #expect(model.showsNoSearchableAddons)
+        model.query = "dune"
+        await model.submit()
+        #expect(model.phase == .done)
+        #expect(model.sections.isEmpty && model.failures.isEmpty)
+        #expect(!model.showsNoResults)
+        #expect(model.groups.isEmpty)
+        #expect(transport.callCount == 0)
     }
 
     @Test func aNewQueryCancelsTheRunningSearch() async throws {

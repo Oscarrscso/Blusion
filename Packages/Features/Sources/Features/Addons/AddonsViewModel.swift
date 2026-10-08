@@ -6,6 +6,12 @@ public struct SuggestedAddon: Sendable, Equatable {
     public let name: String
     public let detail: String
     public let manifestURL: String
+    /// The id in the addon's manifest, for recognising it once installed.
+    public let manifestID: String
+
+    /// Stremio's official metadata addon: catalogs, search and metadata, no streams.
+    public static let cinemeta = SuggestedAddon(name: "Cinemeta", detail: "Official catalogs and metadata (no streams)",
+                                                manifestURL: "https://v3-cinemeta.strem.io/manifest.json", manifestID: "com.linvo.cinemeta")
 }
 
 /// What the "view manifest" screen shows. Never includes the addon's URL (it may embed a token), only its host.
@@ -26,9 +32,8 @@ public struct AddonDetails: Sendable, Equatable {
 @MainActor
 @Observable
 public final class AddonsViewModel {
-    /// Offered once, on the empty state, for catalogs only. Never installed without a tap.
-    public static let suggestion = SuggestedAddon(name: "Cinemeta", detail: "Official catalogs and metadata (no streams)",
-                                                  manifestURL: "https://v3-cinemeta.strem.io/manifest.json")
+    /// Offered on the empty state. It is also the addon `DefaultAddonSeeder` installs on first launch.
+    public static let suggestion = SuggestedAddon.cinemeta
 
     public private(set) var addons: [InstalledAddon] = []
     public var installText = ""

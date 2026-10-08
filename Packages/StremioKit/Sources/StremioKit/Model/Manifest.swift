@@ -216,8 +216,11 @@ extension Manifest {
         return false
     }
 
+    /// Catalogs count as provided when the addon lists `catalog` or declares any: the Stremio core treats a non-empty
+    /// `catalogs` array as enough, and many addons leave `resources` out.
     public func provides(_ resource: ResourceKind) -> Bool {
-        resources.contains { $0.name == resource.rawValue }
+        if resource == .catalog, !catalogs.isEmpty { return true }
+        return resources.contains { $0.name == resource.rawValue }
     }
 
     /// Catalogs that can be shown as rows for one type.
@@ -265,10 +268,13 @@ extension Manifest {
         if id.isEmpty { error(.missingID, "The manifest has no id.") }
         if name.isEmpty { error(.missingName, "The manifest has no name.") }
         if version.isEmpty { warn(.missingVersion, "The manifest has no version.") }
-        if resources.isEmpty {
-            error(.noResources, "The manifest lists no resources.")
-        } else if !resources.contains(where: { ResourceKind(rawValue: $0.name)?.isUsedInV1 == true }) {
-            error(.noUsableResources, "This addon offers none of catalogs, metadata, streams or subtitles.")
+        // Declared catalogs are enough to install, even when `resources` is missing or lists nothing usable (see `provides`).
+        if catalogs.isEmpty {
+            if resources.isEmpty {
+                error(.noResources, "The manifest lists no resources.")
+            } else if !resources.contains(where: { ResourceKind(rawValue: $0.name)?.isUsedInV1 == true }) {
+                error(.noUsableResources, "This addon offers none of catalogs, metadata, streams or subtitles.")
+            }
         }
         for descriptor in resources where !Self.knownResources.contains(descriptor.name) {
             warn(.unknownResource, "Unknown resource “\(descriptor.name)” is ignored.")

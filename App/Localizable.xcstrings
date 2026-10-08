@@ -155,6 +155,17 @@
         }
       }
     },
+    "Choose which rows appear on Home.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose which rows appear on Home."
+          }
+        }
+      }
+    },
     "Clear data": {
       "extractionState": "manual",
       "localizations": {
@@ -188,6 +199,17 @@
         }
       }
     },
+    "Customize Home": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customize Home"
+          }
+        }
+      }
+    },
     "Delay +0.5 s": {
       "extractionState": "manual",
       "localizations": {
@@ -195,6 +217,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delay +0.5 s"
+          }
+        }
+      }
+    },
+    "Design gallery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Design gallery"
+          }
+        }
+      }
+    },
+    "Details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
           }
         }
       }
@@ -298,6 +342,17 @@
         }
       }
     },
+    "Gallery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gallery"
+          }
+        }
+      }
+    },
     "Home": {
       "extractionState": "manual",
       "localizations": {
@@ -375,6 +430,28 @@
         }
       }
     },
+    "Loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
+          }
+        }
+      }
+    },
+    "Loading episodes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading episodes"
+          }
+        }
+      }
+    },
     "Manifest": {
       "extractionState": "manual",
       "localizations": {
@@ -415,6 +492,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next stream"
+          }
+        }
+      }
+    },
+    "No addon can search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No addon can search"
           }
         }
       }
@@ -507,6 +595,17 @@
         }
       }
     },
+    "Nothing here yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing here yet"
+          }
+        }
+      }
+    },
     "Nothing installed": {
       "extractionState": "manual",
       "localizations": {
@@ -536,6 +635,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only basic details are available for this title."
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
           }
         }
       }
@@ -602,6 +712,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Play best"
+          }
+        }
+      }
+    },
+    "Play in Blusion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play in Blusion"
           }
         }
       }
@@ -716,6 +837,28 @@
         }
       }
     },
+    "Resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        }
+      }
+    },
+    "Save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
     "Save address": {
       "extractionState": "manual",
       "localizations": {
@@ -749,6 +892,28 @@
         }
       }
     },
+    "Search asks your catalog addons. Add one, such as Cinemeta, in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search asks your catalog addons. Add one, such as Cinemeta, in Settings."
+          }
+        }
+      }
+    },
+    "Search asks your catalog addons. Add one, such as Cinemeta, on the Addons tab.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search asks your catalog addons. Add one, such as Cinemeta, on the Addons tab."
+          }
+        }
+      }
+    },
     "Search your addons": {
       "extractionState": "manual",
       "localizations": {
@@ -767,6 +932,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Season"
+          }
+        }
+      }
+    },
+    "See All": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See All"
           }
         }
       }
@@ -932,6 +1108,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Watched"
+          }
+        }
+      }
+    },
+    "Widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widgets"
           }
         }
       }

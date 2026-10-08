@@ -16,6 +16,11 @@ public final class DetailViewModel {
     public private(set) var isInLibrary = false
     /// Identities (`type/id`) of watched movies and episodes shown on this screen.
     public private(set) var watchedIdentities: Set<String> = []
+    /// Share of the runtime saved for the movie and episodes shown here, by identity (0...1). Only progress that playback can
+    /// resume from is listed, so a bar or a "Resume" label always means the player starts at the saved position.
+    public private(set) var progressFractions: [String: Double] = [:]
+    /// Saved records for the movie and episodes shown here, by identity. `nextUp` reads their update times.
+    private var savedProgress: [String: WatchProgress] = [:]
 
     private let services: AppServices
 
@@ -30,19 +35,30 @@ public final class DetailViewModel {
         let result = await services.browse.detail(for: preview)
         detail = result.detail
         isFallback = result.isFallback
-        if selectedSeason == nil { selectedSeason = detail.seasons.first }
         isLoading = false
         await refreshUserState()
+        // A series opens on the season of its next episode, so the list starts where the viewer left off.
+        if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
     }
 
-    /// Library membership and watched marks, from the local stores.
+    /// Library membership, watched marks and saved progress, from the local stores.
     public func refreshUserState() async {
         isInLibrary = await services.library.contains(libraryIdentity)
-        var identities = Set<String>()
-        for request in [movieRequest] + detail.videos.map({ request(for: $0) }) {
-            if await services.progress.progress(for: request.identity)?.isWatched == true { identities.insert(request.identity) }
+        var watched = Set<String>()
+        var saved: [String: WatchProgress] = [:]
+        var fractions: [String: Double] = [:]
+        for identity in [movieIdentity] + detail.videos.map({ episodeIdentity($0) }) {
+            guard let record = await services.progress.progress(for: identity) else { continue }
+            saved[identity] = record
+            if record.isWatched {
+                watched.insert(identity)
+            } else if ProgressRecorder.resumePosition(for: record) > 0 {
+                fractions[identity] = record.fraction
+            }
         }
-        watchedIdentities = identities
+        watchedIdentities = watched
+        savedProgress = saved
+        progressFractions = fractions
     }
 
     private var libraryIdentity: String {
@@ -59,6 +75,8 @@ public final class DetailViewModel {
     }
 
     public func isWatched(_ request: StreamRequest) -> Bool { watchedIdentities.contains(request.identity) }
+
+    public func isWatched(_ video: Video) -> Bool { watchedIdentities.contains(episodeIdentity(video)) }
 
     /// Marks a movie or episode watched, or clears the mark (and any saved position).
     public func setWatched(_ watched: Bool, for request: StreamRequest) async {
@@ -81,8 +99,87 @@ public final class DetailViewModel {
 
     public func request(for video: Video) -> StreamRequest { StreamRequest(episode: video, of: detail) }
 
+    /// Series: the episode to play next. The most recently updated unfinished episode, else the first unwatched one in watching
+    /// order, else the first episode. Nil for movies and for series without episodes.
+    public var nextUp: Video? {
+        guard isSeries else { return nil }
+        let ordered = watchingOrder
+        let unfinished = ordered.filter { isUnfinished(episodeIdentity($0)) }
+        if let latest = unfinished.max(by: { lastUpdate($0) < lastUpdate($1) }) { return latest }
+        return ordered.first(where: { !watchedIdentities.contains(episodeIdentity($0)) }) ?? ordered.first
+    }
+
+    /// "Play", "Resume", "Play S1 · E1", "Resume S2 · E5". "Resume" only when playback starts from saved progress.
+    public var primaryActionTitle: String {
+        guard isSeries else { return progressFractions[movieIdentity] == nil ? "Play" : "Resume" }
+        guard let next = nextUp else { return "Play" }
+        let verb = progressFractions[episodeIdentity(next)] == nil ? "Play" : "Resume"
+        guard let season = next.season, let episode = next.episode else { return verb }
+        return "\(verb) S\(season) · E\(episode)"
+    }
+
+    /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.
+    public func progressFraction(for request: StreamRequest) -> Double? { progressFractions[request.identity] }
+
+    /// The same for an episode of this series.
+    public func progressFraction(for video: Video) -> Double? { progressFractions[episodeIdentity(video)] }
+
+    /// Background artwork for the header, falling back to the poster.
+    public var backdropURL: URL? { detail.preview.background ?? detail.preview.poster }
+
+    /// The title's logo (a transparent image), when the addon or the catalog has one.
+    public var logoURL: URL? { detail.preview.logo }
+
+    /// Year, runtime and rating for a `MetaLine`: "2008", "152 min", "★ 9.0". Parts the addon left out are skipped.
+    public var metaParts: [String] {
+        let meta = detail.preview
+        var parts: [String] = []
+        if let year = Self.nonEmpty(meta.releaseInfo) { parts.append(year) }
+        if let runtime = Self.nonEmpty(meta.runtime) { parts.append(runtime) }
+        if let rating = meta.imdbRating, rating > 0 { parts.append("★ \(rating.formatted(.number.precision(.fractionLength(1))))") }
+        return parts
+    }
+
+    /// The first trailer with a well-formed YouTube id, as a watch page.
+    public var trailerURL: URL? {
+        guard let id = detail.trailers.first(where: Self.isYouTubeID) else { return nil }
+        return URL(string: "https://www.youtube.com/watch?v=\(id)")
+    }
+
     public var subtitle: String {
         [detail.preview.releaseInfo, detail.preview.runtime, detail.preview.imdbRating.map { String(format: "★ %.1f", $0) }]
             .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Episodes in watching order: regular seasons, then specials, then any episode the addon gave no season.
+    private var watchingOrder: [Video] {
+        detail.seasons.flatMap { detail.episodes(inSeason: $0) } + detail.videos.filter { $0.season == nil }
+    }
+
+    private var movieIdentity: String { movieRequest.identity }
+
+    /// The identity `request(for:)` gives an episode. Built here so a loop over every episode does not look up each next episode.
+    private func episodeIdentity(_ video: Video) -> String {
+        "\(detail.type.isEmpty ? "series" : detail.type)/\(video.id)"
+    }
+
+    /// Started but not watched.
+    private func isUnfinished(_ identity: String) -> Bool {
+        guard let record = savedProgress[identity] else { return false }
+        return !record.isWatched && record.position > 0
+    }
+
+    private func lastUpdate(_ video: Video) -> Date {
+        savedProgress[episodeIdentity(video)]?.updatedAt ?? .distantPast
+    }
+
+    private static func nonEmpty(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// YouTube ids are short runs of letters, digits, `-` and `_`. Anything else an addon sends is never put into a URL.
+    private static func isYouTubeID(_ id: String) -> Bool {
+        !id.isEmpty && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
     }
 }

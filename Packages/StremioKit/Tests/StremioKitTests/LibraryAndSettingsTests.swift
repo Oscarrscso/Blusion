@@ -51,24 +51,46 @@ import Testing
         let store = DefaultsSettingsStore(defaults: defaults, secrets: secrets)
         #expect(await store.load() == PlaybackSettings(), "fresh install: all defaults")
 
-        let settings = PlaybackSettings(preferredResolution: 1080, subtitleLanguage: "eng", streamingServerURL: "http://user:pw@192.168.1.9:11470", fallbackEngineEnabled: false)
+        let settings = PlaybackSettings(preferredResolution: 1080, subtitleLanguage: "eng", streamingServerURL: "http://user:pw@192.168.1.9:11470",
+                                        fallbackEngineEnabled: false, traktClientID: "client-abc", playerPreference: .infuse,
+                                        showsPosterRatings: false, autoPlayBestStream: true)
         await store.save(settings)
         #expect(await store.load() == settings)
         #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.serverSecret] == "http://user:pw@192.168.1.9:11470")
+        #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.traktClientSecret] == "client-abc", "the Trakt client ID is a secret too")
         let stored = String(describing: defaults.dictionaryRepresentation().filter { $0.key.hasPrefix("settings.") })
         #expect(!stored.contains("192.168.1.9") && !stored.contains("pw@"), "the server URL is never written to UserDefaults")
+        #expect(!stored.contains("client-abc"), "the Trakt client ID is never written to UserDefaults")
     }
 
     @Test func clearingValuesRemovesThem() async {
         let defaults = isolatedDefaults()
         let secrets = InMemorySecretStore()
         let store = DefaultsSettingsStore(defaults: defaults, secrets: secrets)
-        await store.save(PlaybackSettings(preferredResolution: 720, subtitleLanguage: "fre", streamingServerURL: "http://nas:11470"))
-        await store.save(PlaybackSettings(preferredResolution: nil, subtitleLanguage: nil, streamingServerURL: "   "))
+        await store.save(PlaybackSettings(preferredResolution: 720, subtitleLanguage: "fre", streamingServerURL: "http://nas:11470", traktClientID: "client"))
+        await store.save(PlaybackSettings(preferredResolution: nil, subtitleLanguage: nil, streamingServerURL: "   ", traktClientID: "  "))
         let loaded = await store.load()
-        #expect(loaded.preferredResolution == nil && loaded.subtitleLanguage == nil && loaded.streamingServerURL == nil)
-        #expect(await secrets.snapshot.isEmpty, "a blank server URL deletes the secret")
+        #expect(loaded.preferredResolution == nil && loaded.subtitleLanguage == nil && loaded.streamingServerURL == nil && loaded.traktClientID == nil)
+        #expect(await secrets.snapshot.isEmpty, "blank values delete their secrets")
         #expect(loaded.fallbackEngineEnabled, "the fallback toggle defaults to on")
+    }
+
+    @Test func theTraktClientIDIsTrimmedStoredAsASecretAndClearable() async {
+        let defaults = isolatedDefaults()
+        let secrets = InMemorySecretStore()
+        let store = DefaultsSettingsStore(defaults: defaults, secrets: secrets)
+        let initial = await store.load().traktClientID
+        #expect(initial == nil, "no client ID until the user adds one")
+
+        await store.save(PlaybackSettings(traktClientID: "  client-abc \n"))
+        let loaded = await store.load().traktClientID
+        #expect(loaded == "client-abc")
+        #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.traktClientSecret] == "client-abc")
+
+        await store.save(PlaybackSettings(traktClientID: nil))
+        let cleared = await store.load().traktClientID
+        #expect(cleared == nil)
+        #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.traktClientSecret] == nil)
     }
 
     @Test func settingsDeriveTheirPolicies() {
@@ -80,6 +102,13 @@ import Testing
         var off = settings
         off.fallbackEngineEnabled = false
         #expect(!off.policy(fallbackEngineLinked: true).fallbackEngineAvailable)
+        #expect(settings.policy(fallbackEngineLinked: true).playerPreference == .infuseWhenNeeded,
+                "by default Infuse takes only what Blusion's own player cannot open")
+        var infuse = settings
+        infuse.playerPreference = .infuse
+        #expect(infuse.policy(fallbackEngineLinked: false).playerPreference == .infuse)
+        #expect(PlayerPreference.builtIn.externalPlayer == nil)
+        #expect(PlayerPreference.infuseWhenNeeded.externalPlayer == .infuse)
         for bad in ["", "   ", "not a url", "ftp://nas.local", "nas:11470", "//nas"] { #expect(PlaybackSettings(streamingServerURL: bad).serverURL == nil, "\(bad)") }
     }
 

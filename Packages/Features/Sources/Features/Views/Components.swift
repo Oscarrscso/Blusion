@@ -1,30 +1,50 @@
-#if canImport(SwiftUI)
+#if canImport(UIKit)
 import SwiftUI
 import StremioKit
 
-/// A capsule that names a failing addon without hiding the rest of the screen.
+/// A capsule that names a failing addon without hiding the rest of the screen. The failure is said by the icon and the text,
+/// not by a coloured block.
 struct ErrorChip: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.footnote)
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.orange.opacity(0.15)))
-            .accessibilityElement(children: .combine)
+        Label {
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        }
+        .font(.footnote.weight(.medium))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.surfaceStrong, in: Capsule())
+        .accessibilityElement(children: .combine)
     }
 }
 
 /// Shown instead of a wall of per-addon errors when every request failed because the device is offline.
 struct OfflineBanner: View {
     var body: some View {
-        ContentUnavailableView {
-            Label(Connectivity.offlineTitle, systemImage: "wifi.slash")
-        } description: {
-            Text(Connectivity.offlineMessage)
+        HStack(alignment: .top, spacing: Theme.Spacing.m) {
+            Image(systemName: "wifi.slash")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(Connectivity.offlineTitle)
+                    .font(.headline)
+                Text(Connectivity.offlineMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .padding(Theme.Spacing.l)
+        .cardSurface()
+        .padding(.horizontal, Theme.screenPadding)
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("offline.banner")
     }
 }
@@ -39,62 +59,25 @@ struct WrappingStack<Content: View>: View {
     }
 }
 
+/// Poster artwork: 2:3 with poster corners. Give it a width (`.frame(width:)`) and the height follows.
 struct PosterImage: View {
     let url: URL?
     let title: String
 
     var body: some View {
-        ZStack {
-            Rectangle().fill(.quaternary)
-            if let url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        placeholder
-                    default:
-                        ProgressView()
-                    }
-                }
-            } else {
-                placeholder
-            }
-        }
-        .aspectRatio(2.0 / 3.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityHidden(true)
-    }
-
-    private var placeholder: some View {
-        Text(title)
-            .font(.caption)
-            .multilineTextAlignment(.center)
-            .padding(6)
-            .foregroundStyle(.secondary)
+        ArtworkImage(url: url, title: title, maxPixelSize: 480)
+            .aspectRatio(CardAspect.poster.ratio, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.poster, style: .continuous))
+            .accessibilityHidden(true)
     }
 }
 
+/// A poster with its name and year, sized as a medium poster `MediaCard`.
 struct PosterCard: View {
     let item: MetaPreview
-    @ScaledMetric(relativeTo: .body) private var width: CGFloat = 120
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PosterImage(url: item.poster, title: item.name)
-            Text(item.name)
-                .font(.footnote.weight(.medium))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-            if let year = item.releaseInfo {
-                Text(year).font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: width)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel([item.name, item.releaseInfo].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityIdentifier("poster.\(item.id)")
+        MediaCard(item: item)
     }
 }
 
@@ -103,41 +86,36 @@ struct PosterLink: View {
     let item: MetaPreview
 
     var body: some View {
-        NavigationLink(value: item) { PosterCard(item: item) }
-            .buttonStyle(.plain)
+        MediaCardLink(item: item)
     }
 }
 
 struct PosterGrid: View {
     let items: [MetaPreview]
-    var onLastAppear: (() -> Void)?
-
-    @ScaledMetric(relativeTo: .body) private var minimum: CGFloat = 110
+    var onLastAppear: (() -> Void)? = nil
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: minimum, maximum: minimum * 1.4), spacing: 12, alignment: .top)], alignment: .leading, spacing: 16) {
-            ForEach(items) { item in
-                PosterLink(item: item)
-                    .onAppear { if item.id == items.last?.id { onLastAppear?() } }
-            }
-        }
-        .padding(.horizontal)
+        MediaGrid(items: items, aspect: .poster, onLastAppear: onLastAppear)
     }
 }
 
+/// The first-run state: no addon is installed, so there is nothing to browse yet.
 struct EmptyAddonsView: View {
     let onOpenAddons: () -> Void
 
     var body: some View {
-        ContentUnavailableView {
-            Label("No addons yet", systemImage: "puzzlepiece.extension")
-        } description: {
-            Text("Blusion works with Stremio addons but doesn't include any. Paste an addon's link (it starts with https:// or stremio://) on the Addons tab to get catalogs and streams.")
-        } actions: {
+        EmptyStateLayout(
+            title: "No addons yet",
+            systemImage: "puzzlepiece.extension",
+            message: "Addons bring the catalogs, search and streams. "
+                + "Paste an addon's link (it starts with https:// or stremio://) in Settings."
+        ) {
             Button("Add an addon", action: onOpenAddons)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.primaryActionCompact)
+                .padding(.top, Theme.Spacing.s)
                 .accessibilityIdentifier("empty.addAddon")
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("empty.noAddons")
     }
 }
@@ -145,11 +123,17 @@ struct EmptyAddonsView: View {
 /// Where each kind of value in a stack leads. Every tab's stack uses the same set.
 struct AppDestinations: ViewModifier {
     let services: AppServices
+    @Environment(\.zoomNamespace) private var zoomNamespace
 
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
+            .navigationDestination(for: TitleDestination.self) { destination in
+                DetailView(preview: destination.preview, services: services)
+                    .zoomDestination(id: destination.sourceID, in: zoomNamespace)
+            }
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
+            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }
     }
 }
 

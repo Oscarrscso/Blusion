@@ -5,7 +5,7 @@ import PackageDescription
 // Imports AVFoundation only, never UIKit, so it builds and tests on macOS; pure logic also builds on Linux.
 let package = Package(
     name: "PlayerKit",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.iOS("26.0"), .macOS(.v14)],
     products: [
         .library(name: "PlayerKit", targets: ["PlayerKit"]),
         // MockEngine for test targets of this and other packages. Never linked into the app.

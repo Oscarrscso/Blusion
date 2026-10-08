@@ -122,10 +122,12 @@ public struct ProgressRecorder: Sendable {
                              season: request.season, episode: request.episode)
     }
 
-    /// Where to start playing. 0 for new, watched, barely-started or nearly-finished items.
+    /// Where to start playing. 0 for new, watched, barely-started or nearly-finished items. When the length is unknown (a player
+    /// reported only where the viewer stopped), the position is the resume point, since there is no end to measure it against.
     public static func resumePosition(for progress: WatchProgress?, policy: ProgressPolicy = .default) -> TimeInterval {
-        guard let progress, !progress.isWatched, progress.duration > 0 else { return 0 }
+        guard let progress, !progress.isWatched else { return 0 }
         if progress.position < policy.minimumResume { return 0 }
+        guard progress.duration > 0 else { return progress.position }
         if progress.position / progress.duration > policy.maximumResumeFraction { return 0 }
         return progress.position
     }

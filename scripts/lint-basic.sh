@@ -6,10 +6,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 status=0
+TAB="$(printf '\t')"   # BSD grep (macOS) has no -P, so match a literal tab
 while IFS= read -r f; do
   [[ -f "$f" ]] || continue
   if grep -nE '[[:space:]]+$' "$f" >/dev/null; then echo "$f: trailing whitespace: $(grep -nE '[[:space:]]+$' "$f" | head -3 | cut -d: -f1 | tr '\n' ' ')"; status=1; fi
-  if grep -nP '\t' "$f" >/dev/null; then echo "$f: tab character"; status=1; fi
+  if grep -n "$TAB" "$f" >/dev/null; then echo "$f: tab character"; status=1; fi
   if [[ -s "$f" ]]; then
     if [[ "$(tail -c1 "$f" | wc -l)" -eq 0 ]]; then echo "$f: missing trailing newline"; status=1; fi
     if [[ "$(tail -c2 "$f" | wc -l)" -ge 2 ]]; then echo "$f: more than one trailing newline"; status=1; fi

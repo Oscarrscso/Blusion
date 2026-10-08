@@ -21,22 +21,33 @@ public struct CatalogSource: Sendable, Equatable, Hashable, Identifiable {
 public final class BrowseService: Sendable {
     public let registry: AddonRegistry
     public let client: AddonClient
-    /// Types the UI shows. v1 is movies only (PLAN §1); series and other types still decode.
-    public let visibleTypes: Set<String>
+    /// Content types the UI shows. `nil`, the default, shows every type an addon offers (movie, series, anime, `tv`, custom types
+    /// such as `all`); a set keeps only those types.
+    public let visibleTypes: Set<String>?
 
-    public init(registry: AddonRegistry, client: AddonClient, visibleTypes: Set<String> = ["movie"]) {
+    public init(registry: AddonRegistry, client: AddonClient, visibleTypes: Set<String>? = nil) {
         self.registry = registry
         self.client = client
         self.visibleTypes = visibleTypes
     }
 
+    /// `nil` means every type is visible.
+    static func isVisible(_ type: String, in visible: Set<String>?) -> Bool { visible?.contains(type) ?? true }
+
     /// Browsable catalogs of enabled addons, in the user's addon order, then the addon's own catalog order.
     public func catalogSources(type: String? = nil) async -> [CatalogSource] {
-        await registry.addons(providing: .catalog).flatMap { addon in
-            addon.manifest.browsableCatalogs(type: type).filter { visibleTypes.contains($0.type) }.map {
+        let visible = visibleTypes
+        return await registry.addons(providing: .catalog).flatMap { addon in
+            addon.manifest.browsableCatalogs(type: type).filter { BrowseService.isVisible($0.type, in: visible) }.map {
                 CatalogSource(addon: addon.summary, baseURL: addon.baseURL, catalog: $0)
             }
         }
+    }
+
+    /// The enabled addons `search` asks, in the user's order: those with a searchable catalog of a visible type.
+    /// Empty means search has nothing to ask (for example, only stream addons are installed).
+    public func searchableAddons() async -> [AddonSummary] {
+        await searchableInstalled().map(\.summary)
     }
 
     /// One page. `skip` is the number of items already loaded (the protocol's pagination).
@@ -47,18 +58,16 @@ public final class BrowseService: Sendable {
         return try await client.catalog(base: source.baseURL, type: source.catalog.type, id: source.catalog.id, extras: extras)
     }
 
-    /// Search every enabled addon that offers a searchable catalog. One response per addon, in the order they answer;
+    /// Search every addon from `searchableAddons()`. One response per addon, in the order they answer;
     /// an addon's catalogs are merged and de-duplicated, and it only fails if all of its catalogs fail.
     public func search(_ query: String) async -> AsyncStream<AddonResponse<[MetaPreview]>> {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return AsyncStream { $0.finish() } }
         let visible = visibleTypes
-        let addons = await registry.addons(providing: .catalog).filter { addon in
-            addon.manifest.searchableCatalogs.contains { visible.contains($0.type) }
-        }
+        let addons = await searchableInstalled()
         let client = self.client
         return FanOut.run(over: addons) { addon in
-            let catalogs = addon.manifest.searchableCatalogs.filter { visible.contains($0.type) }
+            let catalogs = BrowseService.searchCatalogs(of: addon.manifest, visible: visible)
             let outcomes = await withTaskGroup(of: (Int, Result<[MetaPreview], AddonError>).self) { group in
                 for (index, catalog) in catalogs.enumerated() {
                     group.addTask {
@@ -90,6 +99,17 @@ public final class BrowseService: Sendable {
             if !anySuccess, let firstError { throw firstError }
             return merged
         }
+    }
+
+    /// The addons `search` asks, shared with `searchableAddons()` so the two can never disagree.
+    private func searchableInstalled() async -> [InstalledAddon] {
+        let visible = visibleTypes
+        return await registry.addons(providing: .catalog).filter { !BrowseService.searchCatalogs(of: $0.manifest, visible: visible).isEmpty }
+    }
+
+    /// The catalogs `search` asks one addon: its searchable catalogs of a visible type.
+    static func searchCatalogs(of manifest: Manifest, visible: Set<String>?) -> [CatalogDescriptor] {
+        manifest.searchableCatalogs.filter { isVisible($0.type, in: visible) }
     }
 
     /// Full metadata for Detail. Asks every addon that supports `meta` for this id and takes the first good answer;

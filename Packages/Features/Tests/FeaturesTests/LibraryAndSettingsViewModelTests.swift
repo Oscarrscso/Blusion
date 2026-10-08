@@ -79,20 +79,20 @@ import StremioKitTestSupport
     }
 
     @Test func homeShowsContinueWatching() async throws {
-        let model = BoardViewModel(services: services(progress: [progress("a", 40), progress("b", 99)]))
+        let model = HomeViewModel(services: services(progress: [progress("a", 40), progress("b", 99)]))
         await model.load()
         #expect(model.continueWatching.map(\.contentID) == ["a"])
     }
 
     @Test func homeRefreshesContinueWatchingWithoutReloadingRows() async {
         let services = services(progress: [progress("a", 40)])
-        let model = BoardViewModel(services: services)
+        let model = HomeViewModel(services: services)
         await model.refreshContinueWatching()
         #expect(model.continueWatching.map(\.contentID) == ["a"])
         await services.progress.save(progress("b", 30, age: 10))
         await model.refreshContinueWatching()
         #expect(model.continueWatching.map(\.contentID) == ["b", "a"])
-        #expect(model.rows.isEmpty && model.phase == .loading, "rows are untouched")
+        #expect(model.sections.isEmpty && model.phase == .loading, "rows are untouched")
     }
 
     // MARK: detail: library and watched
@@ -186,7 +186,8 @@ import StremioKitTestSupport
         _ = try await registry.install(from: server.catalogManifestURL(token: "tok").absoluteString)
         let services = AppServices(registry: registry, client: client, settings: InMemorySettingsStore(PlaybackSettings(subtitleLanguage: "eng")),
                                    progress: InMemoryProgressStore([progress("a", 40)]),
-                                   library: InMemoryLibraryStore([LibraryItem(id: "movie/a", type: "movie", contentID: "a", name: "A", addedAt: when)]))
+                                   library: InMemoryLibraryStore([LibraryItem(id: "movie/a", type: "movie", contentID: "a", name: "A", addedAt: when)]),
+                                   widgets: InMemoryWidgetStore([HomeWidget(id: "w", title: "Watching", content: .continueWatching)]))
         let reset = DataResetService(services: services)
 
         let message = await reset.clear(.history)
@@ -201,6 +202,12 @@ import StremioKitTestSupport
         await reset.clear(.settings)
         current = await services.settings.load()
         #expect(current == PlaybackSettings())
+        var layout = await services.widgets.load()
+        #expect(layout?.count == 1, "the Home layout survives until asked")
+        let homeMessage = await reset.clear(.widgets)
+        #expect(homeMessage == "Home layout cleared.")
+        layout = await services.widgets.load()
+        #expect(layout == nil, "clearing the Home layout saves nothing, so Home is automatic again")
         var installed = await registry.addons
         #expect(installed.count == 1, "addons survive until asked")
         await reset.clear(.addons)
@@ -212,13 +219,54 @@ import StremioKitTestSupport
         #expect(history.isEmpty)
     }
 
+    @Test func clearingTheHomeLayoutForgetsTheCachedRows() async throws {
+        let manifest = Manifest(id: "test.cinemeta", name: "Cinemeta", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                                catalogs: [CatalogDescriptor(type: "movie", id: "top", name: "Top")])
+        let transport = StubTransport(data: Data(#"{"metas":[{"id":"tt1","type":"movie"}]}"#.utf8))
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let snapshots = InMemoryWidgetSnapshotStore()
+        let content = WidgetContentService(registry: registry, client: client, settings: InMemorySettingsStore(), snapshots: snapshots)
+        let layout = [HomeWidget(id: "w", title: "Watching", content: .continueWatching)]
+        let services = AppServices(registry: registry, client: client, widgets: InMemoryWidgetStore(layout), widgetContent: content)
+        let source = WidgetSource.addonCatalog(AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top"))
+        _ = try await content.items(for: source, limit: 5)
+        _ = try await content.items(for: source, limit: 5)
+        #expect(transport.callCount == 1, "the second read is served from memory")
+        _ = await DataResetService(services: services).clear(.widgets)
+        let known = await content.lastKnownItems(for: source, limit: 5)
+        #expect(known == nil, "clearing the Home layout forgets the last-known rows too")
+        let stored = await snapshots.items(for: source)
+        #expect(stored == nil, "and their snapshots")
+        _ = try await content.items(for: source, limit: 5)
+        #expect(transport.callCount == 2, "clearing the Home layout asks the addons again")
+    }
+
+    @Test func clearingAddonsForgetsTheLastKnownRowsSoRemovedAddonsDoNotLinger() async throws {
+        let manifest = Manifest(id: "test.cinemeta", name: "Cinemeta", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                                catalogs: [CatalogDescriptor(type: "movie", id: "top", name: "Top")])
+        let transport = StubTransport(data: Data(#"{"metas":[{"id":"tt1","type":"movie"}]}"#.utf8))
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let snapshots = InMemoryWidgetSnapshotStore()
+        let content = WidgetContentService(registry: registry, client: client, settings: InMemorySettingsStore(), snapshots: snapshots)
+        let source = WidgetSource.addonCatalog(AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top"))
+        _ = try await content.items(for: source, limit: 5)
+        let services = AppServices(registry: registry, client: client, widgets: InMemoryWidgetStore(), widgetContent: content)
+        await DataResetService(services: services).clear(.addons)
+        let known = await content.lastKnownItems(for: source, limit: 5)
+        #expect(known == nil)
+        let stored = await snapshots.items(for: source)
+        #expect(stored == nil)
+    }
+
     @Test func everythingClearsEverything() async throws {
         let server = try MockServer.shared()
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 5, maxRetries: 0))
         let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
         _ = try await registry.install(from: server.catalogManifestURL(token: "tok").absoluteString)
         let services = AppServices(registry: registry, client: client, settings: InMemorySettingsStore(PlaybackSettings(subtitleLanguage: "eng")),
-                                   progress: InMemoryProgressStore([progress("a", 40)]), library: InMemoryLibraryStore([LibraryItem(preview: MetaPreview(id: "a", name: "A"))]))
+                                   progress: InMemoryProgressStore([progress("a", 40)]),
+                                   library: InMemoryLibraryStore([LibraryItem(preview: MetaPreview(id: "a", name: "A"))]),
+                                   widgets: InMemoryWidgetStore([HomeWidget(id: "w", title: "Watching", content: .continueWatching)]))
         let model = SettingsViewModel(services: services)
         await model.load()
         await model.clear(.everything)
@@ -226,7 +274,9 @@ import StremioKitTestSupport
         let history = await services.progress.all()
         let saved = await services.library.all()
         let installed = await registry.addons
+        let layout = await services.widgets.load()
         #expect(history.isEmpty && saved.isEmpty && installed.isEmpty)
+        #expect(layout == nil, "everything includes the Home layout")
         #expect(model.settings == PlaybackSettings(), "the screen reloads after a reset")
         #expect(DataResetService.Scope.allCases.allSatisfy { !$0.warning.isEmpty && !$0.title.isEmpty })
     }

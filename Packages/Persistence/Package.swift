@@ -5,7 +5,7 @@ import PackageDescription
 // so the package still builds (as an empty module) on Linux. See ADR-002.
 let package = Package(
     name: "Persistence",
-    platforms: [.iOS(.v17), .macOS(.v14)],
+    platforms: [.iOS("26.0"), .macOS(.v14)],
     products: [
         .library(name: "Persistence", targets: ["Persistence"]),
     ],

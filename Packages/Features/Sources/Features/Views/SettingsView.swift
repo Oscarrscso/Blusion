@@ -1,4 +1,4 @@
-#if canImport(SwiftUI)
+#if canImport(UIKit)
 import SwiftUI
 import StremioKit
 
@@ -14,6 +14,12 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                NavigationLink(value: SettingsDestination.addons) { Label("Addons", systemImage: "puzzlepiece.extension") }
+                    .accessibilityIdentifier("settings.addons")
+                NavigationLink(value: SettingsDestination.widgets) { Label("Widgets", systemImage: "rectangle.3.group") }
+                    .accessibilityIdentifier("settings.widgets")
+            }
             playbackSection
             serverSection
             if fallbackEngineLinked { fallbackSection }
@@ -136,34 +142,6 @@ struct AcknowledgementsView: View {
         .navigationTitle("Acknowledgements")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("acknowledgements.list")
-    }
-}
-
-/// The gear that opens Settings as a sheet from any tab.
-struct SettingsButton: ViewModifier {
-    let services: AppServices
-    @State private var isShowing = false
-
-    func body(content: Content) -> some View {
-        content
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { isShowing = true } label: { Label("Settings", systemImage: "gearshape") }
-                        .accessibilityIdentifier("settings.open")
-                }
-            }
-            .sheet(isPresented: $isShowing) {
-                NavigationStack {
-                    SettingsView(services: services)
-                        .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done") { isShowing = false }.accessibilityIdentifier("settings.done") } }
-                }
-            }
-    }
-}
-
-extension View {
-    func settingsButton(services: AppServices) -> some View {
-        modifier(SettingsButton(services: services))
     }
 }
 #endif

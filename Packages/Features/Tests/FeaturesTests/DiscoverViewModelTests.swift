@@ -112,4 +112,55 @@ import StremioKitTestSupport
         #expect(model.state == .failed(.invalidJSON))
         #expect(model.items.isEmpty)
     }
+
+    @Test func typesFollowTheTabOrderAndSourcesFilterByType() async throws {
+        let server = try MockServer.shared()
+        let services = services(server)
+        _ = try await services.registry.install(from: server.catalogManifestURL().absoluteString)
+        let model = DiscoverViewModel(services: services)
+        await model.loadSources()
+        #expect(model.types == ["movie", "series"])
+        #expect(model.selectedType == "movie")
+        #expect(model.visibleSources.map(\.catalog.id) == ["mock-movies", "mock-top"])
+        await model.select(type: "series")
+        #expect(model.selectedType == "series")
+        #expect(model.selectedSource?.catalog.id == "mock-series", "the type's first source is selected")
+        #expect(model.visibleSources.map(\.catalog.id) == ["mock-series"])
+        #expect(model.items.map(\.id) == ["mock:series1"])
+        await model.select(type: "anime")
+        #expect(model.selectedType == "series", "an unknown type changes nothing")
+    }
+
+    @Test func typesAreOrderedByRankThenFirstAppearance() async throws {
+        let manifest = Manifest(id: "order", name: "Order", version: "1", resources: [ResourceDescriptor(name: "catalog")],
+                                types: ["tv", "zeta", "alpha", "anime", "movie"],
+                                catalogs: [CatalogDescriptor(type: "tv", id: "t"), CatalogDescriptor(type: "zeta", id: "z"),
+                                           CatalogDescriptor(type: "alpha", id: "a"), CatalogDescriptor(type: "anime", id: "n"),
+                                           CatalogDescriptor(type: "movie", id: "m")])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: StubTransport(data: Data(#"{"metas":[]}"#.utf8)))
+        let model = DiscoverViewModel(services: AppServices(registry: registry, client: client))
+        await model.loadSources()
+        #expect(model.types == ["movie", "anime", "tv", "zeta", "alpha"], "by rank, then the order the types first appear in")
+        #expect(model.selectedType == "movie")
+    }
+
+    @Test func loadSourcesKeepsASelectionThatStillExistsAndFallsBackOtherwise() async throws {
+        let server = try MockServer.shared()
+        let services = services(server)
+        _ = try await services.registry.install(from: server.catalogManifestURL(token: "one").absoluteString)
+        let second = try await services.registry.install(from: server.catalogManifestURL(token: "two").absoluteString)
+        let model = DiscoverViewModel(services: services)
+        await model.loadSources()
+        let secondSeries = try #require(model.sources.first { $0.catalog.id == "mock-series" && $0.addon.id == second.id })
+        await model.select(source: secondSeries)
+        await model.loadSources()
+        #expect(model.selectedSource == secondSeries, "the selection survives a refresh")
+        #expect(model.selectedType == "series")
+
+        try await services.registry.setEnabled(false, id: second.id)
+        await model.loadSources()
+        #expect(model.selectedType == "movie", "the selected addon is gone, so the first type takes over")
+        #expect(model.selectedSource?.catalog.id == "mock-movies")
+        #expect(model.selectedSource?.addon.id != second.id)
+    }
 }

@@ -59,12 +59,30 @@ private func manifest(_ file: String) throws -> Manifest {
         #expect(m.supports(.stream, type: "movie", id: "whatever"))
     }
 
-    @Test func catalogHelpersRequireTheCatalogResource() throws {
+    @Test func catalogHelpersNeedDeclaredCatalogs() throws {
         let m = try manifest("08-null-arrays.json")
-        #expect(m.browsableCatalogs().isEmpty)
-        let streamOnly = Manifest(id: "a", name: "A", resources: [ResourceDescriptor(name: "stream")], types: ["movie"],
-                                  catalogs: [CatalogDescriptor(type: "movie", id: "x")])
+        #expect(m.browsableCatalogs().isEmpty, "lists the catalog resource but declares no catalogs")
+        let streamOnly = Manifest(id: "a", name: "A", resources: [ResourceDescriptor(name: "stream")], types: ["movie"])
         #expect(streamOnly.browsableCatalogs().isEmpty)
         #expect(streamOnly.searchableCatalogs.isEmpty)
+        // Declared catalogs count without the `catalog` resource (the Stremio core rule), so this addon does offer rows and search.
+        let withCatalogs = Manifest(id: "a", name: "A", resources: [ResourceDescriptor(name: "stream")], types: ["movie"],
+                                    catalogs: [CatalogDescriptor(type: "movie", id: "x", extra: [ExtraDescriptor(name: "search")])])
+        #expect(withCatalogs.browsableCatalogs().map(\.key) == ["movie/x"])
+        #expect(withCatalogs.searchableCatalogs.map(\.key) == ["movie/x"])
+    }
+
+    @Test func declaredCatalogsCountWithoutTheCatalogResource() {
+        let m = Manifest(id: "a", name: "A", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["movie"],
+                         catalogs: [CatalogDescriptor(type: "movie", id: "top")])
+        #expect(m.provides(.catalog))
+        #expect(m.provides(.meta))
+        #expect(!m.provides(.stream), "other resources are unchanged: only what is listed")
+        #expect(!m.provides(.subtitles))
+    }
+
+    @Test func noCatalogsAndNoCatalogResourceMeansNoCatalogProvider() {
+        let m = Manifest(id: "a", name: "A", resources: [ResourceDescriptor(name: "stream")], types: ["movie"])
+        #expect(!m.provides(.catalog))
     }
 }

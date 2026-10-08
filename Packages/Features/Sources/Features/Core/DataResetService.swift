@@ -5,13 +5,14 @@ import StremioKit
 /// "Clear data" in Settings. Each scope is independent; `everything` is all of them and also removes every addon (and so its Keychain URL).
 public struct DataResetService: Sendable {
     public enum Scope: Sendable, Equatable, CaseIterable {
-        case history, library, settings, addons, everything
+        case history, library, settings, widgets, addons, everything
 
         public var title: String {
             switch self {
             case .history: return "Watch history"
             case .library: return "Saved titles"
             case .settings: return "Settings"
+            case .widgets: return "Home layout"
             case .addons: return "All addons"
             case .everything: return "Everything"
             }
@@ -22,8 +23,9 @@ public struct DataResetService: Sendable {
             case .history: return "Removes your watch progress and watched marks. Continue Watching will be empty."
             case .library: return "Removes every saved title from your library."
             case .settings: return "Resets subtitle language, preferred quality and the streaming server."
+            case .widgets: return "Puts Home back to the automatic layout. Your widgets are removed."
             case .addons: return "Removes every installed addon and its saved link. You'll need to add them again."
-            case .everything: return "Removes watch history, saved titles, settings and all addons."
+            case .everything: return "Removes watch history, saved titles, settings, your Home layout and all addons."
             }
         }
     }
@@ -44,10 +46,14 @@ public struct DataResetService: Sendable {
             await services.library.clear()
         case .settings:
             await services.settings.save(PlaybackSettings())
+        case .widgets:
+            await services.widgets.save(nil)
+            await services.widgetContent.forgetEverything()
         case .addons:
             for addon in await services.registry.addons { try? await services.registry.remove(id: addon.id) }
+            await services.widgetContent.forgetEverything()
         case .everything:
-            for each in [Scope.history, .library, .settings, .addons] { await clear(each) }
+            for each in [Scope.history, .library, .settings, .widgets, .addons] { await clear(each) }
         }
         return "\(scope.title) cleared."
     }

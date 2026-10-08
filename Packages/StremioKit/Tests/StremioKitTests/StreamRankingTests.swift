@@ -80,6 +80,31 @@ import StremioKitTestSupport
         #expect(BingeSelection.pick(from: [item("ext", a, group: "g", native: false)], continuing: BingeContext(bingeGroup: "g")) == nil, "only playable streams qualify")
     }
 
+    /// A stream Infuse plays: its route is a hand-off, which ranks with the natively playable ones.
+    private func handed(_ title: String, _ description: String) -> RankedStream {
+        let stream = S.direct(title, "https://e.example.com/\(title).mkv", description: description)
+        return RankedStream(id: title, stream: stream, addon: S.addon("Infuse"), alsoProvidedBy: [], quality: StreamQuality.parse(stream),
+                            container: .matroska, route: .handoff(.infuse, URL(string: "https://e.example.com/\(title).mkv")!),
+                            addonIndex: 0, indexInAddon: 0)
+    }
+
+    @Test func aHandoffRanksAboveANativeStreamOfLowerQuality() {
+        #expect(order([ranked("native 1080", "1080p"), handed("handoff 2160", "2160p")]) == ["handoff 2160", "native 1080"])
+        #expect(order([ranked("native 720", "720p"), handed("handoff 1080", "1080p")]) == ["handoff 1080", "native 720"])
+    }
+
+    @Test func aHandoffStaysAheadOfUnsupportedStreamsWhateverTheResolution() {
+        #expect(order([ranked("big", "2160p", route: false), handed("low", "480p")]) == ["low", "big"])
+    }
+
+    @Test func linksToWebPagesSortBelowUnsupportedStreams() {
+        // Aggregators add informational entries that are web pages. They never outrank a stream the user could start.
+        let page = RankedStream(id: "page", stream: S.external("Removal Reasons", "https://example.com/summary"), addon: S.addon("A"),
+                                alsoProvidedBy: [], quality: StreamQuality.parse(from: ["2160p"]), container: nil,
+                                route: .external(URL(string: "https://example.com/summary")!), addonIndex: 0, indexInAddon: 0)
+        #expect(order([page, ranked("mkv", "480p", route: false), ranked("sd", "480p")]) == ["sd", "mkv", "page"])
+    }
+
     @Test func identityKeysNormaliseURLsButNotPaths() throws {
         func key(_ text: String) throws -> String { StreamIdentity.key(for: .direct(try #require(URL(string: text)))) }
         #expect(try key("HTTPS://Cdn.Example.com/x.mp4") == key("https://cdn.example.com/x.mp4#frag"))

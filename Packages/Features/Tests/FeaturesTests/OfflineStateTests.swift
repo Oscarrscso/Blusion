@@ -23,15 +23,17 @@ import StremioKitTestSupport
         if streams { _ = try await registry.install(from: server.streamManifestURL(token: "off").absoluteString) }
         let down = makeClient(StubTransport { _, _ in throw URLError(.notConnectedToInternet) }, retries: 0)
         return AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: down),
-                           streams: StreamService(registry: registry, client: down))
+                           streams: StreamService(registry: registry, client: down),
+                           widgetContent: WidgetContentService(registry: registry, client: down, settings: InMemorySettingsStore()))
     }
 
     @Test func homeShowsOneBannerWhenEveryRowIsOffline() async throws {
-        let model = BoardViewModel(services: try await offlineServices())
+        let model = HomeViewModel(services: try await offlineServices())
         #expect(!model.isOffline, "not before anything has been tried")
         await model.load()
-        #expect(model.phase == .ready && !model.rows.isEmpty)
-        #expect(model.rows.allSatisfy { $0.state.error == .offline })
+        #expect(model.phase == .ready && !model.sections.isEmpty)
+        #expect(model.sections.contains { $0.state.error == .offline })
+        #expect(model.sections.filter { $0.state.error != nil }.allSatisfy { $0.state.error == .offline }, "a row failed for another reason")
         #expect(model.isOffline)
     }
 
@@ -40,9 +42,9 @@ import StremioKitTestSupport
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 5, maxRetries: 0))
         let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
         _ = try await registry.install(from: server.catalogManifestURL(token: "ok").absoluteString)
-        let model = BoardViewModel(services: AppServices(registry: registry, client: client))
+        let model = HomeViewModel(services: AppServices(registry: registry, client: client))
         await model.load()
-        #expect(model.rows.allSatisfy { $0.state.value != nil } && !model.isOffline)
+        #expect(model.sections.allSatisfy { $0.state.error == nil } && !model.isOffline)
     }
 
     @Test func searchSaysOfflineInsteadOfNoResults() async throws {

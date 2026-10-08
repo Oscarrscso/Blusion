@@ -84,6 +84,21 @@ import StremioKitTestSupport
         #expect(transport.callCount < 11, "the deadline, not the retry cap, ended it")
     }
 
+    @Test func streamRequestsGetTheirOwnLongerDeadline() async throws {
+        let body = try fixture("streams-all-kinds")
+        let transport = StubTransport { request, _ in
+            try await Task.sleep(for: .milliseconds(600))
+            return StubTransport.response(body, for: request)
+        }
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: 0.2, streamTimeout: 1.5, maxRetries: 0, retryBackoff: 0.01),
+                                 transport: transport)
+        let base = URL(string: "https://addon.example.com")!
+        await #expect(throws: AddonError.timeout) { try await client.catalog(base: base, type: "movie", id: "top") }
+        let streams = try await client.streams(base: base, type: "movie", id: "tt1")
+        #expect(streams.count == 8, "a 0.6 s answer misses the 0.2 s catalog deadline but meets the 1.5 s stream deadline")
+        #expect(transport.callCount == 2)
+    }
+
     @Test func cancellingTheCallerCancelsTheRequest() async {
         let transport = StubTransport { _, _ in
             try await Task.sleep(for: .seconds(30))

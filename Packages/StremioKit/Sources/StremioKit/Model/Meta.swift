@@ -76,6 +76,9 @@ public struct MetaPreview: Sendable, Equatable, Hashable, Codable, Identifiable 
                   genres: genres,
                   runtime: container.string(.runtime))
     }
+
+    /// `type/id`: an id can repeat across types, so this is what tells two items apart.
+    public var identity: String { "\(type)/\(id)" }
 }
 
 /// An episode (series) of a meta.
@@ -84,12 +87,15 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var title: String
     public var season: Int?
     public var episode: Int?
+    /// Air date as the addon sent it: `released`, or `firstAired` when that is missing.
     public var released: String?
     public var thumbnail: URL?
     public var overview: String?
+    /// Episode rating, usually IMDb's (0 to 10).
+    public var rating: Double?
 
     public init(id: String, title: String? = nil, season: Int? = nil, episode: Int? = nil,
-                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil) {
+                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil, rating: Double? = nil) {
         self.id = id
         self.title = title ?? id
         self.season = season
@@ -97,9 +103,12 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.released = released
         self.thumbnail = thumbnail
         self.overview = overview
+        self.rating = rating
     }
 
-    private enum Keys: String, CodingKey { case id, title, name, season, episode, number, released, thumbnail, overview, description }
+    private enum Keys: String, CodingKey {
+        case id, title, name, season, episode, number, released, firstAired, thumbnail, overview, description, rating
+    }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: Keys.self)
@@ -108,9 +117,24 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
                   title: container.string(.title) ?? container.string(.name),
                   season: container.int(.season),
                   episode: container.int(.episode) ?? container.int(.number),
-                  released: container.string(.released),
+                  released: container.string(.released) ?? container.string(.firstAired),
                   thumbnail: container.url(.thumbnail),
-                  overview: container.string(.overview) ?? container.string(.description))
+                  overview: container.string(.overview) ?? container.string(.description),
+                  rating: container.double(.rating))
+    }
+}
+
+/// A trailer as addons send it: `trailerStreams` entries carry a YouTube id in `ytId`, the older `trailers` entries in `source`.
+private struct TrailerEntry: Decodable {
+    let ytId: String?
+    let source: String?
+
+    private enum Keys: String, CodingKey { case ytId, source }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: Keys.self)
+        ytId = container.string(.ytId)
+        source = container.string(.source)
     }
 }
 
@@ -124,13 +148,16 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var links: [MetaLink]
     public var videos: [Video]
     public var defaultVideoID: String?
+    /// YouTube ids of the trailers, in the addon's order.
+    public var trailers: [String]
 
     public var id: String { preview.id }
     public var type: String { preview.type }
     public var name: String { preview.name }
 
     public init(preview: MetaPreview, released: String? = nil, director: [String] = [], cast: [String] = [],
-                writers: [String] = [], links: [MetaLink] = [], videos: [Video] = [], defaultVideoID: String? = nil) {
+                writers: [String] = [], links: [MetaLink] = [], videos: [Video] = [], defaultVideoID: String? = nil,
+                trailers: [String] = []) {
         self.preview = preview
         self.released = released
         self.director = director
@@ -139,9 +166,10 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.links = links
         self.videos = videos
         self.defaultVideoID = defaultVideoID
+        self.trailers = trailers
     }
 
-    private enum Keys: String, CodingKey { case released, director, cast, writer, writers, links, videos, behaviorHints }
+    private enum Keys: String, CodingKey { case released, director, cast, writer, writers, links, videos, behaviorHints, trailerStreams, trailers }
     private enum HintKeys: String, CodingKey { case defaultVideoId }
 
     public init(from decoder: Decoder) throws {
@@ -160,7 +188,19 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
                   writers: writers,
                   links: container.lossyArray(.links),
                   videos: container.lossyArray(.videos),
-                  defaultVideoID: hint)
+                  defaultVideoID: hint,
+                  trailers: Self.trailerIDs(streams: container.lossyArray(.trailerStreams), legacy: container.lossyArray(.trailers)))
+    }
+
+    /// `trailerStreams[].ytId`, or `trailers[].source` when that yields nothing. Empty and repeated ids are dropped.
+    private static func trailerIDs(streams: [TrailerEntry], legacy: [TrailerEntry]) -> [String] {
+        let fromStreams = uniqueIDs(streams.map(\.ytId))
+        return fromStreams.isEmpty ? uniqueIDs(legacy.map(\.source)) : fromStreams
+    }
+
+    private static func uniqueIDs(_ values: [String?]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { $0 }.filter { seen.insert($0).inserted }
     }
 
     /// Episodes grouped by season, ascending; specials (season 0) last, as most UIs show them.
@@ -206,7 +246,7 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
 extension MetaDetail {
     private enum EncodeKeys: String, CodingKey {
         case id, type, name, poster, posterShape, background, logo, description, releaseInfo, imdbRating, genres, runtime
-        case released, director, cast, writers, links, videos, behaviorHints
+        case released, director, cast, writers, links, videos, behaviorHints, trailerStreams
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -229,6 +269,7 @@ extension MetaDetail {
         try container.encode(writers, forKey: .writers)
         try container.encode(links, forKey: .links)
         try container.encode(videos, forKey: .videos)
+        try container.encode(trailers.map { ["ytId": $0] }, forKey: .trailerStreams)
         if let defaultVideoID { try container.encode(["defaultVideoId": defaultVideoID], forKey: .behaviorHints) }
     }
 }

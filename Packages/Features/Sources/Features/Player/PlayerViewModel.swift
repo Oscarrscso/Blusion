@@ -261,7 +261,7 @@ public final class PlayerViewModel {
         let picker = StreamPickerViewModel(request: next, services: services)
         await picker.load()
         let context = plan.candidates.indices.contains(coordinator?.candidateIndex ?? 0) ? plan.candidates[coordinator?.candidateIndex ?? 0].bingeContext : nil
-        if case .play(let nextPlan)? = picker.bingeChoice(continuing: context) { return nextPlan }
+        if case .play(let nextPlan)? = await picker.bingeChoice(continuing: context) { return nextPlan }
         return nil
     }
 }

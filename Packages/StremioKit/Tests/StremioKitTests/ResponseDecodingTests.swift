@@ -118,6 +118,58 @@ import Testing
         #expect(try JSONDecoder().decode(MetaDetail.self, from: JSONEncoder().encode(movie)) == movie)
     }
 
+    @Test func trailersComeFromTrailerStreamsThenTheOlderList() throws {
+        let modern = Data(#"""
+        {"meta":{"id":"tt1","type":"movie","name":"M",
+         "trailerStreams":[{"title":"Trailer","ytId":"abc123"},{"ytId":""},{"title":"No id"},{"ytId":"abc123"},{"ytId":"def456"}],
+         "trailers":[{"source":"zzz999","type":"Trailer"}]}}
+        """#.utf8)
+        #expect(try loadMeta(modern).trailers == ["abc123", "def456"], "empty and repeated ids are dropped; trailerStreams wins over trailers")
+        let older = Data(#"""
+        {"meta":{"id":"tt2","type":"movie","name":"M2",
+         "trailers":[{"source":"old1","type":"Trailer"},{"source":""},{"source":"old1"}]}}
+        """#.utf8)
+        #expect(try loadMeta(older).trailers == ["old1"], "the older trailers list is used when trailerStreams gives no ids")
+        #expect(try loadMeta(Data(#"{"meta":{"id":"tt3","type":"movie"}}"#.utf8)).trailers.isEmpty)
+    }
+
+    @Test func episodesFallBackToFirstAiredAndReadStringRatings() throws {
+        let blob = Data(#"""
+        {"meta":{"id":"tt9","type":"series","name":"Show","videos":[
+          {"id":"tt9:1:1","season":1,"episode":1,"firstAired":"2008-01-20T00:00:00.000Z","rating":"8.4"},
+          {"id":"tt9:1:2","season":1,"episode":2,"released":"2008-01-27T00:00:00.000Z","firstAired":"2008-01-27","rating":7.9}]}}
+        """#.utf8)
+        let meta = try loadMeta(blob)
+        let first = try #require(meta.videos.first { $0.id == "tt9:1:1" })
+        #expect(first.released == "2008-01-20T00:00:00.000Z", "firstAired stands in for a missing released")
+        #expect(first.rating == 8.4)
+        let second = try #require(meta.videos.first { $0.id == "tt9:1:2" })
+        #expect(second.released == "2008-01-27T00:00:00.000Z", "released wins over firstAired")
+        #expect(second.rating == 7.9)
+        #expect(Video(id: "bare").rating == nil)
+    }
+
+    @Test func trailersAndVideoRatingsSurviveARoundTrip() throws {
+        let blob = Data(#"""
+        {"meta":{"id":"tt9","type":"series","name":"Show","trailerStreams":[{"ytId":"abc123"}],
+         "videos":[{"id":"tt9:1:1","season":1,"episode":1,"firstAired":"2008-01-20","rating":"8.4"}]}}
+        """#.utf8)
+        let meta = try loadMeta(blob)
+        let encoded = try JSONEncoder().encode(meta)
+        let again = try JSONDecoder().decode(MetaDetail.self, from: encoded)
+        #expect(again == meta)
+        #expect(again.trailers == ["abc123"])
+        #expect(again.videos.first?.rating == 8.4)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let streams = object["trailerStreams"] as? [[String: String]]
+        #expect(streams == [["ytId": "abc123"]], "encoded as trailerStreams with ytId")
+    }
+
+    @Test func previewIdentityIncludesTheType() {
+        #expect(MetaPreview(id: "tt1", type: "movie").identity == "movie/tt1")
+        #expect(MetaPreview(id: "tt1", type: "series").identity != MetaPreview(id: "tt1", type: "movie").identity)
+    }
+
     @Test func streamsOfEveryKind() throws {
         let streams = try ResponseDecoder.streams(from: data("streams-all-kinds"))
         #expect(streams.count == 8)

@@ -1,4 +1,5 @@
 import Foundation
+import PlayerKit
 import Testing
 import StremioKit
 import StremioKitTestSupport
@@ -7,10 +8,13 @@ import StremioKitTestSupport
 @MainActor
 @Suite struct StreamPickerViewModelTests {
     private let request = StreamRequest(type: "movie", id: "tt1", title: "Test Movie")
+    /// A movie with a year, so hand-off file names have one.
+    private let movie = StreamRequest(type: "movie", id: "tt1", title: "Test Movie", year: "2010")
 
     /// Addon `stubN` answers with `bodies[N]` after `delays[N]`.
     private func services(bodies: [String], delays: [Duration] = [], failing: Set<Int> = [], sniffer: [String: MediaContainer] = [:],
-                          settings: PlaybackSettings = PlaybackSettings(), fallbackLinked: Bool = false) async throws -> AppServices {
+                          settings: PlaybackSettings = PlaybackSettings(), fallbackLinked: Bool = false,
+                          progress: [WatchProgress] = []) async throws -> AppServices {
         let transport = StubTransport { request, _ in
             let index = Int(request.url?.host?.dropFirst(4).prefix(while: \.isNumber) ?? "0") ?? 0
             if index < delays.count { try await Task.sleep(for: delays[index]) }
@@ -20,7 +24,7 @@ import StremioKitTestSupport
         let (registry, client) = try await makeStubbedRegistry(manifests: bodies.indices.map { streamManifest("addon\($0)") }, transport: transport)
         return AppServices(registry: registry, client: client,
                            streams: StreamService(registry: registry, client: client, sniffer: StubSniffer(sniffer)),
-                           settings: InMemorySettingsStore(settings), fallbackEngineLinked: fallbackLinked)
+                           settings: InMemorySettingsStore(settings), progress: InMemoryProgressStore(progress), fallbackEngineLinked: fallbackLinked)
     }
 
     private func body(_ streams: [String]) -> String { #"{"streams":[\#(streams.joined(separator: ","))]}"# }
@@ -100,11 +104,11 @@ import StremioKitTestSupport
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
         let chosen = try #require(model.listing.items.first { $0.title == "720" })
-        guard case .play(let plan)? = model.choose(chosen) else { Issue.record("expected a plan"); return }
+        guard case .play(let plan)? = await model.choose(chosen) else { Issue.record("expected a plan"); return }
         #expect(plan.request == request)
         #expect(plan.candidates.map(\.title) == ["720", "1080"], "the choice first, then the other playable streams; the unsupported one is not offered")
         #expect(plan.candidates.allSatisfy { $0.route.isPlayable })
-        guard case .play(let best)? = model.playBest() else { Issue.record("expected a plan"); return }
+        guard case .play(let best)? = await model.playBest() else { Issue.record("expected a plan"); return }
         #expect(best.candidates.first?.title == "1080")
     }
 
@@ -113,7 +117,7 @@ import StremioKitTestSupport
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
         let unsupported = try #require(model.listing.items.first { $0.title == "mkv" })
-        guard case .unsupported(let next)? = model.choose(unsupported) else { Issue.record("expected unsupported"); return }
+        guard case .unsupported(let next)? = await model.choose(unsupported) else { Issue.record("expected unsupported"); return }
         #expect(next?.title == "mp4")
     }
 
@@ -121,7 +125,8 @@ import StremioKitTestSupport
         let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/1.mkv", "2160p")])], fallbackLinked: true)
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
-        guard case .play(let plan)? = model.choose(model.listing.items[0]) else { Issue.record("expected a plan"); return }
+        let first = try #require(model.listing.items.first)
+        guard case .play(let plan)? = await model.choose(first) else { Issue.record("expected a plan"); return }
         #expect(plan.candidates.first?.route == .fallback(URL(string: "https://a.example.com/1.mkv")!, .container(.matroska)))
     }
 
@@ -136,11 +141,21 @@ import StremioKitTestSupport
         let services = try await services(bodies: [body([#"{"name":"YT","ytId":"abc123"}"#, #"{"name":"Site","externalUrl":"https://example.com/w"}"#])])
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
-        let urls: [URL] = model.listing.items.compactMap(model.choose).compactMap { choice in
-            if case .openExternal(let url) = choice { return url }
-            return nil
+        var urls: [URL] = []
+        for item in model.listing.items {
+            if case .openExternal(let url)? = await model.choose(item) { urls.append(url) }
         }
         #expect(Set(urls) == [URL(string: "https://www.youtube.com/watch?v=abc123")!, URL(string: "https://example.com/w")!])
+    }
+
+    @Test func linksToWebPagesHaveTheirOwnGroupAndTheAddonGroupsHoldTheStreams() async throws {
+        let services = try await services(bodies: [body([#"{"name":"Removal Reasons","externalUrl":"https://example.com/summary"}"#,
+                                                         direct("1080", "https://a.example.com/2.mp4", "1080p")])])
+        let model = StreamPickerViewModel(request: request, services: services)
+        await model.load()
+        #expect(model.links.map(\.title) == ["Removal Reasons"])
+        #expect(model.addonSections.map { $0.streams.map(\.title) } == [["1080"]])
+        #expect(model.listing.items.map(\.title) == ["1080", "Removal Reasons"], "links rank below playable streams")
     }
 
     @Test func torrentsShowUpOnceAStreamingServerIsConfigured() async throws {
@@ -170,11 +185,13 @@ import StremioKitTestSupport
         let services = try await services(bodies: [body([withGroup("other", "https://a.example.com/1.mp4", "g-other"), withGroup("match", "https://a.example.com/2.mp4", "g-1080")])])
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
-        guard case .play(let plan)? = model.bingeChoice(continuing: BingeContext(bingeGroup: "g-1080")) else { Issue.record("expected a plan"); return }
+        guard case .play(let plan)? = await model.bingeChoice(continuing: BingeContext(bingeGroup: "g-1080")) else { Issue.record("expected a plan"); return }
         #expect(plan.candidates.first?.title == "match")
         #expect(plan.candidates.first?.bingeContext?.bingeGroup == "g-1080")
-        #expect(model.bingeChoice(continuing: BingeContext(bingeGroup: "nope")) == nil)
-        #expect(model.bingeChoice(continuing: nil) == nil)
+        let unknownGroup = await model.bingeChoice(continuing: BingeContext(bingeGroup: "nope"))
+        #expect(unknownGroup == nil)
+        let noContext = await model.bingeChoice(continuing: nil)
+        #expect(noContext == nil)
     }
 
     @Test func candidatesCarryHeadersSubtitlesAndHashes() async throws {
@@ -182,7 +199,7 @@ import StremioKitTestSupport
         let services = try await services(bodies: [body([stream])])
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
-        guard case .play(let plan)? = model.playBest() else { Issue.record("expected a plan"); return }
+        guard case .play(let plan)? = await model.playBest() else { Issue.record("expected a plan"); return }
         let candidate = try #require(plan.candidates.first)
         #expect(candidate.headers == ["Referer": "https://r.example.com"])
         #expect(candidate.subtitles.map(\.lang) == ["eng"])
@@ -196,5 +213,200 @@ import StremioKitTestSupport
         await model.load()
         await model.retry()
         #expect(model.listing.items.count == 1)
+    }
+
+    // MARK: another player
+
+    private func url(_ text: String) -> URL { URL(string: text)! }
+
+    private func query(_ link: URL) -> [URLQueryItem] {
+        URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    }
+
+    private func value(_ name: String, in items: [URLQueryItem]) -> String? {
+        items.first { $0.name == name }?.value
+    }
+
+    /// A picker that knows which player apps are installed. Routing depends on that, so it is set before the picker loads.
+    private func picker(_ request: StreamRequest, _ services: AppServices, installed: Set<ExternalPlayer> = [.infuse]) -> StreamPickerViewModel {
+        let model = StreamPickerViewModel(request: request, services: services)
+        model.setInstalledPlayers(installed)
+        return model
+    }
+
+    @Test func infuseTakesAnMKVWithTheResumePointAFileNameAndAStoredHandoff() async throws {
+        let saved = WatchProgress(id: "movie/tt1", type: "movie", contentID: "tt1", title: "Test Movie", position: 1234.7, duration: 7200,
+                                  isWatched: false, updatedAt: Date())
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/Movie%20One.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse), progress: [saved])
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(let player, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(player == .infuse)
+        #expect(link.scheme == "infuse")
+        let items = query(link)
+        #expect(value("url", in: items) == "https://a.example.com/Movie%20One.mkv")
+        #expect(value("position", in: items) == "1234", "resumes where the viewer stopped, rounded down")
+        #expect(value("filename", in: items) == "Test-Movie-2010.mkv")
+        let callback = try #require(value("x-success", in: items))
+        let token = try #require(ExternalPlayerCallback.parse(url(callback))?.token)
+        let stored = await services.handoffs.take(id: token)
+        #expect(stored?.request == movie && stored?.player == .infuse, "the hand-off is remembered for the callback")
+    }
+
+    @Test func withBlusionAloneAnMKVIsUnsupportedAndOfferedToInfuse() async throws {
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/1.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .builtIn))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(item.route == .unsupported(.matroska))
+        #expect(model.alternativePlayers(for: item) == [.infuse])
+        let choice = await model.choose(item)
+        guard case .unsupported? = choice else { Issue.record("expected unsupported"); return }
+    }
+
+    @Test func aPlayerThatIsNotInstalledIsNeverRoutedToOrOffered() async throws {
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/1.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuseWhenNeeded))
+        let model = picker(movie, services, installed: [])
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(item.route == .unsupported(.matroska), "with no Infuse on the device, the MKV stays unsupported")
+        #expect(model.alternativePlayers(for: item).isEmpty)
+    }
+
+    @Test func infuseWhenNeededHandsTheMKVOverOnlyWhenInfuseIsInstalled() async throws {
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/1.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuseWhenNeeded))
+        let without = picker(movie, services, installed: [])
+        await without.load()
+        #expect(without.listing.items.first?.route == .unsupported(.matroska))
+
+        let with = picker(movie, services, installed: [.infuse])
+        await with.load()
+        let item = try #require(with.listing.items.first)
+        #expect(item.route == .handoff(.infuse, url("https://a.example.com/1.mkv")))
+        #expect(with.listing.best?.title == item.title, "a hand-off can be the best stream")
+    }
+
+    @Test func aStreamWithRequestHeadersIsNeverOfferedToInfuse() async throws {
+        let guarded = #"{"name":"guarded","url":"https://a.example.com/1.mkv","behaviorHints":{"proxyHeaders":{"request":{"Referer":"https://r.example.com"}}}}"#
+        let services = try await services(bodies: [body([guarded])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(item.route == .unsupported(.matroska), "Infuse can't send the headers, so the stream stays with Blusion")
+        #expect(model.alternativePlayers(for: item).isEmpty)
+        let handoff = await model.handoffChoice(for: item, player: .infuse)
+        #expect(handoff == nil)
+    }
+
+    @Test func inInfuseModeAnMP4CanStillPlayInBlusion() async throws {
+        let services = try await services(bodies: [body([direct("mp4", "https://a.example.com/1.mp4", "1080p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(item.route == .handoff(.infuse, url("https://a.example.com/1.mp4")))
+        #expect(model.alternativePlayers(for: item).isEmpty, "the route already is Infuse")
+        guard case .play(let plan)? = model.inAppChoice(for: item) else { Issue.record("expected an in-app plan"); return }
+        #expect(plan.candidates.first?.route == .native(url("https://a.example.com/1.mp4")))
+    }
+
+    @Test func inInfuseModeAnMKVWithoutTheFallbackEngineHasNoInAppPlay() async throws {
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/1.mkv")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(model.inAppChoice(for: item) == nil, "Blusion can't play it, so there is nothing to fall back to")
+    }
+
+    @Test func playBestOpensTheBestStreamInInfuseWhenInfuseRanksFirst() async throws {
+        let services = try await services(bodies: [body([direct("1080", "https://a.example.com/2.mp4", "1080p"),
+                                                         direct("4K", "https://a.example.com/1.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        guard case .openInPlayer(let player, let link)? = await model.playBest() else { Issue.record("expected a hand-off"); return }
+        #expect(player == .infuse)
+        #expect(value("url", in: query(link)) == "https://a.example.com/1.mkv")
+        #expect(value("filename", in: query(link)) == "Test-Movie-2010.mkv")
+    }
+
+    @Test func aReleaseNameDoesNotLendItsDottedEndingAsTheExtension() async throws {
+        // Real addons send release names as the file name, with no extension: the file's extension comes from the URL instead.
+        let release = "Breaking.Bad.S01E01.Pilot.2160p.NF.WEB-DL.DD+5.1.H.265-playWEB"
+        let stream = #"{"name":"R","url":"https://a.example.com/files/release.mkv","behaviorHints":{"filename":"\#(release)"}}"#
+        let services = try await services(bodies: [body([stream])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(_, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(value("filename", in: query(link)) == "Test-Movie-2010.mkv", "265-playWEB is not a video extension, so the URL's mkv is used")
+    }
+
+    @Test func aFilenameHintWithAVideoExtensionNamesTheFile() async throws {
+        let stream = #"{"name":"R","url":"https://a.example.com/download?id=7","behaviorHints":{"filename":"Film.Release.2010.1080p.MP4"}}"#
+        let services = try await services(bodies: [body([stream])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(_, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(value("filename", in: query(link)) == "Test-Movie-2010.mp4")
+    }
+
+    @Test func aFileNameWithNoVideoExtensionAnywhereDefaultsToMP4() async throws {
+        let stream = #"{"name":"R","url":"https://a.example.com/download/abc","behaviorHints":{"filename":"Release-playWEB"}}"#
+        let services = try await services(bodies: [body([stream])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(_, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(value("filename", in: query(link)) == "Test-Movie-2010.mp4")
+    }
+
+    @Test func anEpisodeIsNamedAfterItsSeries() async throws {
+        let episode = StreamRequest(type: "series", id: "tt9:2:5", title: "Show · Pilot", season: 2, episode: 5, seriesName: "Show", year: "2008")
+        let services = try await services(bodies: [body([direct("mkv", "https://a.example.com/e.mkv", "1080p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(episode, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(_, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(value("filename", in: query(link)) == "Show-S02-E05.mkv")
+    }
+
+    @Test func theSubtitleInTheUsersLanguageGoesWithTheHandOff() async throws {
+        let stream = #"{"name":"S","url":"https://a.example.com/1.mkv","subtitles":[{"id":"fr","url":"https://a.example.com/fr.srt","lang":"fre"},{"id":"en","url":"https://a.example.com/en.srt","lang":"eng"}]}"#
+        let services = try await services(bodies: [body([stream])], settings: PlaybackSettings(subtitleLanguage: "en", playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        guard case .openInPlayer(_, let link)? = await model.choose(item) else { Issue.record("expected a hand-off"); return }
+        #expect(value("sub", in: query(link)) == "https://a.example.com/en.srt")
+    }
+
+    @Test func noSubtitleIsSentWhenTheSettingIsOff() async throws {
+        let stream = #"{"name":"S","url":"https://a.example.com/1.mkv","subtitles":[{"id":"en","url":"https://a.example.com/en.srt","lang":"eng"}]}"#
+        let services = try await services(bodies: [body([stream])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        let handoff = await model.handoffChoice(for: item, player: .infuse)
+        guard case .openInPlayer(_, let link)? = handoff else { Issue.record("expected a hand-off"); return }
+        #expect(value("sub", in: query(link)) == nil)
+    }
+
+    @Test func onlyDirectStreamsCanGoToAnotherPlayer() async throws {
+        let services = try await services(bodies: [body([#"{"name":"YT","ytId":"abc123"}"#])], settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        await model.load()
+        let item = try #require(model.listing.items.first)
+        #expect(model.alternativePlayers(for: item).isEmpty)
+        let handoff = await model.handoffChoice(for: item, player: .infuse)
+        #expect(handoff == nil)
     }
 }

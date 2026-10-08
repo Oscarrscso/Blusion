@@ -1,4 +1,4 @@
-#if canImport(SwiftUI) && canImport(UIKit) && canImport(AVKit)
+#if canImport(UIKit) && canImport(AVKit)
 import AVKit
 import PlayerKit
 import SwiftUI

@@ -20,7 +20,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if isReady {
-                RootTabView(services: environment.services)
+                RootTabView(services: environment.services, route: environment.launchRoute)
             } else {
                 ProgressView()
                     .accessibilityIdentifier("root.loading")
@@ -28,7 +28,25 @@ struct RootView: View {
         }
         .task {
             try? await environment.services.registry.load()
+            await environment.seedDefaultAddons()
+            #if DEBUG
+            await DebugDemoData.installExtraAddons(environment.services)
+            await DebugDemoData.seedIfRequested(environment.services)
+            #endif
             isReady = true
+            #if DEBUG
+            DebugSnapshot.scheduleIfRequested()
+            await DebugHandoffProbe.startIfRequested(environment.services)
+            #endif
+        }
+        // The player app calls back here with where the viewer stopped (blusion://x-callback-url/handoff/...).
+        .onOpenURL { url in
+            Task {
+                await PlaybackHandoffCenter(services: environment.services).handle(url)
+                #if DEBUG
+                await DebugHandoffProbe.record(url, services: environment.services)
+                #endif
+            }
         }
     }
 }

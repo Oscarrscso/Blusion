@@ -4,8 +4,10 @@ import FoundationNetworking
 #endif
 
 public struct AddonClientConfiguration: Sendable, Equatable {
-    /// Overall deadline for one request, retries included (PLAN M2: 8 s per addon).
+    /// Overall deadline for one request, retries included. Catalog, meta and subtitle requests use it.
     public var timeout: TimeInterval
+    /// Overall deadline for stream requests, which aggregating stream addons often need longer for. `nil` means `timeout`.
+    public var streamTimeout: TimeInterval?
     public var maxBytes: Int
     /// Retries after the first attempt, for idempotent GETs that failed transiently (timeouts, connection loss, 5xx, 429).
     public var maxRetries: Int
@@ -14,9 +16,10 @@ public struct AddonClientConfiguration: Sendable, Equatable {
     public var maxRedirects: Int
     public var userAgent: String
 
-    public init(timeout: TimeInterval = 8, maxBytes: Int = 5 * 1024 * 1024, maxRetries: Int = 2, retryBackoff: TimeInterval = 0.25,
-                maxRedirects: Int = 5, userAgent: String = StremioKitInfo.userAgent) {
+    public init(timeout: TimeInterval = 15, streamTimeout: TimeInterval? = nil, maxBytes: Int = 5 * 1024 * 1024, maxRetries: Int = 2,
+                retryBackoff: TimeInterval = 0.25, maxRedirects: Int = 5, userAgent: String = StremioKitInfo.userAgent) {
         self.timeout = timeout
+        self.streamTimeout = streamTimeout
         self.maxBytes = maxBytes
         self.maxRetries = maxRetries
         self.retryBackoff = retryBackoff
@@ -24,7 +27,10 @@ public struct AddonClientConfiguration: Sendable, Equatable {
         self.userAgent = userAgent
     }
 
-    public static let `default` = AddonClientConfiguration()
+    /// The deadline stream requests run under.
+    public var effectiveStreamTimeout: TimeInterval { streamTimeout ?? timeout }
+
+    public static let `default` = AddonClientConfiguration(timeout: 15, streamTimeout: 30)
 }
 
 /// Talks to addons. Every failure is an `AddonError`; no error or log line ever contains an addon URL.
@@ -42,12 +48,14 @@ public final class AddonClient: Sendable {
     }
 
     /// GET with a deadline, bounded retries and status mapping. 2xx returns; 404 is `notFound`; other statuses are `http`.
-    public func get(_ url: URL, headers: [String: String] = [:], limits: FetchLimits? = nil) async throws -> HTTPResult {
+    /// `timeout` (nil: `configuration.timeout`) bounds the whole call, retries included, and is each attempt's own timeout.
+    public func get(_ url: URL, headers: [String: String] = [:], limits: FetchLimits? = nil, timeout: TimeInterval? = nil) async throws -> HTTPResult {
         let limits = limits ?? FetchLimits(maxBytes: configuration.maxBytes, maxRedirects: configuration.maxRedirects)
+        let timeout = timeout ?? configuration.timeout
         let started = Date()
         do {
-            let result = try await withDeadline(seconds: configuration.timeout) { [self] in
-                try await getWithRetries(url, headers: headers, limits: limits)
+            let result = try await withDeadline(seconds: timeout) { [self] in
+                try await getWithRetries(url, headers: headers, limits: limits, timeout: timeout)
             }
             logger.log(.debug, "GET \(Redactor.redact(url)) -> \(result.response.statusCode) (\(result.data.count) B, \(Self.millis(since: started)) ms)")
             return result
@@ -66,11 +74,11 @@ public final class AddonClient: Sendable {
         return (result.data, result.response.contentType)
     }
 
-    private func getWithRetries(_ url: URL, headers: [String: String], limits: FetchLimits) async throws -> HTTPResult {
+    private func getWithRetries(_ url: URL, headers: [String: String], limits: FetchLimits, timeout: TimeInterval) async throws -> HTTPResult {
         var attempt = 0
         while true {
             do {
-                return try await attemptOnce(url, headers: headers, limits: limits)
+                return try await attemptOnce(url, headers: headers, limits: limits, timeout: timeout)
             } catch let error as AddonError {
                 guard error.isRetryable, attempt < configuration.maxRetries else { throw error }
                 logger.log(.debug, "retry \(attempt + 1)/\(configuration.maxRetries) for \(Redactor.redact(url)) after \(error.shortDescription)")
@@ -80,9 +88,9 @@ public final class AddonClient: Sendable {
         }
     }
 
-    private func attemptOnce(_ url: URL, headers: [String: String], limits: FetchLimits) async throws -> HTTPResult {
+    private func attemptOnce(_ url: URL, headers: [String: String], limits: FetchLimits, timeout: TimeInterval) async throws -> HTTPResult {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { throw AddonError.invalidURL }
-        var request = URLRequest(url: url, timeoutInterval: configuration.timeout)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "GET"
         request.setValue(configuration.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json, */*;q=0.5", forHTTPHeaderField: "Accept")
@@ -128,7 +136,7 @@ extension AddonClient {
     }
 
     public func streams(base: URL, type: String, id: String) async throws -> [AddonStream] {
-        let result = try await get(try url(base, .stream, type, id))
+        let result = try await get(try url(base, .stream, type, id), timeout: configuration.effectiveStreamTimeout)
         return try ResponseDecoder.streams(from: result.data)
     }
 

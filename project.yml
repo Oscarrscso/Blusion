@@ -7,7 +7,7 @@ name: Blusion
 options:
   bundleIdPrefix: app.blusion
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
   createIntermediateGroups: true
   developmentLanguage: en
   generateEmptyDirectories: true
@@ -16,7 +16,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     TARGETED_DEVICE_FAMILY: "1,2"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -54,7 +54,10 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Blusion
-        UILaunchScreen: {}
+        # Always dark, from the first frame: the launch screen and system alerts follow this key, not SwiftUI's preferredColorScheme.
+        UIUserInterfaceStyle: Dark
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -67,6 +70,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.entertainment
         # Addons may live on the user's LAN over plain http. NSAllowsLocalNetworking exempts local addresses from ATS only.
         # NSAllowsArbitraryLoadsForMedia exempts only loads AVFoundation performs itself (many direct stream URLs are plain http); ADR-005.
         # NSAllowsArbitraryLoads is never set (PLAN §1).
@@ -77,9 +81,29 @@ targets:
         UIBackgroundModes:
           - audio
         NSLocalNetworkUsageDescription: "Blusion connects to addons you install that run on your local network."
+        # Player apps a stream can be handed to. Needed for canOpenURL to say whether one is installed.
+        LSApplicationQueriesSchemes:
+          - infuse
+        # blusion://x-callback-url/...: how a player app reports where the viewer stopped (ExternalPlayerCallback).
+        CFBundleURLTypes:
+          - CFBundleURLName: app.blusion.player.callback
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes:
+              - blusion
+          # stremio://host/.../manifest.json: the Install link on an addon's own page. Opens Blusion on the install screen.
+          - CFBundleURLName: app.blusion.player.addon-install
+            CFBundleTypeRole: Viewer
+            CFBundleURLSchemes:
+              - stremio
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.blusion.player
+        # The Mac app is this same target built with Mac Catalyst in the Mac idiom (6): real Mac controls and a sidebar.
+        SUPPORTS_MACCATALYST: YES
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
+        TARGETED_DEVICE_FAMILY: "1,2,6"
+        # The owner's signing team. Kept here because the project is regenerated from this file; a team picked in Xcode would be lost.
+        DEVELOPMENT_TEAM: 4DAM5V8UD3
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO

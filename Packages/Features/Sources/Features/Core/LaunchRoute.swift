@@ -1,0 +1,71 @@
+import Foundation
+import StremioKit
+
+/// Where the app opens. Normally `home`; a launch argument can ask for another screen, which is how UI tests and
+/// `scripts/snapshot.sh` reach a screen without tapping through the app.
+///
+/// Text forms (the `BLUSION_ROUTE` environment variable):
+/// `home`, `discover`, `library`, `search`, `search:<query>`, `detail:<type>:<id>`, `streams:<type>:<id>`,
+/// `settings`, `addons`, `widgets`, `gallery`, `gallery:<section>`, `player`.
+public struct LaunchRoute: Sendable, Equatable {
+    public enum Tab: String, Sendable, Hashable, CaseIterable {
+        case home, discover, library, search
+    }
+
+    /// Settings, or one of the screens inside it.
+    public enum Sheet: String, Sendable, Equatable {
+        case settings, addons, widgets
+    }
+
+    public var tab: Tab
+    /// Typed into the search field on arrival.
+    public var searchQuery: String?
+    /// Pushed onto the Home stack on arrival.
+    public var detail: MetaPreview?
+    public var streams: StreamRequest?
+    public var sheet: Sheet?
+    /// The component gallery, optionally opened on one of its sections.
+    public var showsGallery: Bool
+    public var gallerySection: String?
+    /// The player on a public sample stream, for looking at its controls without a stream addon.
+    public var showsPlayerDemo: Bool
+
+    public init(tab: Tab = .home, searchQuery: String? = nil, detail: MetaPreview? = nil, streams: StreamRequest? = nil,
+                sheet: Sheet? = nil, showsGallery: Bool = false, gallerySection: String? = nil, showsPlayerDemo: Bool = false) {
+        self.tab = tab
+        self.searchQuery = searchQuery
+        self.detail = detail
+        self.streams = streams
+        self.sheet = sheet
+        self.showsGallery = showsGallery
+        self.gallerySection = gallerySection
+        self.showsPlayerDemo = showsPlayerDemo
+    }
+
+    public static let home = LaunchRoute()
+
+    /// nil for text that is not a route. Ids keep their colons (`detail:series:tt1:1:2` is type `series`, id `tt1:1:2`).
+    public static func parse(_ text: String?) -> LaunchRoute? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        let parts = text.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        let argument = parts.dropFirst().joined(separator: ":")
+        switch parts[0].lowercased() {
+        case "search":
+            return LaunchRoute(tab: .search, searchQuery: argument.isEmpty ? nil : argument)
+        case "detail":
+            guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
+            return LaunchRoute(detail: MetaPreview(id: parts[2], type: parts[1]))
+        case "streams":
+            guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
+            return LaunchRoute(streams: StreamRequest(type: parts[1], id: parts[2], title: parts[2]))
+        case "settings", "addons", "widgets":
+            return LaunchRoute(sheet: Sheet(rawValue: parts[0].lowercased()))
+        case "gallery":
+            return LaunchRoute(showsGallery: true, gallerySection: argument.isEmpty ? nil : argument)
+        case "player":
+            return LaunchRoute(showsPlayerDemo: true)
+        default:
+            return Tab(rawValue: parts[0].lowercased()).map { LaunchRoute(tab: $0) }
+        }
+    }
+}
