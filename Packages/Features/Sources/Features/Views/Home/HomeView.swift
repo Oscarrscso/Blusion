@@ -86,9 +86,26 @@ struct HomeView: View {
         .contentMargins(.top, 0, for: .scrollContent)
         .scrollEdgeEffectStyle(.soft, for: .top)
         .scrollEdgeEffectHidden(spotlightIsAtTop, for: .top)
+        .overlay(alignment: .top) {
+            if spotlightIsAtTop { topBlurBar }
+        }
         .screenBackground()
         .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 160 }, action: { _, scrolled in isScrolled = scrolled })
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
+    }
+
+    /// A soft blur over the top edge of the spotlight, behind the status bar, so the picture fades out there instead of being cut off.
+    /// It stays put while the spotlight scrolls, and the navigation bar takes over once the content moves past it.
+    private var topBlurBar: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .frame(height: 64)
+            .mask {
+                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+            }
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {

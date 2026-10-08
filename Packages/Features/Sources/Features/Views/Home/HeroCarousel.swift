@@ -126,7 +126,7 @@ private struct HeroPage: View {
 
     private var artwork: some View {
         Color.clear
-            .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400) }
+            .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400, alignment: .top) }
             .overlay { scrim }
             .contentShape(Rectangle())
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
