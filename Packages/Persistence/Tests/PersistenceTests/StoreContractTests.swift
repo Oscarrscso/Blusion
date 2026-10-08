@@ -104,6 +104,24 @@ func exerciseLibraryStoreContract(_ store: any LibraryStore) async {
         try await exerciseSecretStoreContract(InMemorySecretStore())
     }
 
+    #if canImport(Darwin)
+    /// The store of a Mac build that may not use the Keychain: a second store on the same file sees what the first saved, and
+    /// no other account can read the file.
+    @Test func fileSecretStoreKeepsItsValuesInAPrivateFile() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("blusion-secrets-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("Secrets.json")
+        try await exerciseSecretStoreContract(FileSecretStore(fileURL: file))
+
+        try await FileSecretStore(fileURL: file).set("https://example.com/TOKEN/manifest.json", for: "addon.a.manifestURL")
+        try await FileSecretStore(fileURL: file).set("key", for: "ratings.omdb")
+        #expect(try await FileSecretStore(fileURL: file).get("addon.a.manifestURL") == "https://example.com/TOKEN/manifest.json")
+        let mode = try #require(FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber)
+        #expect(mode.intValue == 0o600)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["Secrets.json"], "no temporary file is left behind")
+    }
+    #endif
+
     @Test func inMemoryProgressStore() async {
         await exerciseProgressStoreContract(InMemoryProgressStore())
     }

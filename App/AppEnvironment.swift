@@ -56,6 +56,7 @@ final class AppEnvironment {
         let progress: any ProgressStore
         let library: any LibraryStore
         let settingsDefaults: UserDefaults
+        var secretsInKeychain = true
         if uiTesting {
             store = InMemoryAddonStore()
             secrets = InMemorySecretStore()
@@ -66,7 +67,10 @@ final class AppEnvironment {
             settingsDefaults = UserDefaults(suiteName: suite) ?? .standard
             settingsDefaults.removePersistentDomain(forName: suite)
         } else {
-            secrets = KeychainSecretStore()
+            let device = KeychainSecretStore.forThisDevice()
+            secrets = device.store
+            secretsInKeychain = device.usesKeychain
+            if !secretsInKeychain { logger.log(.error, "Keychain unavailable to this build; secrets are kept in a private file") }
             settingsDefaults = .standard
             if let container = try? PersistenceContainer.make() {
                 // One container, three stores: addons, watch progress and the library share the same file and migration plan.
@@ -129,7 +133,8 @@ final class AppEnvironment {
         let traktAccount = TraktAccount(settings: settings, secrets: secrets)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,
-                                   posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount)
+                                   posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount,
+                                   secretsInKeychain: secretsInKeychain)
         let seedsDefaults = !uiTesting || environment["BLUSION_SEED_DEFAULTS"] == "1"
         let seeder = seedsDefaults ? DefaultAddonSeeder(registry: registry, flags: DefaultsFlagStore(defaults: settingsDefaults)) : nil
         return AppEnvironment(services: services, isUITesting: uiTesting, launchRoute: LaunchRoute.parse(environment["BLUSION_ROUTE"]) ?? .home,

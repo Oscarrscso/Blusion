@@ -15,6 +15,27 @@ public final class KeychainSecretStore: SecretStore, Sendable {
         self.service = service
     }
 
+    /// False where the system keeps this app away from the Keychain altogether. A Mac Catalyst build signed without a
+    /// provisioning profile has no application identifier, and every call fails with `errSecMissingEntitlement`.
+    public static var isUsable: Bool {
+        // A read finds nothing and says so; only a write is refused. Deleting an item that does not exist changes nothing.
+        let probe: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: "app.blusion.player.probe",
+                                    kSecAttrAccount as String: "probe"]
+        return SecItemDelete(probe as CFDictionary) != errSecMissingEntitlement
+    }
+
+    /// The secret store for this device: the Keychain, except in a Mac build that may not use it. There the secrets go into a
+    /// file only the user's account can read, next to the app's store. `usesKeychain` says which one it is.
+    public static func forThisDevice() -> (store: any SecretStore, usesKeychain: Bool) {
+        #if canImport(SwiftData) && (targetEnvironment(macCatalyst) || os(macOS))
+        if !isUsable, let folder = PersistenceContainer.defaultStoreURL()?.deletingLastPathComponent() {
+            return (FileSecretStore(fileURL: folder.appendingPathComponent("Secrets.json")), false)
+        }
+        #endif
+        return (KeychainSecretStore(), true)
+    }
+
     private func baseQuery(_ key: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,

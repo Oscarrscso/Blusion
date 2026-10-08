@@ -28,12 +28,15 @@ public struct AppServices: Sendable {
     public let handoffs: any HandoffStore
     public let searchHistory: any SearchHistoryStore
     public let traktAccount: TraktAccount
+    /// False in a Mac build that the system keeps away from the Keychain: addon links and credentials are then in a private file.
+    public let secretsInKeychain: Bool
 
     public init(registry: AddonRegistry, client: AddonClient, browse: BrowseService? = nil, streams: StreamService? = nil,
                 subtitles: SubtitleService? = nil, settings: (any SettingsStore)? = nil, progress: (any ProgressStore)? = nil,
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
-                handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil) {
+                handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
+                secretsInKeychain: Bool = true) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -51,5 +54,6 @@ public struct AppServices: Sendable {
         self.traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
+        self.secretsInKeychain = secretsInKeychain
     }
 }

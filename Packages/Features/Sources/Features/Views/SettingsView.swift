@@ -180,7 +180,12 @@ struct SettingsView: View {
         } header: {
             Text("Clear data")
         } footer: {
-            Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
+            if services.secretsInKeychain {
+                Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
+            } else {
+                // A Mac build signed without a provisioning profile: the other screens still say Keychain.
+                Text("This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library folder instead. Trakt sync sends only the items you choose to share.")
+            }
         }
     }
 
