@@ -31,7 +31,7 @@ Left/Right to skip 10 seconds, and Esc to close. Reduce Motion disables card mov
 2. Save the title, check it appears in Library, and try the poster context menu.
 3. Open **Settings → Widgets**, edit a Home row, return Home, and check the change.
 4. Open the IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons on a title page. Links work without keys;
-   optional scores use an OMDb API key and TMDb API Read Access Token saved in **Settings → Review services**.
+   optional TMDb scores use a TMDb API Read Access Token saved in **Settings → Review services**.
 5. Register your Trakt API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`. Open **Settings → Accounts → Trakt**,
    save its Client ID and Client Secret, and select **Sign in to Trakt**.
    Authorize the displayed code in the browser. Choose the watchlist/history switches, then **Import from Trakt** or **Send to Trakt**.

@@ -112,14 +112,14 @@ struct ReviewSitesRow: View {
     var body: some View {
         if let store {
             let ratings = store.ratings(for: item)
-            links(ratings: ratings)
+            links(ratings: ratings, issue: store.reviewServiceIssue)
                 .task(id: "\(item.identity):\(store.reviewServicesRevision)") { _ = store.ratings(for: item, includeReviews: true) }
         } else {
-            links(ratings: nil)
+            links(ratings: nil, issue: nil)
         }
     }
 
-    private func links(ratings: TitleRatings?) -> some View {
+    private func links(ratings: TitleRatings?, issue: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
@@ -148,8 +148,11 @@ struct ReviewSitesRow: View {
                 }
             }
             .scrollIndicators(.hidden)
-            if ratings?.rottenTomatoes != nil || ratings?.metacritic != nil {
-                Text("Critic scores supplied by OMDb.").font(.caption2).foregroundStyle(.secondary)
+            if let issue {
+                Text(issue)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("detail.reviews.issue")
             }
         }
         .accessibilityIdentifier("detail.reviews")

@@ -85,7 +85,7 @@ final class AppEnvironment {
                 library = InMemoryLibraryStore()
             }
         }
-        let settings = DefaultsSettingsStore(defaults: settingsDefaults, secrets: secrets)
+        let settings = DefaultsSettingsStore(defaults: settingsDefaults, secrets: secrets, logger: logger)
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
         // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS and friends go to the fallback engine when it is built in (ADR-006, opt-in).
         let makeEngine: EngineFactory = { candidate in
@@ -128,7 +128,7 @@ final class AppEnvironment {
         } else {
             ratingsCache = InMemoryRatingsCache()
         }
-        let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache)
+        let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache, logger: logger)
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
         let traktAccount = TraktAccount(settings: settings, secrets: secrets)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,

@@ -119,7 +119,7 @@ struct SettingsView: View {
         } header: {
             Text("Review services")
         } footer: {
-            Text("Optional. Adds TMDB ratings to posters. Paste the Read Access Token from your TMDB API settings. It’s stored in the Keychain.")
+            Text("Optional. A TMDB Read Access Token adds TMDB scores and episode ratings. Credentials stay in the Keychain. Site links work without keys.")
         }
     }
 

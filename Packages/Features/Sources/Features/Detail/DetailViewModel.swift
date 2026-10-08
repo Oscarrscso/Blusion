@@ -12,8 +12,13 @@ public final class DetailViewModel {
     public private(set) var isLoading = true
     /// True when no addon returned `meta` and Detail is built from the catalog preview alone.
     public private(set) var isFallback = false
-    public var selectedSeason: Int?
+    /// Choosing a season fills in its episode ratings from TMDb, when the addon sent none (see `loadEpisodeRatings`).
+    public var selectedSeason: Int? {
+        didSet { if selectedSeason != oldValue { Task { await loadEpisodeRatings() } } }
+    }
     public private(set) var isInLibrary = false
+    /// Seasons whose TMDb episode scores are already in `detail`, or on their way.
+    private var episodeRatingSeasons: Set<Int> = []
     /// Identities (`type/id`) of watched movies and episodes shown on this screen.
     public private(set) var watchedIdentities: Set<String> = []
     /// Share of the runtime saved for the movie and episodes shown here, by identity (0...1). Only progress that playback can
@@ -39,6 +44,25 @@ public final class DetailViewModel {
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
+        await loadEpisodeRatings()
+    }
+
+    /// The IMDb id that names this series on TMDb: the title's own id, else the one at the head of an episode id (`tt…:1:2`).
+    private var seriesIMDbID: String? {
+        if LetterboxdRatings.isIMDbID(detail.preview.id) { return detail.preview.id }
+        return detail.videos.lazy.compactMap { Video.seriesIMDbID(fromVideoID: $0.id) }.first
+    }
+
+    /// Fills the selected season's episodes that have no rating of their own from TMDb's season data. The addon's rating always wins.
+    /// Runs once per season; a season TMDb has no votes for is asked again the next time it is chosen.
+    private func loadEpisodeRatings() async {
+        guard isSeries, let season = selectedSeason, !episodeRatingSeasons.contains(season),
+              detail.episodes(inSeason: season).contains(where: { $0.rating == nil }),
+              let seriesID = seriesIMDbID else { return }
+        episodeRatingSeasons.insert(season)
+        let scores = await services.posterRatings.episodeRatings(seriesIMDbID: seriesID, season: season)
+        if scores.isEmpty { episodeRatingSeasons.remove(season) }
+        detail.fillEpisodeRatings(season: season, scores: scores, source: .tmdb)
     }
 
     /// Library membership, watched marks and saved progress, from the local stores.

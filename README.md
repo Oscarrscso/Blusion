@@ -46,7 +46,7 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   Infuse handoff includes the resume position and records progress when its callback returns.
 - **Settings → Appearance:** toggle poster ratings. IMDb ratings come from catalog metadata; movie Letterboxd ratings are fetched and cached when available.
 - **Title details:** IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons open their review pages or a labeled search.
-  Links work without API keys. **Settings → Review services** accepts an optional OMDb API key for critic scores and a TMDb API Read Access Token
+  Links work without API keys. **Settings → Review services** accepts an optional TMDb API Read Access Token for TMDb scores and episode ratings
   for TMDb ratings; select **Save Review Services**. Credentials are stored in the Keychain.
 - **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that
   Trakt API app, then select **Connect Trakt**. PKCE sign-in needs no Client Secret. A registered `blusion://trakt/callback`
@@ -99,7 +99,7 @@ Snapshot builds carry the bundle id `app.blusion.player.snapshot`, so a run neve
   VoiceOver, and accessibility text sizes. See [the device checklist](docs/DEVICE_CHECKLIST.md).
 - A real streaming-server route, the optional MPV fallback build, distribution signing, and App Store submission are not validated by local layout snapshots.
 - Letterboxd lookup depends on its public page format and availability; a missing rating leaves the poster badge absent.
-- Trakt sign-in/sync and optional OMDb/TMDb lookups have stub-based tests; live account checks require user credentials.
+- Trakt sign-in/sync and optional TMDb lookups have stub-based tests; live account checks require user credentials.
 - External-player progress depends on the player returning a callback. A canceled or missing callback cannot supply a new position.
 - SRT and WebVTT are supported by the built-in player; styled or bitmap subtitles need a player that supports them.
 - Trakt imports on connection; later refreshes are manual. It does not transfer playback positions or propagate removals. There is no automatic device sync or tvOS target.
