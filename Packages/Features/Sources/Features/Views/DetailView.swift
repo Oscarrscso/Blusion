@@ -72,7 +72,9 @@ struct DetailView: View {
         VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.l) {
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(metrics.isRegular ? .leading : .center)
-            actionRow
+            primaryAction
+                .frame(maxWidth: metrics.isRegular ? 380 : .infinity)
+            secondaryActions
             synopsis
                 .frame(maxWidth: metrics.readableWidth, alignment: .leading)
             ReviewSitesRow(item: model.detail.preview)
@@ -110,21 +112,15 @@ struct DetailView: View {
         return model.nextUp.map { model.request(for: $0) }
     }
 
-    /// Play and the circle actions on one line: Play takes the room the circles leave.
-    private var actionRow: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.m) {
-            primaryAction
-                .frame(maxWidth: metrics.isRegular ? 280 : .infinity)
-            GlassEffectContainer(spacing: Theme.Spacing.s) {
-                HStack(alignment: .top, spacing: Theme.Spacing.s) {
-                    saveAction
-                    if !model.isSeries { watchedAction }
-                    if let trailer = model.trailerURL { trailerAction(trailer) }
-                }
+    private var secondaryActions: some View {
+        GlassEffectContainer(spacing: Theme.Spacing.l) {
+            HStack(alignment: .top, spacing: Theme.Spacing.xl) {
+                saveAction
+                if !model.isSeries { watchedAction }
+                if let trailer = model.trailerURL { trailerAction(trailer) }
             }
-            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var saveAction: some View {
