@@ -190,14 +190,6 @@ public struct RootTabView: View {
                             case .widgets: WidgetsManagerView(services: services)
                             }
                         }
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { router.dismissSettings() }
-                                    .buttonStyle(.glass)
-                                    .foregroundStyle(.white)
-                                    .accessibilityIdentifier("settings.done")
-                            }
-                        }
                     }
             }
             .task {
