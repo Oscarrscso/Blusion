@@ -188,45 +188,22 @@ struct StreamPickerView: View {
 
     // MARK: the main action
 
-    /// The white capsule that starts the best stream, and under it one grey line saying which stream that is, so the choice is
-    /// never a surprise.
     @ViewBuilder
     private var playBestButton: some View {
         if let best = model.listing.best {
-            VStack(spacing: Theme.Spacing.s) {
-                Button { playBest() } label: {
-                    Label(playBestTitle(for: best), systemImage: "play.fill")
-                }
+            Button(playBestTitle(for: best)) { playBest() }
                 .buttonStyle(.primaryAction)
                 .accessibilityIdentifier("streams.playBest")
-                if let detail = playBestDetail(for: best) {
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .accessibilityHidden(true)
-                }
-            }
-            .frame(maxWidth: metrics.isRegular ? 380 : .infinity)
-            .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
-            .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 
-    /// "Play Best" in Blusion, "Play Best in Infuse" for a hand-off.
+    /// "Play Best · 4K HDR" in Blusion, "Play Best in Infuse · 4K HDR" for a hand-off.
     private func playBestTitle(for best: RankedStream) -> String {
         var title = "Play Best"
         if let target = best.route.handoffTarget { title += " in \(target.player.displayName)" }
-        return title
-    }
-
-    /// "4K Dolby Vision · 76.5 GB": the picture and the size of the stream Play Best chose.
-    private func playBestDetail(for best: RankedStream) -> String? {
-        var parts: [String] = []
         let picture = pictureLabel(best)
-        if !picture.isEmpty { parts.append(picture) }
-        if let size = best.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return picture.isEmpty ? title : "\(title) · \(picture)"
     }
 
     // MARK: filtering
