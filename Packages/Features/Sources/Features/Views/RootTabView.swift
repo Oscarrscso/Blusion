@@ -175,7 +175,14 @@ public struct RootTabView: View {
         .sheet(isPresented: $router.isShowingSettings) {
             NavigationStack(path: $router.settingsPath) {
                 SettingsView(services: services)
-                    .toolbar { SettingsDoneButton { router.dismissSettings() } }
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { router.dismissSettings() }
+                                .buttonStyle(.glass)
+                                .foregroundStyle(.white)
+                                .accessibilityIdentifier("settings.done")
+                        }
+                    }
                     .navigationDestination(for: SettingsDestination.self) { destination in
                         Group {
                             switch destination {
@@ -183,7 +190,6 @@ public struct RootTabView: View {
                             case .widgets: WidgetsManagerView(services: services)
                             }
                         }
-                        .toolbar { SettingsDoneButton { router.dismissSettings() } }
                     }
             }
             .task {
@@ -219,21 +225,6 @@ private extension PlaybackPlan {
         guard let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8") else { return nil }
         return PlaybackPlan(request: StreamRequest(type: "series", id: "demo:1:2", title: "Sample Show · Test Pattern", season: 1, episode: 2),
                             candidates: [PlaybackCandidate(id: "demo", title: "Sample stream", addonName: "Demo", route: .native(url))])
-    }
-}
-
-/// The one "Done" of the Settings sheet, on every screen inside it. It takes no button style or colour of its own: the navigation
-/// bar already draws a toolbar button as a glass capsule, and a second glass style on the button drew a capsule inside that one,
-/// which read as a doubled button.
-private struct SettingsDoneButton: ToolbarContent {
-    let action: () -> Void
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Done", action: action)
-                .fontWeight(.semibold)
-                .accessibilityIdentifier("settings.done")
-        }
     }
 }
 

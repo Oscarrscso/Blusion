@@ -35,11 +35,10 @@ struct DetailView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .screenBackground()
-        // The scroll view runs under the navigation bar, so the backdrop runs under it too. A soft edge fades the bar's blur
-        // into the artwork instead of stopping at a hard line.
+        // The scroll view runs under the navigation bar, so the backdrop runs under it too. The scroll-edge blur is off, so the
+        // artwork shows unblurred under the status bar and navigation bar.
         .ignoresSafeArea(.container, edges: .top)
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .navigationTitle(model.detail.name)
+        .scrollEdgeEffectHidden(true, for: .top)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onAppear { Task { await model.refreshUserState() } }
@@ -76,9 +75,7 @@ struct DetailView: View {
         VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.l) {
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(metrics.isRegular ? .leading : .center)
-            primaryAction
-                .frame(maxWidth: metrics.isRegular ? 380 : .infinity)
-            secondaryActions
+            actionRow
             synopsis
                 .frame(maxWidth: metrics.readableWidth, alignment: .leading)
             if model.isFallback && !model.isLoading {
@@ -115,19 +112,27 @@ struct DetailView: View {
         return model.nextUp.map { model.request(for: $0) }
     }
 
-    private var secondaryActions: some View {
-        GlassEffectContainer(spacing: Theme.Spacing.l) {
-            HStack(alignment: .top, spacing: Theme.Spacing.xl) {
-                saveAction
-                watchedAction
-                if let trailer = model.trailerURL { trailerAction(trailer) }
+    /// Play and the circle actions on one line, tops aligned: Play is as tall as the circles, and takes the width they leave.
+    private var actionRow: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.m) {
+            primaryAction
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: metrics.isRegular ? 280 : .infinity)
+            GlassEffectContainer(spacing: Theme.Spacing.s) {
+                HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                    saveAction
+                    watchedAction
+                    if let trailer = model.trailerURL { trailerAction(trailer) }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
+            .fixedSize()
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var saveAction: some View {
-        CircleActionButton(title: "Add", systemImage: "plus", isOn: model.isInLibrary, onTitle: "Added", onSystemImage: "checkmark") {
+        CircleActionButton(title: "Save", systemImage: "bookmark", isOn: model.isInLibrary, onTitle: "Saved", onSystemImage: "bookmark.fill") {
             Task {
                 await model.toggleLibrary()
                 await titleActions.refresh()
@@ -144,7 +149,7 @@ struct DetailView: View {
     private var watchedAction: some View {
         if model.isSeries {
             let watched = model.isSeriesWatched
-            CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched) {
                 if watched {
                     isConfirmingUnmarkShow = true
                 } else {
@@ -172,7 +177,7 @@ struct DetailView: View {
         } else {
             let request = model.movieRequest
             let watched = model.isWatched(request)
-            CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched) {
                 Task {
                     await model.setWatched(!watched, for: request)
                     await titleActions.refresh()

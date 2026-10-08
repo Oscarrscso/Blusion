@@ -79,9 +79,9 @@ extension ButtonStyle where Self == GlassCapsuleButtonStyle {
     static var glassCapsule: GlassCapsuleButtonStyle { GlassCapsuleButtonStyle() }
 }
 
-/// The TV app's secondary action on a title page: a round Liquid Glass button with a small grey caption under it ("Add",
-/// "Watched", "Trailer"). With `isOn` it shows `onSystemImage` (default: the same symbol, filled) and `onTitle` ("Added"); the
-/// symbol swaps with the system replace effect. The circle and the caption are one button, one VoiceOver element.
+/// The TV app's secondary action on a title page: a round Liquid Glass button with its symbol and no caption. `title` ("Add",
+/// "Watched", "Trailer") is its VoiceOver label. With `isOn` it shows `onSystemImage` (default: the same symbol, filled) and
+/// `onTitle` ("Added"); the symbol swaps with the system replace effect.
 ///
 /// Several in a row belong in one `GlassEffectContainer` (or `CircleActionRow`) so the glass is composed once.
 struct CircleActionButton: View {
@@ -104,30 +104,25 @@ struct CircleActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: Theme.Spacing.s - 2) {
-                Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
-                    .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: Self.diameter, height: Self.diameter)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .pointerInteraction(cornerRadius: Self.diameter / 2)
-                Text(isOn ? (onTitle ?? title) : title)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(width: Self.diameter + 24)
-            }
-            .contentShape(Rectangle())
+            Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
+                .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.white)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: Self.diameter, height: Self.diameter)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .pointerInteraction(cornerRadius: Self.diameter / 2)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        // The caption is gone, so the name is spoken here instead.
+        .accessibilityLabel(isOn ? (onTitle ?? title) : title)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: isOn)
     }
 
-    static let diameter: CGFloat = 48
+    /// The height of the primary action beside it on the title page, so the two read as one row.
+    static let diameter: CGFloat = 50
 }
 
 /// A row of `CircleActionButton`s the way a title page lays them out: one glass container, even gaps, leading aligned.
