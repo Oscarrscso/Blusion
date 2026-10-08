@@ -118,7 +118,7 @@ struct CircleActionButton: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(width: Self.diameter + 24)
+                    .frame(width: Self.diameter + 14)
             }
             .contentShape(Rectangle())
         }
@@ -127,7 +127,8 @@ struct CircleActionButton: View {
         .sensoryFeedback(.selection, trigger: isOn)
     }
 
-    static let diameter: CGFloat = 48
+    /// The height of the primary action beside it on the title page, so the two read as one row.
+    static let diameter: CGFloat = 50
 }
 
 /// A row of `CircleActionButton`s the way a title page lays them out: one glass container, even gaps, leading aligned.

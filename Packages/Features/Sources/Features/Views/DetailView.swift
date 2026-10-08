@@ -110,10 +110,12 @@ struct DetailView: View {
         return model.nextUp.map { model.request(for: $0) }
     }
 
-    /// Play and the circle actions on one line: Play takes the room the circles leave.
+    /// Play and the circle actions on one line, tops aligned: Play is as tall as the circles, and takes the width they leave.
     private var actionRow: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+        HStack(alignment: .top, spacing: Theme.Spacing.m) {
             primaryAction
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: metrics.isRegular ? 280 : .infinity)
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(alignment: .top, spacing: Theme.Spacing.s) {
