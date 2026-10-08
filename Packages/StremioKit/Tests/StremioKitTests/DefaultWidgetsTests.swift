@@ -25,7 +25,7 @@ import StremioKitTestSupport
     private func configuration(_ widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .row(let config), .hero(let config): return config
-        case .collection, .continueWatching: return nil
+        case .collection, .continueWatching, .unsupported: return nil
         }
     }
 
