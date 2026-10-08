@@ -188,6 +188,63 @@ import StremioKitTestSupport
         #expect(transport.callCount == 1)
     }
 
+    private let omdbMovie = Data(#"{"Response":"True","imdbRating":"7.4","Metascore":"N/A"}"#.utf8)
+    private let omdbSeason = Data(#"{"Response":"True","Season":"2","Episodes":[{"Episode":"1","imdbRating":"8.9"},{"Episode":"2","imdbRating":"N/A"}]}"#.utf8)
+
+    @Test func aPosterWithoutAnIMDbScoreAsksOMDbForItOnce() async throws {
+        let transport = StubTransport(data: omdbMovie)
+        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        let unrated = MetaPreview(id: "tt1234567", type: "movie", name: "New")
+        let entry = store.ratings(for: unrated)
+        for _ in 0..<10 { _ = store.ratings(for: unrated) }
+        try await waitUntil { entry.imdb == 7.4 }
+        #expect(transport.callCount == 1 && entry.imdbText == "7.4")
+        // A catalog that already carried the score is never worth a request.
+        _ = store.ratings(for: MetaPreview(id: "tt7654321", type: "movie", imdbRating: 6))
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(transport.callCount == 1)
+    }
+
+    @Test func aRefusedOMDbKeyStopsEveryOtherLookupUntilCredentialsChange() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
+        let store = PosterRatingsStore(maxConcurrentLookups: 1, omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "bad"))
+        let items = (0..<4).map { MetaPreview(id: "tt\(2_000_000 + $0)", type: "movie") }
+        for item in items { _ = store.ratings(for: item) }
+        try await waitUntil { transport.callCount >= 1 }
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(transport.callCount == 1, "the first refusal pauses the rest")
+        let scores = await store.episodeRatings(for: "tt0944947", season: 1)
+        #expect(scores.isEmpty && transport.callCount == 1)
+        await store.setReviewServices(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "good"), tmdb: nil)
+        _ = store.ratings(for: MetaPreview(id: "tt3000000", type: "movie"))
+        try await waitUntil { transport.callCount == 2 }
+    }
+
+    @Test func episodeScoresComeFromOMDbOncePerSeasonAndAreCached() async throws {
+        let cache = InMemoryRatingsCache()
+        let transport = StubTransport(data: omdbSeason)
+        let store = PosterRatingsStore(cache: cache, now: { when }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        async let first = store.episodeRatings(for: "tt0944947", season: 2)
+        async let second = store.episodeRatings(for: "tt0944947", season: 2)
+        let (a, b) = await (first, second)
+        #expect(a == [1: 8.9] && b == a)
+        let again = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(again == a && transport.callCount == 1)
+        let stored = await cache.value(for: "omdb:tt0944947:s2")
+        #expect(stored == CachedRating(rating: nil, fetchedAt: when, episodes: [1: 8.9]))
+        _ = await store.episodeRatings(for: "tt0944947", season: 3)
+        #expect(transport.callCount == 2)
+    }
+
+    @Test func episodeScoresNeedAnOMDbKeyAndAnIMDbID() async throws {
+        let transport = StubTransport(data: omdbSeason)
+        let without = PosterRatingsStore()
+        let withKey = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        let noKey = await without.episodeRatings(for: "tt0944947", season: 1)
+        let notIMDb = await withKey.episodeRatings(for: "kitsu:1", season: 1)
+        #expect(noKey.isEmpty && notIMDb.isEmpty && transport.callCount == 0)
+    }
+
     @Test func reviewScoresUseTheCacheAndRemainAvailableWithPosterBadgesDisabled() async throws {
         let cache = InMemoryRatingsCache()
         await cache.store(CachedRating(rating: nil, fetchedAt: when, reviews: ReviewRatings(tmdb: 8.4,

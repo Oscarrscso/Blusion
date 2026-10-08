@@ -80,6 +80,33 @@ import StremioKitTestSupport
         #expect(record == nil)
     }
 
+    @Test func aShowIsMarkedWatchedEpisodeByEpisodeAndClearedAgain() async throws {
+        let server = try MockServer.shared()
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: server.slowDelay + 4, maxRetries: 0))
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client), client: client)
+        _ = try await services.registry.install(from: server.catalogManifestURL().absoluteString)
+        let actions = TitleActions(services: services)
+        let show = MetaPreview(id: "mock:series1", type: "series", name: "S")
+        #expect(!actions.hasWatchedEpisodes(show))
+        await actions.setSeriesWatched(true, for: show)
+        let marked = await services.progress.all().filter(\.isWatched)
+        #expect(marked.count == 6, "both seasons of three episodes")
+        #expect(actions.hasWatchedEpisodes(show) && actions.watchedIdentities.isEmpty, "a show is not a watched movie")
+        #expect(marked.allSatisfy { $0.type == "series" && $0.contentID.hasPrefix("mock:series1:") && $0.season != nil && $0.episode != nil })
+        await actions.setSeriesWatched(false, for: show)
+        let left = await services.progress.all()
+        #expect(left.isEmpty && !actions.hasWatchedEpisodes(show))
+    }
+
+    @Test func markingAShowNeedsItsEpisodesAndIgnoresMovies() async {
+        let services = services()
+        let actions = TitleActions(services: services)
+        await actions.setSeriesWatched(true, for: series)
+        await actions.setSeriesWatched(true, for: movie)
+        let records = await services.progress.all()
+        #expect(records.isEmpty, "no addon described the show, and a movie is not a show")
+    }
+
     @Test func refreshPicksUpChangesMadeElsewhere() async {
         let services = services()
         let actions = TitleActions(services: services)

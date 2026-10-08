@@ -45,9 +45,16 @@ opens it. That is the only copy to open. A build product launched from `build/` 
 - **Settings → Playback:** choose Blusion, Infuse, or Infuse only when Blusion cannot play a format. Automatic best-stream playback is optional.
   Infuse handoff includes the resume position and records progress when its callback returns.
 - **Settings → Appearance:** toggle poster ratings. IMDb ratings come from catalog metadata; movie Letterboxd ratings are fetched and cached when available.
-- **Title details:** IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDb icons open their review pages or a labeled search.
-  Links work without API keys. **Settings → Review services** accepts an optional OMDb API key for critic scores and a TMDb API Read Access Token
-  for TMDb ratings; select **Save Review Services**. Credentials are stored in the Keychain.
+  Catalogs often leave the IMDb score out (new releases, unrated titles); with an OMDb key saved, a poster without one asks OMDb for it.
+- **Title details:** small buttons under the title (a site's icon, then its score) open the title on IMDb, Letterboxd, Rotten Tomatoes,
+  Metacritic or TMDb. IMDb is always there; the others appear once they have a score. **Settings → Review services** accepts an optional
+  OMDb API key (missing IMDb scores, per-episode IMDb scores, Rotten Tomatoes, Metacritic) and a TMDb API Read Access Token for TMDb ratings;
+  select **Save Review Services**. Credentials are stored in the Keychain. The free OMDb key allows 1,000 lookups a day; if OMDb refuses the
+  key or the quota runs out, Blusion stops asking for an hour.
+- **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are
+  fetched when you open it, cached for 21 days, and shown with the IMDb mark next to each episode's air date.
+- **Watched:** a movie or a whole show can be marked from its title page (a show marks every episode that has aired; clearing asks first).
+  The season menu marks one season, and a poster's long-press menu marks a whole show.
 - **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that
   Trakt API app, then select **Connect Trakt**. PKCE sign-in needs no Client Secret. A registered `blusion://trakt/callback`
   returns through the native browser session; other registered callbacks can be pasted after authorization.

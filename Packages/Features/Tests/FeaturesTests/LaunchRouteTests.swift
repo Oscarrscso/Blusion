@@ -25,6 +25,16 @@ import Testing
         #expect(streams?.streams?.identity == "movie/tt0468569")
     }
 
+    @Test func streamsRoutesCanNameTheTitleAndItsPoster() {
+        let named = LaunchRoute.parse("streams:series:tt0903747:1:2?title=Breaking%20Bad%20%C2%B7%20Cat%27s&poster=https://example.com/p.jpg")
+        #expect(named?.streams?.id == "tt0903747:1:2" && named?.streams?.type == "series")
+        #expect(named?.streams?.title == "Breaking Bad · Cat's")
+        #expect(named?.streams?.poster?.absoluteString == "https://example.com/p.jpg")
+        let bare = LaunchRoute.parse("streams:movie:tt1?")
+        #expect(bare?.streams?.id == "tt1" && bare?.streams?.title == "tt1" && bare?.streams?.poster == nil)
+        #expect(LaunchRoute.parse("streams:movie:?title=x") == nil)
+    }
+
     @Test func sheetsAndGallery() {
         #expect(LaunchRoute.parse("settings")?.sheet == .settings)
         #expect(LaunchRoute.parse("widgets")?.sheet == .widgets)

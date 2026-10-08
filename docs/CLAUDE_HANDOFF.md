@@ -65,6 +65,18 @@ Three subagents separately added Trakt account support, review-site support, and
 - **Trakt:** Settings → Accounts → Trakt now uses PKCE with the supplied public Client ID prefilled; no Client Secret is required. The exact registered Redirect URI is still required. A registered `blusion://trakt/callback` returns through the native browser session; other registered callbacks can be pasted after authorization. Connection automatically imports watchlist and collection into Library → Saved, and watched history into Library → Watched. Refresh is manual, add-only, and keeps playback positions local. Tokens and redirect settings use the Keychain. The supplied Client ID returned HTTP 200 on a live public API request; live account authorization still awaits the registered Redirect URI and the user's browser approval.
 - **Reviews:** Detail has icons and links for IMDb, Letterboxd, Rotten Tomatoes, Metacritic, and TMDB. OMDb supplies optional Rotten Tomatoes/Metacritic scores; TMDB requires its API Read Access Token. Save credentials under Settings → Review services. Keys are optional and live credentialed requests were not tested; parser/cache behavior has unit coverage. Poster ratings remain IMDb/Letterboxd.
 - **Interaction:** Poster cards, chips, stream rows, and playback controls use hover/focus feedback and helpful keyboard labels, respecting disabled controls and Reduce Motion.
+- **Missing ratings (2026-10-08):** Cinemeta's own catalogs lack `imdbRating` on 8–50% of items (new and unrated titles), and it sends `rating: "0"`
+  for the episodes of nearly every show (15 of 16 sampled), which the app rightly drops. OMDb was only asked from the detail page's review row,
+  never for posters or episodes. Now a poster with no IMDb score asks OMDb (cached 21 days, or 3 when empty; paused for an hour when OMDb answers
+  401/429), and `OMDbRatings.episodeRatings` reads a season's `Episodes` list (`PosterRatingsStore.episodeRatings`, shown by `DetailViewModel.score(for:)`).
+  The season endpoint is parsed from OMDb's documented format and covered by stub tests; it has not been run against a live key.
+- **Detail page:** ratings are small icon-then-score glass buttons (`RatingButtonsRow`) under the hero title, replacing the five large review links.
+  "Watched" now exists for shows (every aired episode; specials aside), per season (season menu), and from a poster's long-press menu.
+- **Stream picker:** restyled as cards (resolution tile, quality headline, formatted facts, the addon's notes underneath), an ambient poster header,
+  a Play Best caption, and resolution filter chips when the list holds more than one sharpness.
+- **Settings Done:** the two hand-styled `.glass` Done buttons drew a glass capsule inside the toolbar's own glass capsule; one system-styled
+  `SettingsDoneButton` replaces them. The cause is inferred from the code, not seen on screen (Mac Catalyst draws toolbars differently from
+  iOS 26/27): confirm on the iPhone that Settings and its Addons and Widgets pages each show one Done.
 - **Home:** Returning after a cancelled load starts a fresh observation; cancellation no longer replaces rows with errors. Two regression tests cover reload and retry. Home launch routes wait for their navigation stack; a stale Settings model preserves account credentials when changing playback.
 
 ## Test the current app

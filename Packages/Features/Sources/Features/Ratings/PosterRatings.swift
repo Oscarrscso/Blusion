@@ -26,6 +26,17 @@ public final class TitleRatings: Identifiable {
     public var letterboxdText: String? { letterboxd.map { String(format: "%.1f", $0 * 2) } }
     public var isEmpty: Bool { imdb == nil && letterboxd == nil }
 
+    /// The score alone, for a small button that already shows the site's icon: "8.7", "91%", "82".
+    public func shortText(for site: ReviewSite) -> String? {
+        switch site {
+        case .imdb: imdbText
+        case .letterboxd: letterboxdText
+        case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f%%", $0) }
+        case .metacritic: metacritic.map { String(format: "%.0f", $0) }
+        case .tmdb: tmdb.map { String(format: "%.1f", $0) }
+        }
+    }
+
     public func text(for site: ReviewSite) -> String? {
         switch site {
         case .imdb: imdbText.map { "\($0)/10" }
@@ -52,6 +63,10 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var queued: Set<String> = []
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var retryAfter: [String: Date] = [:]
+    @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
+    /// Set when OMDb refused the key or the daily quota ran out: nothing asks it again until then, so a bad key does not
+    /// spend one failing request per poster.
+    @ObservationIgnored private var omdbPausedUntil: Date?
     @ObservationIgnored private var isClearing = false
     @ObservationIgnored private let letterboxd: LetterboxdRatings?
     @ObservationIgnored private var omdb: OMDbRatings?
@@ -86,9 +101,12 @@ public final class PosterRatingsStore {
         }
         guard !isClearing, isEnabled || includeReviews, LetterboxdRatings.isIMDbID(item.id) else { return entry }
         if letterboxd != nil, item.type == "movie" { enqueue(item, provider: .letterboxd, includeReviews: includeReviews) }
-        if includeReviews {
-            if omdb != nil { enqueue(item, provider: .omdb, includeReviews: true) }
-            if tmdb != nil, ["movie", "series"].contains(item.type) { enqueue(item, provider: .tmdb, includeReviews: true) }
+        // OMDb fills the IMDb score a catalog left out, so a poster asks for it too; the review row also takes its critic scores.
+        if omdb != nil, includeReviews || (entry.imdb == nil && item.imdbRating == nil), ["movie", "series"].contains(item.type) {
+            enqueue(item, provider: .omdb, includeReviews: includeReviews)
+        }
+        if includeReviews, tmdb != nil, ["movie", "series"].contains(item.type) {
+            enqueue(item, provider: .tmdb, includeReviews: true)
         }
         return entry
     }
@@ -98,6 +116,7 @@ public final class PosterRatingsStore {
         await cancelLookups()
         self.omdb = omdb
         self.tmdb = tmdb
+        omdbPausedUntil = nil
         for entry in entries.values {
             entry.rottenTomatoes = nil
             entry.metacritic = nil
@@ -126,14 +145,19 @@ public final class PosterRatingsStore {
         isClearing = true
         queue.removeAll()
         let pending = Array(tasks.values)
+        let pendingEpisodes = Array(episodeTasks.values)
         for task in pending { task.cancel() }
+        for task in pendingEpisodes { task.cancel() }
         for task in pending { await task.value }
+        for task in pendingEpisodes { _ = await task.value }
         queued.removeAll()
+        episodeTasks.removeAll()
         retryAfter.removeAll()
     }
 
     private func enqueue(_ item: MetaPreview, provider: Provider, includeReviews: Bool) {
         let lookup = Lookup(item: item, provider: provider, includeReviews: includeReviews)
+        if provider == .omdb, isOMDbPaused { return }
         if includeReviews, let index = queue.firstIndex(where: { $0.id == lookup.id }) {
             queue[index].includeReviews = true
             Task { startLookups() }
@@ -163,7 +187,10 @@ public final class PosterRatingsStore {
                         guard let letterboxd else { return }
                         answer = CachedRating(rating: try await letterboxd.rating(imdbID: lookup.item.id), fetchedAt: now())
                     case .omdb:
-                        guard let omdb else { return }
+                        guard let omdb, !isOMDbPaused else {
+                            queued.remove(lookup.id)   // asked again once the pause ends
+                            return
+                        }
                         answer = CachedRating(rating: nil, fetchedAt: now(), reviews: try await omdb.ratings(imdbID: lookup.item.id))
                     case .tmdb:
                         guard let tmdb else { return }
@@ -178,9 +205,50 @@ public final class PosterRatingsStore {
                     guard !Task.isCancelled else { return }
                     queued.remove(lookup.id)
                     retryAfter[lookup.id] = now().addingTimeInterval(600)
+                    if lookup.provider == .omdb { pauseOMDbIfRefused(error) }
                 }
             }
         }
+    }
+
+    /// IMDb scores of one season's episodes, by episode number, from OMDb. Empty without an OMDb key, for an id that is not an IMDb
+    /// one, while OMDb is refusing the key, or when OMDb has nothing for the season. Answers are cached like the others (21 days, or
+    /// 3 when empty), and a season asked for twice at once is fetched once.
+    public func episodeRatings(for seriesID: String, season: Int) async -> [Int: Double] {
+        guard !isClearing, let omdb, !isOMDbPaused, LetterboxdRatings.isIMDbID(seriesID), season >= 0 else { return [:] }
+        let key = "omdb:\(seriesID):s\(season)"
+        if let running = episodeTasks[key] { return await running.value }
+        if let until = retryAfter[key], now() < until { return [:] }
+        let task = Task<[Int: Double], Never> { [self] in
+            let cached = await cache.value(for: key)
+            if let cached, now().timeIntervalSince(cached.fetchedAt) < (cached.episodes?.isEmpty == false ? 21 : 3) * 86_400 {
+                return cached.episodes ?? [:]
+            }
+            do {
+                let scores = try await omdb.episodeRatings(imdbID: seriesID, season: season)
+                guard !Task.isCancelled else { return [:] }
+                await cache.store(CachedRating(rating: nil, fetchedAt: now(), episodes: scores), for: key)
+                return scores
+            } catch {
+                if !Task.isCancelled {
+                    retryAfter[key] = now().addingTimeInterval(600)
+                    pauseOMDbIfRefused(error)
+                }
+                return [:]
+            }
+        }
+        episodeTasks[key] = task
+        let scores = await task.value
+        if episodeTasks[key] == task { episodeTasks[key] = nil }
+        return scores
+    }
+
+    private var isOMDbPaused: Bool { omdbPausedUntil.map { now() < $0 } ?? false }
+
+    /// A rejected key or an exhausted quota will fail the same way for every other title, so stop asking for an hour.
+    private func pauseOMDbIfRefused(_ error: Error) {
+        guard case AddonError.http(let status) = error, status == 401 || status == 429 else { return }
+        omdbPausedUntil = now().addingTimeInterval(3600)
     }
 
     private func hasAnswer(_ cached: CachedRating, provider: Provider) -> Bool {

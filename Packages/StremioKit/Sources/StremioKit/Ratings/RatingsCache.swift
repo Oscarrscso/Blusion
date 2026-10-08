@@ -6,11 +6,14 @@ public struct CachedRating: Sendable, Codable, Equatable {
     public var fetchedAt: Date
     /// Optional extra scores allow the same bounded file cache to hold other providers; old files still decode.
     public var reviews: ReviewRatings?
+    /// One season's episode scores by episode number, for the OMDb season lookups. Absent in files written before they existed.
+    public var episodes: [Int: Double]?
 
-    public init(rating: Double?, fetchedAt: Date, reviews: ReviewRatings? = nil) {
+    public init(rating: Double?, fetchedAt: Date, reviews: ReviewRatings? = nil, episodes: [Int: Double]? = nil) {
         self.rating = rating
         self.fetchedAt = fetchedAt
         self.reviews = reviews
+        self.episodes = episodes
     }
 }
 

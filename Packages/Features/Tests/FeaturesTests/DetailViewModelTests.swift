@@ -179,18 +179,76 @@ import StremioKitTestSupport
         #expect(model.trailerURL?.absoluteString == "https://www.youtube.com/watch?v=EXeTwQWrcwY")
     }
 
+    @Test func aWholeShowCanBeMarkedWatchedAndUnmarked() async throws {
+        let services = try await installedServices()
+        let model = await loadedSeries(services)
+        #expect(!model.isSeriesWatched && !model.isSeasonWatched(1))
+        await model.setSeriesWatched(true)
+        #expect(model.isSeriesWatched && model.isSeasonWatched(1) && model.isSeasonWatched(2))
+        #expect(model.watchedIdentities.count == 6, "every episode of both seasons")
+        let saved = await services.progress.progress(for: "series/mock:series1:2:3")
+        #expect(saved?.isWatched == true && saved?.season == 2 && saved?.episode == 3)
+        await model.setSeriesWatched(false)
+        #expect(!model.isSeriesWatched && model.watchedIdentities.isEmpty)
+        let cleared = await services.progress.progress(for: "series/mock:series1:2:3")
+        #expect(cleared == nil)
+    }
+
+    @Test func aSeasonIsMarkedOnItsOwn() async throws {
+        let model = await loadedSeries(try await installedServices())
+        await model.setSeasonWatched(true, season: 1)
+        #expect(model.isSeasonWatched(1) && !model.isSeasonWatched(2) && !model.isSeriesWatched)
+        #expect(model.watchedIdentities.count == 3)
+        #expect(model.nextUp?.season == 2, "the next episode moves to the season after")
+        await model.setSeasonWatched(false, season: 1)
+        #expect(model.watchedIdentities.isEmpty)
+    }
+
+    @Test func markingAShowSkipsEpisodesThatHaveNotAiredYet() async throws {
+        let json = #"""
+        {"meta":{"id":"tt7000001","type":"series","name":"Ongoing","videos":[
+          {"id":"tt7000001:1:1","title":"Out","season":1,"episode":1,"released":"2001-01-01T00:00:00.000Z"},
+          {"id":"tt7000001:1:2","title":"Soon","season":1,"episode":2,"released":"2999-01-01T00:00:00.000Z"}]}}
+        """#
+        let transport = StubTransport { request, _ in StubTransport.response(Data(json.utf8), for: request) }
+        let manifest = Manifest(id: "test.stubmeta", name: "Stub", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let model = DetailViewModel(preview: MetaPreview(id: "tt7000001", type: "series", name: "Ongoing"),
+                                    services: AppServices(registry: registry, client: client))
+        await model.load()
+        await model.setSeriesWatched(true)
+        #expect(model.watchedIdentities == ["series/tt7000001:1:1"])
+        #expect(model.isSeriesWatched, "the show counts as watched once everything that has aired is")
+    }
+
+    @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
+        let ratings = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "test-key"))
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, posterRatings: ratings)
+        let model = DetailViewModel(preview: MetaPreview(id: "tt0944947", type: "series", name: "S"), services: services)
+        let first = Video(id: "tt0944947:1:1", season: 1, episode: 1, rating: 6)
+        let second = Video(id: "tt0944947:1:2", season: 1, episode: 2, rating: 7.5)
+        #expect(model.score(for: first) == .init(value: 6, isIMDb: false))
+        await model.loadEpisodeScores(season: 1)
+        #expect(model.score(for: first) == .init(value: 8.9, isIMDb: true))
+        #expect(model.score(for: second) == .init(value: 7.5, isIMDb: false))
+        #expect(model.score(for: Video(id: "x")) == nil)
+    }
+
     @Test func trailerURLIsNilWithoutTrailers() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X"), services: offlineServices())
         #expect(model.trailerURL == nil)
     }
 
-    @Test func metaPartsAreYearRuntimeAndRating() {
+    @Test func metaPartsAreYearAndRuntime() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008",
                                                          imdbRating: 9.0, runtime: "152 min"),
                                     services: offlineServices())
-        #expect(model.metaParts == ["2008", "152 min", "★ \(9.0.formatted(.number.precision(.fractionLength(1))))"])
+        #expect(model.metaParts == ["2008", "152 min"], "the rating is a button under the title, not part of the line")
         let bare = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X", releaseInfo: " ", imdbRating: 0),
                                    services: offlineServices())
-        #expect(bare.metaParts.isEmpty, "blank years and unrated titles add no parts")
+        #expect(bare.metaParts.isEmpty, "blank years add no parts")
     }
 }

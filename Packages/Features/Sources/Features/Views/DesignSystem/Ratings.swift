@@ -104,60 +104,84 @@ struct ReviewSiteIcon: View {
     }
 }
 
-/// All five sites stay usable without API keys. Only genuine scores are shown; unmatched pages are labeled Search.
-struct ReviewSitesRow: View {
+/// The title's scores as small buttons, for the line under its name on the detail page: a site's icon, then its score, in a small
+/// glass capsule that opens the title on that site. IMDb is always there (its icon alone until a score arrives, so the link is
+/// never lost); every other site appears only once it has a genuine score, so an unrated title shows one button, not five.
+/// Meant to sit over artwork, so the text is white.
+struct RatingButtonsRow: View {
     let item: MetaPreview
+    /// Where the buttons sit when the row is wider than they are.
+    var alignment: Alignment = .center
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
         if let store {
             let ratings = store.ratings(for: item)
-            links(ratings: ratings)
+            buttons(ratings: ratings)
                 .task(id: "\(item.identity):\(store.reviewServicesRevision)") { _ = store.ratings(for: item, includeReviews: true) }
         } else {
-            links(ratings: nil)
+            buttons(ratings: nil)
         }
     }
 
-    private func links(ratings: TitleRatings?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(spacing: 10) {
-                    ForEach(ReviewSite.allCases) { site in
-                        if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
-                            let search = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
-                            Link(destination: url) {
-                                HStack(spacing: 7) {
-                                    ReviewSiteIcon(site: site)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(site.name).font(.caption.weight(.semibold))
-                                        Text(subtitle(site: site, ratings: ratings, search: search))
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .monospacedDigit()
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                            .buttonStyle(.glassCapsule)
-                            .hoverEffect(.highlight)
-                            .help(search ? "Search \(site.name) for \(item.name)" : "Open \(item.name) on \(site.name)")
-                            .accessibilityIdentifier("detail.reviews.\(site.rawValue)")
-                        }
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-            if ratings?.rottenTomatoes != nil || ratings?.metacritic != nil {
-                Text("Critic scores supplied by OMDb.").font(.caption2).foregroundStyle(.secondary)
+    private func buttons(ratings: TitleRatings?) -> some View {
+        let sites = ReviewSite.allCases.filter { $0 == .imdb || ratings?.shortText(for: $0) != nil }
+        return GlassEffectContainer(spacing: 6) {
+            ViewThatFits(in: .horizontal) {
+                row(sites, ratings: ratings)
+                ScrollView(.horizontal) { row(sites, ratings: ratings) }
+                    .scrollIndicators(.hidden)
             }
         }
+        .frame(maxWidth: .infinity, alignment: alignment)
         .accessibilityIdentifier("detail.reviews")
     }
 
-    private func subtitle(site: ReviewSite, ratings: TitleRatings?, search: Bool) -> String {
-        if let score = ratings?.text(for: site) { return search ? "\(score) · Search" : score }
-        return search ? "Search" : "Reviews"
+    private func row(_ sites: [ReviewSite], ratings: TitleRatings?) -> some View {
+        HStack(spacing: 6) {
+            ForEach(sites) { site in
+                if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
+                    RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
+                                 isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name)
+                }
+            }
+        }
+    }
+}
+
+/// One small rating button: the site's icon, then the score. Without a score it is the icon alone.
+struct RatingButton: View {
+    let site: ReviewSite
+    let score: String?
+    let url: URL
+    /// True when the link is a search on the site, not the title's own page.
+    let isSearch: Bool
+    let title: String
+
+    var body: some View {
+        Link(destination: url) {
+            HStack(spacing: 5) {
+                ReviewSiteIcon(site: site, size: 15)
+                if let score {
+                    Text(score)
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, score == nil ? 9 : 10)
+            .frame(height: 28)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .contentShape(Capsule())
+            .pointerInteraction(cornerRadius: 999)
+        }
+        .buttonStyle(.plain)
+        .help(isSearch ? "Search \(site.name) for \(title)" : "Open \(title) on \(site.name)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(score.map { "\(site.name) \($0)" } ?? site.name)
+        .accessibilityHint(isSearch ? "Searches \(site.name) for this title" : "Opens this title on \(site.name)")
+        .accessibilityAddTraits(.isLink)
+        .accessibilityIdentifier("detail.reviews.\(site.rawValue)")
     }
 }
 #endif

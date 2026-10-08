@@ -123,7 +123,7 @@ struct SettingsView: View {
         } header: {
             Text("Review services")
         } footer: {
-            Text("Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.")
+            Text("Optional. OMDb fills in IMDb scores that catalogs leave out (on posters and for each episode) and adds Rotten Tomatoes and Metacritic. The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.")
         }
     }
 

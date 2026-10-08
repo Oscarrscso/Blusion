@@ -56,8 +56,14 @@ public struct LaunchRoute: Sendable, Equatable {
             guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
             return LaunchRoute(detail: MetaPreview(id: parts[2], type: parts[1]))
         case "streams":
-            guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty else { return nil }
-            return LaunchRoute(streams: StreamRequest(type: parts[1], id: parts[2], title: parts[2]))
+            guard parts.count == 3, !parts[1].isEmpty else { return nil }
+            // `streams:movie:tt1?title=Film&poster=https://…` names the title and its artwork, as Detail does when it opens the picker.
+            let idAndQuery = parts[2].split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard let id = idAndQuery.first, !id.isEmpty else { return nil }
+            let query = idAndQuery.count == 2 ? URLComponents(string: "?" + idAndQuery[1])?.queryItems : nil
+            func value(_ name: String) -> String? { query?.first { $0.name == name }?.value.flatMap { $0.isEmpty ? nil : $0 } }
+            return LaunchRoute(streams: StreamRequest(type: parts[1], id: id, title: value("title") ?? id,
+                                                      poster: value("poster").flatMap(URL.init(string:))))
         case "settings", "addons", "widgets":
             return LaunchRoute(sheet: Sheet(rawValue: parts[0].lowercased()))
         case "gallery":

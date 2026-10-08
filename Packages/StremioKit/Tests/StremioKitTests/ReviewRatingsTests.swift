@@ -84,6 +84,48 @@ import StremioKitTestSupport
         #expect(ReviewSite.letterboxd.isSearch(for: MetaPreview(id: movie.id, type: "series")))
     }
 
+    private let season = Data(#"""
+    {"Title":"Show","Season":"1","totalSeasons":"3","Response":"True","Episodes":[
+      {"Title":"Pilot","Released":"2011-04-17","Episode":"1","imdbRating":"9.1","imdbID":"tt1480055"},
+      {"Title":"Second","Released":"2011-04-24","Episode":"2","imdbRating":"8.8","imdbID":"tt1668746"},
+      {"Title":"Unrated","Released":"2011-05-01","Episode":"3","imdbRating":"N/A","imdbID":"tt1668747"},
+      {"Title":"Broken","Released":"N/A","Episode":"x","imdbRating":"7.0","imdbID":"tt1668748"},
+      {"Title":"Out of range","Released":"N/A","Episode":"5","imdbRating":"11.2","imdbID":"tt1668749"}]}
+    """#.utf8)
+
+    @Test func omdbSeasonAnswersGiveEpisodeScoresAndSkipUnusableOnes() throws {
+        #expect(try OMDbRatings.parseSeason(season) == [1: 9.1, 2: 8.8])
+    }
+
+    @Test func omdbSeasonRequestsCarryTheSeasonNumber() async throws {
+        let transport = StubTransport(data: season)
+        let scores = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").episodeRatings(imdbID: "tt0944947", season: 1)
+        #expect(scores == [1: 9.1, 2: 8.8])
+        let url = try #require(transport.requests.first?.url)
+        let parameters = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        #expect(parameters?.contains(URLQueryItem(name: "Season", value: "1")) == true)
+        #expect(parameters?.contains(URLQueryItem(name: "i", value: "tt0944947")) == true)
+        let invalid = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").episodeRatings(imdbID: "kitsu:1", season: 1)
+        let noKey = try await OMDbRatings(client: makeClient(transport), apiKey: "").episodeRatings(imdbID: "tt0944947", season: 1)
+        #expect(invalid.isEmpty && noKey.isEmpty && transport.callCount == 1)
+    }
+
+    @Test func omdbMissingSeasonsAreEmptyButBadKeysAndQuotasStillThrow() throws {
+        #expect(try OMDbRatings.parseSeason(Data(#"{"Response":"False","Error":"Series or season not found!"}"#.utf8)).isEmpty)
+        #expect(throws: AddonError.http(status: 401)) {
+            try OMDbRatings.parseSeason(Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
+        }
+        #expect(throws: AddonError.http(status: 429)) {
+            try OMDbRatings.parseSeason(Data(#"{"Response":"False","Error":"Request limit reached!"}"#.utf8))
+        }
+        #expect(throws: AddonError.invalidJSON) { try OMDbRatings.parseSeason(Data("{}".utf8)) }
+    }
+
+    @Test func episodeScoresSurviveTheCacheFile() throws {
+        let current = CachedRating(rating: nil, fetchedAt: Date(timeIntervalSince1970: 100), episodes: [1: 9.1, 12: 7.4])
+        #expect(try JSONDecoder().decode(CachedRating.self, from: JSONEncoder().encode(current)) == current)
+    }
+
     @Test func extendedCachesDecodeOldAnswersAndRoundTripNewScores() throws {
         let legacy = Data(#"{"rating":4.5,"fetchedAt":100}"#.utf8)
         let decoded = try JSONDecoder().decode(CachedRating.self, from: legacy)

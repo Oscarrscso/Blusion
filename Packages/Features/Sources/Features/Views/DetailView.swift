@@ -9,6 +9,7 @@ import UIKit
 struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
+    @State private var isConfirmingUnmarkShow = false
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
@@ -53,13 +54,16 @@ struct DetailView: View {
             ZStack(alignment: metrics.isRegular ? .bottomLeading : .bottom) {
                 ArtworkImage(url: model.backdropURL, maxPixelSize: metrics.isRegular ? 1800 : 1200)
                 BottomFade(length: 0.65)
-                TitleArt(name: model.detail.name, logo: model.logoURL, alignment: metrics.isRegular ? .leading : .center)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(model.detail.name)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("detail.title")
-                    .padding(.horizontal, metrics.pageMargin)
-                    .padding(.bottom, Theme.Spacing.l)
+                VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.m) {
+                    TitleArt(name: model.detail.name, logo: model.logoURL, alignment: metrics.isRegular ? .leading : .center)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(model.detail.name)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("detail.title")
+                    RatingButtonsRow(item: model.detail.preview, alignment: metrics.isRegular ? .leading : .center)
+                }
+                .padding(.horizontal, metrics.pageMargin)
+                .padding(.bottom, Theme.Spacing.l)
             }
             .clipped()
         }
@@ -77,7 +81,6 @@ struct DetailView: View {
             secondaryActions
             synopsis
                 .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-            ReviewSitesRow(item: model.detail.preview)
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -116,7 +119,7 @@ struct DetailView: View {
         GlassEffectContainer(spacing: Theme.Spacing.l) {
             HStack(alignment: .top, spacing: Theme.Spacing.xl) {
                 saveAction
-                if !model.isSeries { watchedAction }
+                watchedAction
                 if let trailer = model.trailerURL { trailerAction(trailer) }
             }
             .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
@@ -135,18 +138,50 @@ struct DetailView: View {
         .sensoryFeedback(.success, trigger: model.isInLibrary)
     }
 
+    /// A movie is marked on its own. A show is marked as a whole: every episode that has aired. Clearing a whole show asks first,
+    /// because it removes the mark from every episode at once.
+    @ViewBuilder
     private var watchedAction: some View {
-        let request = model.movieRequest
-        let watched = model.isWatched(request)
-        return CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
-            Task {
-                await model.setWatched(!watched, for: request)
-                await titleActions.refresh()
+        if model.isSeries {
+            let watched = model.isSeriesWatched
+            CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+                if watched {
+                    isConfirmingUnmarkShow = true
+                } else {
+                    Task {
+                        await model.setSeriesWatched(true)
+                        await titleActions.refresh()
+                    }
+                }
             }
+            .disabled(model.detail.videos.isEmpty)
+            .opacity(model.detail.videos.isEmpty ? 0.4 : 1)
+            .accessibilityValue(watched ? "Every episode watched" : "Not watched")
+            .accessibilityHint(watched ? "Clears the watched mark from every episode" : "Marks every episode that has aired as watched")
+            .accessibilityIdentifier("detail.watchedButton")
+            .sensoryFeedback(.success, trigger: watched)
+            .confirmationDialog("Mark every episode as not watched?", isPresented: $isConfirmingUnmarkShow, titleVisibility: .visible) {
+                Button("Mark Show as Not Watched", role: .destructive) {
+                    Task {
+                        await model.setSeriesWatched(false)
+                        await titleActions.refresh()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+        } else {
+            let request = model.movieRequest
+            let watched = model.isWatched(request)
+            CircleActionButton(title: "Watched", systemImage: "checkmark.circle", isOn: watched) {
+                Task {
+                    await model.setWatched(!watched, for: request)
+                    await titleActions.refresh()
+                }
+            }
+            .accessibilityValue(watched ? "Watched" : "Not watched")
+            .accessibilityIdentifier("detail.watchedButton")
+            .sensoryFeedback(.success, trigger: watched)
         }
-        .accessibilityValue(watched ? "Watched" : "Not watched")
-        .accessibilityIdentifier("detail.watchedButton")
-        .sensoryFeedback(.success, trigger: watched)
     }
 
     /// Opens the trailer on YouTube, in the YouTube app when it is installed.
@@ -189,6 +224,19 @@ struct DetailView: View {
                 ForEach(model.seasons, id: \.self) { season in
                     Button(season == 0 ? "Specials" : "Season \(season)") { model.selectedSeason = season }
                 }
+                if let season = model.selectedSeason {
+                    Divider()
+                    let watched = model.isSeasonWatched(season)
+                    let name = season == 0 ? "Specials" : "Season \(season)"
+                    Button(watched ? "Mark \(name) as Not Watched" : "Mark \(name) as Watched",
+                           systemImage: watched ? "xmark.circle" : "checkmark.circle") {
+                        Task {
+                            await model.setSeasonWatched(!watched, season: season)
+                            await titleActions.refresh()
+                        }
+                    }
+                    .accessibilityIdentifier("detail.seasonWatched")
+                }
             } label: {
                 HStack(spacing: 6) {
                     Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.shelfTitle)
@@ -212,12 +260,16 @@ struct DetailView: View {
             .scrollClipDisabled()
         }
         .padding(.top, Theme.Spacing.xxl)
+        // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
+        .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading)") {
+            await model.loadEpisodeScores(season: model.selectedSeason)
+        }
     }
 
     private func episodeRow(_ video: Video) -> some View {
         NavigationLink(value: model.request(for: video)) {
             EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                       artwork: model.backdropURL)
+                       artwork: model.backdropURL, score: model.score(for: video))
         }
         .buttonStyle(PressableCardStyle())
         .contextMenu {
@@ -344,6 +396,7 @@ private struct EpisodeRow: View {
     let fraction: Double?
     let watched: Bool
     let artwork: URL?
+    let score: DetailViewModel.EpisodeScore?
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
@@ -356,7 +409,7 @@ private struct EpisodeRow: View {
                 Text(video.title)
                     .font(.headline)
                     .lineLimit(2)
-                MetaLine([AirDate.text(video.released), ratingText])
+                dateAndScore
                 if let overview = video.overview, !overview.isEmpty {
                     Text(overview)
                         .font(.footnote)
@@ -407,19 +460,29 @@ private struct EpisodeRow: View {
             .accessibilityHidden(true)
     }
 
-    private var ratingText: String? {
-        guard let rating = video.rating, rating > 0 else { return nil }
-        return "★ \(rating.formatted(.number.precision(.fractionLength(1))))"
-    }
-}
-
-/// Air dates as addons send them (ISO 8601, usually with fractional seconds), written the way the locale writes a date.
-private enum AirDate {
-    static func text(_ released: String?) -> String? {
-        guard let released, !released.isEmpty else { return nil }
-        let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
-        guard let date = (try? fractional.parse(released)) ?? (try? Date.ISO8601FormatStyle().parse(released)) else { return nil }
-        return date.formatted(date: .abbreviated, time: .omitted)
+    /// "Jan 20, 2008 · [IMDb] 8.9": the air date, then the score with the IMDb mark when it is IMDb's (a star when it is the addon's).
+    @ViewBuilder
+    private var dateAndScore: some View {
+        let date = video.airDate?.formatted(date: .abbreviated, time: .omitted)
+        if date != nil || score != nil {
+            HStack(spacing: 5) {
+                if let date { Text(date) }
+                if date != nil, score != nil { Text("·") }
+                if let score {
+                    if score.isIMDb {
+                        ReviewSiteIcon(site: .imdb, size: 13)
+                    } else {
+                        Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
+                    }
+                    Text(score.text).monospacedDigit()
+                }
+            }
+            .font(Theme.Typography.metaLine)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([date, score.map { "\($0.isIMDb ? "IMDb rating" : "Rating") \($0.text)" }].compactMap { $0 }.joined(separator: ", "))
+        }
     }
 }
 #endif

@@ -17,4 +17,20 @@ import Testing
         }
         #expect(try video(#"{"id":"a"}"#).ratingText == nil)
     }
+
+    @Test func airDatesReadWithOrWithoutFractionalSeconds() throws {
+        let fractional = try video(#"{"id":"a","released":"2008-01-20T00:00:00.000Z"}"#)
+        let whole = try video(#"{"id":"a","firstAired":"2008-01-20T00:00:00Z"}"#)
+        #expect(fractional.airDate == Date(timeIntervalSince1970: 1_200_787_200))
+        #expect(whole.airDate == fractional.airDate)
+        #expect(try video(#"{"id":"a","released":"soon"}"#).airDate == nil)
+        #expect(try video(#"{"id":"a"}"#).airDate == nil)
+    }
+
+    @Test func anEpisodeHasAiredUnlessItsKnownDateIsInTheFuture() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(try video(#"{"id":"a","released":"2008-01-20T00:00:00.000Z"}"#).hasAired(by: now))
+        #expect(try !video(#"{"id":"a","released":"2099-01-01T00:00:00.000Z"}"#).hasAired(by: now))
+        #expect(try video(#"{"id":"a"}"#).hasAired(by: now), "no date: counts as aired")
+    }
 }

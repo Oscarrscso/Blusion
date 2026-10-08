@@ -90,6 +90,79 @@ public final class DetailViewModel {
         await refreshUserState()
     }
 
+    // MARK: watched marks for a whole show
+
+    /// Marks every aired episode of the show, specials aside, watched, or clears every one of those marks. Specials keep their own
+    /// marks (the season menu and an episode's menu reach them): a show counts as watched without them.
+    public func setSeriesWatched(_ watched: Bool) async {
+        await setWatched(watched, episodes: detail.episodesCountingAsWatched())
+    }
+
+    /// The same for one season, specials included when that season is the specials.
+    public func setSeasonWatched(_ watched: Bool, season: Int) async {
+        await setWatched(watched, episodes: markableEpisodes(in: [season]))
+    }
+
+    /// True when the show has aired episodes and every one of them is marked. Specials do not count.
+    public var isSeriesWatched: Bool {
+        let episodes = detail.episodesCountingAsWatched()
+        return !episodes.isEmpty && episodes.allSatisfy { watchedIdentities.contains(episodeIdentity($0)) }
+    }
+
+    /// True when the season has aired episodes and every one of them is marked.
+    public func isSeasonWatched(_ season: Int) -> Bool {
+        let episodes = markableEpisodes(in: [season])
+        return !episodes.isEmpty && episodes.allSatisfy { watchedIdentities.contains(episodeIdentity($0)) }
+    }
+
+    private func markableEpisodes(in seasons: [Int], now: Date = Date()) -> [Video] {
+        seasons.flatMap { detail.episodes(inSeason: $0) }.filter { $0.hasAired(by: now) }
+    }
+
+    private func setWatched(_ watched: Bool, episodes: [Video]) async {
+        for video in episodes {
+            let request = request(for: video)
+            if watched {
+                await services.progress.save(WatchProgress(id: request.identity, type: request.type, contentID: request.id, title: request.title,
+                                                           poster: request.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
+                                                           season: request.season, episode: request.episode))
+            } else {
+                await services.progress.remove(request.identity)
+            }
+        }
+        await refreshUserState()
+    }
+
+    // MARK: episode scores
+
+    /// An episode's score and where it came from: OMDb's IMDb score when there is one, else whatever the addon sent.
+    public struct EpisodeScore: Equatable, Sendable {
+        public let value: Double
+        public let isIMDb: Bool
+        public var text: String { value.formatted(.number.precision(.fractionLength(1))) }
+    }
+
+    /// OMDb's scores by season, then episode number. A season is here once it has been asked for, even when OMDb had none.
+    public private(set) var omdbEpisodeScores: [Int: [Int: Double]] = [:]
+
+    /// Changes when review credentials do, so the screen asks again for the season on show.
+    public var reviewServicesRevision: Int { services.posterRatings.reviewServicesRevision }
+
+    /// Asks OMDb for the season's episode scores. Nothing without an OMDb key; the screen calls it as seasons are picked.
+    public func loadEpisodeScores(season: Int?) async {
+        guard let season, isSeries, LetterboxdRatings.isIMDbID(detail.id) else { return }
+        let scores = await services.posterRatings.episodeRatings(for: detail.id, season: season)
+        guard !Task.isCancelled else { return }
+        omdbEpisodeScores[season] = scores
+    }
+
+    public func score(for video: Video) -> EpisodeScore? {
+        if let season = video.season, let episode = video.episode, let value = omdbEpisodeScores[season]?[episode] {
+            return EpisodeScore(value: value, isIMDb: true)
+        }
+        return video.rating.map { EpisodeScore(value: $0, isIMDb: false) }
+    }
+
     public var isSeries: Bool { detail.type == "series" || !detail.videos.isEmpty }
     public var seasons: [Int] { detail.seasons }
     public var episodes: [Video] { selectedSeason.map { detail.episodes(inSeason: $0) } ?? [] }
@@ -130,13 +203,13 @@ public final class DetailViewModel {
     /// The title's logo (a transparent image), when the addon or the catalog has one.
     public var logoURL: URL? { detail.preview.logo }
 
-    /// Year, runtime and rating for a `MetaLine`: "2008", "152 min", "★ 9.0". Parts the addon left out are skipped.
+    /// Year and runtime for a `MetaLine`: "2008", "152 min". Parts the addon left out are skipped. The rating is not here: the page
+    /// shows it as a button under the title.
     public var metaParts: [String] {
         let meta = detail.preview
         var parts: [String] = []
         if let year = Self.nonEmpty(meta.releaseInfo) { parts.append(year) }
         if let runtime = Self.nonEmpty(meta.runtime) { parts.append(runtime) }
-        if let rating = meta.imdbRating, rating > 0 { parts.append("★ \(rating.formatted(.number.precision(.fractionLength(1))))") }
         return parts
     }
 

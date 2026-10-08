@@ -110,6 +110,20 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     /// `8.4`, or nil without a usable rating.
     public var ratingText: String? { rating.map { String(format: "%.1f", $0) } }
 
+    /// When the episode first aired, from `released`: ISO 8601, usually with fractional seconds. Nil when the addon gave no date
+    /// or one that does not read.
+    public var airDate: Date? {
+        guard let released, !released.isEmpty else { return nil }
+        let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        return (try? fractional.parse(released)) ?? (try? Date.ISO8601FormatStyle().parse(released))
+    }
+
+    /// False only for an episode with a known air date after `now`. An episode with no date counts as aired, so a show whose addon
+    /// sends no dates can still be marked watched.
+    public func hasAired(by now: Date = Date()) -> Bool {
+        airDate.map { $0 <= now } ?? true
+    }
+
     private enum Keys: String, CodingKey {
         case id, title, name, season, episode, number, released, firstAired, thumbnail, overview, description, imdbRating, rating
     }
@@ -215,6 +229,14 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
 
     public func episodes(inSeason season: Int) -> [Video] {
         videos.filter { $0.season == season }.sorted { ($0.episode ?? 0) < ($1.episode ?? 0) }
+    }
+
+    /// The episodes that "watched" means for the whole show: everything that has aired in the regular seasons, plus episodes the addon
+    /// gave no season. Specials (season 0) and episodes that are yet to air are left out, so a show counts as watched once its
+    /// regular, aired episodes are, and marking it never claims an episode nobody could have seen.
+    public func episodesCountingAsWatched(by now: Date = Date()) -> [Video] {
+        let regular = seasons.filter { $0 != 0 }.flatMap { episodes(inSeason: $0) }
+        return (regular + videos.filter { $0.season == nil }).filter { $0.hasAired(by: now) }
     }
 
     /// The episode after `video` in watching order: season by season, specials (season 0) only after the last regular season.

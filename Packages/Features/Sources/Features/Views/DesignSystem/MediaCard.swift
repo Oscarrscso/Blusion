@@ -224,6 +224,15 @@ struct MediaCardLink: View {
                     Button(actions.isWatched(item) ? "Mark as Unwatched" : "Mark as Watched", systemImage: "checkmark.circle") {
                         Task { await actions.setWatched(!actions.isWatched(item), for: item) }
                     }
+                } else if item.type == "series" {
+                    Button("Mark All Episodes as Watched", systemImage: "checkmark.circle") {
+                        Task { await actions.setSeriesWatched(true, for: item) }
+                    }
+                    if actions.hasWatchedEpisodes(item) {
+                        Button("Mark All Episodes as Unwatched", systemImage: "xmark.circle") {
+                            Task { await actions.setSeriesWatched(false, for: item) }
+                        }
+                    }
                 }
                 if item.id.hasPrefix("tt"), item.id.dropFirst(2).allSatisfy(\.isNumber),
                    let url = URL(string: "https://www.imdb.com/title/\(item.id)/") {
