@@ -9,6 +9,8 @@ struct HomeView: View {
     @State private var isScrolling = false
     /// How far Home has been pulled down past its top; the spotlight stretches by this much (see `HeroCarousel`).
     @State private var heroPull: CGFloat = 0
+    /// The height of the navigation bar and status bar above Home; a spotlight extends beneath them, so the customise button clears them.
+    @State private var topInset: CGFloat = 0
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
@@ -25,24 +27,10 @@ struct HomeView: View {
                 .environment(\.isHomeScrolling, isScrolling)
                 .environment(\.layoutMetrics, homeMetrics)
         }
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)
-            .toolbar {
-                if model.phase == .ready {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            router.showWidgets()
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                        }
-                        .buttonStyle(.glass)
-                        .foregroundStyle(.white)
-                        .accessibilityLabel("Customize Home")
-                        .accessibilityIdentifier("home.customize")
-                    }
-                }
-            }
             .task { await model.observeAddons() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
@@ -119,6 +107,9 @@ struct HomeView: View {
                 }
             }
             .padding(.bottom, Theme.Spacing.xxl)
+            // In the content, not the navigation bar: it scrolls away with the page instead of staying pinned, and it is one glass
+            // circle instead of a glass button inside the bar's own glass.
+            .overlay(alignment: .topTrailing) { customizeButton }
         }
         .accessibilityIdentifier("board.rows")
         .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
@@ -132,6 +123,24 @@ struct HomeView: View {
         .scrollEdgeEffectStyle(.soft, for: .top)
         .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
+    }
+
+    private var customizeButton: some View {
+        Button {
+            router.showWidgets()
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, homeMetrics.pageMargin)
+        .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
+        .accessibilityLabel("Customize Home")
+        .accessibilityIdentifier("home.customize")
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {
