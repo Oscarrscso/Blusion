@@ -55,9 +55,10 @@ struct LayoutMetrics: Equatable, Sendable {
         readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
     )
 
-    var continueCardWidth: CGFloat { isRegular ? 180 : 148 }
+    var continueCardWidth: CGFloat { isRegular ? 200 : 164 }
 
-    var landscapePosterWidth: CGFloat { continueCardWidth * 1.2 }
+    /// Other landscape rows keep their own base, so a larger Continue card does not resize them.
+    var landscapePosterWidth: CGFloat { (isRegular ? 180 : 148) * 1.2 }
 
     func heroHeight(forContainerHeight height: CGFloat) -> CGFloat {
         min(max(height * heroHeightFraction, 380), heroMaxHeight)
