@@ -24,28 +24,56 @@ import StremioKitTestSupport
 
     // MARK: library
 
-    @Test func continueWatchingKeepsOnlyResumableItemsNewestFirst() async {
-        let model = LibraryViewModel(services: services(progress: [
+    @Test func resumableItemsNewestFirstAreWhatHomeContinuesWatching() async {
+        let store = services(progress: [
             progress("old", 40, age: 0), progress("new", 60, age: 100), progress("barely", 2, age: 50), progress("nearly", 97, age: 60),
             progress("done", 95, watched: true, age: 70),
+        ]).progress
+        #expect(LibraryViewModel.continueWatching(from: await store.all()).map(\.contentID) == ["new", "old"], "barely started, nearly finished and watched items don't qualify")
+    }
+
+    @Test func inProgressTitlesStayOutOfTheLibrary() async {
+        let model = LibraryViewModel(services: services(progress: [
+            progress("old", 40, age: 0), progress("done", 95, watched: true, age: 70),
         ]))
         #expect(!model.hasLoaded)
         await model.load()
         #expect(model.hasLoaded)
-        #expect(model.continueWatching.map(\.contentID) == ["new", "old"], "barely started, nearly finished and watched items don't qualify")
         #expect(model.watched.map(\.contentID) == ["done"])
         #expect(model.isEmpty == false)
+        model.filter.statuses = [.inProgress]
+        #expect(model.watched.isEmpty && model.saved.isEmpty)
     }
 
     @Test func onlyTheLatestEpisodePerSeriesContinues() async {
-        let items = [
+        let store = services(progress: [
             progress("tt9:1:1", 30, age: 0, type: "series", season: 1, episode: 1),
             progress("tt9:1:2", 30, age: 100, type: "series", season: 1, episode: 2),
             progress("tt8:1:1", 30, age: 50, type: "series", season: 1, episode: 1),
-        ]
-        let model = LibraryViewModel(services: services(progress: items))
+        ]).progress
+        #expect(LibraryViewModel.continueWatching(from: await store.all()).map(\.contentID) == ["tt9:1:2", "tt8:1:1"])
+    }
+
+    @Test func savedAndWatchedGridsLoadOnePageAsTheViewerScrolls() async {
+        let library = (0..<130).map { LibraryItem(id: "movie/s\($0)", type: "movie", contentID: "s\($0)", name: "S\($0)", addedAt: when.addingTimeInterval(Double($0))) }
+        let watched = (0..<130).map { progress("w\($0)", 100, watched: true, age: Double($0)) }
+        let model = LibraryViewModel(services: services(progress: watched, library: library))
         await model.load()
-        #expect(model.continueWatching.map(\.contentID) == ["tt9:1:2", "tt8:1:1"])
+        #expect(model.saved.count == 60 && model.watched.count == 60)
+        #expect(model.hasMoreSaved && model.hasMoreWatched)
+
+        model.savedCardAppeared(model.saved[0].id)
+        #expect(model.saved.count == 60, "a card near the top of the page doesn't load the next one")
+        model.savedCardAppeared(model.saved[59].id)
+        #expect(model.saved.count == 120)
+        model.savedCardAppeared(model.saved[119].id)
+        #expect(model.saved.count == 130 && !model.hasMoreSaved)
+
+        model.watchedCardAppeared(model.watched[59].id)
+        #expect(model.watched.count == 120)
+
+        model.filter.sort = .title
+        #expect(model.saved.count == 60 && model.watched.count == 60, "a new filter starts each grid from its first page")
     }
 
     @Test func savedTitlesAndRemoval() async {
@@ -59,13 +87,11 @@ import StremioKitTestSupport
     }
 
     @Test func removingMarkingAndUnmarking() async {
-        let model = LibraryViewModel(services: services(progress: [progress("a", 40), progress("b", 50, age: -10)]))
+        let model = LibraryViewModel(services: services(progress: [progress("a", 100, watched: true), progress("b", 100, watched: true, age: -10)]))
         await model.load()
-        #expect(model.continueWatching.map(\.contentID) == ["a", "b"])
-        await model.removeFromContinueWatching(model.continueWatching[0])
-        #expect(model.continueWatching.map(\.contentID) == ["b"])
-        await model.markWatched(model.continueWatching[0])
-        #expect(model.continueWatching.isEmpty && model.watched.map(\.contentID) == ["b"])
+        #expect(model.watched.map(\.contentID) == ["a", "b"])
+        await model.markUnwatched(model.watched[0])
+        #expect(model.watched.map(\.contentID) == ["b"])
         await model.markUnwatched(model.watched[0])
         #expect(model.watched.isEmpty && model.isEmpty)
     }

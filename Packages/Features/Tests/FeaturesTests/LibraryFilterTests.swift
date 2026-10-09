@@ -193,19 +193,17 @@ import StremioKitTestSupport
         let model = LibraryViewModel(services: services(progress: progress, library: library))
         await model.load()
         #expect(model.saved.map(\.contentID) == ["a", "b"])
-        #expect(model.continueWatching.map(\.contentID) == ["c", "a"], "most recently watched first")
-        #expect(model.watched.map(\.contentID) == ["d"])
+        #expect(model.watched.map(\.contentID) == ["d"], "the unsaved title in progress is not in the Library")
         #expect(model.availableGenres == ["Comedy", "Drama"])
 
         model.filter.kinds = [.series]
         #expect(model.saved.map(\.contentID) == ["b"])
-        #expect(model.continueWatching.isEmpty && model.watched.isEmpty)
+        #expect(model.watched.isEmpty)
         #expect(model.hasMatches && !model.isEmpty)
 
         model.filter.kinds = []
         model.filter.statuses = [.inProgress]
         #expect(model.saved.map(\.contentID) == ["a"], "a saved title in progress keeps its place")
-        #expect(model.continueWatching.map(\.contentID) == ["c", "a"])
         #expect(model.watched.isEmpty)
 
         model.filter.statuses = []
@@ -228,12 +226,12 @@ import StremioKitTestSupport
         #expect(!model.isEmpty, "the Library still holds a title, so the screen says nothing matches rather than that it is empty")
     }
 
-    @Test func continueWatchingSortsByRecentActivityUnlessAnotherSortIsChosen() async {
-        let model = LibraryViewModel(services: services(progress: [record("old", age: -50, position: 30), record("new", age: -1, position: 30)]))
+    @Test func watchedSortsByRecentActivityUnlessAnotherSortIsChosen() async {
+        let model = LibraryViewModel(services: services(progress: [record("old", age: -50, watched: true), record("new", age: -1, watched: true)]))
         await model.load()
         model.filter.sort = .recentlyAdded
-        #expect(model.continueWatching.map(\.contentID) == ["new", "old"])
+        #expect(model.watched.map(\.contentID) == ["new", "old"])
         model.filter.sort = .title
-        #expect(model.continueWatching.map(\.contentID) == ["new", "old"], "by title: T new, then T old")
+        #expect(model.watched.map(\.contentID) == ["new", "old"], "by title: T new, then T old")
     }
 }

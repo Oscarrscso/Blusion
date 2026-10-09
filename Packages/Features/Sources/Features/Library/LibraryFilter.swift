@@ -225,7 +225,7 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
     public let status: WatchStatus
     /// The saved title, when there is one.
     public let item: LibraryItem?
-    /// The progress record shown for this title: the one a Continue Watching or Watched card opens. For a saved title, the most recent
+    /// The progress record shown for this title: the one a Watched card opens. For a saved title, the most recent
     /// record, when it has any.
     public let progress: WatchProgress?
 

@@ -3,29 +3,37 @@ import Observation
 import PlayerKit
 import StremioKit
 
-/// Library: continue watching, saved titles, and what has been watched. The filter narrows all three sections at once.
+/// Library: saved titles and what has been watched. The filter narrows both sections at once. In-progress titles live on Home.
 @MainActor
 @Observable
 public final class LibraryViewModel {
-    /// The sections as the view shows them: each already filtered and sorted.
-    public private(set) var continueWatching: [WatchProgress] = []
+    /// How many titles a grid adds each time the viewer scrolls near its end, and how close to the end that has to be.
+    static let pageSize = 60
+    private static let prefetchDistance = 12
+
+    /// The sections as the view shows them: each already filtered, sorted and cut to the pages loaded so far.
     public private(set) var saved: [LibraryItem] = []
     public private(set) var watched: [WatchProgress] = []
     public private(set) var hasLoaded = false
 
-    /// The filters and sort in use. Changing it re-filters the sections at once.
+    /// The filters and sort in use. Changing it re-filters the sections at once and starts each grid from its first page.
     public var filter = LibraryFilter() {
-        didSet { applyFilter() }
+        didSet {
+            savedLimit = Self.pageSize
+            watchedLimit = Self.pageSize
+            applyFilter()
+        }
     }
 
     private let services: AppServices
     /// Everything the Library knows, before any filter. The sections above are the visible part of these.
     private var savedEntries: [LibraryEntry] = []
-    private var continueEntries: [LibraryEntry] = []
     private var watchedEntries: [LibraryEntry] = []
     private var visibleSaved: [LibraryEntry] = []
-    private var visibleContinue: [LibraryEntry] = []
     private var visibleWatched: [LibraryEntry] = []
+    /// How many of each grid's filtered titles are shown.
+    private var savedLimit = LibraryViewModel.pageSize
+    private var watchedLimit = LibraryViewModel.pageSize
     private var lastTraktPull = Date.distantPast
     /// Where the scores from the rating sites other than IMDb come from. Nil until the view attaches it.
     @ObservationIgnored private var ratings: PosterRatingsStore?
@@ -41,14 +49,18 @@ public final class LibraryViewModel {
     }
 
     /// True when the Library holds nothing at all, whatever the filter. A filter that matches nothing is not empty.
-    public var isEmpty: Bool { savedEntries.isEmpty && continueEntries.isEmpty && watchedEntries.isEmpty }
+    public var isEmpty: Bool { savedEntries.isEmpty && watchedEntries.isEmpty }
 
     /// True when at least one section has a title to show under the current filter.
-    public var hasMatches: Bool { !(continueWatching.isEmpty && saved.isEmpty && watched.isEmpty) }
+    public var hasMatches: Bool { !(saved.isEmpty && watched.isEmpty) }
+
+    /// Whether each grid has titles past the pages on screen.
+    public var hasMoreSaved: Bool { visibleSaved.count > savedLimit }
+    public var hasMoreWatched: Bool { visibleWatched.count > watchedLimit }
 
     /// The genres and year span of everything in the Library, for the filter's pickers.
-    public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + continueEntries + watchedEntries) }
-    public var availableYears: ClosedRange<Int>? { LibraryFiltering.yearRange(in: savedEntries + continueEntries + watchedEntries) }
+    public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + watchedEntries) }
+    public var availableYears: ClosedRange<Int>? { LibraryFiltering.yearRange(in: savedEntries + watchedEntries) }
 
     /// An empty library can recover from a missed Trakt import without signing in again.
     public func refresh(now: Date = Date()) async {
@@ -66,9 +78,6 @@ public final class LibraryViewModel {
         let recordsByTitle = Dictionary(grouping: all, by: Self.titleKey(of:))
 
         savedEntries = savedItems.map { LibraryEntry(item: $0, records: recordsByTitle[$0.id] ?? []) }
-        continueEntries = Self.continueWatching(from: all).map { record in
-            LibraryEntry(record: record, saved: savedByID[Self.titleKey(of: record)])
-        }
         watchedEntries = all.filter(\.isWatched).map { record in
             LibraryEntry(record: record, saved: savedByID[Self.titleKey(of: record)])
         }
@@ -76,7 +85,7 @@ public final class LibraryViewModel {
         applyFilter()
     }
 
-    /// In-progress items worth resuming, newest first, one per series (the latest episode).
+    /// In-progress items worth resuming, newest first, one per series (the latest episode). Home's Continue Watching uses this.
     public static func continueWatching(from all: [WatchProgress]) -> [WatchProgress] {
         var seenSeries = Set<String>()
         return all.filter { !$0.isWatched && ProgressRecorder.resumePosition(for: $0) > 0 }
@@ -86,17 +95,18 @@ public final class LibraryViewModel {
             }
     }
 
-    public func removeFromContinueWatching(_ item: WatchProgress) async {
-        await services.progress.remove(item.id)
-        await load()
+    /// Called as a Saved card appears. Near the end of the loaded page, the next page is shown.
+    public func savedCardAppeared(_ id: String) {
+        guard hasMoreSaved, Self.isNearEnd(id, of: saved.map(\.id)) else { return }
+        savedLimit += Self.pageSize
+        publishSections()
     }
 
-    public func markWatched(_ item: WatchProgress) async {
-        var updated = item
-        updated.isWatched = true
-        updated.updatedAt = Date()
-        await services.progress.save(updated)
-        await load()
+    /// Called as a Watched card appears. Near the end of the loaded page, the next page is shown.
+    public func watchedCardAppeared(_ id: String) {
+        guard hasMoreWatched, Self.isNearEnd(id, of: watched.map(\.id)) else { return }
+        watchedLimit += Self.pageSize
+        publishSections()
     }
 
     public func markUnwatched(_ item: WatchProgress) async {
@@ -133,25 +143,30 @@ public final class LibraryViewModel {
     private func applyFilter() {
         let now = Date()
         let filter = filter
-        // Continue Watching is a list of where the viewer left off, so "recently added" there means "recently watched".
-        var continueFilter = filter
-        if continueFilter.sort == .recentlyAdded { continueFilter.sort = .recentlyWatched }
-        let (savedEntries, continueEntries, watchedEntries) = (self.savedEntries, self.continueEntries, self.watchedEntries)
+        let (savedEntries, watchedEntries) = (self.savedEntries, self.watchedEntries)
         let score = scoreLookup(for: filter)
         // Reading each title's score inside the tracking block means a score that arrives later re-runs the filter on its own.
-        let (visibleSaved, visibleContinue, visibleWatched) = withObservationTracking {
+        let (visibleSaved, visibleWatched) = withObservationTracking {
             (LibraryFiltering.apply(filter, to: savedEntries, now: now, score: score),
-             LibraryFiltering.apply(continueFilter, to: continueEntries, now: now, score: score),
              LibraryFiltering.apply(filter, to: watchedEntries, now: now, score: score))
         } onChange: { [weak self] in
             Task { @MainActor in self?.applyFilter() }
         }
         self.visibleSaved = visibleSaved
-        self.visibleContinue = visibleContinue
         self.visibleWatched = visibleWatched
-        saved = visibleSaved.compactMap(\.item)
-        continueWatching = visibleContinue.compactMap(\.progress)
-        watched = visibleWatched.compactMap(\.progress)
+        publishSections()
+    }
+
+    /// Cuts each filtered list to the pages loaded so far.
+    private func publishSections() {
+        saved = visibleSaved.prefix(savedLimit).compactMap(\.item)
+        watched = visibleWatched.prefix(watchedLimit).compactMap(\.progress)
+    }
+
+    /// True when the card is one of the last few on the loaded page, so the next page should load.
+    private static func isNearEnd(_ id: String, of ids: [String]) -> Bool {
+        guard let index = ids.firstIndex(of: id) else { return false }
+        return index >= ids.count - prefetchDistance
     }
 
     /// Every site's score for a title comes from the rating store, which starts a lookup for it if it has none yet. Without a

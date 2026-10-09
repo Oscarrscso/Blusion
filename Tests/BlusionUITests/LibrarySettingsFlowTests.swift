@@ -104,10 +104,9 @@ final class LibrarySettingsFlowTests: XCTestCase {
         if !app.buttons["player.close"].exists { app.otherElements["player.screen"].tap() }
         app.buttons["player.close"].tap()
 
-        // Home shows Continue Watching; Library does too.
+        // Home shows Continue Watching; the Library leaves in-progress titles out.
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.buttons["library.continue.movie/mock:movie1"].waitForExistence(timeout: 10))
-        captureScreenshot(app, named: "M7-library-continue")
+        XCTAssertFalse(app.buttons["library.continue.movie/mock:movie1"].waitForExistence(timeout: 3))
         app.tabBars.buttons["Home"].tap()
         XCTAssertTrue(app.otherElements["board.continueWatching"].waitForExistence(timeout: 10))
         captureScreenshot(app, named: "M7-home-continue")
