@@ -20,7 +20,7 @@ public struct DataResetService: Sendable {
 
         public var warning: String {
             switch self {
-            case .history: return "Removes your watch progress and watched marks. Continue Watching will be empty."
+            case .history: return "Removes your watch progress and watched marks. Continue will be empty."
             case .library: return "Removes every saved title from your library."
             case .settings: return "Resets playback and ratings preferences, account credentials and the streaming server."
             case .widgets: return "Puts Home back to the automatic layout. Your widgets are removed."

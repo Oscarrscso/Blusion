@@ -529,24 +529,24 @@
         }
       }
     },
-    "Continue Watching": {
+    "Continue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Continue Watching"
+            "value": "Continue"
           }
         }
       }
     },
-    "Continue Watching refresh": {
+    "Continue refresh": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Continue Watching refresh"
+            "value": "Continue refresh"
           }
         }
       }
@@ -1860,13 +1860,13 @@
         }
       }
     },
-    "Refreshing Continue Watching": {
+    "Refreshing Continue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Refreshing Continue Watching"
+            "value": "Refreshing Continue"
           }
         }
       }
@@ -1926,13 +1926,13 @@
         }
       }
     },
-    "Remove from Continue Watching": {
+    "Remove from Continue": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove from Continue Watching"
+            "value": "Remove from Continue"
           }
         }
       }

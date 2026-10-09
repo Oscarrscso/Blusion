@@ -175,7 +175,7 @@ struct LibraryView: View {
     }
 
     private var continueSection: some View {
-        MediaRow("Continue Watching") {
+        MediaRow("Continue") {
             ForEach(model.continueWatching) { item in
                 NavigationLink(value: LibraryViewModel.request(for: item)) {
                     ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster, fraction: item.fraction)
@@ -185,7 +185,7 @@ struct LibraryView: View {
                 .accessibilityIdentifier("library.continue.\(item.id)")
                 .contextMenu {
                     Button("Mark as Watched") { Task { await model.markWatched(item); await actions?.refresh() } }
-                    Button("Remove from Continue Watching", role: .destructive) { Task { await model.removeFromContinueWatching(item) } }
+                    Button("Remove from Continue", role: .destructive) { Task { await model.removeFromContinueWatching(item) } }
                 }
             }
         }

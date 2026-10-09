@@ -109,7 +109,7 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(model.sections.map(\.id) == ["auto.hero", "auto.continue", "auto.row.test.cinemeta.movie.top", "auto.row.test.cinemeta.series.trending",
                                              "auto.genres"])
         #expect(model.sections[0].state.value?.map(\.id) == ["tt1", "tt2"], "the spotlight loads")
-        #expect(model.sections[1].state == .loaded([]), "Continue Watching has nothing to load")
+        #expect(model.sections[1].state == .loaded([]), "Continue has nothing to load")
         #expect(model.sections[2].state.value?.count == 2 && model.sections[3].state.value?.count == 2)
         #expect(model.sections[4].state == .loaded([]), "a genre collection has nothing to load")
         #expect(model.sections.allSatisfy { $0.issue == nil })

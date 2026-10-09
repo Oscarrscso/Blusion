@@ -242,7 +242,7 @@ public final class WidgetsManagerViewModel {
         case .row(let row): return "Row · \(describe(row.source))"
         case .hero(let row): return "Spotlight · \(describe(row.source))"
         case .collection(let tiles): return "Collection · \(WidgetsManagerViewModel.plural(tiles.count, "tile"))"
-        case .continueWatching: return "Continue Watching"
+        case .continueWatching: return "Continue"
         case .unsupported(let type): return "Can't show yet · \(type)"
         }
     }

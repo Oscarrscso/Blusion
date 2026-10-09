@@ -111,7 +111,7 @@ struct SettingsView: View {
         Section("Accounts") {
             NavigationLink { TraktAccountView(services: services) } label: { Label("Trakt", systemImage: "person.crop.circle") }
                 .accessibilityIdentifier("settings.trakt")
-            Picker("Continue Watching refresh", selection: Binding(get: { model.settings.continueWatchingRefreshSeconds ?? 300 }, set: { value in
+            Picker("Continue refresh", selection: Binding(get: { model.settings.continueWatchingRefreshSeconds ?? 300 }, set: { value in
                 Task { await model.setContinueWatchingRefreshSeconds(value) }
             })) {
                 ForEach(SettingsViewModel.continueWatchingRefreshOptions) { Text($0.label).tag($0.value) }
