@@ -55,9 +55,12 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.zoomScope) private var zoomScope
+    @Environment(\.layoutMetrics) private var metrics
 
     func body(content: Content) -> some View {
         let sourceID = "continue/\(zoomScope)/\(preview.identity)"
+        let cardWidth = metrics.continueCardWidth
+        let cardHeight = cardWidth / CardAspect.wide.ratio
         Button {
             Haptics.tap()
             router.open(.home)
@@ -81,7 +84,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                 }
             }
         } preview: {
-            content
+            content.frame(width: cardWidth, height: cardHeight)
         }
     }
 }
