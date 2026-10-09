@@ -126,6 +126,8 @@ private struct HeroPage: View {
     @Environment(PosterRatingsStore.self) private var ratings
     @State private var heroArtwork: TMDbArtwork?
     @State private var titleTop: CGFloat = 0
+    /// The logo waits for the picture, so it never shows over the grey placeholder.
+    @State private var pictureLoaded = false
 
     var body: some View {
         let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork)
@@ -178,6 +180,7 @@ private struct HeroPage: View {
                 ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
                              title: item.name, maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
+                    .onLoaded { pictureLoaded = true }
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
@@ -217,7 +220,10 @@ private struct HeroPage: View {
     @ViewBuilder
     private var titleBlock: some View {
         if let logo = item.logo ?? heroArtwork?.logo {
+            // Hidden rather than removed until the picture is on screen, so the title block keeps its height.
             HeroLogo(url: logo, title: item.name)
+                .opacity(pictureLoaded ? 1 : 0)
+                .animation(.easeOut(duration: 0.25), value: pictureLoaded)
         } else {
             Text(item.name)
                 .font(.largeTitle.bold())
