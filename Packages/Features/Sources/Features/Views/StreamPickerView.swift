@@ -12,6 +12,7 @@ struct StreamPickerView: View {
     @State private var expandedDetails: RankedStream?
     @State private var autoPickTask: Task<Void, Never>?
     @State private var hasSelectedManually = false
+    @State private var isOpeningPlayer = false
     /// The sharpness the chips narrow the list to; nil shows every stream.
     @State private var resolutionFilter: Band?
     /// A stream whose format Blusion can't play: the alert offers another player, or the next stream.
@@ -23,6 +24,7 @@ struct StreamPickerView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.scenePhase) private var scenePhase
 
     init(request: StreamRequest, services: AppServices) {
         self.services = services
@@ -69,6 +71,9 @@ struct StreamPickerView: View {
             }
         }
         .onDisappear { autoPickTask?.cancel() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { isOpeningPlayer = false }
+        }
         .sheet(item: $expandedDetails) { item in
             NavigationStack {
                 ScrollView {
@@ -462,8 +467,13 @@ struct StreamPickerView: View {
         case .openExternal(let url):
             openURL(url)
         case .openInPlayer(let player, let link):
+            guard !isOpeningPlayer else { return }
+            isOpeningPlayer = true
             openURL(link) { accepted in
-                if !accepted { missing = MissingPlayer(player: player, item: item) }
+                if !accepted {
+                    isOpeningPlayer = false
+                    missing = MissingPlayer(player: player, item: item)
+                }
             }
         case .unsupported:
             unsupported = item   // the alert offers the next playable stream, or another player

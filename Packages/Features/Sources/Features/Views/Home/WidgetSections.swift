@@ -194,14 +194,14 @@ struct ContinueWatchingRow: View {
                     MediaRow(title, hideTitle: true) {
                         ForEach(shown) { item in
                             let artworkID = ContentID(item.request.id).baseID
-                            NavigationLink(value: item.request) {
-                                ProgressCard(title: item.request.title, subtitle: item.subtitle,
-                                             artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
-                                             logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
-                                             duration: item.request.expectedDuration)
-                            }
-                            .buttonStyle(PressableCardStyle())
-                            .titleTapHaptic()
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle,
+                                         artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
+                                         logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
+                                         duration: item.request.expectedDuration)
+                            .continueWatchingHold(preview: MetaPreview(id: artworkID, type: item.request.type,
+                                                                      name: item.request.seriesName ?? item.request.title,
+                                                                      poster: item.request.poster, releaseInfo: item.request.year),
+                                                  request: item.request)
                             .id(item.id)
                             .accessibilityIdentifier("board.continue.\(item.id)")
                         }

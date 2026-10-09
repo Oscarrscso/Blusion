@@ -36,33 +36,43 @@ struct HeroSection: View {
     }
 }
 
-/// A paging carousel of full-width pages. Each page is its item's artwork with the title (its logo when there is one), a metadata
-/// line and a "Details" button over the bottom of it.
+/// A paging carousel of full-resolution portrait or landscape heroes, each clipped to its own page.
 struct HeroCarousel: View {
     let items: [MetaPreview]
     @Environment(\.layoutMetrics) private var metrics
-    /// The page on screen, counted from 0, read from the scroll position.
-    @State private var index = 0
+    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.heroContainerHeight) private var containerHeight
+    @Environment(\.isHomeScrolling) private var isHomeScrolling
+    /// Keep the same title aligned when the window resizes or the device rotates.
+    @State private var pageID: String?
 
     var body: some View {
+        let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
         Color.clear
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
             .overlay {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 0) {
+                GeometryReader { geometry in
+                    TabView(selection: $pageID) {
                         ForEach(items, id: \.identity) { item in
-                            HeroPage(item: item)
-                                .containerRelativeFrame(.horizontal)
+                            HeroPage(item: item, isScrolling: isHomeScrolling)
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .clipped()
+                                .tag(Optional(item.identity))
                         }
                     }
-                    .scrollTargetLayout()
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .onChange(of: pageID) { oldID, newID in
+                        guard let oldID, let newID, oldID != newID,
+                              items.contains(where: { $0.identity == oldID }) else { return }
+                        Haptics.scrollSnap()
+                    }
+                    .onAppear {
+                        pageID = pageID ?? items.first?.identity
+                    }
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollClipDisabled()
-                .onScrollGeometryChange(for: Int.self, of: { geometry in
-                    Int((geometry.contentOffset.x / max(geometry.containerSize.width, 1)).rounded())
-                }, action: { _, newIndex in index = newIndex })
             }
             .overlay(alignment: .bottom) {
                 if items.count > 1 { pageDots }
@@ -71,14 +81,14 @@ struct HeroCarousel: View {
 
     private var pageDots: some View {
         HStack(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.element.identity) { position, _ in
-                let isCurrent = position == index
+            ForEach(items, id: \.identity) { item in
+                let isCurrent = item.identity == (pageID ?? items.first?.identity)
                 Capsule()
                     .fill(.white.opacity(isCurrent ? 0.95 : 0.35))
                     .frame(width: isCurrent ? 16 : 6, height: 6)
             }
         }
-        .animation(.snappy(duration: 0.25), value: index)
+        .animation(.snappy(duration: 0.25), value: pageID)
         .padding(.bottom, Theme.Spacing.m)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -88,10 +98,13 @@ struct HeroCarousel: View {
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.heroContainerHeight) private var containerHeight
     var body: some View {
+        let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
         Color.clear
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)
@@ -99,34 +112,73 @@ struct HeroPlaceholder: View {
     }
 }
 
-/// One page of the spotlight. The artwork is the link to the title and the place its screen zooms out of. The title block and the
-/// "Details" button sit over it as a second link, so a tap on the button and a tap on the picture open the same title.
+/// One hero page of the spotlight, using a separate image for each orientation.
 private struct HeroPage: View {
     /// The zoom source of this page's artwork: the title's screen zooms out of it.
     static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
 
     let item: MetaPreview
+    let isScrolling: Bool
+    @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
+    @Environment(PosterRatingsStore.self) private var ratings
+    @State private var heroArtwork: TMDbArtwork?
+    @State private var titleTop: CGFloat = 0
 
     var body: some View {
-        let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item))
-        ZStack(alignment: .bottomLeading) {
-            NavigationLink(value: destination) {
-                artwork
-            }
-            .buttonStyle(.plain)
-            .titleTapHaptic()
-            .accessibilityLabel(item.name)
+        let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork)
+        let openTitle = {
+            Haptics.tap()
+            router.homePath.append(destination)
+        }
+        ZStack(alignment: .bottom) {
+            artwork
+                .allowsHitTesting(false)
+            // Keep the fade outside the zoom source so a cancelled press cannot hide it.
+            scrim
+                .allowsHitTesting(false)
             caption
+                .allowsHitTesting(false)
+        }
+        .overlay(alignment: .top) {
+            // A tap can open the title, but never claims a drag or disables views during one.
+            Color.clear
+                .frame(height: max(0, titleTop - Theme.Spacing.m))
+                .contentShape(Rectangle())
+                .simultaneousGesture(TapGesture().onEnded {
+                    guard !isScrolling else { return }
+                    openTitle()
+                })
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(item.name)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { openTitle() }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if isLandscape {
+                PosterRatingsOverlay(item: item, isLandscape: true)
+                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.bottom, Theme.Spacing.m)
+                    .allowsHitTesting(false)
+            }
+        }
+        .coordinateSpace(name: HeroPage.sourceID(for: item))
+        .task(id: ratings.reviewServicesRevision) {
+            let loaded = await ratings.heroArtwork(for: item)
+            guard !Task.isCancelled else { return }
+            heroArtwork = loaded
         }
     }
 
     private var artwork: some View {
         Color.clear
-            .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400) }
-            .overlay { scrim }
-            .contentShape(Rectangle())
+            .overlay {
+                ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
+                             title: item.name, maxPixelSize: 4096, contentMode: .fit,
+                             placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
+            }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
 
@@ -143,30 +195,34 @@ private struct HeroPage: View {
         ], startPoint: .top, endPoint: .bottom)
     }
 
-    /// The title, its logo and the metadata line. The picture is the link, so the page carries no buttons of its own.
+    /// The title, its logo and the metadata line. Only the picture above the logo accepts taps.
     private var caption: some View {
-        VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.s) {
+        VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.frame(in: .named(HeroPage.sourceID(for: item))).minY
+                } action: { titleTop = $0 }
                 .allowsHitTesting(false)
             MetaLine(metaParts)
+                .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, metrics.pageMargin)
-        // Room for the page dots under the button.
+        // Room for the page dots beneath the metadata.
         .padding(.bottom, 44)
-        .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     @ViewBuilder
     private var titleBlock: some View {
-        if let logo = item.logo {
+        if let logo = item.logo ?? heroArtwork?.logo {
             HeroLogo(url: logo, title: item.name)
         } else {
             Text(item.name)
                 .font(.largeTitle.bold())
                 .lineLimit(2)
-                .multilineTextAlignment(metrics.isRegular ? .leading : .center)
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
         }
@@ -192,7 +248,7 @@ private struct HeroLogo: View {
     var body: some View {
         Color.clear
             .frame(width: Self.box.width, height: Self.box.height)
-            .overlay(alignment: .bottomLeading) {
+            .overlay(alignment: .bottom) {
                 if let image {
                     Image(uiImage: image)
                         .resizable()

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TMDbArtwork: Sendable, Equatable {
+public struct TMDbArtwork: Sendable, Hashable {
     public let backdrop: URL?
     public let portrait: URL?
     public let logo: URL?
@@ -102,8 +102,8 @@ public struct TMDbRatings: Sendable {
         let english = logos.filter { $0.iso_639_1 == "en" }
         let portraits = images.posters ?? []
         let textless = portraits.filter { $0.iso_639_1 == nil }
-        return TMDbArtwork(backdrop: Self.popular(images.backdrops ?? [])?.url(size: "w1280"),
-                           portrait: Self.popular(textless.isEmpty ? portraits : textless)?.url(size: "w780"),
+        return TMDbArtwork(backdrop: Self.popular(images.backdrops ?? [])?.url(size: "original"),
+                           portrait: Self.popular(textless.isEmpty ? portraits : textless)?.url(size: "original"),
                            logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"))
     }
 

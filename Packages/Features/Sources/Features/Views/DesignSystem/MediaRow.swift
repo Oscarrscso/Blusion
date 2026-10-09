@@ -101,12 +101,14 @@ struct MediaRow<Content: View>: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    content()
+                    ForEach(subviews: content()) { card in
+                        card.id(card.id)
+                    }
                 }
                 .scrollTargetLayout()
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
+            .softSnappingScroll(idType: Subview.ID.self)
             .scrollClipDisabled()
         }
         .environment(\.zoomScope, zoomScope)

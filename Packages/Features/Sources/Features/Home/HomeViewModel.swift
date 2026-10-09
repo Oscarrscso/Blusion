@@ -42,6 +42,7 @@ public final class HomeViewModel {
     private var traktPlayback: [TraktPlaybackItem] = []
     private var refreshingPlayback = false
     private var lastPlaybackRefresh = Date.distantPast
+    private var addonSignature: [String]?
 
     public init(services: AppServices) {
         self.services = services
@@ -161,14 +162,14 @@ public final class HomeViewModel {
 
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.
     public func observeAddons() async {
-        // A returning view starts fresh even when its previous observation was cancelled during a row load.
-        var signature: [String]?
         for await addons in await services.registry.updates() {
             guard !Task.isCancelled else { break }
             let newSignature = addons.map { "\($0.id.uuidString):\($0.isEnabled)" }
-            guard newSignature != signature else { continue }
-            signature = newSignature
+            // Returning from details keeps completed shelves intact. Interrupted loads still resume.
+            guard newSignature != addonSignature || phase == .loading
+                    || sections.contains(where: { $0.state.isLoading || $0.isRefreshing }) else { continue }
             await load()
+            if !Task.isCancelled { addonSignature = newSignature }
         }
     }
 

@@ -129,8 +129,8 @@ struct AppDestinations: ViewModifier {
         content
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
             .navigationDestination(for: TitleDestination.self) { destination in
-                DetailView(preview: destination.preview, services: services)
-                    .zoomDestination(id: destination.sourceID, in: zoomNamespace)
+                DetailView(preview: destination.preview, services: services, artwork: destination.artwork)
+                    .zoomDestination(id: destination.sourceID, in: destination.usesZoomTransition ? zoomNamespace : nil)
             }
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
             .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }

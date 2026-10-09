@@ -31,11 +31,12 @@ struct LetterboxdMark: View {
 struct RatingsLine: View {
     let ratings: TitleRatings
     var font: Font = .caption.weight(.semibold)
+    var sites: [ReviewSite]?
 
     var body: some View {
         if !ratings.isEmpty {
             HStack(spacing: 7) {
-                ForEach(ratings.posterSites) { site in
+                ForEach(sites ?? ratings.posterSites) { site in
                     if let score = ratings.shortText(for: site) {
                         HStack(spacing: 3) {
                             if site == .letterboxd {
@@ -64,18 +65,21 @@ struct RatingsLine: View {
 /// Only this view observes the title's entry, so a rating that arrives late redraws one poster.
 struct PosterRatingsOverlay: View {
     let item: MetaPreview
+    var isLandscape = false
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
         if let store, store.isEnabled {
             let ratings = store.ratings(for: item)
+            let sites = isLandscape ? [ReviewSite.imdb, .letterboxd].filter { ratings.shortText(for: $0) != nil } : ratings.posterSites
             ZStack {
-                if !ratings.isEmpty {
-                    RatingsLine(ratings: ratings)
-                        .padding(.horizontal, 3)
-                        .padding(.bottom, 2)
-                        .padding(.top, 18)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                if !sites.isEmpty {
+                    RatingsLine(ratings: ratings, font: isLandscape ? .system(size: 10, weight: .semibold) : .caption.weight(.semibold),
+                                sites: sites)
+                        .padding(.horizontal, isLandscape ? 6 : 3)
+                        .padding(.bottom, isLandscape ? 4 : 2)
+                        .padding(.top, isLandscape ? 8 : 18)
+                        .frame(maxWidth: .infinity, alignment: isLandscape ? .trailing : .center)
                         .background(alignment: .bottom) {
                             LinearGradient(colors: [.black.opacity(0), .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
                         }

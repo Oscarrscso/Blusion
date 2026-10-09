@@ -29,12 +29,15 @@ public final class DetailViewModel {
 
     private let services: AppServices
     public private(set) var tmdbArtwork: TMDbArtwork?
+    public private(set) var isLoadingArtwork = true
     public private(set) var reviews: [TMDbReview] = []
 
-    public init(preview: MetaPreview, services: AppServices) {
+    public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         self.preview = preview
         self.detail = .fallback(from: preview)
         self.services = services
+        self.tmdbArtwork = artwork
+        self.isLoadingArtwork = artwork == nil
     }
 
     public func load() async {
@@ -60,6 +63,8 @@ public final class DetailViewModel {
     }
 
     private func loadArtwork() async {
+        isLoadingArtwork = true
+        defer { isLoadingArtwork = false }
         let settings = await services.settings.load()
         guard let token = settings.tmdbReadToken, !token.isEmpty else { return }
         let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
@@ -81,9 +86,14 @@ public final class DetailViewModel {
     }
 
     private func loadEpisodeRatings() async {
-        guard isSeries, let season = selectedSeason, !episodeRatingSeasons.contains(season),
-              detail.episodes(inSeason: season).contains(where: { $0.rating == nil }), let seriesID = seriesIMDbID else { return }
+        guard isSeries, let season = selectedSeason, !episodeRatingSeasons.contains(season), let seriesID = seriesIMDbID else { return }
         episodeRatingSeasons.insert(season)
+        await loadEpisodeScores(season: season)
+        guard !Task.isCancelled else { return }
+        let needsFallback = detail.episodes(inSeason: season).contains { video in
+            video.rating == nil && video.episode.flatMap { omdbEpisodeScores[season]?[$0] } == nil
+        }
+        guard needsFallback else { return }
         let scores = await services.posterRatings.episodeRatings(seriesIMDbID: seriesID, season: season)
         guard !Task.isCancelled else { return }
         if scores.isEmpty { episodeRatingSeasons.remove(season) }
@@ -199,8 +209,8 @@ public final class DetailViewModel {
 
     /// Asks OMDb for the season's episode scores. Nothing without an OMDb key; the screen calls it as seasons are picked.
     public func loadEpisodeScores(season: Int?) async {
-        guard let season, isSeries, LetterboxdRatings.isIMDbID(detail.id) else { return }
-        let scores = await services.posterRatings.episodeRatings(for: detail.id, season: season)
+        guard let season, isSeries, let seriesID = seriesIMDbID else { return }
+        let scores = await services.posterRatings.episodeRatings(for: seriesID, season: season)
         guard !Task.isCancelled else { return }
         omdbEpisodeScores[season] = scores
     }
@@ -246,12 +256,16 @@ public final class DetailViewModel {
     /// The same for an episode of this series.
     public func progressFraction(for video: Video) -> Double? { progressFractions[episodeIdentity(video)] }
 
-    /// Background artwork for the header, falling back to the poster.
-    public var backdropURL: URL? { tmdbArtwork?.backdrop ?? detail.preview.background ?? detail.preview.poster }
-    public var portraitArtworkURL: URL? { tmdbArtwork?.portrait ?? detail.preview.poster ?? detail.preview.background }
+    /// Separate landscape and portrait heroes. Keep the transition's poster until the artwork lookup finishes.
+    public var backdropURL: URL? {
+        tmdbArtwork?.backdrop ?? (isLoadingArtwork ? nil : detail.preview.background ?? MetahubArtwork.background(imdbID: preview.id))
+    }
+    public var portraitArtworkURL: URL? {
+        tmdbArtwork?.portrait ?? (isLoadingArtwork ? nil : detail.preview.background ?? MetahubArtwork.background(imdbID: preview.id))
+    }
 
     /// The title's logo (a transparent image), when the addon or the catalog has one.
-    public var logoURL: URL? { tmdbArtwork?.logo ?? detail.preview.logo }
+    public var logoURL: URL? { detail.preview.logo ?? tmdbArtwork?.logo }
 
     /// Year and runtime for a `MetaLine`: "2008", "152 min". Parts the addon left out are skipped. The rating is not here: the page
     /// shows it as a button under the title.

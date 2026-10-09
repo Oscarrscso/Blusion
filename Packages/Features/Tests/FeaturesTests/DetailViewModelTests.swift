@@ -237,9 +237,80 @@ import StremioKitTestSupport
         #expect(model.score(for: Video(id: "x")) == nil)
     }
 
+    @Test(arguments: [false, true])
+    func episodesLoadIMDbFirstEvenWhenTheAddonUsesItsOwnSeriesID(usesAddonID: Bool) async throws {
+        let seriesID = usesAddonID ? "addon:show" : "tt0944947"
+        let meta = #"{"meta":{"id":"\#(seriesID)","type":"series","name":"Show","videos":[{"id":"tt0944947:1:1","season":1,"episode":1}]}}"#
+        let transport = StubTransport { request, _ in
+            let json = request.url?.host == "www.omdbapi.com"
+                ? #"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"# : meta
+            return StubTransport.response(Data(json.utf8), for: request)
+        }
+        let manifest = Manifest(id: "test.meta", name: "Meta", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let ratings = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "test-key"),
+                                         tmdb: TMDbRatings(client: client, readAccessToken: "test-token"))
+        let model = DetailViewModel(preview: MetaPreview(id: seriesID, type: "series"),
+                                    services: AppServices(registry: registry, client: client, posterRatings: ratings))
+        await model.load()
+        let episode = try #require(model.episodes.first)
+        #expect(model.score(for: episode) == .init(value: 8.9, isIMDb: true))
+        #expect(transport.requests.filter { $0.url?.host == "www.omdbapi.com" }.count == 1)
+        #expect(!transport.requests.contains { $0.url?.host == "api.themoviedb.org" }, "IMDb already covered the season")
+    }
+
     @Test func trailerURLIsNilWithoutTrailers() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X"), services: offlineServices())
         #expect(model.trailerURL == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func detailUsesSeparateOriginalHeroesInsteadOfCatalogPosters(hasArtwork: Bool) async throws {
+        let transport = StubTransport { request, _ in
+            let json: String
+            switch request.url?.lastPathComponent {
+            case "tt0468569": json = #"{"movie_results":[{"id":155}]}"#
+            case "images":
+                json = #"""
+                {"backdrops":[{"file_path":"/backdrop.jpg"}],
+                 "posters":[{"file_path":"/poster.jpg"}],
+                 "logos":[{"file_path":"/logo.png","iso_639_1":"en"}]}
+                """#
+            default: json = #"{"results":[]}"#
+            }
+            return StubTransport.response(Data(json.utf8), for: request)
+        }
+        let client = makeClient(transport)
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, settings: InMemorySettingsStore(PlaybackSettings(tmdbReadToken: "test-key")))
+        let poster = URL(string: "https://example.com/poster.jpg")
+        let backdrop = URL(string: "https://example.com/backdrop.jpg")
+        let logo = URL(string: "https://example.com/logo.png")
+        let preview = MetaPreview(id: "tt0468569", type: "movie", name: "Film", poster: hasArtwork ? poster : nil,
+                                  background: hasArtwork ? backdrop : nil, logo: hasArtwork ? logo : nil)
+        let model = DetailViewModel(preview: preview, services: services)
+        await model.load()
+        #expect(model.tmdbArtwork != nil)
+        #expect(model.portraitArtworkURL == URL(string: "https://image.tmdb.org/t/p/original/poster.jpg"))
+        #expect(model.backdropURL == URL(string: "https://image.tmdb.org/t/p/original/backdrop.jpg"))
+        #expect(model.portraitArtworkURL != model.backdropURL)
+        #expect(model.logoURL == (hasArtwork ? logo : URL(string: "https://image.tmdb.org/t/p/original/logo.png")))
+        let openedFromHome = DetailViewModel(preview: preview, services: services, artwork: model.tmdbArtwork)
+        #expect(!openedFromHome.isLoadingArtwork)
+        #expect(openedFromHome.portraitArtworkURL == model.portraitArtworkURL)
+        #expect(openedFromHome.backdropURL == model.backdropURL)
+    }
+
+    @Test func heroLoadingWaitsForArtworkAndFallsBackWithoutUsingTheCatalogPoster() async {
+        let background = URL(string: "https://example.com/hero.jpg")
+        let preview = MetaPreview(id: "tt0468569", type: "movie", name: "Film", poster: URL(string: "https://example.com/poster.jpg"),
+                                  background: background)
+        let model = DetailViewModel(preview: preview, services: offlineServices())
+        #expect(model.isLoadingArtwork)
+        #expect(model.portraitArtworkURL == nil && model.backdropURL == nil)
+        await model.load()
+        #expect(!model.isLoadingArtwork)
+        #expect(model.portraitArtworkURL == background && model.backdropURL == background)
     }
 
     @Test func metaPartsAreYearAndRuntime() {

@@ -7,6 +7,9 @@ import StremioKit
 struct TitleDestination: Hashable {
     let preview: MetaPreview
     let sourceID: String
+    var artwork: TMDbArtwork?
+    /// Holds can pop out of their card; ordinary title taps use the native navigation slide.
+    var usesZoomTransition = false
 }
 
 extension EnvironmentValues {

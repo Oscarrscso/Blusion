@@ -6,6 +6,7 @@ import SwiftUI
 /// answers, and every state (loading, nothing installed, nothing to browse, an issue, offline) has a look of its own.
 struct HomeView: View {
     @State private var model: HomeViewModel
+    @State private var isScrolling = false
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
@@ -16,7 +17,11 @@ struct HomeView: View {
     }
 
     var body: some View {
-        content
+        GeometryReader { geometry in
+            content
+                .environment(\.heroContainerHeight, geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
+                .environment(\.isHomeScrolling, isScrolling)
+        }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)
@@ -92,11 +97,13 @@ struct HomeView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .accessibilityIdentifier("board.rows")
+        .onScrollPhaseChange { _, phase in isScrolling = phase.isScrolling }
+        .onDisappear { isScrolling = false }
         .contentMargins(.top, 0, for: .scrollContent)
         .screenBackground()
         .scrollEdgeEffectStyle(.soft, for: .top)
         .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
-        .ignoresSafeArea(.container, edges: heroIsFirst && !isLandscape ? .top : [])
+        .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {
@@ -109,6 +116,8 @@ struct HomeView: View {
         switch section.widget.content {
         case .hero:
             HeroSection(section: section, onRetry: { retry(section) })
+                // The next shelf starts directly below the hero, without the normal gap between shelves.
+                .padding(.bottom, -metrics.shelfSpacing)
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) })
         case .collection(let items):

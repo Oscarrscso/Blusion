@@ -132,7 +132,9 @@ struct MediaCard: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                if showsRating && aspect != .wide && !usesLandscapeArtwork { PosterRatingsOverlay(item: item) }
+                if showsRating && (aspect != .wide || isLandscape) {
+                    PosterRatingsOverlay(item: item, isLandscape: isLandscape)
+                }
             }
             .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
             .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)

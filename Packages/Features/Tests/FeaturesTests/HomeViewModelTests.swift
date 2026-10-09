@@ -390,6 +390,27 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         observing.cancel()
     }
 
+    @Test func returningToLoadedHomeKeepsItsShelvesWithoutReloading() async throws {
+        let transport = answering()
+        let row = HomeWidget(id: "a", title: "Popular", content: .row(RowConfiguration(
+            source: .addonCatalog(AddonCatalogReference(manifestID: cinemeta.id, catalogType: "movie", catalogID: "top")), cacheTTL: 0)))
+        let model = HomeViewModel(services: try await services([cinemeta], transport: transport, widgets: [row]))
+        let firstObservation = Task { await model.observeAddons() }
+        try await waitUntil { model.sections.first?.state.value?.count == 2 && model.sections.first?.isRefreshing == false }
+        try await Task.sleep(for: .milliseconds(20))
+        firstObservation.cancel()
+        await firstObservation.value
+        let previous = model.sections
+
+        let returningObservation = Task { await model.observeAddons() }
+        defer { returningObservation.cancel() }
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(transport.callCount == 1, "a completed Home must not refetch catalogs during the back transition")
+        #expect(model.sections == previous)
+        returningObservation.cancel()
+        await returningObservation.value
+    }
+
     @Test func returningToHomeReloadsAfterItsObservationWasCancelled() async throws {
         let gate = Gate()
         let transport = StubTransport { request, call in

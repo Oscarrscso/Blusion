@@ -15,8 +15,8 @@ struct DetailView: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
 
-    init(preview: MetaPreview, services: AppServices) {
-        _model = State(initialValue: DetailViewModel(preview: preview, services: services))
+    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
+        _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork))
     }
 
     var body: some View {
@@ -50,8 +50,10 @@ struct DetailView: View {
         if isLandscape {
             let artworkWidth = max(120, (size.width - metrics.pageMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                ArtworkImage(url: model.backdropURL, maxPixelSize: 1400, contentMode: .fit)
+                ArtworkImage(url: model.backdropURL, maxPixelSize: 4096, contentMode: .fit,
+                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
+                    .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .leading)
@@ -66,7 +68,8 @@ struct DetailView: View {
                 .padding(.top, Theme.Spacing.s)
         } else {
             ZStack(alignment: .bottom) {
-                ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 1400, contentMode: .fit)
+                ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fit,
+                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
                 BottomFade(length: 0.42)
                 titleArt(alignment: .center)
                     .padding(.horizontal, metrics.pageMargin)
@@ -166,7 +169,6 @@ struct DetailView: View {
         }
         .accessibilityValue(model.isInLibrary ? "Saved" : "Not saved")
         .accessibilityIdentifier("detail.libraryButton")
-        .sensoryFeedback(.success, trigger: model.isInLibrary)
     }
 
     /// A movie is marked on its own. A show is marked as a whole: every episode that has aired. Clearing a whole show asks first,
@@ -190,7 +192,6 @@ struct DetailView: View {
             .accessibilityValue(watched ? "Every episode watched" : "Not watched")
             .accessibilityHint(watched ? "Clears the watched mark from every episode" : "Marks every episode that has aired as watched")
             .accessibilityIdentifier("detail.watchedButton")
-            .sensoryFeedback(.success, trigger: watched)
             .confirmationDialog("Mark every episode as not watched?", isPresented: $isConfirmingUnmarkShow, titleVisibility: .visible) {
                 Button("Mark Show as Not Watched", role: .destructive) {
                     Task {
@@ -211,7 +212,6 @@ struct DetailView: View {
             }
             .accessibilityValue(watched ? "Watched" : "Not watched")
             .accessibilityIdentifier("detail.watchedButton")
-            .sensoryFeedback(.success, trigger: watched)
         }
     }
 
@@ -282,12 +282,14 @@ struct DetailView: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    ForEach(model.episodes) { episodeRow($0) }
+                    ForEach(model.episodes) { episode in
+                        episodeRow(episode).id(episode.id)
+                    }
                 }
                 .scrollTargetLayout()
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
+            .softSnappingScroll(idType: Video.ID.self)
             .scrollClipDisabled()
         }
         .padding(.top, Theme.Spacing.xxl)
@@ -377,6 +379,7 @@ struct DetailView: View {
 
 private struct ReviewCard: View {
     let review: TMDbReview
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -391,12 +394,17 @@ private struct ReviewCard: View {
             }
             Text(LocalizedStringKey(review.content))
                 .font(.subheadline)
-                .lineLimit(6)
+                .lineLimit(isExpanded ? nil : 6)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let url = review.url {
-                Link("Read on TMDb", destination: url)
+            Button {
+                isExpanded.toggle()
+            } label: {
+                Text(isExpanded ? "Show less" : "Show more")
                     .font(.footnote.weight(.semibold))
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("detail.review.\(review.id).toggle")
         }
         .padding(16)
         .cardSurface()

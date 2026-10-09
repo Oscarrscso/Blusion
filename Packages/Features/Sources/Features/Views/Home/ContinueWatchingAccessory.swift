@@ -28,7 +28,15 @@ struct ResumeAccessoryModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
-        content
+        content.safeAreaInset(edge: .bottom) {
+            if let newest = model.newest {
+                ContinueWatchingAccessory(item: newest)
+                    .padding(.vertical, Theme.Spacing.s)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.horizontal, Theme.Spacing.l)
+                    .padding(.bottom, Theme.Spacing.s)
+            }
+        }
         #else
         if #available(iOS 26.1, *) {
             content.tabViewBottomAccessory(isEnabled: model.newest != nil) {
@@ -47,35 +55,29 @@ struct ResumeAccessoryModifier: ViewModifier {
 /// Home at that title's streams, where the player resumes from the saved position.
 struct ContinueWatchingAccessory: View {
     let item: WatchProgress
-    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        Button {
-            router.open(.home)
-            router.homePath.append(LibraryViewModel.request(for: item))
-        } label: {
-            HStack(spacing: Theme.Spacing.m) {
-                ArtworkImage(url: item.poster, title: item.title, maxPixelSize: 120)
-                    .frame(width: 30, height: 45)
-                    .mediaArtwork(cornerRadius: 6)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(item.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    ProgressView(value: item.fraction)
-                        .progressViewStyle(.linear)
-                        .tint(.white)
-                        .accessibilityHidden(true)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "play.fill")
+        HStack(spacing: Theme.Spacing.m) {
+            ArtworkImage(url: item.poster, title: item.title, maxPixelSize: 120)
+                .frame(width: 30, height: 45)
+                .mediaArtwork(cornerRadius: 6)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(item.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                ProgressView(value: item.fraction)
+                    .progressViewStyle(.linear)
+                    .tint(.white)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, Theme.Spacing.l)
-            .contentShape(Rectangle())
+            Spacer(minLength: 0)
+            Image(systemName: "play.fill")
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, Theme.Spacing.l)
+        .continueWatchingHold(preview: MetaPreview(id: ContentID(item.contentID).baseID, type: item.type,
+                                                  name: item.title, poster: item.poster), request: LibraryViewModel.request(for: item))
         .accessibilityLabel("Continue watching \(item.title), \(Int((item.fraction * 100).rounded())) percent watched")
         .accessibilityIdentifier("tabbar.continue")
     }

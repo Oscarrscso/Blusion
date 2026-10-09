@@ -267,6 +267,12 @@ public final class PosterRatingsStore {
         }
     }
 
+    /// Full-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
+    public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
+        guard let tmdb, !isClearing else { return nil }
+        return try? await tmdb.artwork(imdbID: item.id, type: item.type)
+    }
+
     /// TMDb scores fill episodes that have no rating from their addon.
     public func episodeRatings(seriesIMDbID: String, season: Int) async -> [Int: Double] {
         guard let tmdb, !isClearing else { return [:] }
