@@ -27,6 +27,12 @@ public enum StreamSourceKind: String, Sendable, Equatable, Hashable {
     }
 }
 
+/// Which Dolby Atmos a release carries, from the codec of its Atmos track: E-AC-3 (Dolby Digital Plus) with Atmos is the lossy
+/// streaming kind, TrueHD with Atmos is the lossless Blu-ray kind.
+public enum AtmosFormat: String, Sendable, Equatable, Hashable {
+    case streaming, lossless
+}
+
 /// Facts guessed from a stream's `name`, `description` and filename. Addons put them in free text, so this is heuristic.
 public struct StreamQuality: Sendable, Equatable {
     /// Vertical resolution (2160, 1080, 720, 480, …).
@@ -55,6 +61,15 @@ public struct StreamQuality: Sendable, Equatable {
     /// because the player picks a decodable track.
     public var audioNeedsFallbackEngine: Bool {
         audioCodecs.contains { $0.needsFallbackEngine } && !audioCodecs.contains { !$0.needsFallbackEngine }
+    }
+
+    /// The kind of Atmos, read from the audio codec beside it, not from the release's source: TrueHD wins when both are named, since
+    /// a lossless track is the one a viewer picks Atmos for. Nil when there is no Atmos, or the codec does not say which kind.
+    public var atmosFormat: AtmosFormat? {
+        guard hasAtmos else { return nil }
+        if audioCodecs.contains(.trueHD) { return .lossless }
+        if audioCodecs.contains(.eac3) { return .streaming }
+        return nil
     }
 
     public var resolutionLabel: String? {

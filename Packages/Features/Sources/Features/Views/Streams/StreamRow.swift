@@ -15,28 +15,19 @@ struct StreamRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs + 2) {
             HStack(spacing: Theme.Spacing.xs) {
-                if let label = item.quality.resolutionLabel { Badge(label, style: .quality) }
-                if isRemux { Badge("REMUX") }
-                if let source = item.quality.source { Badge(source.label, style: .quality) }
-                Spacer(minLength: Theme.Spacing.s)
-                if isBest {
-                    Label("Best match", systemImage: "sparkles")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .accessibilityIdentifier("stream.bestMatch")
+                if let label = item.quality.resolutionLabel {
+                    QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
                 }
+                if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
+                if isRemux { QualityBadge.remux }
+                if let source = item.quality.source { QualityBadge.source(source) }
             }
             Text(headline)
                 .font(.subheadline.weight(.semibold))
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
-            if !facts.isEmpty {
-                Text(facts.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            metadataRow
             if let routeNote {
                 Label(routeNote.text, systemImage: routeNote.symbol)
                     .font(.caption.weight(.medium))
@@ -64,24 +55,60 @@ struct StreamRow: View {
         return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
-    /// The facts a viewer picks a stream by after its sharpness and source: how big the file is, how the picture is encoded, and what
-    /// the sound is.
-    private var facts: [String] {
+    /// Size and video codec in grey, then the audio: lossless Atmos as a small badge, lossy Atmos as text, and "Best match" at the
+    /// trailing edge of the stream Auto Pick would start.
+    private var metadataRow: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            if !sizeAndCodec.isEmpty {
+                Text(sizeAndCodec)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            audio
+            Spacer(minLength: 0)
+            if isBest {
+                Label("Best match", systemImage: "sparkles")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                    .accessibilityIdentifier("stream.bestMatch")
+            }
+        }
+    }
+
+    /// "38.2 GB · HEVC": the facts a viewer picks a stream by after its sharpness and source.
+    private var sizeAndCodec: String {
         var parts: [String] = []
         if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
-        if let codec = item.quality.videoCodec {
-            parts.append(item.quality.isDolbyVision ? "\(codec.label) Dolby Vision" : item.quality.isHDR ? "\(codec.label) HDR" : codec.label)
-        } else if item.quality.isDolbyVision {
-            parts.append("Dolby Vision")
-        } else if item.quality.isHDR {
-            parts.append("HDR")
+        if let codec = item.quality.videoCodec { parts.append(codec.label) }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The audio as the codec says it is. Lossless Atmos (TrueHD) is a badge; lossy Atmos (Dolby Digital Plus) is quiet text. Without
+    /// Atmos, the first audio codec the release names.
+    @ViewBuilder private var audio: some View {
+        switch item.quality.atmosFormat {
+        case .lossless:
+            QualityBadge("Atmos · TrueHD", symbol: "waveform")
+        case .streaming:
+            Text("Atmos · DD+")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        case nil:
+            if let text = plainAudio {
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
-        if let audio = item.quality.audioCodecs.first {
-            parts.append(item.quality.hasAtmos ? "\(audio.label) Atmos" : audio.label)
-        } else if item.quality.hasAtmos {
-            parts.append("Atmos")
-        }
-        return parts
+    }
+
+    private var plainAudio: String? {
+        if let audio = item.quality.audioCodecs.first { return audio.label }
+        return item.quality.hasAtmos ? "Atmos" : nil
     }
 
     private var routeNote: (text: String, symbol: String, isWarning: Bool)? {

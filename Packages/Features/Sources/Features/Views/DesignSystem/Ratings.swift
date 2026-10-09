@@ -5,6 +5,8 @@ import StremioKit
 /// Letterboxd's mark: three small overlapping dots. Drawn, not an image, so it needs no brand assets and stays crisp at any size.
 struct LetterboxdMark: View {
     var dot: CGFloat = 8
+    /// Draws the three dots in Letterboxd's colours whatever the setting says (posters always do).
+    var keepsColour = false
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
@@ -19,7 +21,7 @@ struct LetterboxdMark: View {
 
     /// Its own colour when coloured logos are on; otherwise the surrounding text colour, with a thin edge so the overlapping dots stay apart.
     @ViewBuilder private func mark(_ colour: Color) -> some View {
-        if store?.showsColouredLogos ?? false {
+        if keepsColour || store?.showsColouredLogos ?? false {
             Circle().fill(colour)
         } else {
             Circle().overlay(Circle().stroke(.black.opacity(0.35), lineWidth: dot * 0.08))
@@ -60,9 +62,11 @@ struct RatingsLine: View {
     }
 }
 
-/// The ratings of one title over the bottom of its poster: a short black fade, then `RatingsLine`. Reads the environment's
-/// `PosterRatingsStore`; draws nothing without one, when ratings are switched off, or while no scores are known.
-/// Only this view observes the title's entry, so a rating that arrives late redraws one poster.
+/// The ratings of one title as a small floating pill over the bottom-left of a poster: dark, translucent and blurred, inset from the
+/// edges, sized to its contents, so the artwork stays unobstructed. Each score is led by its provider's own colours. Landscape artwork
+/// (the hero and the title page) keeps its pill in the bottom-right corner. Reads the environment's `PosterRatingsStore`; draws nothing
+/// without one, when ratings are switched off, or while no scores are known. Only this view observes the title's entry, so a rating
+/// that arrives late redraws one poster.
 struct PosterRatingsOverlay: View {
     let item: MetaPreview
     var isLandscape = false
@@ -74,16 +78,11 @@ struct PosterRatingsOverlay: View {
             let sites = isLandscape ? [ReviewSite.imdb, .letterboxd].filter { ratings.shortText(for: $0) != nil } : ratings.posterSites
             ZStack {
                 if !sites.isEmpty {
-                    RatingsLine(ratings: ratings, font: isLandscape ? .system(size: 10, weight: .semibold) : .caption.weight(.semibold),
-                                sites: sites)
-                        .padding(.horizontal, isLandscape ? 6 : 3)
-                        .padding(.bottom, isLandscape ? 4 : 2)
-                        .padding(.top, isLandscape ? 8 : 18)
-                        .frame(maxWidth: .infinity, alignment: isLandscape ? .trailing : .center)
-                        .background(alignment: .bottom) {
-                            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
-                        }
+                    RatingPill(ratings: ratings, sites: sites)
+                        .padding(Theme.Spacing.s - 2)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isLandscape ? .bottomTrailing : .bottomLeading)
                         .accessibilityHidden(true)
+                        .allowsHitTesting(false)
                         .transition(.opacity)
                 }
             }
@@ -94,17 +93,61 @@ struct PosterRatingsOverlay: View {
     }
 }
 
+/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a dark blurred rounded rectangle with a
+/// hairline edge. It is only as wide as its contents.
+private struct RatingPill: View {
+    let ratings: TitleRatings
+    let sites: [ReviewSite]
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            ForEach(sites) { site in
+                if let score = ratings.shortText(for: site) {
+                    HStack(spacing: 4) {
+                        if site == .letterboxd {
+                            LetterboxdMark(dot: 6, keepsColour: true)
+                        } else {
+                            ReviewSiteIcon(site: site, size: 11, keepsColour: true)
+                        }
+                        Text(score)
+                            .font(.system(size: 12, weight: .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background {
+            let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(.black.opacity(0.38))
+            }
+        }
+        .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(.white.opacity(0.14), lineWidth: 1 / displayScale) }
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+    }
+}
+
 /// Local official marks, so opening a screen does not make five extra image requests.
 struct ReviewSiteIcon: View {
     let site: ReviewSite
     var size: CGFloat = 24
+    /// Draws the official colours whatever the setting says (posters always do).
+    var keepsColour = false
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     /// The official colours only when the user asks for them; otherwise the mark takes the surrounding text colour.
     var body: some View {
         Image(assetName)
             .resizable()
-            .renderingMode(store?.showsColouredLogos ?? false ? .original : .template)
+            .renderingMode(keepsColour || store?.showsColouredLogos ?? false ? .original : .template)
             .scaledToFit()
             .frame(width: size, height: size)
             .accessibilityHidden(true)
