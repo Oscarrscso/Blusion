@@ -179,7 +179,7 @@ struct ContinueWatchingRow: View {
             if !items.isEmpty {
                 MediaRow(title, hideTitle: true) {
                     ForEach(items) { item in
-                        NavigationLink(value: item.request) {
+                        NavigationLink(value: ResumeDestination(request: item.request)) {
                             ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
                         }
                         .buttonStyle(PressableCardStyle())

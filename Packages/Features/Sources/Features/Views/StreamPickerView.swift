@@ -19,13 +19,16 @@ struct StreamPickerView: View {
     /// A hand-off whose player app is not installed: the alert offers its App Store page, or playing the stream in Blusion.
     @State private var missing: MissingPlayer?
     private let services: AppServices
+    /// Opened from Continue Watching: plays the best stream as soon as the streams load, as "auto play" does.
+    private let resumes: Bool
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
 
-    init(request: StreamRequest, services: AppServices) {
+    init(request: StreamRequest, services: AppServices, resumes: Bool = false) {
         self.services = services
+        self.resumes = resumes
         _model = State(initialValue: StreamPickerViewModel(request: request, services: services))
     }
 
@@ -65,7 +68,7 @@ struct StreamPickerView: View {
             if !model.hasLoaded {
                 await model.load()
                 let settings = await services.settings.load()
-                if settings.autoPlayBestStream, !hasSelectedManually, let best = model.listing.best { select(best) }
+                if settings.autoPlayBestStream || resumes, !hasSelectedManually, let best = model.listing.best { select(best) }
             }
         }
         .onDisappear { autoPickTask?.cancel() }

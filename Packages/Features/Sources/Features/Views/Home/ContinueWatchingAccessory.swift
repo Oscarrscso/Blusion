@@ -52,7 +52,7 @@ struct ContinueWatchingAccessory: View {
     var body: some View {
         Button {
             router.open(.home)
-            router.homePath.append(LibraryViewModel.request(for: item))
+            router.homePath.append(ResumeDestination(request: LibraryViewModel.request(for: item)))
         } label: {
             HStack(spacing: Theme.Spacing.m) {
                 ArtworkImage(url: item.poster, title: item.title, maxPixelSize: 120)

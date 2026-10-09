@@ -133,6 +133,7 @@ struct AppDestinations: ViewModifier {
                     .zoomDestination(id: destination.sourceID, in: zoomNamespace)
             }
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
+            .navigationDestination(for: ResumeDestination.self) { StreamPickerView(request: $0.request, services: services, resumes: true) }
             .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }
     }
 }
