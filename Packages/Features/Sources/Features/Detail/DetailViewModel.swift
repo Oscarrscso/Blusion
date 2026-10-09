@@ -31,6 +31,8 @@ public final class DetailViewModel {
     public private(set) var tmdbArtwork: TMDbArtwork?
     public private(set) var isLoadingArtwork = true
     public private(set) var reviews: [TMDbReview] = []
+    /// The cast and crew with TMDb ids and photos. Nil until TMDb answers, or when no read token is saved.
+    public private(set) var titleCredits: TMDbTitleCredits?
 
     public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         self.preview = preview
@@ -45,6 +47,8 @@ public final class DetailViewModel {
         episodeRatingSeasons.removeAll()
         async let artwork: Void = loadArtwork()
         async let reviews: Void = loadReviews()
+        // Cast photos are secondary: they start with the page but never hold up the details or the artwork above.
+        async let credits: Void = loadTitleCredits()
         let result = await services.browse.detail(for: preview)
         detail = result.detail
         isFallback = result.isFallback
@@ -55,6 +59,7 @@ public final class DetailViewModel {
         await loadEpisodeRatings()
         await artwork
         await reviews
+        await credits
     }
 
     public func refresh() async {
@@ -70,6 +75,23 @@ public final class DetailViewModel {
         let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         tmdbArtwork = artwork
+    }
+
+    private func loadTitleCredits() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { titleCredits = nil; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).titleCredits(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        titleCredits = loaded
+    }
+
+    /// The first twenty cast members, then the key crew who are not already in that cast. Nil while TMDb's credits are unknown; empty
+    /// when TMDb has none, so the screen falls back to the addon's plain names.
+    public var castAndCrew: [TMDbTitlePerson]? {
+        guard let titleCredits else { return nil }
+        let cast = Array(titleCredits.cast.prefix(20))
+        let castIDs = Set(cast.map(\.id))
+        return cast + titleCredits.keyCrew.filter { !castIDs.contains($0.id) }
     }
 
     private func loadReviews() async {

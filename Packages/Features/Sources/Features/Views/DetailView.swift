@@ -335,7 +335,17 @@ struct DetailView: View {
                     }
                 }
             }
-            if !model.detail.cast.isEmpty {
+            if let people = model.castAndCrew, !people.isEmpty {
+                // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
+                SectionHeader("Cast & Crew")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                        ForEach(people) { PersonCardLink(person: $0) }
+                    }
+                }
+                .accessibilityIdentifier("detail.castCarousel")
+            } else if !model.detail.cast.isEmpty {
+                // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
                 SectionHeader("Cast & Crew")
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {

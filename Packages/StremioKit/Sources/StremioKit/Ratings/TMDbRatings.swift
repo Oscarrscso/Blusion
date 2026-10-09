@@ -24,8 +24,8 @@ public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
 /// Resolves an IMDb ID to the matching movie or show, its community score and its direct TMDB page.
 public struct TMDbRatings: Sendable {
     public static let defaultBaseURL = URL(string: "https://api.themoviedb.org/3/") ?? URL(fileURLWithPath: "/")
-    private let client: AddonClient
-    private let credential: Credential?
+    let client: AddonClient
+    let credential: Credential?
     private let baseURL: URL
 
     /// The credential as TMDb expects it. `nil` for an empty token: no request is sent.
@@ -164,7 +164,7 @@ public struct TMDbRatings: Sendable {
     }
 
     /// The URL and headers for a path under `baseURL`. The credential goes in the header or the query, never in the path.
-    private func request(path: [String], query: [URLQueryItem] = []) throws -> (URL, [String: String]) {
+    func request(path: [String], query: [URLQueryItem] = []) throws -> (URL, [String: String]) {
         var url = baseURL
         for component in path { url = url.appendingPathComponent(component) }
         guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { throw AddonError.invalidURL }

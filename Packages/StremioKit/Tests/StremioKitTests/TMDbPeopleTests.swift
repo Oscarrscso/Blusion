@@ -1,0 +1,151 @@
+import Foundation
+import Testing
+@testable import StremioKit
+import StremioKitTestSupport
+
+@Suite struct TMDbPeopleTests {
+    private let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ0ZXN0In0.signature"
+
+    // MARK: Title credits
+
+    @Test func aMoviesCreditsMergeARepeatedCrewMemberIntoOneEntryWithEveryJob() throws {
+        let data = Data(#"""
+        {"id":155,"cast":[
+            {"id":3894,"name":"Christian Bale","character":"Bruce Wayne","profile_path":"/bale.jpg","order":0},
+            {"id":1,"name":"Nobody","character":"","profile_path":null,"order":1}],
+         "crew":[
+            {"id":525,"name":"Christopher Nolan","job":"Director","department":"Directing","profile_path":"/nolan.jpg"},
+            {"id":525,"name":"Christopher Nolan","job":"Writer","department":"Writing","profile_path":"/nolan.jpg"},
+            {"id":7,"name":"Sound Person","job":"Sound Mixer","department":"Sound","profile_path":null}]}
+        """#.utf8)
+        let credits = try TMDbTitleCredits.parse(data)
+        #expect(credits.cast.map(\.name) == ["Christian Bale", "Nobody"])
+        #expect(credits.cast[0].roleText == "Bruce Wayne")
+        #expect(credits.cast[0].profile?.absoluteString == "https://image.tmdb.org/t/p/w342/bale.jpg")
+        #expect(credits.cast[1].roleText == nil && credits.cast[1].profile == nil)
+        #expect(credits.crew.count == 2, "the director and writer share one entry")
+        #expect(credits.crew[0].roles == ["Director", "Writer"])
+        #expect(credits.keyCrew.map(\.name) == ["Christopher Nolan"], "sound crew is not a key role")
+    }
+
+    @Test func aSeriesAggregateCreditsKeepsEachPersonsRolesAndKeyCrewLeadsWithTheDirector() throws {
+        let data = Data(#"""
+        {"cast":[{"id":10,"name":"Actor One","order":0,"profile_path":"/a.jpg",
+                  "roles":[{"character":"Jon Snow","episode_count":60},{"character":"Lord Commander","episode_count":2}]}],
+         "crew":[{"id":20,"name":"Producer Pat","department":"Production","profile_path":null,
+                  "jobs":[{"job":"Producer","department":"Production"},{"job":"Executive Producer","department":"Production"}]},
+                 {"id":21,"name":"Creator Cy","department":"Writing","profile_path":"/c.jpg",
+                  "jobs":[{"job":"Creator","department":"Writing"},{"job":"Writer","department":"Writing"}]},
+                 {"id":22,"name":"Director Dee","department":"Directing","profile_path":null,
+                  "jobs":[{"job":"Director","department":"Directing"}]}]}
+        """#.utf8)
+        let credits = try TMDbTitleCredits.parse(data)
+        #expect(credits.cast.first?.roleText == "Jon Snow · Lord Commander")
+        #expect(credits.keyCrew.map(\.name) == ["Director Dee", "Creator Cy", "Producer Pat"])
+        #expect(credits.keyCrew.last?.roleText == "Producer · Executive Producer", "every job the person holds is kept, not only the key one")
+    }
+
+    @Test func aMalformedCreditsAnswerThrowsInvalidJSON() {
+        #expect(throws: AddonError.invalidJSON) { try TMDbTitleCredits.parse(Data("not json".utf8)) }
+    }
+
+    @Test func titleCreditsResolvesTheTitleThenAsksTheRightEndpoint() async throws {
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            let body = path.hasPrefix("/3/find") ? #"{"movie_results":[{"id":155,"vote_average":8.4,"vote_count":9}],"tv_results":[]}"# : #"{"cast":[],"crew":[]}"#
+            return HTTPResult(data: Data(body.utf8), response: HTTPResponseInfo(statusCode: 200, headers: [:], url: request.url))
+        }
+        let client = TMDbRatings(client: makeClient(transport), readAccessToken: jwt)
+        _ = try await client.titleCredits(imdbID: "tt0468569", type: "movie")
+        let paths = transport.requests.compactMap { $0.url?.path }
+        #expect(paths == ["/3/find/tt0468569", "/3/movie/155/credits"])
+        #expect(transport.requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)" })
+    }
+
+    @Test func titleCreditsForAnUnknownTitleSendsNoSecondRequest() async throws {
+        let transport = StubTransport(data: Data(#"{"movie_results":[],"tv_results":[]}"#.utf8))
+        let credits = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).titleCredits(imdbID: "tt0000001", type: "movie")
+        #expect(credits == .empty && transport.callCount == 1)
+    }
+
+    // MARK: Person
+
+    @Test func aPersonPageTrimsTheBiographyAndDropsAnEmptyOne() throws {
+        let person = try TMDbPerson.parse(Data(#"{"id":525,"name":"Christopher Nolan","biography":"  Born in London.\n","known_for_department":"Directing","profile_path":"/n.jpg"}"#.utf8))
+        #expect(person.biography == "Born in London.")
+        #expect(person.department == "Directing")
+        #expect(person.profile?.absoluteString == "https://image.tmdb.org/t/p/h632/n.jpg")
+        let blank = try TMDbPerson.parse(Data(#"{"id":1,"name":"A","biography":"  ","known_for_department":"","profile_path":null}"#.utf8))
+        #expect(blank.biography == nil && blank.department == nil && blank.profile == nil)
+    }
+
+    // MARK: Filmography
+
+    @Test func combinedCreditsMergeEveryRoleOnOneTitleAndSkipOtherMediaTypes() throws {
+        let data = Data(#"""
+        {"cast":[
+            {"id":1,"media_type":"movie","title":"Memento","release_date":"2000-10-05","poster_path":"/p.jpg","backdrop_path":"/b.jpg",
+             "character":"Leonard","vote_average":8.4,"vote_count":12000,"popularity":30.5},
+            {"id":2,"media_type":"tv","name":"Show","first_air_date":"2010-01-01","character":"Hero","episode_count":10,
+             "vote_average":0,"vote_count":0,"popularity":4},
+            {"id":99,"media_type":"person","name":"Not a title","character":"X"}],
+         "crew":[
+            {"id":1,"media_type":"movie","title":"Memento","release_date":"2000-10-05","department":"Writing","job":"Screenplay",
+             "vote_average":8.4,"vote_count":12000,"popularity":30.5},
+            {"id":3,"media_type":"movie","title":"Undated","release_date":"","department":"Sound","job":"Sound Mixer","popularity":1}]}
+        """#.utf8)
+        let credits = try TMDbPersonCredit.parseCombined(data)
+        #expect(credits.map(\.title) == ["Memento", "Show", "Undated"])
+        let memento = try #require(credits.first)
+        #expect(memento.year == 2000 && memento.isMovie)
+        #expect(memento.roles == [.acting(character: "Leonard"), .crew(job: "Screenplay", department: "Writing")])
+        #expect(memento.categories == [.acting, .writing])
+        #expect(memento.voteAverage == 8.4)
+        #expect(memento.poster?.absoluteString == "https://image.tmdb.org/t/p/w342/p.jpg")
+        #expect(memento.backdrop?.absoluteString == "https://image.tmdb.org/t/p/w780/b.jpg")
+
+        let show = credits[1]
+        #expect(show.isMovie == false && show.year == 2010 && show.episodeCount == 10)
+        #expect(show.voteAverage == nil, "an average without votes is not shown as a rating")
+
+        let undated = credits[2]
+        #expect(undated.releaseDate == nil && undated.year == nil)
+        #expect(undated.categories == [.other], "a sound job is in Other")
+    }
+
+    @Test func unknownDepartmentsAndMissingTitlesStillParse() {
+        #expect(CreditCategory(department: "Camera") == .other)
+        #expect(CreditCategory(department: "Directing") == .directing)
+        #expect(CreditCategory(department: "Production") == .production)
+        let credits = try? TMDbPersonCredit.parseCombined(Data(#"{"cast":[{"id":5,"media_type":"movie","character":""}],"crew":[]}"#.utf8))
+        #expect(credits?.first?.title == "" && credits?.first?.roles == [.acting(character: nil)])
+    }
+
+    @Test func personCreditsAskTheCombinedCreditsEndpoint() async throws {
+        let transport = StubTransport(data: Data(#"{"cast":[],"crew":[]}"#.utf8))
+        let credits = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).personCredits(id: 525)
+        #expect(credits.isEmpty)
+        #expect(transport.requests.first?.url?.path == "/3/person/525/combined_credits")
+    }
+
+    // MARK: IMDb id for a credit
+
+    @Test func aCreditOpensTheTitleByItsIMDbID() async throws {
+        let transport = StubTransport(data: Data(#"{"imdb_id":"tt0468569"}"#.utf8))
+        let client = TMDbRatings(client: makeClient(transport), readAccessToken: jwt)
+        #expect(try await client.imdbID(tmdbID: 155, mediaType: "movie") == "tt0468569")
+        #expect(transport.requests.first?.url?.path == "/3/movie/155/external_ids")
+    }
+
+    @Test func aMissingOrMalformedIMDbIDIsNilAndAPersonWithoutATokenSendsNothing() async throws {
+        let missing = StubTransport(data: Data(#"{"imdb_id":null}"#.utf8))
+        #expect(try await TMDbRatings(client: makeClient(missing), readAccessToken: jwt).imdbID(tmdbID: 1, mediaType: "tv") == nil)
+        let junk = StubTransport(data: Data(#"{"imdb_id":"not-an-id"}"#.utf8))
+        #expect(try await TMDbRatings(client: makeClient(junk), readAccessToken: jwt).imdbID(tmdbID: 1, mediaType: "tv") == nil)
+        let silent = StubTransport(data: Data())
+        let noToken = TMDbRatings(client: makeClient(silent), readAccessToken: " ")
+        #expect(try await noToken.imdbID(tmdbID: 1, mediaType: "movie") == nil)
+        #expect(try await noToken.imdbID(tmdbID: 1, mediaType: "person") == nil)
+        #expect(silent.callCount == 0)
+    }
+}
