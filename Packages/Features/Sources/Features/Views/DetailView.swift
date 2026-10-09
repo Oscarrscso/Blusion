@@ -673,9 +673,9 @@ private struct ReviewCard: View {
     }
 }
 
-/// The logo, or the name when there is no logo or it failed to load. While a logo loads, the name keeps its place in the layout
-/// but is not drawn, so the name never flashes before the logo. The logo comes through `ImagePipeline` because `ArtworkImage` only
-/// fills its frame.
+/// The logo, or the name when there is no logo or it failed to load. While a logo loads, the name is not drawn, so it never flashes
+/// before the logo, and the logo's full height is kept, so the text below does not move when it arrives. The logo comes through
+/// `ImagePipeline` because `ArtworkImage` only fills its frame.
 private struct TitleArt: View {
     let name: String
     let logo: URL?
@@ -692,10 +692,15 @@ private struct TitleArt: View {
         _image = State(initialValue: logo.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 800) })
     }
 
+    /// The tallest a logo can be on this page.
+    private var logoHeight: CGFloat { compact ? 56 : 150 }
+    /// A title with a logo URL keeps the logo's space until the logo arrives or fails.
+    private var reservesLogoHeight: Bool { logo != nil && !failed }
+
     var body: some View {
         Group {
             if let image {
-                LogoLayout(imageSize: image.size, maxWidth: compact ? 220 : .infinity, maxHeight: compact ? 56 : 150) {
+                LogoLayout(imageSize: image.size, maxWidth: compact ? 220 : .infinity, maxHeight: logoHeight) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
@@ -712,6 +717,8 @@ private struct TitleArt: View {
                     .opacity(logo == nil || failed ? 1 : 0)
             }
         }
+        // Bottom-aligned, so a logo shorter than the reserved space sits where it did before, just above the controls.
+        .frame(minHeight: reservesLogoHeight ? logoHeight : nil, alignment: Alignment(horizontal: alignment.horizontal, vertical: .bottom))
         .task(id: logo) {
             failed = false
             guard let logo else {
