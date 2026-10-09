@@ -41,8 +41,9 @@ struct TraktListBrowserView: View {
                 results
             }
             .padding(.top, Theme.Spacing.s)
-            .padding(.bottom, Theme.Spacing.xxl)
         }
+        // Margin, not padding: the last row scrolls fully clear of the tab bar and the mini-player.
+        .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
         // The controls stay put while results scroll; the system's edge effect keeps rows legible under them.
         .safeAreaInset(edge: .top, spacing: 0) { controls }
         .scrollEdgeEffectStyle(.soft, for: .top)
@@ -68,22 +69,37 @@ struct TraktListBrowserView: View {
                     .accessibilityIdentifier("widgetEditor.save")
             }
         }
+        .environment(\.layoutMetrics, browserMetrics)
         .accessibilityIdentifier("traktBrowser")
+    }
+
+    /// The browser's page margin is the content margin, as on Home, so the chip row scrolls on the same 16pt inset as the controls above it.
+    private var browserMetrics: LayoutMetrics {
+        var browserMetrics = metrics
+        browserMetrics.pageMargin = metrics.contentMargin
+        return browserMetrics
     }
 
     // MARK: Sections
 
-    /// Title, Lists/Users, and one row for the scope chips with the sort menu at its end.
+    /// Three rows, each its own full-width stack: title with Sort, the Lists/Users selector, and the scope chips. Nothing shares a row with
+    /// the scrolling chips, so they cannot be covered.
     private var controls: some View {
         @Bindable var browser = browser
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            titleField
+            HStack(spacing: Theme.Spacing.s) {
+                titleField
+                sortMenu
+                    .frame(width: 128)
+                    .disabled(browser.showsUsers)
+            }
+            .padding(.horizontal, metrics.contentMargin)
             QualitySelector(titles: TraktBrowserViewModel.Tab.allCases.map(\.rawValue), selection: Binding {
                 TraktBrowserViewModel.Tab.allCases.firstIndex(of: browser.tab) ?? 0
             } set: { browser.tab = TraktBrowserViewModel.Tab.allCases[$0] },
                             symbols: ["list.bullet.rectangle", "person.2"], accessibilityID: "traktBrowser.tab")
                 .padding(.horizontal, metrics.contentMargin)
-            if browser.tab == .lists || browser.browsedUser != nil { filterRow }
+            if browser.tab == .lists && browser.trimmedQuery.isEmpty && browser.browsedUser == nil { scopeChips }
         }
         .padding(.vertical, Theme.Spacing.s)
         .sensoryFeedback(.selection, trigger: sort)
@@ -98,22 +114,8 @@ struct TraktListBrowserView: View {
                 .accessibilityIdentifier("widgetEditor.title")
         }
         .padding(.horizontal, Theme.Spacing.m)
-        .frame(height: 40)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .glassEffect(.regular.interactive(), in: .capsule)
-        .padding(.horizontal, metrics.contentMargin)
-    }
-
-    private var filterRow: some View {
-        HStack(spacing: Theme.Spacing.s) {
-            if browser.tab == .lists && browser.trimmedQuery.isEmpty && browser.browsedUser == nil {
-                scopeChips
-            } else {
-                Spacer(minLength: 0)
-            }
-            sortMenu
-                .frame(width: 128)
-                .padding(.trailing, metrics.contentMargin)
-        }
     }
 
     private var sortMenu: some View {
