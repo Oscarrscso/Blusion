@@ -78,8 +78,9 @@ extension View {
         background(Theme.surface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    func glassCardSurface() -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+    /// Glass for a card of content (a stream, a panel) with its translucent hairline. Cards share `Theme.Radius.card`.
+    func glassCardSurface(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return glassEffect(.regular, in: shape)
             .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
     }

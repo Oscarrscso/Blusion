@@ -2,60 +2,58 @@
 import SwiftUI
 import StremioKit
 
-/// One stream as a card of its own: the label of the picker's button, so the whole card is one target. A tile on the left says how
-/// sharp it is, the headline says what the picture is, one grey line gives the facts a viewer picks by (size, source, codecs), and the
-/// addon's own notes sit quietly underneath. The icon at the trailing edge says what a tap does: play here, open another app, or warn
-/// that Blusion cannot play it.
+/// One stream as a card. The top of it is the button that plays the stream: small badges for sharpness, REMUX and source, the release
+/// name in up to two lines, and one grey line of facts (size, codec, audio). A note underneath says when the stream opens elsewhere or
+/// Blusion cannot play it. The technical details fold away in a section of their own, so tapping the card always plays.
 struct StreamRow: View {
     let item: RankedStream
-    /// True for the stream "Play Best" would start: it carries a small mark so the top of the list explains itself.
+    /// True for the stream Auto Pick recommends: a quiet "Best match" over the badges, and nothing else on the card changes.
     var isBest = false
+    /// True when the release name says REMUX. Found in the name, the same way Auto Pick finds it.
+    var isRemux = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: Theme.Spacing.m) {
-                ResolutionTile(quality: item.quality)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                        Text(headline)
-                            .font(.subheadline.weight(.semibold))
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(2)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if isBest { Badge("Best", style: .accent) }
-                    }
-                    if !facts.isEmpty {
-                        Text(facts.joined(separator: " · "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let routeNote {
-                        Label(routeNote.text, systemImage: routeNote.symbol)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(routeNote.isWarning ? Color.orange : Color.white.opacity(0.62))
-                    }
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs + 2) {
+            HStack(spacing: Theme.Spacing.xs) {
+                if let label = item.quality.resolutionLabel { Badge(label, style: .quality) }
+                if isRemux { Badge("REMUX") }
+                if let source = item.quality.source { Badge(source.label, style: .quality) }
                 Spacer(minLength: Theme.Spacing.s)
-                Image(systemName: glyph)
-                    .font(.title2)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(glyphColor)
-                    .accessibilityHidden(true)
+                if isBest {
+                    Label("Best match", systemImage: "sparkles")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .accessibilityIdentifier("stream.bestMatch")
+                }
+            }
+            Text(headline)
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if !facts.isEmpty {
+                Text(facts.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if let routeNote {
+                Label(routeNote.text, systemImage: routeNote.symbol)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(routeNote.isWarning ? Color.orange : Color.white.opacity(0.62))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.m)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+        .padding(.top, Theme.Spacing.m)
+        .padding(.bottom, Theme.Spacing.s)
         .contentShape(shape)
         .help(item.route.handoffTarget.map { "Play in \($0.player.displayName)" } ?? "Choose this stream")
     }
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous) }
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous) }
 
-    /// Keep the release name beside the quality badge, rather than repeating the badge's resolution/HDR.
+    /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
     private var headline: String {
         if let filename = item.stream.behaviorHints.filename?.trimmingCharacters(in: .whitespacesAndNewlines), !filename.isEmpty {
             return (filename as NSString).lastPathComponent
@@ -66,19 +64,23 @@ struct StreamRow: View {
         return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
-    /// The facts a viewer picks a stream by, in the order they usually decide: size, where the file came from, how it is encoded, what the
-    /// sound is and what holds it.
+    /// The facts a viewer picks a stream by after its sharpness and source: how big the file is, how the picture is encoded, and what
+    /// the sound is.
     private var facts: [String] {
         var parts: [String] = []
         if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
-        if let source = item.quality.source { parts.append(source.label) }
-        if let codec = item.quality.videoCodec { parts.append(codec.label) }
+        if let codec = item.quality.videoCodec {
+            parts.append(item.quality.isDolbyVision ? "\(codec.label) Dolby Vision" : item.quality.isHDR ? "\(codec.label) HDR" : codec.label)
+        } else if item.quality.isDolbyVision {
+            parts.append("Dolby Vision")
+        } else if item.quality.isHDR {
+            parts.append("HDR")
+        }
         if let audio = item.quality.audioCodecs.first {
             parts.append(item.quality.hasAtmos ? "\(audio.label) Atmos" : audio.label)
         } else if item.quality.hasAtmos {
             parts.append("Atmos")
         }
-        if let container = item.container { parts.append(container.fileExtension.uppercased()) }
         return parts
     }
 
@@ -89,56 +91,56 @@ struct StreamRow: View {
         case .native, .fallback, .external, .hidden: nil
         }
     }
-
-    private var glyph: String {
-        switch item.route {
-        case .native, .fallback: return "play.circle.fill"
-        case .handoff, .external: return "arrow.up.forward.circle.fill"
-        case .unsupported: return "exclamationmark.triangle.fill"
-        case .hidden: return "eye.slash.circle.fill"
-        }
-    }
-
-    private var glyphColor: Color {
-        switch item.route {
-        case .native, .fallback: return .white
-        case .handoff, .external: return .white.opacity(0.78)
-        case .unsupported: return .orange
-        case .hidden: return .secondary
-        }
-    }
 }
 
-/// The square on the left of a stream: its resolution as large type, and under it the dynamic range when there is one. Without a
-/// resolution it shows a film symbol, so every card keeps the same left edge.
-private struct ResolutionTile: View {
-    let quality: StreamQuality
+/// The card's own section for the technical details: the file name, the addon's description, the container and where else the stream
+/// came from. Folded away until asked for, so the list stays about choosing.
+struct StreamTechnicalDetails: View {
+    let item: RankedStream
+    @State private var isExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 1) {
-            if let label = quality.resolutionLabel {
-                Text(label)
-                    .font(.system(size: label.count <= 2 ? 21 : 16, weight: .heavy, design: .rounded))
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
-                if let range {
-                    Text(range)
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.7))
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+                .padding(.horizontal, Theme.Spacing.m)
+            Button {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Text("Technical details")
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
-            } else {
-                Image(systemName: "film").font(.title3.weight(.semibold))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.vertical, Theme.Spacing.s)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("stream.details.\(item.title)")
+            if isExpanded, !lines.isEmpty {
+                Text(lines.joined(separator: "\n"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .padding(.bottom, Theme.Spacing.s)
             }
         }
-        .foregroundStyle(.white)
-        .frame(width: 54, height: 54)
-        .background(Theme.surfaceStrong, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .accessibilityHidden(true)
     }
 
-    private var range: String? {
-        if quality.isDolbyVision { return "DV" }
-        return quality.isHDR ? "HDR" : nil
+    private var lines: [String] {
+        [item.stream.behaviorHints.filename,
+         item.container.map { "Container \($0.fileExtension.uppercased())" },
+         item.stream.description,
+         item.alsoProvidedBy.isEmpty ? nil : "Also from \(item.alsoProvidedBy.map(\.name).joined(separator: ", "))"]
+            .compactMap { $0 }
     }
 }
 
@@ -184,11 +186,11 @@ private extension AudioCodec {
 /// Grey stand-ins for stream cards while the first answers are on their way, so the screen has its shape at once.
 struct StreamRowsSkeleton: View {
     var body: some View {
-        VStack(spacing: Theme.Spacing.s + 2) {
+        VStack(spacing: Theme.Spacing.s) {
             ForEach(0..<3, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .fill(Theme.surface)
-                    .frame(height: 96)
+                    .frame(height: 84)
             }
         }
         .shimmering()

@@ -2,35 +2,70 @@
 import StremioKit
 import SwiftUI
 
-/// Best Blurays' recommendation, shown beside the stream results after Play.
+/// Best Blurays' recommendation, shown beside the stream results after Play. Folded into one row, with the release named on it, so
+/// it reads as a single line until someone opens it.
 struct BestEditionView: View {
     let model: StreamPickerViewModel
     @State private var isExpanded = false
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         if model.canFindBestEdition {
-            DisclosureGroup(isExpanded: $isExpanded) {
-                content.padding(.top, Theme.Spacing.s)
-            } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    Label("Best Blu-ray edition", systemImage: "opticaldisc")
-                        .font(.subheadline.weight(.semibold))
-                    if case .found(let edition) = model.bestEdition {
-                        Text(edition.release).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    } else if case .loading = model.bestEdition {
-                        Text("Checking Best Blurays…").font(.caption).foregroundStyle(.secondary)
-                    } else if case .failed = model.bestEdition {
-                        Text("Couldn’t load edition · Tap to retry").font(.caption).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: Theme.Spacing.s) {
+                        Image(systemName: "opticaldisc")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text("Best Blu-ray")
+                            .font(.subheadline.weight(.semibold))
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(summaryColor)
+                            .lineLimit(1)
+                        Spacer(minLength: Theme.Spacing.s)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     }
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .padding(.vertical, Theme.Spacing.s + 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityIdentifier("streams.bestEdition")
+                if isExpanded {
+                    content
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.bottom, Theme.Spacing.m)
+                        .padding(.top, Theme.Spacing.xs)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)
                 }
             }
-            .tint(.secondary)
-            .padding(Theme.Spacing.m)
             .glassCardSurface()
-            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isExpanded)
-            .accessibilityIdentifier("streams.bestEdition")
         }
+    }
+
+    /// The one line the row shows while it is folded: the release it names, or where the lookup stands.
+    private var summary: String {
+        switch model.bestEdition {
+        case .idle, .loading: "Checking…"
+        case .found(let edition): edition.release
+        case .listedWithoutEdition: "No best release named yet"
+        case .notListed: "No page yet"
+        case .failed: "Couldn’t load · tap to retry"
+        }
+    }
+
+    private var summaryColor: Color {
+        if case .failed = model.bestEdition { return .orange }
+        return .secondary
     }
 
     @ViewBuilder
@@ -58,7 +93,7 @@ struct BestEditionView: View {
     }
 
     private func found(_ edition: BestBlurayEdition) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(edition.heading)
                 .font(Theme.Typography.eyebrow)
                 .textCase(.uppercase)
@@ -102,9 +137,10 @@ struct BestEditionView: View {
     }
 
     private func message(_ text: String, link: URL, linkTitle: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(text)
-                .font(.body)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button { openURL(link) } label: {
                 Label(linkTitle, systemImage: "arrow.up.right.square")

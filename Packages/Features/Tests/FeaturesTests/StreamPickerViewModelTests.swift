@@ -432,6 +432,18 @@ import StremioKitTestSupport
         #expect(value("filename", in: query(link)) == "Test-Movie-2010.mkv")
     }
 
+    @Test func theRecommendedStreamIsTheOneAutoPickStarts() async throws {
+        let services = try await services(bodies: [body([direct("1080", "https://a.example.com/2.mp4", "1080p"),
+                                                         direct("4K", "https://a.example.com/1.mkv", "2160p")])],
+                                          settings: PlaybackSettings(playerPreference: .infuse))
+        let model = picker(movie, services)
+        #expect(model.recommendedStream == nil, "no mark while the addons are still answering")
+        await model.load()
+        let recommended = try #require(model.recommendedStream)
+        _ = await model.autoPickBest()
+        #expect(model.autoPickedStream?.id == recommended.id, "the mark in the list is the stream Auto Pick starts")
+    }
+
     @Test func aReleaseNameDoesNotLendItsDottedEndingAsTheExtension() async throws {
         // Real addons send release names as the file name, with no extension: the file's extension comes from the URL instead.
         let release = "Breaking.Bad.S01E01.Pilot.2160p.NF.WEB-DL.DD+5.1.H.265-playWEB"

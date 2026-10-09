@@ -186,11 +186,7 @@ public final class StreamPickerViewModel {
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return nil }
         }
         guard !Task.isCancelled else { return nil }
-        let candidates = listing.items.filter { item in
-            guard let url = PlaybackPolicy.playbackURL(for: item.stream, config: listing.config) else { return false }
-            return ExternalPlayer.infuse.canPlay(streamURL: url, headers: item.stream.behaviorHints.proxyHeaders?.request ?? [:])
-        }
-        guard let pick = AutoStreamRanking.best(from: candidates, duration: request.expectedDuration) else {
+        guard let pick = AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration) else {
             autoPickMessage = "No streams compatible with Infuse were found."
             return nil
         }
@@ -198,6 +194,21 @@ public final class StreamPickerViewModel {
         autoPickedStream = pick.item
         autoPickMessage = "Selected \(pick.item.quality.resolutionLabel ?? "stream") · \(pick.isRemux ? "REMUX" : pick.item.quality.source?.rawValue ?? "release")"
         return await handoffChoice(for: pick.item, player: .infuse)
+    }
+
+    /// The stream Auto Pick would start, marked in the list before anyone asks for it. Nil while the addons are still answering, so the
+    /// mark does not jump from one release to another as they arrive.
+    public var recommendedStream: RankedStream? {
+        guard !isLoading else { return nil }
+        return AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration)?.item
+    }
+
+    /// The streams Infuse can take as they are: what Auto Pick ranks.
+    private var infuseCandidates: [RankedStream] {
+        listing.items.filter { item in
+            guard let url = PlaybackPolicy.playbackURL(for: item.stream, config: listing.config) else { return false }
+            return ExternalPlayer.infuse.canPlay(streamURL: url, headers: item.stream.behaviorHints.proxyHeaders?.request ?? [:])
+        }
     }
 
     /// The first stream Blusion plays itself after `item`: what "Try the next stream" plays.

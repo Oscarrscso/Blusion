@@ -33,7 +33,7 @@ struct StreamPickerView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 header
                 playBestButton
                 BestEditionView(model: model)
@@ -42,14 +42,15 @@ struct StreamPickerView: View {
                 failures
                 emptyState
                 loadingRows
-                groups
+                groups(recommended: model.recommendedStream)
                 links
                 hiddenHint
             }
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
-            .padding(.bottom, Theme.Spacing.xxl)
         }
+        // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding inside it.
+        .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
         // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
         .background(alignment: .top) { ambientBackdrop }
         .screenBackground()
@@ -139,9 +140,9 @@ struct StreamPickerView: View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             if let poster = model.request.poster {
                 PosterImage(url: poster, title: model.request.title)
-                    .frame(width: 54, height: 81)
+                    .frame(width: 44, height: 66)
             }
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
                 if let eyebrow {
                     Text(eyebrow)
                         .font(Theme.Typography.eyebrow)
@@ -155,12 +156,11 @@ struct StreamPickerView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 status
-                    .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, metrics.pageMargin)
-        .padding(.top, Theme.Spacing.s)
+        .padding(.top, Theme.Spacing.xs)
     }
 
     /// "S1 · E3" for an episode, the release year for a film.
@@ -212,6 +212,7 @@ struct StreamPickerView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.primaryActionCompact)
+                .controlSize(.small)
                 .disabled(model.isAutoPicking)
                 .accessibilityIdentifier("streams.playBest")
                 if let message = model.autoPickMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
@@ -312,12 +313,13 @@ struct StreamPickerView: View {
 
     // MARK: streams
 
-    private var groups: some View {
+    /// `recommended` is the stream Auto Pick would start; it alone carries the Best match mark.
+    private func groups(recommended: RankedStream?) -> some View {
         ForEach(visibleSections) { section in
-            VStack(alignment: .leading, spacing: Theme.Spacing.s + 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 if model.addonSections.count > 1 { sectionTitle(section) }
                 ForEach(section.streams) { item in
-                    streamButton(item)
+                    streamButton(item, isRecommended: item.id == recommended?.id)
                 }
             }
             .padding(.horizontal, metrics.pageMargin)
@@ -343,45 +345,35 @@ struct StreamPickerView: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    /// Links to web pages: a quiet group at the bottom, since they leave the app rather than play.
+    /// Links to web pages: a quiet group at the bottom, since they leave the app rather than play. Its cards are the stream cards, so the
+    /// group has no background of its own.
     @ViewBuilder
     private var links: some View {
         if !model.links.isEmpty {
             DisclosureGroup("Notes from your addons") {
-                VStack(spacing: Theme.Spacing.s + 2) {
-                    ForEach(model.links) { item in streamButton(item) }
+                VStack(spacing: Theme.Spacing.s) {
+                    ForEach(model.links) { item in streamButton(item, isRecommended: false) }
                 }
                 .padding(.top, Theme.Spacing.s)
             }
             .font(.subheadline.weight(.medium))
-            .padding(Theme.Spacing.m + 2)
-            .cardSurface()
             .padding(.horizontal, metrics.pageMargin)
         }
     }
 
-    private func streamButton(_ item: RankedStream) -> some View {
+    /// One stream as a card: the top plays it, the technical details fold away underneath in the same glass.
+    private func streamButton(_ item: RankedStream, isRecommended: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-        Button {
-            select(item)
-        } label: {
-            StreamRow(item: item, isBest: item.id == model.autoPickedStream?.id)
-        }
-        .buttonStyle(PressableCardStyle())
-        .contextMenu { contextActions(for: item) }
-        .accessibilityIdentifier("stream.row.\(item.title)")
-        .accessibilityHint(hint(for: item))
-        DisclosureGroup("Technical details") {
-            Text([item.stream.behaviorHints.filename, item.stream.description,
-                  item.alsoProvidedBy.isEmpty ? nil : "Also from \(item.alsoProvidedBy.map(\.name).joined(separator: ", "))"]
-                .compactMap { $0 }.joined(separator: "\n"))
-                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
-        }
-        .font(.caption)
-        .tint(.secondary)
-        .padding(.horizontal, Theme.Spacing.m)
-        .padding(.bottom, 8)
+            Button {
+                select(item)
+            } label: {
+                StreamRow(item: item, isBest: isRecommended, isRemux: AutoStreamRanking.assess(item, duration: nil).isRemux)
+            }
+            .buttonStyle(PressableCardStyle())
+            .contextMenu { contextActions(for: item) }
+            .accessibilityIdentifier("stream.row.\(item.title)")
+            .accessibilityHint(hint(for: item))
+            StreamTechnicalDetails(item: item)
         }
         .glassCardSurface()
     }
