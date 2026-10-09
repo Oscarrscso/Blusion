@@ -14,7 +14,7 @@ public enum DefaultWidgets {
         }
         let hero = HomeWidget(id: "auto.hero", title: "Spotlight", hideTitle: true,
                               content: .hero(RowConfiguration(source: .addonCatalog(spotlight.reference()), limit: 8)))
-        let continueWatching = HomeWidget(id: "auto.continue", title: "Continue Watching", content: .continueWatching)
+        let continueWatching = HomeWidget(id: "auto.continue", title: "Continue", content: .continueWatching)
         return [hero, continueWatching] + rows
     }
 

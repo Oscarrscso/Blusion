@@ -122,7 +122,7 @@ struct MediaCard: View {
             .overlay(alignment: .bottom) {
                 if showsRating && aspect != .wide { PosterRatingsOverlay(item: item) }
             }
-            .mediaArtwork(cornerRadius: aspect.cornerRadius, bordered: aspect != .poster)
+            .clipShape(RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous))
             .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
     }
 

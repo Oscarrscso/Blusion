@@ -52,7 +52,7 @@ struct DetailView: View {
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 ArtworkImage(url: model.backdropURL, maxPixelSize: 1400, contentMode: .fit)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
-                    .mediaArtwork(cornerRadius: Theme.Radius.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .leading)
                     controls
@@ -74,7 +74,7 @@ struct DetailView: View {
             }
             // Navigation bar changes during scrolling must not resize the artwork.
             .frame(width: size.width, height: min(size.width * 1.5, metrics.heroMaxHeight))
-            .mediaArtwork(cornerRadius: 0)
+            .clipped()
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 controls
                 synopsis
@@ -447,15 +447,26 @@ private struct EpisodeRow: View {
     private var still: some View {
         ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: metrics.episodeWidth * 3)
             .frame(width: metrics.episodeWidth, height: metrics.episodeWidth / CardAspect.wide.ratio)
-            .overlay {
-                if !watched, let fraction {
-                    PlaybackProgressOverlay(fraction: fraction, width: metrics.episodeWidth)
-                }
-            }
+            .overlay(alignment: .bottom) { progressBar }
             .overlay(alignment: .topTrailing) {
                 if watched { checkmark }
             }
-            .mediaArtwork(cornerRadius: Theme.Radius.small)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+    }
+
+    /// Only for an episode that is partly watched: a thin line along the bottom edge of the still.
+    @ViewBuilder
+    private var progressBar: some View {
+        if let fraction, !watched {
+            Rectangle()
+                .fill(.white.opacity(0.25))
+                .frame(width: metrics.episodeWidth, height: 3)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(.white)
+                        .frame(width: metrics.episodeWidth * min(max(fraction, 0), 1), height: 3)
+                }
+        }
     }
 
     private var checkmark: some View {

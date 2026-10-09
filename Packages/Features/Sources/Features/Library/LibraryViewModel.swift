@@ -3,12 +3,11 @@ import Observation
 import PlayerKit
 import StremioKit
 
-/// Library: continue watching, saved titles, and what has been watched. The filter narrows all three sections at once.
+/// Library: saved titles and what has been watched. The filter narrows both sections at once.
 @MainActor
 @Observable
 public final class LibraryViewModel {
     /// The sections as the view shows them: each already filtered and sorted.
-    public private(set) var continueWatching: [WatchProgress] = []
     public private(set) var saved: [LibraryItem] = []
     public private(set) var watched: [WatchProgress] = []
     public private(set) var hasLoaded = false
@@ -21,10 +20,8 @@ public final class LibraryViewModel {
     private let services: AppServices
     /// Everything the Library knows, before any filter. The sections above are the visible part of these.
     private var savedEntries: [LibraryEntry] = []
-    private var continueEntries: [LibraryEntry] = []
     private var watchedEntries: [LibraryEntry] = []
     private var visibleSaved: [LibraryEntry] = []
-    private var visibleContinue: [LibraryEntry] = []
     private var visibleWatched: [LibraryEntry] = []
     private var lastTraktPull = Date.distantPast
     /// Where the scores from the rating sites other than IMDb come from. Nil until the view attaches it.
@@ -41,14 +38,14 @@ public final class LibraryViewModel {
     }
 
     /// True when the Library holds nothing at all, whatever the filter. A filter that matches nothing is not empty.
-    public var isEmpty: Bool { savedEntries.isEmpty && continueEntries.isEmpty && watchedEntries.isEmpty }
+    public var isEmpty: Bool { savedEntries.isEmpty && watchedEntries.isEmpty }
 
     /// True when at least one section has a title to show under the current filter.
-    public var hasMatches: Bool { !(continueWatching.isEmpty && saved.isEmpty && watched.isEmpty) }
+    public var hasMatches: Bool { !(saved.isEmpty && watched.isEmpty) }
 
     /// The genres and year span of everything in the Library, for the filter's pickers.
-    public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + continueEntries + watchedEntries) }
-    public var availableYears: ClosedRange<Int>? { LibraryFiltering.yearRange(in: savedEntries + continueEntries + watchedEntries) }
+    public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + watchedEntries) }
+    public var availableYears: ClosedRange<Int>? { LibraryFiltering.yearRange(in: savedEntries + watchedEntries) }
 
     /// An empty library can recover from a missed Trakt import without signing in again.
     public func refresh(now: Date = Date()) async {
@@ -66,9 +63,6 @@ public final class LibraryViewModel {
         let recordsByTitle = Dictionary(grouping: all, by: Self.titleKey(of:))
 
         savedEntries = savedItems.map { LibraryEntry(item: $0, records: recordsByTitle[$0.id] ?? []) }
-        continueEntries = Self.continueWatching(from: all).map { record in
-            LibraryEntry(record: record, saved: savedByID[Self.titleKey(of: record)])
-        }
         watchedEntries = all.filter(\.isWatched).map { record in
             LibraryEntry(record: record, saved: savedByID[Self.titleKey(of: record)])
         }
@@ -84,11 +78,6 @@ public final class LibraryViewModel {
                 guard let series = item.seriesID else { return true }
                 return seenSeries.insert(series).inserted
             }
-    }
-
-    public func removeFromContinueWatching(_ item: WatchProgress) async {
-        await services.progress.remove(item.id)
-        await load()
     }
 
     public func markWatched(_ item: WatchProgress) async {
@@ -133,24 +122,18 @@ public final class LibraryViewModel {
     private func applyFilter() {
         let now = Date()
         let filter = filter
-        // Continue Watching is a list of where the viewer left off, so "recently added" there means "recently watched".
-        var continueFilter = filter
-        if continueFilter.sort == .recentlyAdded { continueFilter.sort = .recentlyWatched }
-        let (savedEntries, continueEntries, watchedEntries) = (self.savedEntries, self.continueEntries, self.watchedEntries)
+        let (savedEntries, watchedEntries) = (self.savedEntries, self.watchedEntries)
         let score = scoreLookup(for: filter)
         // Reading each title's score inside the tracking block means a score that arrives later re-runs the filter on its own.
-        let (visibleSaved, visibleContinue, visibleWatched) = withObservationTracking {
+        let (visibleSaved, visibleWatched) = withObservationTracking {
             (LibraryFiltering.apply(filter, to: savedEntries, now: now, score: score),
-             LibraryFiltering.apply(continueFilter, to: continueEntries, now: now, score: score),
              LibraryFiltering.apply(filter, to: watchedEntries, now: now, score: score))
         } onChange: { [weak self] in
             Task { @MainActor in self?.applyFilter() }
         }
         self.visibleSaved = visibleSaved
-        self.visibleContinue = visibleContinue
         self.visibleWatched = visibleWatched
         saved = visibleSaved.compactMap(\.item)
-        continueWatching = visibleContinue.compactMap(\.progress)
         watched = visibleWatched.compactMap(\.progress)
     }
 

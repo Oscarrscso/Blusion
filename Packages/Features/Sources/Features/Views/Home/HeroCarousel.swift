@@ -95,7 +95,6 @@ struct HeroPlaceholder: View {
             .frame(maxWidth: .infinity)
             .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
             .background { Rectangle().fill(Theme.surface) }
-            .mediaArtwork(cornerRadius: 0)
             .shimmering()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Loading")
@@ -129,7 +128,6 @@ private struct HeroPage: View {
         Color.clear
             .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400) }
             .overlay { scrim }
-            .mediaArtwork(cornerRadius: 0)
             .contentShape(Rectangle())
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }

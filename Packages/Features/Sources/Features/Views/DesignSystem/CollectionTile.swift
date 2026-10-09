@@ -27,7 +27,7 @@ struct CollectionTile: View {
         space
             .overlay { face }
             .overlay(alignment: .bottomLeading) { label }
-            .mediaArtwork(cornerRadius: aspect.cornerRadius)
+            .clipShape(RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(title)
             .accessibilityAddTraits(.isButton)

@@ -142,7 +142,7 @@ struct ContinueWatchingRow: View {
     let items: [ContinueWatchingEntry]
     let state: HomeViewModel.ContinueState
     let retry: () -> Void
-    var title = "Continue Watching"
+    var title = "Continue"
     var hideTitle = false
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -164,7 +164,7 @@ struct ContinueWatchingRow: View {
                         .tint(.gray)
                         .scaleEffect(0.75)
                         .opacity(state == .loading ? 1 : 0)
-                        .accessibilityLabel("Refreshing Continue Watching")
+                        .accessibilityLabel("Refreshing Continue")
                         .accessibilityHidden(state != .loading)
                     if !items.isEmpty {
                         if case .failed(let message) = state {
@@ -186,8 +186,7 @@ struct ContinueWatchingRow: View {
                 MediaRow(title, hideTitle: true) {
                     ForEach(shown) { item in
                         NavigationLink(value: item.request) {
-                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster,
-                                         fraction: item.fraction, duration: item.request.expectedDuration)
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
@@ -265,7 +264,6 @@ struct RowPlaceholder: View {
                             RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous)
                                 .fill(Theme.surfaceStrong)
                                 .frame(width: width, height: width / aspect.ratio)
-                                .mediaArtwork(cornerRadius: aspect.cornerRadius, bordered: aspect != .poster)
                             VStack(alignment: .leading, spacing: 4) {
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)

@@ -9,8 +9,9 @@ public struct ContinueWatchingEntry: Identifiable, Equatable, Sendable {
     public var id: String { request.identity }
 
     public var subtitle: String {
-        guard let season = request.season, let episode = request.episode else { return "" }
-        return "S\(season), E\(episode)"
+        let percentage = "\(Int(fraction * 100))% watched"
+        guard let season = request.season, let episode = request.episode else { return percentage }
+        return "S\(season) E\(episode) · \(percentage)"
     }
 
     static func merge(local: [WatchProgress], remote: [TraktPlaybackItem]) -> [ContinueWatchingEntry] {
