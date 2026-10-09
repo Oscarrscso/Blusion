@@ -51,7 +51,7 @@ struct DiscoverView: View {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
                         ForEach(model.visibleSources) { source in
-                            Button("\(source.title) · \(model.showsAllTypes ? ContentTypeName.plural(source.type) : source.addon.name)") { Task { await model.select(source: source) } }
+                            Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
                         }
                     } label: {
                         FilterMenuLabel(model.selectedSource?.title ?? "Catalog", systemImage: "square.stack")

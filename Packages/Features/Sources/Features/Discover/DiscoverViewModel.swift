@@ -26,7 +26,15 @@ public final class DiscoverViewModel {
     public private(set) var canLoadMore = false
     public var isOffline: Bool { state == .failed(.offline) }
 
+    /// One catalog feeding the "All" mix, with how far it has been read.
+    private struct Cursor {
+        var source: CatalogSource
+        var received = 0
+        var hasMore = true
+    }
+
     private let services: AppServices
+    private var cursors: [Cursor] = []
     private var generation = 0
     /// Raw items received so far: the protocol's `skip` counts items the addon sent, not items left after de-duplication.
     private var receivedCount = 0
@@ -35,7 +43,12 @@ public final class DiscoverViewModel {
         self.services = services
     }
 
-    public var genres: [String] { selectedSource?.catalog.genreOptions ?? [] }
+    public var genres: [String] {
+        guard showsAllTypes else { return selectedSource?.catalog.genreOptions ?? [] }
+        var all: [String] = []
+        for genre in mixSources.flatMap(\.catalog.genreOptions) where !all.contains(genre) { all.append(genre) }
+        return all
+    }
     public var hasSources: Bool { !sources.isEmpty }
 
     /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
@@ -48,9 +61,28 @@ public final class DiscoverViewModel {
         }.map(\.element)
     }
 
-    /// The sources of the selected type; every source on "All" or when no type is selected.
+    /// The catalogs the "All" mix reads: the selected one and its counterpart of the other type (same addon and name when there is
+    /// one, else the same name, else the type's first catalog), movies first.
+    var mixSources: [CatalogSource] {
+        guard let selected = selectedSource else { return [] }
+        return ["movie", "series"].compactMap { type in
+            if selected.type.lowercased() == type { return selected }
+            let ofType = sources.filter { $0.type.lowercased() == type }
+            let name = selected.title.lowercased()
+            return ofType.first { $0.addon.id == selected.addon.id && $0.title.lowercased() == name }
+                ?? ofType.first { $0.title.lowercased() == name }
+                ?? ofType.first
+        }
+    }
+
+    /// The sources of the selected type; on "All" the movie catalogs (each one brings its series counterpart); every source when no
+    /// type is selected.
     public var visibleSources: [CatalogSource] {
-        guard !showsAllTypes, let selectedType else { return sources }
+        if showsAllTypes {
+            let movies = sources.filter { $0.type.lowercased() == "movie" }
+            return movies.isEmpty ? sources : movies
+        }
+        guard let selectedType else { return sources }
         return sources.filter { $0.type == selectedType }
     }
 
@@ -76,11 +108,19 @@ public final class DiscoverViewModel {
         await select(source: first)
     }
 
-    /// Switches to "All": every type's sources are offered, and the current source stays (or the first one is selected).
+    /// Switches to "All": movies and series of the selected catalog, mixed into one grid.
     public func selectAllTypes() async {
         showsAllTypes = true
-        guard selectedSource == nil, let first = sources.first else { return }
-        await select(source: first)
+        if let selected = selectedSource, selected.type.lowercased() != "movie",
+           let movie = sources.first(where: { $0.type.lowercased() == "movie" && $0.title.lowercased() == selected.title.lowercased() }) {
+            selectedSource = movie
+            selectedType = movie.type
+        } else if selectedSource == nil, let first = sources.first {
+            selectedSource = first
+            selectedType = first.type
+        }
+        if let genre = selectedGenre, !genres.contains(genre) { selectedGenre = nil }
+        await reload()
     }
 
     public func select(source: CatalogSource) async {
@@ -104,6 +144,13 @@ public final class DiscoverViewModel {
         receivedCount = 0
         canLoadMore = false
         state = .loadingFirstPage
+        if showsAllTypes {
+            cursors = mixSources.map { mixed in
+                Cursor(source: mixed, hasMore: selectedGenre.map { mixed.catalog.genreOptions.contains($0) } ?? true)
+            }
+            await loadMixedPage(generation: current)
+            return
+        }
         do {
             let page = try await services.browse.page(source, genre: selectedGenre, skip: 0)
             guard current == generation else { return }
@@ -120,6 +167,10 @@ public final class DiscoverViewModel {
         guard canLoadMore, state == .loaded, let source = selectedSource else { return }
         let current = generation
         state = .loadingMore
+        if showsAllTypes {
+            await loadMixedPage(generation: current)
+            return
+        }
         do {
             let page = try await services.browse.page(source, genre: selectedGenre, skip: receivedCount)
             guard current == generation else { return }
@@ -130,6 +181,42 @@ public final class DiscoverViewModel {
             // Keep what we have; the user can scroll again to retry.
             state = .loaded
         }
+    }
+
+    /// Reads the next page of every catalog in the mix at once and interleaves them (movie, series, movie, ...), so neither type
+    /// buries the other. A catalog that fails is skipped; the mix only fails when none answers.
+    private func loadMixedPage(generation current: Int) async {
+        let browse = services.browse
+        let genre = selectedGenre
+        let pending = cursors.enumerated().filter(\.element.hasMore)
+        var pages: [Int: [MetaPreview]] = [:]
+        var failure: Error?
+        await withTaskGroup(of: (Int, [MetaPreview]?, Error?).self) { group in
+            for (index, cursor) in pending {
+                group.addTask {
+                    do { return (index, try await browse.page(cursor.source, genre: genre, skip: cursor.received), nil) } catch { return (index, nil, error) }
+                }
+            }
+            for await (index, page, error) in group {
+                if let page { pages[index] = page } else { failure = error }
+            }
+        }
+        guard current == generation else { return }
+        if pages.isEmpty, let failure, !pending.isEmpty {
+            state = items.isEmpty ? .failed(AddonError.from(failure)) : .loaded
+            return
+        }
+        for (index, page) in pages {
+            cursors[index].received += page.count
+            cursors[index].hasMore = !page.isEmpty && cursors[index].source.catalog.supportsSkip
+        }
+        var known = Set(items.map(\.id))
+        let ordered = pages.keys.sorted().map { pages[$0] ?? [] }
+        for position in 0..<(ordered.map(\.count).max() ?? 0) {
+            for page in ordered where position < page.count && known.insert(page[position].id).inserted { items.append(page[position]) }
+        }
+        canLoadMore = cursors.contains(where: \.hasMore)
+        state = .loaded
     }
 
     private func append(_ page: [MetaPreview], source: CatalogSource) {

@@ -35,7 +35,7 @@ import StremioKitTestSupport
         await model.selectAllTypes()
         #expect(model.showsAllTypes)
         #expect(model.selectedSource == source)
-        #expect(model.visibleSources == model.sources)
+        #expect(model.mixSources.contains { $0 == source })
         if let type = model.types.first {
             await model.select(type: type)
             #expect(!model.showsAllTypes)
