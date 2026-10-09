@@ -52,6 +52,7 @@ struct RootView: View {
             try? await environment.services.registry.load()
             let settings = await environment.services.settings.load()
             environment.services.posterRatings.isEnabled = settings.showsPosterRatings
+            environment.services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
             await environment.services.posterRatings.setReviewServices(
                 omdb: settings.omdbAPIKey.map { OMDbRatings(client: environment.services.client, apiKey: $0) },
                 tmdb: settings.tmdbReadToken.map { TMDbRatings(client: environment.services.client, readAccessToken: $0) })

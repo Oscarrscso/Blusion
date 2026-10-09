@@ -65,6 +65,8 @@ public final class PosterRatingsStore {
     public var isEnabled: Bool {
         didSet { if isEnabled { Task { startLookups() } } }
     }
+    /// Read by the rating logos: their brand colours when on, the text colour when off. Mirrors the saved setting.
+    public var showsColouredLogos = false
 
     @ObservationIgnored private var entries: [String: TitleRatings] = [:]
     @ObservationIgnored private var queue: [Lookup] = []

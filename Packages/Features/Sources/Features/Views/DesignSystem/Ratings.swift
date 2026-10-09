@@ -5,15 +5,25 @@ import StremioKit
 /// Letterboxd's mark: three small overlapping dots. Drawn, not an image, so it needs no brand assets and stays crisp at any size.
 struct LetterboxdMark: View {
     var dot: CGFloat = 8
+    @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
         HStack(spacing: -dot * 0.34) {
-            Circle().fill(Color(red: 1.0, green: 0.50, blue: 0.0))
-            Circle().fill(Color(red: 0.0, green: 0.88, blue: 0.33))
-            Circle().fill(Color(red: 0.25, green: 0.74, blue: 0.96))
+            mark(Color(red: 1.0, green: 0.50, blue: 0.0))
+            mark(Color(red: 0.0, green: 0.88, blue: 0.33))
+            mark(Color(red: 0.25, green: 0.74, blue: 0.96))
         }
         .frame(width: dot * 2.32, height: dot)
         .accessibilityHidden(true)
+    }
+
+    /// Its own colour when coloured logos are on; otherwise the surrounding text colour, with a thin edge so the overlapping dots stay apart.
+    @ViewBuilder private func mark(_ colour: Color) -> some View {
+        if store?.showsColouredLogos ?? false {
+            Circle().fill(colour)
+        } else {
+            Circle().overlay(Circle().stroke(.black.opacity(0.35), lineWidth: dot * 0.08))
+        }
     }
 }
 
@@ -84,11 +94,13 @@ struct PosterRatingsOverlay: View {
 struct ReviewSiteIcon: View {
     let site: ReviewSite
     var size: CGFloat = 24
+    @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
+    /// The official colours only when the user asks for them; otherwise the mark takes the surrounding text colour.
     var body: some View {
         Image(assetName)
             .resizable()
-            .renderingMode(.original)
+            .renderingMode(store?.showsColouredLogos ?? false ? .original : .template)
             .scaledToFit()
             .frame(width: size, height: size)
             .accessibilityHidden(true)
@@ -171,6 +183,7 @@ struct RatingButton: View {
         Link(destination: url) {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
+                    .foregroundStyle(.white)
                 if let score {
                     Text(score)
                         .font(.system(size: 13, weight: .semibold))

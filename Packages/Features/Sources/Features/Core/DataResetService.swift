@@ -48,7 +48,10 @@ public struct DataResetService: Sendable {
             await services.settings.save(PlaybackSettings())
             await services.traktAccount.clearCredentials()
             await services.posterRatings.setReviewServices(tmdb: nil)
-            await MainActor.run { services.posterRatings.isEnabled = PlaybackSettings().showsPosterRatings }
+            await MainActor.run {
+                services.posterRatings.isEnabled = PlaybackSettings().showsPosterRatings
+                services.posterRatings.showsColouredLogos = PlaybackSettings().showsColouredRatingLogos
+            }
             await services.widgetContent.invalidate()
         case .widgets:
             await services.widgets.save(nil)

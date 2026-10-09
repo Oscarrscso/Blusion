@@ -104,6 +104,10 @@ struct SettingsView: View {
                 Task { await model.setShowsPosterRatings(value) }
             }))
             .accessibilityIdentifier("settings.posterRatings")
+            Toggle("Coloured rating logos", isOn: Binding(get: { model.settings.showsColouredRatingLogos }, set: { value in
+                Task { await model.setShowsColouredRatingLogos(value) }
+            }))
+            .accessibilityIdentifier("settings.colouredRatingLogos")
         }
     }
 
