@@ -93,7 +93,7 @@ struct LibraryView: View {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
-                        ReleaseYearPicker(model: model)
+                        ReleaseYearOptions(model: model)
                     } label: {
                         filterLabel("Year", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                     }
@@ -231,32 +231,30 @@ struct RatingPicker: View {
     }
 }
 
-/// One release year at a time, from the 1930s to 2029, grouped by decade. Choosing a year sets both ends of the filter to it.
-struct ReleaseYearPicker: View {
-    @Bindable var model: LibraryViewModel
+/// Release years in ten-year spans, "1920 - 1929" up to "2020 - 2029". Choosing a span sets both ends of the year filter to it; "Any" clears it.
+struct ReleaseYearOptions: View {
+    let model: LibraryViewModel
+    private static let starts = Array(stride(from: 1920, through: 2020, by: 10))
 
     var body: some View {
-        Picker("Year", selection: yearSelection) {
-            Text("Any").tag(Int?.none)
-            ForEach(Array(stride(from: 1930, through: 2020, by: 10)), id: \.self) { decade in
-                Section("\(decade)s") {
-                    ForEach(decade..<decade + 10, id: \.self) { year in
-                        Text(String(year)).tag(Int?.some(year))
-                    }
-                }
-            }
+        Button { setSpan(nil) } label: {
+            choice("Any", isOn: model.filter.minimumYear == nil && model.filter.maximumYear == nil)
         }
-        .accessibilityIdentifier("library.filter.year.picker")
+        ForEach(Self.starts, id: \.self) { start in
+            Button { setSpan(start) } label: {
+                choice("\(start) - \(start + 9)", isOn: model.filter.minimumYear == start && model.filter.maximumYear == start + 9)
+            }
+            .accessibilityIdentifier("library.filter.year.\(start)")
+        }
     }
 
-    private var yearSelection: Binding<Int?> {
-        Binding {
-            guard let low = model.filter.minimumYear, low == model.filter.maximumYear else { return nil }
-            return low
-        } set: { year in
-            model.filter.minimumYear = year
-            model.filter.maximumYear = year
-        }
+    private func setSpan(_ start: Int?) {
+        model.filter.minimumYear = start
+        model.filter.maximumYear = start.map { $0 + 9 }
+    }
+
+    @ViewBuilder private func choice(_ title: String, isOn: Bool) -> some View {
+        if isOn { Label(title, systemImage: "checkmark") } else { Text(title) }
     }
 }
 
@@ -281,7 +279,7 @@ struct LibraryFilterSheet: View {
                     }
                 }
                 Section("Release year") {
-                    ReleaseYearPicker(model: model)
+                    ReleaseYearOptions(model: model)
                 }
                 Section {
                     let genres = model.availableGenres
