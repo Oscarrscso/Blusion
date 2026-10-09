@@ -1,7 +1,7 @@
 name: CI
 
-# ADR-002: the Linux job proves the host layer (packages + mock addon); the macOS job runs the Xcode steps of
-# scripts/verify.sh (xcodegen, xcodebuild on a simulator, SwiftLint). Both must be green for a milestone.
+# The macOS job runs scripts/verify.sh milestone: package tests, the mock addon, xcodegen, xcodebuild on a simulator and SwiftLint.
+# Blusion ships on iOS only, so there is no Linux job.
 on:
   # Pushes to main only: a push to a branch with an open PR would otherwise run CI twice (push + pull_request) and email twice.
   push:
@@ -18,34 +18,6 @@ permissions:
   contents: read
 
 jobs:
-  host-linux:
-    name: Host layer (Linux, Swift 6.3)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install host tools and Swift dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg curl python3 python3-yaml ca-certificates \
-            binutils gnupg2 libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev libncurses-dev \
-            libpython3-dev libsqlite3-0 libstdc++-13-dev libxml2-dev libz3-dev pkg-config zlib1g-dev
-          node --version
-      - name: Install Swift 6.3.3
-        # Swiftly downloads and verifies the toolchain from swift.org, avoiding Docker Hub's anonymous pull limit.
-        run: |
-          curl -fL --retry 3 https://download.swift.org/swiftly/linux/swiftly-1.1.2-x86_64.tar.gz -o "$RUNNER_TEMP/swiftly.tar.gz"
-          tar -xzf "$RUNNER_TEMP/swiftly.tar.gz" -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/swiftly" init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
-          . "$HOME/.local/share/swiftly/env.sh"
-          swiftly install 6.3.3 --assume-yes
-          echo "$SWIFTLY_BIN_DIR" >> "$GITHUB_PATH"
-          swift --version
-      - name: verify.sh (host layer)
-        run: ./scripts/verify.sh
-      - name: Coverage gate (StremioKit)
-        run: ./scripts/coverage.sh StremioKit 90
-
   macos:
     name: Full layer (macOS, Xcode, simulator)
     runs-on: macos-latest

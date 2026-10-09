@@ -73,7 +73,7 @@ public final class MockServer: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["node", script.path, "--catalog-port", "0", "--stream-port", "0", "--watch-stdin"]
         var childEnv = env
-        childEnv["MOCK_DELAY_MS"] = "1200"
+        childEnv["MOCK_DELAY_MS"] = "3000"
         process.environment = childEnv
         let out = Pipe()
         let input = Pipe()
@@ -92,7 +92,7 @@ public final class MockServer: @unchecked Sendable {
               let json = try JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
               let c = json["catalog"] as? String, let s = json["stream"] as? String,
               let catalog = URL(string: c), let stream = URL(string: s) else { throw LaunchError(description: "unexpected mock server output") }
-        return MockServer(catalog: catalog, stream: stream, slowDelay: 1.2, process: process, stdin: input)
+        return MockServer(catalog: catalog, stream: stream, slowDelay: 3, process: process, stdin: input)
     }
 
     /// `<origin>/flag-a/flag-b/<token>`; flags switch on misbehaviour, the token stands in for a user secret.

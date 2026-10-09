@@ -1,5 +1,7 @@
 # Blusion CI repair handoff
 
+> **Update 2026-10-09:** the Linux job was removed from `.github/workflows/ci.yml` at the owner's request; Blusion ships on iOS only, so CI is the macOS job (plus the opt-in fallback). Everything below about Linux is historical. The 90% StremioKit coverage gate lived in the Linux job and is no longer run in CI (`scripts/coverage.sh StremioKit 90` still works locally). The macOS run on 9a06567 failed only on `MockIntegrationTests.aSlowAddonDoesNotDelayAFastOne` (fast answer took 0.77s against a 0.72s limit on a loaded runner); the mock server's slow delay is now 3s, which widens every timing margin without changing any assertion.
+
 The user asked to fix the real CI failures, commit/push to main, and verify BOTH required GitHub Actions jobs green. They then asked for a quick handoff because they are low on usage. Work is incomplete: do not report CI green until the final pushed commit's run finishes successfully.
 
 ## Rules and workspace
