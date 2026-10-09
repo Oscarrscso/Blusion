@@ -373,6 +373,11 @@ public enum LibraryFiltering {
         return low...high
     }
 
+    /// The first year of each decade the range touches, newest first: 2020, 2010, 2000 for a range from 2003 to 2024.
+    public static func decadeStarts(in range: ClosedRange<Int>) -> [Int] {
+        Array(stride(from: range.upperBound / 10 * 10, through: range.lowerBound / 10 * 10, by: -10))
+    }
+
     /// "8" for 8.0 and "7.5" for 7.5, the way the rating picker and chips show a threshold.
     public static func ratingText(_ value: Double) -> String {
         value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)

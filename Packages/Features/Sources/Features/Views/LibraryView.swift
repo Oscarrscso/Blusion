@@ -95,11 +95,11 @@ struct LibraryView: View {
                         if let range = model.availableYears {
                             Picker("From", selection: $model.filter.minimumYear) {
                                 Text("Any").tag(Int?.none)
-                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
                             }
                             Picker("To", selection: $model.filter.maximumYear) {
                                 Text("Any").tag(Int?.none)
-                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0 + 9)).tag(Int?.some($0 + 9)) }
                             }
                         } else {
                             Text("No release years yet")
@@ -212,7 +212,7 @@ struct RatingPicker: View {
     var body: some View {
         Picker("At least", selection: $threshold) {
             Text("Any").tag(Double?.none)
-            ForEach([5.0, 6, 7, 8, 9, 10], id: \.self) { value in
+            ForEach([5.0, 6, 7, 8, 9], id: \.self) { value in
                 Text("\(LibraryFiltering.ratingText(value))+").tag(Double?.some(value))
             }
         }
@@ -244,11 +244,11 @@ struct LibraryFilterSheet: View {
                     if let range = model.availableYears {
                         Picker("From", selection: $model.filter.minimumYear) {
                             Text("Any").tag(Int?.none)
-                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
                         }
                         Picker("To", selection: $model.filter.maximumYear) {
                             Text("Any").tag(Int?.none)
-                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0 + 9)).tag(Int?.some($0 + 9)) }
                         }
                     } else {
                         Text("No release years yet").foregroundStyle(.secondary)
