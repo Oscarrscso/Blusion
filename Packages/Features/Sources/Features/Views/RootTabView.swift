@@ -105,7 +105,7 @@ public struct RootTabView: View {
             }
             router.tab = tab
         })) {
-            Tab("Home", systemImage: router.tab == .home ? "play.house.fill" : "play.house", value: LaunchRoute.Tab.home) {
+            Tab(value: LaunchRoute.Tab.home) {
                 NavigationStack(path: $router.homePath) {
                     HomeView(services: services)
                         .appDestinations(services: services)
@@ -117,25 +117,46 @@ public struct RootTabView: View {
                     guard !Task.isCancelled else { return }
                     router.presentLaunchRoute()
                 }
+            } label: {
+                Label {
+                    Text("Home")
+                } icon: {
+                    Image(systemName: router.tab == .home ? "play.house.fill" : "play.house")
+                        .environment(\.symbolVariants, .none)
+                }
             }
-            Tab("Discover", systemImage: "square.grid.2x2.fill", value: LaunchRoute.Tab.discover) {
+            Tab(value: LaunchRoute.Tab.discover) {
                 NavigationStack {
                     DiscoverView(services: services) { router.showAddons() }
                         .appDestinations(services: services)
                 }
                 .zoomTransitions()
+            } label: {
+                Label {
+                    Text("Discover")
+                } icon: {
+                    Image(systemName: router.tab == .discover ? "square.grid.2x2.fill" : "square.grid.2x2")
+                        .environment(\.symbolVariants, .none)
+                }
             }
             TabSection("Library") {
-                Tab("Library", systemImage: "books.vertical.fill", value: LaunchRoute.Tab.library) {
+                Tab(value: LaunchRoute.Tab.library) {
                     NavigationStack {
                         LibraryView(services: services) { router.open(.discover) }
                             .appDestinations(services: services)
                     }
                     .zoomTransitions()
+                } label: {
+                    Label {
+                        Text("Library")
+                    } icon: {
+                        Image(systemName: router.tab == .library ? "books.vertical.fill" : "books.vertical")
+                            .environment(\.symbolVariants, .none)
+                    }
                 }
             }
             // Settings is a tab like the rest, so there is no sheet to dismiss and no Done button.
-            Tab("Settings", systemImage: "gearshape.fill", value: LaunchRoute.Tab.settings) {
+            Tab(value: LaunchRoute.Tab.settings) {
                 NavigationStack(path: $router.settingsPath) {
                     SettingsView(services: services)
                         .navigationDestination(for: SettingsDestination.self) { destination in
@@ -146,6 +167,13 @@ public struct RootTabView: View {
                                 }
                             }
                         }
+                }
+            } label: {
+                Label {
+                    Text("Settings")
+                } icon: {
+                    Image(systemName: router.tab == .settings ? "gearshape.fill" : "gearshape")
+                        .environment(\.symbolVariants, .none)
                 }
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {

@@ -17,5 +17,11 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Search"].exists)
         XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
         captureScreenshot(app, named: "M0-launch")
+        for name in ["Discover", "Library", "Settings", "Home"] {
+            let tab = app.tabBars.buttons[name]
+            tab.tap()
+            XCTAssertTrue(tab.isSelected)
+            captureScreenshot(app, named: "M0-tab-\(name)")
+        }
     }
 }
