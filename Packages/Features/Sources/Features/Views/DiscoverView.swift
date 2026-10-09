@@ -32,9 +32,10 @@ struct DiscoverView: View {
         .accessibilityIdentifier("discover.scroll")
     }
 
+    /// The same filter row as the Library: the type control, menus that show their active choice, and removable chips under them.
     private var filters: some View {
         let types = model.types.filter { $0.lowercased() != "other" }
-        return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if types.count > 1 {
                 QualitySelector(titles: types.map(ContentTypeName.plural), selection: Binding {
                     types.firstIndex(where: { $0 == model.selectedType }) ?? 0
@@ -44,26 +45,44 @@ struct DiscoverView: View {
                 }, accessibilityID: "discover.filter.type")
                 .padding(.horizontal, metrics.pageMargin)
             }
-            Menu {
-                ForEach(model.visibleSources) { source in
-                    Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
-                }
-            } label: {
-                HStack { Text(model.selectedSource?.title ?? "Catalog"); Image(systemName: "chevron.down") }
-            }
-            .buttonStyle(.glassCapsule)
-            .padding(.horizontal, metrics.pageMargin)
-            .accessibilityIdentifier("discover.catalogMenu")
-            if !model.genres.isEmpty {
-                ChipRow {
-                    GlassChip("All", isSelected: model.selectedGenre == nil) { Task { await model.select(genre: nil) } }
-                    ForEach(model.genres, id: \.self) { genre in
-                        GlassChip(genre, isSelected: model.selectedGenre == genre) { Task { await model.select(genre: genre) } }
+            GlassEffectContainer(spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    Menu {
+                        ForEach(model.visibleSources) { source in
+                            Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
+                        }
+                    } label: {
+                        FilterMenuLabel(model.selectedSource?.title ?? "Catalog", systemImage: "square.stack")
+                    }
+                    .accessibilityIdentifier("discover.catalogMenu")
+                    if !model.genres.isEmpty {
+                        Menu {
+                            Button("All genres") { Task { await model.select(genre: nil) } }
+                            ForEach(model.genres, id: \.self) { genre in
+                                Button {
+                                    Task { await model.select(genre: genre) }
+                                } label: {
+                                    if model.selectedGenre == genre { Label(genre, systemImage: "checkmark") } else { Text(genre) }
+                                }
+                            }
+                        } label: {
+                            FilterMenuLabel(model.selectedGenre ?? "Genre", systemImage: "tag", isActive: model.selectedGenre != nil)
+                        }
+                        .accessibilityIdentifier("discover.genreMenu")
                     }
                 }
-                .accessibilityIdentifier("discover.genreMenu")
+            }
+            .padding(.horizontal, metrics.pageMargin)
+            if let genre = model.selectedGenre {
+                ActiveFilterChips(chips: [ActiveFilterChip(id: "genre", label: genre) { Task { await model.select(genre: nil) } }],
+                                  identifier: "discover", clearAll: { Task { await model.select(genre: nil) } })
+                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.top, Theme.Spacing.xs)
             }
         }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: model.selectedGenre)
+        .sensoryFeedback(.selection, trigger: model.selectedSource)
     }
 
     @ViewBuilder

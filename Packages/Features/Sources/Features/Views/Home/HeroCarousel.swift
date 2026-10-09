@@ -113,7 +113,6 @@ private struct HeroPage: View {
     let item: MetaPreview
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
-    @Environment(TitleActions.self) private var actions: TitleActions?
 
     var body: some View {
         let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item))
@@ -122,8 +121,9 @@ private struct HeroPage: View {
                 artwork
             }
             .buttonStyle(.plain)
+            .titleTapHaptic()
             .accessibilityLabel(item.name)
-            caption(destination)
+            caption
         }
     }
 
@@ -148,26 +148,13 @@ private struct HeroPage: View {
         ], startPoint: .top, endPoint: .bottom)
     }
 
-    private func caption(_ destination: TitleDestination) -> some View {
+    /// The title, its logo and the metadata line. The picture is the link, so the page carries no buttons of its own.
+    private var caption: some View {
         VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
             MetaLine(metaParts)
                 .allowsHitTesting(false)
-            HStack(spacing: Theme.Spacing.m) {
-                NavigationLink(value: destination) { Text("More Info") }
-                    .buttonStyle(.primaryActionCompact)
-                    .accessibilityIdentifier("hero.details.\(item.id)")
-                if let actions {
-                    Button { Task { await actions.toggleSaved(item) } } label: {
-                        Image(systemName: actions.isSaved(item) ? "checkmark" : "plus").frame(width: 32, height: 32)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .accessibilityLabel(actions.isSaved(item) ? "Remove from Library" : "Add to Library")
-                }
-            }
-            .padding(.top, Theme.Spacing.s)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, metrics.pageMargin)

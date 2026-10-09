@@ -84,6 +84,26 @@ public enum AddedWithin: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// A rating site the Library ranks by. The cases are in priority order: a title is rated by the first of them that has scored it. Each
+/// score stays on its own site's scale until it is put out of 10 for the threshold, and it is never averaged with another site's.
+public enum RatingSource: String, CaseIterable, Sendable, Identifiable {
+    case letterboxd, imdb, rottenTomatoes, metacritic
+
+    public var id: String { rawValue }
+
+    /// The top of the site's own scale.
+    public var scaleMaximum: Double {
+        switch self {
+        case .letterboxd: 5
+        case .imdb: 10
+        case .rottenTomatoes, .metacritic: 100
+        }
+    }
+
+    /// A score put out of 10: 3.5 of 5 is 7, and 70 of 100 is 7.
+    public func outOfTen(_ score: Double) -> Double { score * 10 / scaleMaximum }
+}
+
 /// One active filter, as a chip above the Library. `target` is what removing the chip clears.
 public struct FilterChip: Identifiable, Equatable, Sendable {
     public enum Target: Equatable, Sendable {
@@ -122,7 +142,7 @@ public struct LibraryFilter: Equatable, Sendable {
     public var maximumYear: Int?
     /// Match any of these genres.
     public var genres: Set<String> = []
-    /// The lowest IMDb rating to show. A title with no rating is excluded while this is set.
+    /// The lowest rating to show, out of 10. A title no site has scored is excluded while this is set.
     public var minimumRating: Double?
     public var addedWithin: AddedWithin = .anyTime
     public var sort: LibrarySort = .recentlyAdded
@@ -170,7 +190,7 @@ public struct LibraryFilter: Equatable, Sendable {
         }
         chips += genres.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { FilterChip(target: .genre($0), label: $0) }
         if let minimumRating {
-            chips.append(FilterChip(target: .rating, label: "★ \(LibraryFiltering.ratingText(minimumRating))+"))
+            chips.append(FilterChip(target: .rating, label: "Rating \(LibraryFiltering.ratingText(minimumRating))+"))
         }
         if addedWithin != .anyTime {
             chips.append(FilterChip(target: .addedWithin, label: addedWithin.title))
@@ -198,6 +218,8 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
     public let rating: Double?
     public let genres: [String]
     public let addedAt: Date?
+    /// The title as the rating lookups know it, by its id.
+    public let preview: MetaPreview
     /// When the title was last watched or progressed, if ever.
     public let activityAt: Date?
     public let status: WatchStatus
@@ -217,6 +239,7 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
         rating = item.imdbRating
         genres = item.genres
         addedAt = item.addedAt
+        preview = item.preview
         activityAt = records.map(\.updatedAt).max()
         status = LibraryFiltering.status(of: records)
         self.item = item
@@ -232,6 +255,7 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
         rating = saved?.imdbRating
         genres = saved?.genres ?? []
         addedAt = saved?.addedAt
+        preview = saved?.preview ?? MetaPreview(id: record.seriesID ?? record.contentID, type: record.type, name: record.title, poster: record.poster)
         activityAt = record.updatedAt
         status = LibraryFiltering.status(of: [record])
         item = saved
@@ -263,8 +287,25 @@ public enum LibraryFiltering {
         return .unwatched
     }
 
+    /// The score an entry has from one rating site, on that site's scale; nil when the site has not scored it. IMDb is the catalogue's
+    /// rating; the other sites come from the rating lookups, which the view model supplies.
+    public typealias ScoreLookup = (LibraryEntry, RatingSource) -> Double?
+
+    /// The rating a title is judged by, out of 10: its first site in priority order that has scored it. Nil when no site has scored it.
+    public static func judgedRating(_ entry: LibraryEntry, score: ScoreLookup) -> Double? {
+        for source in RatingSource.allCases {
+            if let value = score(entry, source) { return source.outOfTen(value) }
+        }
+        return nil
+    }
+
+    /// The catalogue's IMDb rating, and nothing else. Used when no lookup is supplied.
+    public static func catalogueScores(_ entry: LibraryEntry, _ source: RatingSource) -> Double? {
+        source == .imdb ? entry.rating : nil
+    }
+
     /// Whether an entry passes every active filter. `now` anchors the added-date window.
-    public static func matches(_ entry: LibraryEntry, _ filter: LibraryFilter, now: Date) -> Bool {
+    public static func matches(_ entry: LibraryEntry, _ filter: LibraryFilter, now: Date, score: ScoreLookup = catalogueScores) -> Bool {
         if !filter.kinds.isEmpty, !filter.kinds.contains(entry.kind) { return false }
         if !filter.statuses.isEmpty, !filter.statuses.contains(entry.status) { return false }
         if filter.minimumYear != nil || filter.maximumYear != nil {
@@ -274,7 +315,7 @@ public enum LibraryFiltering {
         }
         if !filter.genres.isEmpty, filter.genres.isDisjoint(with: entry.genres) { return false }
         if let minimum = filter.minimumRating {
-            guard let rating = entry.rating, rating >= minimum else { return false }
+            guard let rating = judgedRating(entry, score: score), rating >= minimum else { return false }
         }
         if let days = filter.addedWithin.days {
             guard let added = entry.addedAt, added >= now.addingTimeInterval(-Double(days) * 86_400) else { return false }
@@ -283,8 +324,9 @@ public enum LibraryFiltering {
     }
 
     /// The entries that pass the filter, in the filter's sort order.
-    public static func apply(_ filter: LibraryFilter, to entries: [LibraryEntry], now: Date = Date()) -> [LibraryEntry] {
-        sorted(entries.filter { matches($0, filter, now: now) }, by: filter.sort)
+    public static func apply(_ filter: LibraryFilter, to entries: [LibraryEntry], now: Date = Date(),
+                             score: ScoreLookup = catalogueScores) -> [LibraryEntry] {
+        sorted(entries.filter { matches($0, filter, now: now, score: score) }, by: filter.sort)
     }
 
     /// Sorts by one key, with the title (then id) as the tie-break so the order is always the same. Missing values sort last.

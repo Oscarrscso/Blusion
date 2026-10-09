@@ -8,13 +8,17 @@ struct GlassChip: View {
     let systemImage: String?
     let isSelected: Bool
     let fillsWidth: Bool
+    /// A 36pt chip with 12pt side padding, for a row of removable filters that sits above a list.
+    let isCompact: Bool
     let action: () -> Void
 
-    init(_ title: String, systemImage: String? = nil, isSelected: Bool = false, fillsWidth: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, systemImage: String? = nil, isSelected: Bool = false, fillsWidth: Bool = false, isCompact: Bool = false,
+         action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
         self.isSelected = isSelected
         self.fillsWidth = fillsWidth
+        self.isCompact = isCompact
         self.action = action
     }
 
@@ -25,9 +29,10 @@ struct GlassChip: View {
                 .lineLimit(fillsWidth ? 1 : nil)
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(isSelected ? Color.black : Color.primary)
-                .padding(.horizontal, fillsWidth ? Theme.Spacing.s : Theme.Spacing.l)
-                .padding(.vertical, Theme.Spacing.s + 1)
+                .padding(.horizontal, fillsWidth ? Theme.Spacing.s : isCompact ? Theme.Spacing.m : Theme.Spacing.l)
+                .padding(.vertical, isCompact ? 0 : Theme.Spacing.s + 1)
                 .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: fillsWidth ? 44 : nil)
+                .frame(height: isCompact ? 36 : nil)
                 .background { if isSelected { Capsule().fill(.white) } }
                 .glassEffect(isSelected ? .identity : .regular.interactive(), in: .capsule)
                 .contentShape(Capsule())

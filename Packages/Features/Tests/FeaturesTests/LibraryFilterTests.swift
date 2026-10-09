@@ -154,7 +154,7 @@ import StremioKitTestSupport
         filter.minimumRating = 7.5
         filter.addedWithin = .lastMonth
         filter.sort = .rating
-        #expect(filter.chips.map(\.label) == ["Movies", "Watched", "2000–2010", "Drama", "★ 7.5+", "Last 30 days"])
+        #expect(filter.chips.map(\.label) == ["Movies", "Watched", "2000–2010", "Drama", "Rating 7.5+", "Last 30 days"])
         #expect(Set(filter.chips.map(\.id)).count == filter.chips.count, "chip ids are unique")
 
         for chip in filter.chips { filter.remove(chip.target) }
