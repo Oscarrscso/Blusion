@@ -89,17 +89,6 @@ struct LibraryView: View {
                     }
                     .accessibilityIdentifier("library.filter.year")
                     Menu {
-                        Button("Any") { model.filter.statuses = [] }
-                        ForEach(WatchStatus.allCases) { status in
-                            Toggle(status.title, isOn: membership(status, in: \.statuses))
-                                .accessibilityIdentifier("library.filter.status.\(status.rawValue)")
-                        }
-                    } label: {
-                        filterLabel("Status", tint: model.filter.statuses.contains(.watched) ? .green
-                                    : model.filter.statuses.contains(.inProgress) ? .orange : .primary, isActive: !model.filter.statuses.isEmpty)
-                    }
-                    .accessibilityIdentifier("library.filter.status")
-                    Menu {
                         RatingPicker(threshold: $model.filter.minimumRating)
                     } label: {
                         filterLabel("Rating", systemImage: "star.fill", tint: .yellow, isActive: model.filter.minimumRating != nil)
