@@ -106,19 +106,6 @@ struct LibraryView: View {
                     }
                     .accessibilityIdentifier("library.filter.rating")
                     Menu {
-                        let genres = model.availableGenres
-                        if genres.isEmpty {
-                            Text("Genres appear here for titles saved from now on.")
-                        } else {
-                            ForEach(genres, id: \.self) { genre in
-                                Toggle(genre, isOn: membership(genre, in: \.genres))
-                            }
-                        }
-                    } label: {
-                        filterLabel("Genre", isActive: !model.filter.genres.isEmpty)
-                    }
-                    .accessibilityIdentifier("library.filter.genre")
-                    Menu {
                         Picker("Added", selection: $model.filter.addedWithin) {
                             ForEach(AddedWithin.allCases) { Text($0.title).tag($0) }
                         }
