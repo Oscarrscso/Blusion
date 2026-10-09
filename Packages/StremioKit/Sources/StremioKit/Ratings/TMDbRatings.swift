@@ -122,7 +122,7 @@ public struct TMDbRatings: Sendable {
         }
     }
 
-    /// Uses the most-voted backdrop and English logo, with rating and image width breaking ties.
+    /// The backdrop is the best one `BackdropPicker` finds (textless first, then the highest rated). The poster and logo keep the most-voted pick.
     public func artwork(imdbID: String, type: String) async throws -> TMDbArtwork? {
         guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return nil }
         let id = String(number)
@@ -136,7 +136,7 @@ public struct TMDbRatings: Sendable {
         let english = logos.filter { $0.iso_639_1 == "en" }
         let portraits = images.posters ?? []
         let textless = portraits.filter { $0.iso_639_1 == nil }
-        return TMDbArtwork(backdrop: Self.popular(images.backdrops ?? [])?.url(size: "original"),
+        return TMDbArtwork(backdrop: BackdropPicker.best(Self.backdropCandidates(images.backdrops ?? [])),
                            portrait: Self.popular(textless.isEmpty ? portraits : textless)?.url(size: "original"),
                            logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"))
     }
@@ -195,6 +195,15 @@ public struct TMDbRatings: Sendable {
             if $0.vote_count != $1.vote_count { return ($0.vote_count ?? 0) < ($1.vote_count ?? 0) }
             if $0.vote_average != $1.vote_average { return ($0.vote_average ?? 0) < ($1.vote_average ?? 0) }
             return ($0.width ?? 0) < ($1.width ?? 0)
+        }
+    }
+
+    /// The backdrops with a usable path, in the form `BackdropPicker` ranks.
+    private static func backdropCandidates(_ images: [Image]) -> [BackdropCandidate] {
+        images.compactMap { image -> BackdropCandidate? in
+            guard image.file_path.hasPrefix("/"), let url = image.url(size: "original") else { return nil }
+            return BackdropCandidate(url: url, language: image.iso_639_1, voteAverage: image.vote_average,
+                                     voteCount: image.vote_count, width: image.width)
         }
     }
 
