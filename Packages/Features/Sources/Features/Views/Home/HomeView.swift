@@ -10,18 +10,15 @@ struct HomeView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
     @Environment(TitleActions.self) private var actions: TitleActions?
-    /// True once the content has scrolled past the top of the spotlight, when the navigation bar takes a background and a title.
-    @State private var isScrolled = false
-
     init(services: AppServices) {
         _model = State(initialValue: HomeViewModel(services: services))
     }
 
     var body: some View {
         content
-            .navigationTitle(spotlightIsAtTop ? "" : "Home")
+            .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackgroundVisibility(spotlightIsAtTop ? .hidden : .automatic, for: .navigationBar)
+            .toolbarBackgroundVisibility(heroIsFirst ? .hidden : .automatic, for: .navigationBar)
             .task { await model.observeAddons() }
             .onAppear { Task { await model.refreshContinueWatching() } }
             .refreshable { await model.refresh() }
@@ -36,12 +33,10 @@ struct HomeView: View {
             }
     }
 
-    /// The spotlight covers the top of the screen until the content moves past it: the bar is then clear and has no title.
-    private var spotlightIsAtTop: Bool {
-        !isScrolled && heroIsFirst
-    }
-
-    /// A spotlight without a heading can extend beneath the navigation bar; a visible heading stays below it.
+    /// A spotlight without a heading extends beneath the navigation bar, which is then clear and has no title; a visible heading stays
+    /// below it, under an ordinary bar. This used to follow the scroll position too (the bar took a background and a title once the
+    /// content moved past 160 pt), but changing the bar changes the insets the offset is measured against, so the offset crossed the
+    /// threshold again and the bar changed again, without end: the Home freeze. Nothing about the bar depends on scrolling now.
     private var heroIsFirst: Bool {
         guard let first = model.sections.first, case .hero = first.widget.content else { return false }
         return first.widget.hideTitle
@@ -86,9 +81,8 @@ struct HomeView: View {
         .accessibilityIdentifier("board.rows")
         .contentMargins(.top, 0, for: .scrollContent)
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .scrollEdgeEffectHidden(spotlightIsAtTop, for: .top)
+        .scrollEdgeEffectHidden(heroIsFirst, for: .top)
         .screenBackground()
-        .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 160 }, action: { _, scrolled in isScrolled = scrolled })
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 

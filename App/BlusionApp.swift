@@ -72,6 +72,7 @@ struct RootView: View {
             #if DEBUG
             DebugSnapshot.scheduleIfRequested()
             DebugStress.startIfRequested()
+            DebugHangSampler.start()
             await DebugHandoffProbe.startIfRequested(environment.services)
             #endif
         }
