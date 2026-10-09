@@ -22,6 +22,8 @@ struct DetailView: View {
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = 150
+    /// Set once the hero picture has loaded, or failed. The title waits for it: the poster shown meanwhile often has the title printed on it.
+    @State private var heroSettled = false
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -63,18 +65,34 @@ struct DetailView: View {
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
+        .task(id: heroURL) { await settleHero() }
         .onAppear { Task { await model.refreshUserState() } }
         .accessibilityIdentifier("detail.scroll")
     }
 
     // MARK: - Header
 
+    /// The main picture: the backdrop in landscape, the tall artwork in portrait. Until the artwork lookup answers, the poster stands in.
+    private var heroURL: URL? { isLandscape ? model.backdropURL : model.portraitArtworkURL }
+
+    /// The title shows once the hero picture has loaded or failed, with the poster behind it. With no picture to wait for, it shows
+    /// as soon as the artwork lookup has answered.
+    private var isTitleRevealed: Bool { heroSettled || (heroURL == nil && !model.isLoadingArtwork) }
+
+    /// Waits for the hero picture to finish. `ImagePipeline` shares this download with the `ArtworkImage` showing it, so no extra request.
+    private func settleHero() async {
+        guard let heroURL else { return }
+        _ = try? await ImagePipeline.shared.image(for: heroURL, maxPixelSize: 4096)
+        guard !Task.isCancelled else { return }
+        heroSettled = true
+    }
+
     @ViewBuilder
     private func feature(in size: CGSize) -> some View {
         if isLandscape {
             let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                ArtworkImage(url: model.backdropURL, maxPixelSize: 4096, contentMode: .fit,
+                ArtworkImage(url: heroURL, maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
                     .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
@@ -107,7 +125,7 @@ struct DetailView: View {
             }
             .background(alignment: .top) {
                 ZStack(alignment: .bottom) {
-                    ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
+                    ArtworkImage(url: heroURL, maxPixelSize: 4096, contentMode: .fill,
                                  placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
                     BottomFade(length: 0.42)
                 }
@@ -121,6 +139,9 @@ struct DetailView: View {
     private func titleArt(alignment: Alignment) -> some View {
         TitleArt(name: model.detail.name, logo: model.logoURL, alignment: alignment, compact: isLandscape)
             .frame(maxWidth: .infinity, alignment: alignment)
+            // Hidden rather than removed, so the layout does not move when the title appears.
+            .opacity(isTitleRevealed ? 1 : 0)
+            .animation(.easeOut(duration: 0.25), value: isTitleRevealed)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(model.detail.name)
             .accessibilityAddTraits(.isHeader)
@@ -568,14 +589,16 @@ private struct ReviewCard: View {
     }
 }
 
-/// The logo, or the name while the logo loads and whenever there is none. The logo comes through `ImagePipeline` because
-/// `ArtworkImage` only fills its frame.
+/// The logo, or the name when there is no logo or it failed to load. While a logo loads, the name keeps its place in the layout
+/// but is not drawn, so the name never flashes before the logo. The logo comes through `ImagePipeline` because `ArtworkImage` only
+/// fills its frame.
 private struct TitleArt: View {
     let name: String
     let logo: URL?
     let alignment: Alignment
     let compact: Bool
     @State private var image: UIImage?
+    @State private var failed = false
 
     init(name: String, logo: URL?, alignment: Alignment, compact: Bool = false) {
         self.name = name
@@ -602,15 +625,21 @@ private struct TitleArt: View {
                     .lineLimit(compact ? 2 : 3)
                     .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
+                    .opacity(logo == nil || failed ? 1 : 0)
             }
         }
         .task(id: logo) {
+            failed = false
             guard let logo else {
                 image = nil
                 return
             }
             let loaded = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 800, priority: .high)
-            guard !Task.isCancelled, let loaded else { return }
+            guard !Task.isCancelled else { return }
+            guard let loaded else {
+                failed = true
+                return
+            }
             withAnimation(.easeOut(duration: 0.25)) { image = loaded }
         }
     }
