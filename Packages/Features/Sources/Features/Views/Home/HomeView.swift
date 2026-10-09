@@ -16,11 +16,7 @@ struct HomeView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            content
-                .environment(\.homeHeroHeight, min(geometry.size.width * (isLandscape ? 1 / CardAspect.wide.ratio : 1.5),
-                                                  metrics.heroMaxHeight))
-        }
+        content
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)

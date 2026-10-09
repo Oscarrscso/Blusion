@@ -68,7 +68,7 @@ struct PlaybackProgressOverlay: View {
                             .overlay(alignment: .leading) {
                                 Capsule().fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
                             }
-                            .frame(width: min(52, width * 0.20), height: 3)
+                            .frame(width: min(60, width * 0.28), height: 3)
                         if let remainingTime {
                             Text(remainingTime)
                                 .font(.system(size: 10, weight: .medium))

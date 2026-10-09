@@ -151,16 +151,13 @@ struct LibraryView: View {
     }
 
     private var savedSection: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            SectionHeader("Saved").padding(.horizontal, metrics.pageMargin)
-            LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
-                ForEach(model.saved) { item in
-                    MediaCardLink(item: item.preview).stretched()
-                        .accessibilityIdentifier("library.saved.\(item.id)")
-                }
+        LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
+            ForEach(model.saved) { item in
+                MediaCardLink(item: item.preview).stretched()
+                    .accessibilityIdentifier("library.saved.\(item.id)")
             }
-            .padding(.horizontal, metrics.pageMargin)
         }
+        .padding(.horizontal, metrics.pageMargin)
     }
 
     private var watchedSection: some View {

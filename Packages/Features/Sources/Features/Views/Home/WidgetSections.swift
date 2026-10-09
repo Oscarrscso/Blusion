@@ -162,12 +162,11 @@ struct ContinueWatchingRow: View {
                             Text(title)
                         }
                         .buttonStyle(.plain)
-                            .font(Theme.Typography.shelfTitle)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .layoutPriority(1)
-                            .accessibilityAddTraits(.isHeader)
-                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
+                        .font(Theme.Typography.shelfTitle)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                        .accessibilityAddTraits(.isHeader)
                         ProgressView()
                             .controlSize(.small)
                             .tint(.gray)
@@ -186,6 +185,7 @@ struct ContinueWatchingRow: View {
                             }
                         }
                         Spacer(minLength: 0)
+                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
                     }
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, Theme.screenPadding)
