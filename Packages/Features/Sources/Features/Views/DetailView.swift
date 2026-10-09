@@ -10,7 +10,7 @@ struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
-    /// How far the page has scrolled down. The portrait hero grows by this much so its top never shows empty background.
+    /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
@@ -38,7 +38,7 @@ struct DetailView: View {
                 }
                 .padding(.bottom, Theme.Spacing.xxl)
             }
-            .onScrollGeometryChange(for: CGFloat.self) { max(0, $0.contentOffset.y + $0.contentInsets.top) } action: { _, value in
+            .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
             .refreshable { await model.refresh() }
@@ -78,9 +78,8 @@ struct DetailView: View {
                 .padding(.top, Theme.Spacing.s)
         } else {
             let height = min(size.width * 1.5, metrics.heroMaxHeight)
-            // The layout keeps the hero's height. The artwork is an overlay that grows upward by the scroll distance: its bottom stays
-            // where it is on screen and its top rises with the page, so the top of the screen is never empty. Navigation bar changes
-            // during scrolling do not resize it.
+            // The layout keeps the hero's height. The artwork is an overlay that stretches downward only when the page is pulled past its
+            // top: its top stays at the screen's top and its bottom follows the finger. Scrolling leaves it where it is.
             Color.clear
                 .frame(width: size.width, height: height)
                 .overlay(alignment: .top) {
@@ -91,6 +90,7 @@ struct DetailView: View {
                     }
                     .frame(width: size.width, height: height + scrollPull)
                     .clipped()
+                    .offset(y: -scrollPull)
                 }
                 .overlay(alignment: .bottom) {
                     titleArt(alignment: .center)

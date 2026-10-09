@@ -7,7 +7,7 @@ import SwiftUI
 struct HomeView: View {
     @State private var model: HomeViewModel
     @State private var isScrolling = false
-    /// How far Home has scrolled down; the spotlight grows by this much (see `HeroCarousel`).
+    /// How far Home has been pulled down past its top; the spotlight stretches by this much (see `HeroCarousel`).
     @State private var heroPull: CGFloat = 0
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -99,7 +99,7 @@ struct HomeView: View {
             .padding(.bottom, Theme.Spacing.xxl)
         }
         .accessibilityIdentifier("board.rows")
-        .onScrollGeometryChange(for: CGFloat.self) { max(0, $0.contentOffset.y + $0.contentInsets.top) } action: { _, value in
+        .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
             heroPull = value
         }
         .environment(\.heroPull, heroIsFirst ? heroPull : 0)

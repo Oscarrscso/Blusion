@@ -37,8 +37,8 @@ struct HeroSection: View {
 }
 
 extension EnvironmentValues {
-    /// How far Home has scrolled down while the spotlight is its first section. The portrait spotlight grows by this much, so its top
-    /// stays covered by artwork as the page scrolls.
+    /// How far Home has been pulled down past its top while the spotlight is its first section. The portrait spotlight stretches by this
+    /// much, like a refresh.
     @Entry var heroPull: CGFloat = 0
 }
 
@@ -60,8 +60,9 @@ struct HeroCarousel: View {
             .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
             .overlay {
                 GeometryReader { geometry in
-                    // In portrait the spotlight grows upward by the scroll distance; its bottom stays where it is on screen.
-                    let height = geometry.size.height + (isLandscape ? 0 : heroPull)
+                    // In portrait the spotlight stretches downward when pulled past the top; its top stays at the top of the screen.
+                    let pull = isLandscape ? 0 : heroPull
+                    let height = geometry.size.height + pull
                     TabView(selection: $pageID) {
                         ForEach(items, id: \.identity) { item in
                             HeroPage(item: item, isScrolling: isHomeScrolling)
@@ -73,6 +74,7 @@ struct HeroCarousel: View {
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .frame(width: geometry.size.width, height: height)
                     .clipped()
+                    .offset(y: -pull)
                     .onChange(of: pageID) { oldID, newID in
                         guard let oldID, let newID, oldID != newID,
                               items.contains(where: { $0.identity == oldID }) else { return }
