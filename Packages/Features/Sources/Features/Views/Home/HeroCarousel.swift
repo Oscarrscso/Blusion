@@ -262,6 +262,12 @@ private struct HeroLogo: View {
     @State private var image: UIImage?
     @State private var failed = false
 
+    init(url: URL, title: String) {
+        self.url = url
+        self.title = title
+        _image = State(initialValue: ImagePipeline.shared.cachedImage(for: url, maxPixelSize: 800))
+    }
+
     var body: some View {
         Color.clear
             .frame(width: Self.box.width, height: Self.box.height)
@@ -282,9 +288,11 @@ private struct HeroLogo: View {
 
     private func load() async {
         do {
-            let loaded = try await ImagePipeline.shared.image(for: url, maxPixelSize: 800)
+            let loaded = try await ImagePipeline.shared.image(for: url, maxPixelSize: 800, priority: .high)
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.25)) { image = loaded }
         } catch {
+            guard !Task.isCancelled else { return }
             failed = true
         }
     }

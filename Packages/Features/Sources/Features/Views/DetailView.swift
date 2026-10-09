@@ -492,6 +492,7 @@ private struct TitleArt: View {
         self.logo = logo
         self.alignment = alignment
         self.compact = compact
+        _image = State(initialValue: logo.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 800) })
     }
 
     var body: some View {
@@ -517,7 +518,7 @@ private struct TitleArt: View {
                 image = nil
                 return
             }
-            let loaded = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 600)
+            let loaded = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 800, priority: .high)
             guard !Task.isCancelled, let loaded else { return }
             withAnimation(.easeOut(duration: 0.25)) { image = loaded }
         }

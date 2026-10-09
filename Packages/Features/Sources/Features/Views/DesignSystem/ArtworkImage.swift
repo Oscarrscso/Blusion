@@ -12,17 +12,6 @@ struct ArtworkImage: View {
     let placeholderURL: URL?
     let placeholderBlur: CGFloat
     let imageAlignment: Alignment
-    @Environment(\.displayScale) private var displayScale
-    @State private var renderedSize: CGSize = .zero
-    @State private var loadedPixelSize: CGFloat = 0
-
-    private var pixelSize: CGFloat {
-        guard maxPixelSize == 4096 else { return maxPixelSize }
-        let pixels = max(renderedSize.width, renderedSize.height) * displayScale
-        return min(4096, max(256, ceil(pixels / 128) * 128))
-    }
-
-    private var loadID: String { "\(url?.absoluteString ?? "")|\(Int(pixelSize))" }
 
     @State private var image: UIImage?
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
@@ -41,7 +30,6 @@ struct ArtworkImage: View {
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
         let cached = url.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: maxPixelSize) }
         _image = State(initialValue: cached)
-        _loadedPixelSize = State(initialValue: cached == nil ? 0 : maxPixelSize)
         _imageURL = State(initialValue: cached == nil ? nil : url)
         _placeholderImage = State(initialValue: placeholderURL.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 600) })
     }
@@ -70,8 +58,8 @@ struct ArtworkImage: View {
             }
             .clipped()
             .accessibilityHidden(true)
-            .onGeometryChange(for: CGSize.self) { maxPixelSize == 4096 ? $0.size : .zero } action: { renderedSize = $0 }
-            .task(id: loadID) { await load() }
+            // Stretching changes only the frame; it must not restart the download, decode or fade.
+            .task(id: url) { await load() }
             .task(id: image == nil ? placeholderURL : nil) {
                 guard image == nil, let placeholderURL else { return }
                 let preview = try? await ImagePipeline.shared.image(for: placeholderURL, maxPixelSize: 600)
@@ -101,24 +89,20 @@ struct ArtworkImage: View {
             imageURL = nil
             return
         }
-        if maxPixelSize == 4096, renderedSize == .zero { return }
-        let targetSize = pixelSize
-        if imageURL == url, image != nil, loadedPixelSize >= targetSize { return }
-        if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: targetSize) {
+        if imageURL == url, image != nil { return }
+        if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
             withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
                 image = cached
                 imageURL = url
-                loadedPixelSize = targetSize
                 placeholderImage = nil
             }
             return
         }
         // Keep the current artwork visible while a replacement downloads.
-        guard let loaded = try? await ImagePipeline.shared.image(for: url, maxPixelSize: targetSize), !Task.isCancelled else { return }
+        guard let loaded = try? await ImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize), !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
             image = loaded
             imageURL = url
-            loadedPixelSize = targetSize
             placeholderImage = nil
         }
     }

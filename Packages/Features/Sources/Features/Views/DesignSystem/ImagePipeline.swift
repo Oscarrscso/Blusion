@@ -18,7 +18,7 @@ actor ImagePipeline {
     }
     private var inFlight: [String: Pending] = [:]
     private var activeDownloads = 0
-    private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
+    private var waiting: [(id: UUID, priority: TaskPriority, continuation: CheckedContinuation<Void, Error>)] = []
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -42,7 +42,7 @@ actor ImagePipeline {
 
     /// The image at `url`, decoded no larger than `maxPixelSize` on its long edge. Memory-cached; concurrent requests for
     /// the same URL and size share one download. Only http and https URLs are loaded.
-    func image(for url: URL, maxPixelSize: CGFloat) async throws -> UIImage {
+    func image(for url: URL, maxPixelSize: CGFloat, priority: TaskPriority = .medium) async throws -> UIImage {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             throw ImagePipelineError.unsupportedURL
         }
@@ -57,8 +57,8 @@ actor ImagePipeline {
             inFlight[key] = pending
             task = pending.task
         } else {
-            task = Task {
-                try await acquireDownloadSlot()
+            task = Task(priority: priority) {
+                try await acquireDownloadSlot(priority: priority)
                 defer { releaseDownloadSlot() }
                 try Task.checkCancellation()
                 return try await Self.fetch(url, maxPixelSize: size, session: session)
@@ -84,24 +84,31 @@ actor ImagePipeline {
         } else { inFlight[key] = pending }
     }
 
-    private func acquireDownloadSlot() async throws {
+    private func acquireDownloadSlot(priority: TaskPriority) async throws {
         try Task.checkCancellation()
-        if activeDownloads < 6 { activeDownloads += 1; return }
+        // Keep one of the six slots available for title logos, even when posters fill the queue.
+        if activeDownloads < (priority >= .high ? 6 : 5) { activeDownloads += 1; return }
         let id = UUID()
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in waiting.append((id, continuation)) }
+            try await withCheckedThrowingContinuation { continuation in
+                let index = waiting.firstIndex { $0.priority < priority } ?? waiting.endIndex
+                waiting.insert((id, priority, continuation), at: index)
+            }
         } onCancel: {
             Task { await self.cancelWaitingDownload(id) }
         }
     }
 
     private func cancelWaitingDownload(_ id: UUID) {
-        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
-        waiting.remove(at: index).1.resume(throwing: CancellationError())
+        guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
+        waiting.remove(at: index).continuation.resume(throwing: CancellationError())
     }
 
     private func releaseDownloadSlot() {
-        if waiting.isEmpty { activeDownloads -= 1 } else { waiting.removeFirst().1.resume() }
+        activeDownloads -= 1
+        guard let next = waiting.first, activeDownloads < (next.priority >= .high ? 6 : 5) else { return }
+        activeDownloads += 1
+        waiting.removeFirst().continuation.resume()
     }
 
     /// Runs off the actor, so a slow download or decode never blocks requests for other images.
