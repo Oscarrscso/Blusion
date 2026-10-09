@@ -36,6 +36,12 @@ struct HeroSection: View {
     }
 }
 
+extension EnvironmentValues {
+    /// How far Home has scrolled down while the spotlight is its first section. The portrait spotlight grows by this much, so its top
+    /// stays covered by artwork as the page scrolls.
+    @Entry var heroPull: CGFloat = 0
+}
+
 /// A paging carousel of full-resolution portrait or landscape heroes, each clipped to its own page.
 struct HeroCarousel: View {
     let items: [MetaPreview]
@@ -43,6 +49,7 @@ struct HeroCarousel: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.isHomeScrolling) private var isHomeScrolling
+    @Environment(\.heroPull) private var heroPull
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
@@ -53,16 +60,18 @@ struct HeroCarousel: View {
             .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
             .overlay {
                 GeometryReader { geometry in
+                    // In portrait the spotlight grows upward by the scroll distance; its bottom stays where it is on screen.
+                    let height = geometry.size.height + (isLandscape ? 0 : heroPull)
                     TabView(selection: $pageID) {
                         ForEach(items, id: \.identity) { item in
                             HeroPage(item: item, isScrolling: isHomeScrolling)
-                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(width: geometry.size.width, height: height)
                     .clipped()
                     .onChange(of: pageID) { oldID, newID in
                         guard let oldID, let newID, oldID != newID,

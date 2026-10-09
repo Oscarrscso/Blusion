@@ -107,7 +107,7 @@ public final class PersonViewModel {
     public private(set) var person: TMDbPerson?
     /// Every credit, merged by title and in TMDb's order. Filters and sorting work on this list.
     public internal(set) var credits: [TMDbPersonCredit] = []
-    /// Profile photos, best voted first. The page shows them as a strip under the portrait.
+    /// Profile photos, best voted first.
     public private(set) var photos: [URL] = []
     public private(set) var isLoading = true
     /// Set when the page cannot show anything: no TMDb token, or TMDb refused both requests.
@@ -172,6 +172,11 @@ public final class PersonViewModel {
         credits
             .filter { credit in mediaFilter.matches(credit) && (roleFilter.map { credit.categories.contains($0) } ?? true) }
             .sorted(by: Self.isNewer)
+    }
+
+    /// The photos the page shows as a strip: TMDb's profile photos, or the photo the card already had when TMDb has none.
+    public var photoStrip: [URL] {
+        photos.isEmpty ? [destination.profile].compactMap { $0 } : photos
     }
 
     /// The roles this person has an entry for, among the titles the media filter lets through, in the menu's order. The role menu

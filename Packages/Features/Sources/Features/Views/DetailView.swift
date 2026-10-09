@@ -10,6 +10,8 @@ struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
+    /// How far the page has scrolled down. The portrait hero grows by this much so its top never shows empty background.
+    @State private var scrollPull: CGFloat = 0
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -35,6 +37,9 @@ struct DetailView: View {
                     }
                 }
                 .padding(.bottom, Theme.Spacing.xxl)
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { max(0, $0.contentOffset.y + $0.contentInsets.top) } action: { _, value in
+                scrollPull = value
             }
             .refreshable { await model.refresh() }
         }
@@ -72,17 +77,26 @@ struct DetailView: View {
                 .padding(.horizontal, metrics.pageMargin)
                 .padding(.top, Theme.Spacing.s)
         } else {
-            ZStack(alignment: .bottom) {
-                ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fit,
-                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
-                BottomFade(length: 0.42)
-                titleArt(alignment: .center)
-                    .padding(.horizontal, metrics.pageMargin)
-                    .padding(.bottom, Theme.Spacing.l)
-            }
-            // Navigation bar changes during scrolling must not resize the artwork.
-            .frame(width: size.width, height: min(size.width * 1.5, metrics.heroMaxHeight))
-            .clipped()
+            let height = min(size.width * 1.5, metrics.heroMaxHeight)
+            // The layout keeps the hero's height. The artwork is an overlay that grows upward by the scroll distance: its bottom stays
+            // where it is on screen and its top rises with the page, so the top of the screen is never empty. Navigation bar changes
+            // during scrolling do not resize it.
+            Color.clear
+                .frame(width: size.width, height: height)
+                .overlay(alignment: .top) {
+                    ZStack(alignment: .bottom) {
+                        ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fit,
+                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
+                        BottomFade(length: 0.42)
+                    }
+                    .frame(width: size.width, height: height + scrollPull)
+                    .clipped()
+                }
+                .overlay(alignment: .bottom) {
+                    titleArt(alignment: .center)
+                        .padding(.horizontal, metrics.pageMargin)
+                        .padding(.bottom, Theme.Spacing.l)
+                }
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 controls
                 synopsis
@@ -345,9 +359,11 @@ struct DetailView: View {
                 SectionHeader("Cast & Crew")
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                        ForEach(people) { PersonCardLink(person: $0) }
+                        ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
                     }
+                    .scrollTargetLayout()
                 }
+                .softSnappingScroll(loosened: true)
                 .accessibilityIdentifier("detail.castCarousel")
             } else if !model.detail.cast.isEmpty {
                 // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.

@@ -19,7 +19,7 @@ struct PersonView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.horizontal, metrics.pageMargin)
-                if !model.photos.isEmpty {
+                if !model.photoStrip.isEmpty {
                     photos.padding(.top, Theme.Spacing.xxl)
                 }
                 if !model.knownFor.isEmpty {
@@ -42,15 +42,9 @@ struct PersonView: View {
 
     private var name: String { model.person?.name ?? model.destination.name }
 
-    /// A portrait about half again the width of a poster, but never wider than 220 pt.
-    private var portraitWidth: CGFloat { min(metrics.posterWidth * 1.5, 220) }
-
     /// The portrait while it loads is the one the card already showed, so the page never opens on an empty frame.
     private var header: some View {
         VStack(spacing: Theme.Spacing.m) {
-            ArtworkImage(url: model.person?.profile ?? model.destination.profile, title: name, maxPixelSize: 900, contentMode: .fill)
-                .frame(width: portraitWidth, height: portraitWidth * 1.5)
-                .mediaArtwork(cornerRadius: Theme.Radius.surface)
             VStack(spacing: Theme.Spacing.xs) {
                 Text(name)
                     .font(Theme.Typography.heroTitle)
@@ -116,7 +110,7 @@ struct PersonView: View {
                 .padding(.horizontal, metrics.pageMargin)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    ForEach(model.photos, id: \.self) { url in
+                    ForEach(model.photoStrip, id: \.self) { url in
                         ArtworkImage(url: url, title: "", maxPixelSize: 360, contentMode: .fill)
                             .frame(width: metrics.posterWidth, height: metrics.posterWidth * 1.5)
                             .mediaArtwork(cornerRadius: Theme.Radius.poster)
