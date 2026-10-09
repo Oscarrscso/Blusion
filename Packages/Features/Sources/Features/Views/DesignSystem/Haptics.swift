@@ -28,8 +28,9 @@ extension View {
         simultaneousGesture(TapGesture().onEnded { Haptics.tap() })
     }
 
-    /// Let a swipe travel naturally, align to cards, and tick each time a card's leading edge passes the screen's leading edge,
-    /// so the tick falls in the gap between two cards. Each card in the shelf must call `reportsShelfEdge(id:)`.
+    /// Let a swipe travel naturally, align to cards, and tick when a step between cards starts: as a card's leading edge passes the
+    /// screen's leading edge under the finger, or as the finger lifts and the shelf snaps on to the next card. The tick is not held
+    /// back until the snap settles. Each card in the shelf must call `reportsShelfEdge(id:)`.
     func softSnappingScroll() -> some View {
         modifier(SoftSnappingScrollModifier())
     }
@@ -68,7 +69,8 @@ private struct SoftSnappingScrollModifier: ViewModifier {
 
     /// The card whose leading edge last reached the screen's leading edge. It changes exactly when a card crosses it.
     @State private var leadingID: AnyHashable?
-    @State private var isUserScrolling = false
+    /// True while the finger is on the shelf and dragging it; the snap that follows a release is not dragging.
+    @State private var isDragging = false
     @State private var offset: CGFloat = 0
     @State private var offsetAtLastTick: CGFloat = 0
 
@@ -81,19 +83,21 @@ private struct SoftSnappingScrollModifier: ViewModifier {
                 let leading = edges.filter { $0.minX <= 0 }.max { $0.minX < $1.minX }?.id
                 guard leading != leadingID else { return }
                 leadingID = leading
-                guard isUserScrolling, leading != nil, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
+                // Ticks while dragging only: a card crossing during the snap would land at the end of the transition.
+                guard isDragging, leading != nil, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
                 offsetAtLastTick = offset
                 Haptics.scrollSnap()
             }
             .onScrollPhaseChange { _, phase in
-                switch phase {
-                case .interacting, .decelerating:
-                    isUserScrolling = true
-                default:
-                    isUserScrolling = false
-                }
+                let wasDragging = isDragging
+                isDragging = phase == .interacting
+                // The finger lifts: if the shelf has moved on from the last tick, the snap is about to step to a new card. Tick now, at
+                // the start of that transition.
+                guard wasDragging, !isDragging, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
+                offsetAtLastTick = offset
+                Haptics.scrollSnap()
             }
-            .onDisappear { isUserScrolling = false }
+            .onDisappear { isDragging = false }
     }
 }
 
