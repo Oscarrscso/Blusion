@@ -18,7 +18,7 @@ struct DetailView: View {
     @Environment(TitleActions.self) private var titleActions
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
-    private static let scrollIndicatorInset: CGFloat = 120
+    private static let scrollIndicatorInset: CGFloat = 260
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork))
@@ -122,6 +122,8 @@ struct DetailView: View {
     private var controls: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.m) {
             actionRow
+                // Kept clear of the page's scroll indicator on the right edge.
+                .padding(.horizontal, isLandscape ? 0 : Theme.Spacing.xl)
             RatingButtonsRow(item: model.detail.preview, alignment: isLandscape ? .leading : .center)
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(isLandscape ? .leading : .center)
@@ -498,7 +500,7 @@ private struct TitleArt: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: compact ? 220 : CGFloat.infinity, maxHeight: compact ? 56 : 96, alignment: alignment)
+                    .frame(maxWidth: compact ? 220 : CGFloat.infinity, maxHeight: compact ? 56 : 150, alignment: alignment)
                     .transition(.opacity)
             } else {
                 Text(name)
