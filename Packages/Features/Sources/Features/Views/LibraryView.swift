@@ -95,11 +95,11 @@ struct LibraryView: View {
                         if let range = model.availableYears {
                             Picker("From", selection: $model.filter.minimumYear) {
                                 Text("Any").tag(Int?.none)
-                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0)) }
                             }
                             Picker("To", selection: $model.filter.maximumYear) {
                                 Text("Any").tag(Int?.none)
-                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0 + 9)).tag(Int?.some($0 + 9)) }
+                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0 + 9)) }
                             }
                         } else {
                             Text("No release years yet")
@@ -244,11 +244,11 @@ struct LibraryFilterSheet: View {
                     if let range = model.availableYears {
                         Picker("From", selection: $model.filter.minimumYear) {
                             Text("Any").tag(Int?.none)
-                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0)) }
                         }
                         Picker("To", selection: $model.filter.maximumYear) {
                             Text("Any").tag(Int?.none)
-                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(String($0 + 9)).tag(Int?.some($0 + 9)) }
+                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0 + 9)) }
                         }
                     } else {
                         Text("No release years yet").foregroundStyle(.secondary)

@@ -373,10 +373,13 @@ public enum LibraryFiltering {
         return low...high
     }
 
-    /// The first year of each decade the range touches, newest first: 2020, 2010, 2000 for a range from 2003 to 2024.
+    /// The first year of each decade the range touches, oldest first: 2000, 2010, 2020 for a range from 2003 to 2024.
     public static func decadeStarts(in range: ClosedRange<Int>) -> [Int] {
-        Array(stride(from: range.upperBound / 10 * 10, through: range.lowerBound / 10 * 10, by: -10))
+        Array(stride(from: range.lowerBound / 10 * 10, through: range.upperBound / 10 * 10, by: 10))
     }
+
+    /// "1940–1949" for the decade starting at 1940.
+    public static func decadeText(_ start: Int) -> String { "\(start)–\(start + 9)" }
 
     /// "8" for 8.0 and "7.5" for 7.5, the way the rating picker and chips show a threshold.
     public static func ratingText(_ value: Double) -> String {
