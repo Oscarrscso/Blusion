@@ -145,6 +145,33 @@ import StremioKitTestSupport
         #expect(transport.requests.first?.url?.path == "/3/person/525/combined_credits")
     }
 
+    @Test func personPhotosAreBestVotedFirstAndEmptyWhenThereAreNone() async throws {
+        let transport = StubTransport(data: Data(#"{"profiles":[{"file_path":"/low.jpg","vote_average":4.0,"vote_count":2},{"file_path":"/top.jpg","vote_average":6.5,"vote_count":30},{"file_path":"/mid.jpg","vote_average":5.0,"vote_count":9}]}"#.utf8))
+        let photos = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).personPhotos(id: 525)
+        #expect(photos.map(\.lastPathComponent) == ["top.jpg", "mid.jpg", "low.jpg"])
+        #expect(photos.first?.absoluteString == "https://image.tmdb.org/t/p/w342/top.jpg")
+        #expect(transport.requests.first?.url?.path == "/3/person/525/images")
+        let none = StubTransport(data: Data(#"{"profiles":[]}"#.utf8))
+        #expect(try await TMDbRatings(client: makeClient(none), readAccessToken: jwt).personPhotos(id: 1).isEmpty)
+    }
+
+    // MARK: Related titles
+
+    @Test func relatedTitlesKeepTmdbOrderAndSkipEntriesWithoutATitle() async throws {
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            let body = path.hasPrefix("/3/find") ? #"{"movie_results":[{"id":155,"vote_average":8.4,"vote_count":9}],"tv_results":[]}"# :
+                #"{"results":[{"id":272,"title":"Batman Begins","release_date":"2005-06-15","poster_path":"/b.jpg","backdrop_path":null},{"id":9,"title":"","poster_path":null},{"id":11,"name":"A Show","first_air_date":"2001-01-01","media_type":"tv"}]}"#
+            return HTTPResult(data: Data(body.utf8), response: HTTPResponseInfo(statusCode: 200, headers: [:], url: request.url))
+        }
+        let related = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt, titleIDs: TMDbTitleIDCache())
+            .relatedTitles(imdbID: "tt7002001", type: "movie")
+        #expect(related.map(\.title) == ["Batman Begins", "A Show"])
+        #expect(related[0].mediaType == "movie" && related[0].releaseDate == "2005-06-15" && related[0].backdrop == nil)
+        #expect(related[1].mediaType == "tv" && related[1].releaseDate == "2001-01-01")
+        #expect(transport.requests.last?.url?.path == "/3/movie/155/recommendations")
+    }
+
     // MARK: IMDb id for a credit
 
     @Test func aCreditOpensTheTitleByItsIMDbID() async throws {

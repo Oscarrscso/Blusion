@@ -33,6 +33,8 @@ public final class DetailViewModel {
     public private(set) var reviews: [TMDbReview] = []
     /// The cast and crew with TMDb ids and photos. Nil until TMDb answers, or when no read token is saved.
     public private(set) var titleCredits: TMDbTitleCredits?
+    /// Titles TMDb recommends for this one, for the shelf at the bottom of the page. Empty until TMDb answers.
+    public private(set) var relatedTitles: [TMDbRelatedTitle] = []
 
     public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         self.preview = preview
@@ -49,6 +51,7 @@ public final class DetailViewModel {
         async let reviews: Void = loadReviews()
         // Cast photos are secondary: they start with the page but never hold up the details or the artwork above.
         async let credits: Void = loadTitleCredits()
+        async let related: Void = loadRelatedTitles()
         let result = await services.browse.detail(for: preview)
         detail = result.detail
         isFallback = result.isFallback
@@ -60,6 +63,7 @@ public final class DetailViewModel {
         await artwork
         await reviews
         await credits
+        await related
     }
 
     public func refresh() async {
@@ -83,6 +87,14 @@ public final class DetailViewModel {
         let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).titleCredits(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         titleCredits = loaded
+    }
+
+    private func loadRelatedTitles() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { relatedTitles = []; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).relatedTitles(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        relatedTitles = loaded ?? []
     }
 
     /// The first twenty cast members, then the key crew who are not already in that cast. Nil while TMDb's credits are unknown; empty

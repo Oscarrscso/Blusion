@@ -28,6 +28,11 @@ struct DetailView: View {
                     credits
                         .padding(.horizontal, metrics.pageMargin)
                         .padding(.top, Theme.Spacing.l)
+                    if !model.relatedTitles.isEmpty {
+                        related
+                            .padding(.horizontal, metrics.pageMargin)
+                            .padding(.top, Theme.Spacing.xl)
+                    }
                 }
                 .padding(.bottom, Theme.Spacing.xxl)
             }
@@ -373,6 +378,30 @@ struct DetailView: View {
                 information("Writers", model.detail.writers.joined(separator: ", "))
             }
             .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+        }
+    }
+
+    /// Titles TMDb recommends for this one, at the bottom of the page. Each opens its own page.
+    private var related: some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            SectionHeader("More Like This")
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                    ForEach(model.relatedTitles) { title in
+                        NavigationLink(value: title.titleDestination) {
+                            MediaCard(item: title.preview, aspect: .poster, showsRating: false)
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .titleTapHaptic()
+                        .reportsShelfEdge(id: title.id)
+                        .accessibilityIdentifier("detail.related.\(title.id)")
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollClipDisabled()
+            .softSnappingScroll(loosened: true)
+            .accessibilityIdentifier("detail.related")
         }
     }
 

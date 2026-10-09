@@ -242,6 +242,48 @@ extension TMDbRatings {
         return try TMDbTitleCredits.parse(result.data)
     }
 
+}
+
+// MARK: - Related titles
+
+/// A movie or series TMDb recommends alongside another one.
+public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
+    /// "movie" or "tv".
+    public let mediaType: String
+    public let tmdbID: Int
+    public let title: String
+    public let releaseDate: String?
+    /// A 342 pt wide poster. Nil when TMDb has none.
+    public let poster: URL?
+    /// A 780 pt wide backdrop. Nil when TMDb has none.
+    public let backdrop: URL?
+
+    public var id: String { "\(mediaType)/\(tmdbID)" }
+
+    public init(mediaType: String, tmdbID: Int, title: String, releaseDate: String?, poster: URL?, backdrop: URL?) {
+        self.mediaType = mediaType
+        self.tmdbID = tmdbID
+        self.title = title
+        self.releaseDate = releaseDate
+        self.poster = poster
+        self.backdrop = backdrop
+    }
+
+    static func parse(_ data: Data) throws -> [TMDbRelatedTitle] {
+        let response: RawRecommendations
+        do { response = try JSONDecoder().decode(RawRecommendations.self, from: data) } catch { throw AddonError.invalidJSON }
+        return (response.results ?? []).compactMap { entry in
+            let title = [entry.title, entry.name].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty }
+            guard let title else { return nil }
+            let date = [entry.releaseDate, entry.firstAirDate].compactMap { $0 }.first { !$0.isEmpty }
+            return TMDbRelatedTitle(mediaType: entry.mediaType ?? "movie", tmdbID: entry.id, title: title, releaseDate: date,
+                                    poster: TMDbImage.url(entry.posterPath, size: "w342"),
+                                    backdrop: TMDbImage.url(entry.backdropPath, size: "w780"))
+        }
+    }
+}
+
+extension TMDbRatings {
     /// A person's page. Throws `AddonError` for refusals (a 404 when TMDb has no such person) and failures.
     public func person(id: Int) async throws -> TMDbPerson {
         let (url, headers) = try request(path: ["person", String(id)])
@@ -254,6 +296,27 @@ extension TMDbRatings {
         let (url, headers) = try request(path: ["person", String(id), "combined_credits"])
         let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 4 * 1024 * 1024), timeout: 10)
         return try TMDbPersonCredit.parseCombined(result.data)
+    }
+
+    /// Every profile photo TMDb has for a person, best voted first, each 342 pt wide. Empty when there are none. Throws `AddonError` for
+    /// refusals and failures.
+    public func personPhotos(id: Int) async throws -> [URL] {
+        let (url, headers) = try request(path: ["person", String(id), "images"])
+        let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 512 * 1024), timeout: 8)
+        let response: RawPersonImages
+        do { response = try JSONDecoder().decode(RawPersonImages.self, from: result.data) } catch { throw AddonError.invalidJSON }
+        return (response.profiles ?? [])
+            .sorted { ($0.voteAverage ?? 0, $0.voteCount ?? 0) > ($1.voteAverage ?? 0, $1.voteCount ?? 0) }
+            .compactMap { TMDbImage.url($0.filePath, size: "w342") }
+    }
+
+    /// Titles TMDb recommends alongside the given one, in TMDb's order. Empty when TMDb does not know the title. Throws `AddonError`
+    /// for refusals and failures.
+    public func relatedTitles(imdbID: String, type: String) async throws -> [TMDbRelatedTitle] {
+        guard let id = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
+        let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", String(id), "recommendations"])
+        let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
+        return try TMDbRelatedTitle.parse(result.data)
     }
 
     /// The IMDb id of a TMDb movie or series, so a credit can open the title's page. Nil when TMDb has none.
@@ -365,6 +428,46 @@ private struct RawCredit: Decodable {
         case voteAverage = "vote_average"
         case voteCount = "vote_count"
         case episodeCount = "episode_count"
+    }
+}
+
+private struct RawRecommendations: Decodable {
+    let results: [RawRecommendation]?
+
+    struct RawRecommendation: Decodable {
+        let id: Int
+        let mediaType: String?
+        let title: String?
+        let name: String?
+        let releaseDate: String?
+        let firstAirDate: String?
+        let posterPath: String?
+        let backdropPath: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, name
+            case mediaType = "media_type"
+            case releaseDate = "release_date"
+            case firstAirDate = "first_air_date"
+            case posterPath = "poster_path"
+            case backdropPath = "backdrop_path"
+        }
+    }
+}
+
+private struct RawPersonImages: Decodable {
+    let profiles: [RawProfile]?
+
+    struct RawProfile: Decodable {
+        let filePath: String
+        let voteAverage: Double?
+        let voteCount: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case filePath = "file_path"
+            case voteAverage = "vote_average"
+            case voteCount = "vote_count"
+        }
     }
 }
 

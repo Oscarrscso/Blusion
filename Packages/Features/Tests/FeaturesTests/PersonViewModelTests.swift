@@ -48,7 +48,8 @@ import StremioKitTestSupport
         model.roleFilter = .directing
         #expect(model.filteredCredits.map(\.title) == ["Film director"])
         model.mediaFilter = .tv
-        #expect(model.filteredCredits.isEmpty, "the only series is a writing credit, so it is not under Directing")
+        #expect(model.roleFilter == nil, "Directing has no series here, so switching to TV drops it")
+        #expect(model.filteredCredits.map(\.title) == ["Series writer"])
         model.roleFilter = .writing
         #expect(model.filteredCredits.map(\.title) == ["Series writer"])
         model.mediaFilter = .all
@@ -106,6 +107,18 @@ import StremioKitTestSupport
                                                               backdrop: film.backdrop, year: 2008))
         #expect(film.preview.id == "tmdb:movie:155" && film.preview.type == "movie" && film.preview.releaseInfo == "2008")
         #expect(credit(9, "", date: nil, movie: false).preview.name == "Untitled")
+    }
+
+    @Test func theRoleMenueListsOnlyRolesThePersonHasAndDropsARoleTheMediaFilterRemoves() {
+        let model = makeModel([
+            credit(1, "Film actor", date: "2020-01-01", roles: [.acting(character: "A")]),
+            credit(2, "Series director", date: "2021-01-01", movie: false, roles: [.crew(job: "Director", department: "Directing")]),
+        ])
+        #expect(model.availableRoles == [.acting, .directing])
+        model.roleFilter = .directing
+        model.mediaFilter = .movies
+        #expect(model.availableRoles == [.acting], "no film is directed here, so Directing leaves the menu")
+        #expect(model.roleFilter == nil, "and the filter that no longer matches anything is cleared")
     }
 
     @Test func yearAndDayHelpersReadTmdbDates() {

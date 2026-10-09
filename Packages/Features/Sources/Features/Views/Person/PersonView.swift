@@ -19,6 +19,9 @@ struct PersonView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.horizontal, metrics.pageMargin)
+                if !model.photos.isEmpty {
+                    photos.padding(.top, Theme.Spacing.xxl)
+                }
                 if !model.knownFor.isEmpty {
                     knownFor.padding(.top, Theme.Spacing.xxl)
                 }
@@ -104,6 +107,31 @@ struct PersonView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Photos
+
+    /// Every profile photo TMDb has for the person, best voted first, as a strip of portraits.
+    private var photos: some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            SectionHeader("Photos")
+                .padding(.horizontal, metrics.pageMargin)
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                    ForEach(model.photos, id: \.self) { url in
+                        ArtworkImage(url: url, title: "", maxPixelSize: 360, contentMode: .fill)
+                            .frame(width: metrics.posterWidth, height: metrics.posterWidth * 1.5)
+                            .mediaArtwork(cornerRadius: Theme.Radius.poster)
+                            .reportsShelfEdge(id: url)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .scrollClipDisabled()
+            .softSnappingScroll(loosened: true)
+            .accessibilityIdentifier("person.photos")
+        }
+    }
+
     // MARK: - Known For
 
     /// The titles to remember them by, as wide cards with their backdrops.
@@ -185,7 +213,7 @@ struct PersonView: View {
             Menu {
                 Picker("Roles", selection: $model.roleFilter) {
                     Text("All Roles").tag(CreditCategory?.none)
-                    ForEach(CreditCategory.allCases, id: \.self) { Text($0.title).tag(CreditCategory?.some($0)) }
+                    ForEach(model.availableRoles, id: \.self) { Text($0.title).tag(CreditCategory?.some($0)) }
                 }
             } label: {
                 FilterMenuLabel(model.roleFilter?.title ?? "All Roles", systemImage: "person.text.rectangle", isActive: model.roleFilter != nil)

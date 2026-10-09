@@ -107,13 +107,20 @@ public final class PersonViewModel {
     public private(set) var person: TMDbPerson?
     /// Every credit, merged by title and in TMDb's order. Filters and sorting work on this list.
     public internal(set) var credits: [TMDbPersonCredit] = []
+    /// Profile photos, best voted first. The page shows them as a strip under the portrait.
+    public private(set) var photos: [URL] = []
     public private(set) var isLoading = true
     /// Set when the page cannot show anything: no TMDb token, or TMDb refused both requests.
     public private(set) var unavailableReason: String?
     public private(set) var visibleCount = PersonViewModel.pageSize
 
     public var mediaFilter: PersonMediaFilter = .all {
-        didSet { if oldValue != mediaFilter { visibleCount = Self.pageSize } }
+        didSet {
+            guard oldValue != mediaFilter else { return }
+            // A role the new kind of title does not have is dropped, so the page never shows a filter that matches nothing.
+            if let roleFilter, !availableRoles.contains(roleFilter) { self.roleFilter = nil }
+            visibleCount = Self.pageSize
+        }
     }
 
     /// The role to show, or nil for every role.
@@ -143,9 +150,11 @@ public final class PersonViewModel {
         // The page and the filmography are separate requests, so one failing still shows the other.
         async let details = try? await tmdb.person(id: id)
         async let filmography = try? await tmdb.personCredits(id: id)
+        async let profilePhotos = try? await tmdb.personPhotos(id: id)
         person = await details
         let loaded = await filmography
         credits = loaded ?? []
+        photos = await profilePhotos ?? []
         unavailableReason = person == nil && loaded == nil ? "TMDb could not load this person." : nil
         isLoading = false
     }
@@ -163,6 +172,13 @@ public final class PersonViewModel {
         credits
             .filter { credit in mediaFilter.matches(credit) && (roleFilter.map { credit.categories.contains($0) } ?? true) }
             .sorted(by: Self.isNewer)
+    }
+
+    /// The roles this person has an entry for, among the titles the media filter lets through, in the menu's order. The role menu
+    /// offers only these.
+    public var availableRoles: [CreditCategory] {
+        let titles = credits.filter { mediaFilter.matches($0) }
+        return CreditCategory.allCases.filter { category in titles.contains { $0.categories.contains(category) } }
     }
 
     /// The filtered credits shown so far, grouped by release year, newest year first. Undated titles come last.
