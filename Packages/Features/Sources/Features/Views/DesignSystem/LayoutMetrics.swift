@@ -55,7 +55,7 @@ struct LayoutMetrics: Equatable, Sendable {
         readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
     )
 
-    var continueCardWidth: CGFloat { isRegular ? 200 : 164 }
+    var continueCardWidth: CGFloat { isRegular ? 220 : 180 }
 
     /// Other landscape rows keep their own base, so a larger Continue card does not resize them.
     var landscapePosterWidth: CGFloat { (isRegular ? 180 : 148) * 1.2 }

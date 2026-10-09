@@ -18,6 +18,7 @@ struct DetailView: View {
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
     @State private var reviewSort = ReviewSort.highestRated
+    @State private var expandedReviewID: String?
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = 150
@@ -41,7 +42,7 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     feature(in: geometry.size)
                     if model.isSeries { episodesSection }
-                    credits
+                    credits(in: geometry.size.width)
                         .padding(.top, sectionSpacing)
                     if !model.relatedTitles.isEmpty {
                         related
@@ -364,7 +365,7 @@ struct DetailView: View {
         }
     }
 
-    private var credits: some View {
+    private func credits(in width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
             if isLandscape {
                 RatingButtonsRow(item: model.detail.preview)
@@ -394,19 +395,38 @@ struct DetailView: View {
                         .accessibilityIdentifier("detail.reviews.sort")
                     }
                     .padding(.horizontal, contentMargin)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: metrics.cardSpacing) {
-                            ForEach(sortedReviews) { review in
-                                ReviewCard(review: review)
-                                    .frame(width: metrics.isRegular ? 340 : 280)
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: metrics.cardSpacing) {
+                                ForEach(sortedReviews) { review in
+                                    ReviewCard(review: review, isExpanded: expandedReviewID == review.id) {
+                                        withAnimation(.snappy(duration: 0.35)) {
+                                            expandedReviewID = expandedReviewID == review.id ? nil : review.id
+                                        }
+                                    }
+                                    .frame(width: expandedReviewID == review.id
+                                           ? max(0, width - contentMargin * 2)
+                                           : (metrics.isRegular ? 340 : 280))
+                                    .id(review.id)
                                     .reportsShelfEdge(id: review.id)
+                                    .onGeometryChange(for: Bool.self) { geometry in
+                                        expandedReviewID == review.id &&
+                                        abs(geometry.size.width - (width - contentMargin * 2)) < 0.5
+                                    } action: { isFullWidth in
+                                        if isFullWidth {
+                                            withAnimation(.snappy(duration: 0.35)) {
+                                                proxy.scrollTo(review.id, anchor: .center)
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            .scrollTargetLayout()
                         }
-                        .scrollTargetLayout()
+                        .contentMargins(.horizontal, contentMargin, for: .scrollContent)
+                        .softSnappingScroll()
+                        .scrollClipDisabled()
                     }
-                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-                    .softSnappingScroll()
-                    .scrollClipDisabled()
                 }
             }
             if let people = model.castAndCrew, !people.isEmpty {
@@ -505,35 +525,38 @@ struct DetailView: View {
 
 private struct ReviewCard: View {
     let review: TMDbReview
-    @State private var isExpanded = false
+    let isExpanded: Bool
+    let onToggle: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            HStack {
-                Text(review.author).font(.headline).lineLimit(1)
-                Spacer(minLength: 8)
-                if let rating = review.rating {
-                    let stars = min(10, max(0, rating)).rounded() / 2
-                    HStack(spacing: 2) {
-                        ForEach(0..<5) { index in
-                            Image(systemName: stars >= Double(index + 1) ? "star.fill" :
-                                    stars >= Double(index) + 0.5 ? "star.leadinghalf.filled" : "star")
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                HStack {
+                    Text(review.author).font(.headline).lineLimit(1)
+                    Spacer(minLength: 8)
+                    if let rating = review.rating {
+                        let stars = min(10, max(0, rating)).rounded() / 2
+                        HStack(spacing: 2) {
+                            ForEach(0..<5) { index in
+                                Image(systemName: stars >= Double(index + 1) ? "star.fill" :
+                                        stars >= Double(index) + 0.5 ? "star.leadinghalf.filled" : "star")
+                            }
                         }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                 }
+                Text(LocalizedStringKey(review.content))
+                    .font(.subheadline)
+                    .lineLimit(isExpanded ? nil : 6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text(LocalizedStringKey(review.content))
-                .font(.subheadline)
-                .lineLimit(isExpanded ? nil : 6)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                isExpanded.toggle()
-            } label: {
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, perform: onToggle)
+            Button(action: onToggle) {
                 Text(isExpanded ? "Show less" : "Show more")
                     .font(.footnote.weight(.semibold))
             }
