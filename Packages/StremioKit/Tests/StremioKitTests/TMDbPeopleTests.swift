@@ -62,6 +62,23 @@ import StremioKitTestSupport
         #expect(transport.requests.allSatisfy { $0.value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)" })
     }
 
+    @Test func theTitleIDIsLookedUpOnceAndSharedByConcurrentCallers() async throws {
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            let body = path.hasPrefix("/3/find") ? #"{"movie_results":[{"id":155,"vote_average":8.4,"vote_count":9}],"tv_results":[]}"# : #"{"cast":[],"crew":[],"results":[]}"#
+            return HTTPResult(data: Data(body.utf8), response: HTTPResponseInfo(statusCode: 200, headers: [:], url: request.url))
+        }
+        let client = TMDbRatings(client: makeClient(transport), readAccessToken: jwt, titleIDs: TMDbTitleIDCache())
+        async let credits = client.titleCredits(imdbID: "tt7001001", type: "movie")
+        async let reviews = client.reviews(imdbID: "tt7001001", type: "movie")
+        _ = try await credits
+        _ = try await reviews
+        let finds = { transport.requests.filter { $0.url?.path.hasPrefix("/3/find") == true }.count }
+        #expect(finds() == 1, "concurrent calls share one lookup")
+        _ = try await client.titleCredits(imdbID: "tt7001001", type: "movie")
+        #expect(finds() == 1, "a later call reuses the id")
+    }
+
     @Test func titleCreditsForAnUnknownTitleSendsNoSecondRequest() async throws {
         let transport = StubTransport(data: Data(#"{"movie_results":[],"tv_results":[]}"#.utf8))
         let credits = try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt).titleCredits(imdbID: "tt0000001", type: "movie")

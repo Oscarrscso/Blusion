@@ -119,6 +119,7 @@ struct PersonView: View {
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
+                        .reportsShelfEdge(id: credit.id)
                         .accessibilityIdentifier("person.knownFor.\(credit.id)")
                     }
                 }
@@ -126,7 +127,7 @@ struct PersonView: View {
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
-            .softSnappingScroll()
+            .softSnappingScroll(loosened: true)
         }
     }
 

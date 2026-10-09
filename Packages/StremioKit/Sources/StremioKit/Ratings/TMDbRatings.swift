@@ -21,12 +21,35 @@ public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
     private struct AuthorDetails: Decodable, Sendable, Equatable { let rating: Double? }
 }
 
+/// The TMDb id of each IMDb title, kept for the session. Artwork, reviews and cast all need it and a title's id never changes, so one
+/// lookup serves them all. Callers that ask at the same time share one lookup. Unknown titles are not kept, so they are asked again.
+public actor TMDbTitleIDCache {
+    public static let shared = TMDbTitleIDCache()
+
+    private var ids: [String: Int] = [:]
+    private var lookups: [String: Task<Int?, Error>] = [:]
+
+    public init() {}
+
+    func id(for key: String, lookup: @escaping @Sendable () async throws -> Int?) async throws -> Int? {
+        if let id = ids[key] { return id }
+        if let pending = lookups[key] { return try await pending.value }
+        let task = Task { try await lookup() }
+        lookups[key] = task
+        defer { lookups[key] = nil }
+        let id = try await task.value
+        if let id { ids[key] = id }
+        return id
+    }
+}
+
 /// Resolves an IMDb ID to the matching movie or show, its community score and its direct TMDB page.
 public struct TMDbRatings: Sendable {
     public static let defaultBaseURL = URL(string: "https://api.themoviedb.org/3/") ?? URL(fileURLWithPath: "/")
     let client: AddonClient
     let credential: Credential?
     private let baseURL: URL
+    let titleIDs: TMDbTitleIDCache
 
     /// The credential as TMDb expects it. `nil` for an empty token: no request is sent.
     enum Credential: Sendable, Equatable {
@@ -34,10 +57,12 @@ public struct TMDbRatings: Sendable {
         case apiKey(String)
     }
 
-    public init(client: AddonClient, readAccessToken: String, baseURL: URL = TMDbRatings.defaultBaseURL) {
+    public init(client: AddonClient, readAccessToken: String, baseURL: URL = TMDbRatings.defaultBaseURL,
+                titleIDs: TMDbTitleIDCache = .shared) {
         self.client = client
         self.credential = Self.credential(for: readAccessToken)
         self.baseURL = baseURL
+        self.titleIDs = titleIDs
     }
 
     /// Trims the text, drops a pasted `Bearer ` prefix, and picks the header for a JWT or the query for anything else.
@@ -88,10 +113,19 @@ public struct TMDbRatings: Sendable {
         return ReviewRatings(tmdb: rating, tmdbURL: URL(string: "https://www.themoviedb.org/\(type == "movie" ? "movie" : "tv")/\(match.id)"))
     }
 
+    /// The TMDb id for an IMDb title, looked up once per session (see `TMDbTitleIDCache`). Nil when TMDb does not know the title.
+    func tmdbID(imdbID: String, type: String) async throws -> Int? {
+        try await titleIDs.id(for: "\(type)|\(imdbID)") {
+            let resolved = try await self.ratings(imdbID: imdbID, type: type)
+            guard let id = resolved.tmdbURL?.lastPathComponent else { return nil }
+            return Int(id)
+        }
+    }
+
     /// Uses the most-voted backdrop and English logo, with rating and image width breaking ties.
     public func artwork(imdbID: String, type: String) async throws -> TMDbArtwork? {
-        let resolved = try await ratings(imdbID: imdbID, type: type)
-        guard let id = resolved.tmdbURL?.lastPathComponent, Int(id) != nil else { return nil }
+        guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return nil }
+        let id = String(number)
         let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", id, "images"],
                                          query: [URLQueryItem(name: "include_image_language", value: "en,null")])
         let result = try await client.get(url, headers: headers,
@@ -108,8 +142,8 @@ public struct TMDbRatings: Sendable {
     }
 
     public func reviews(imdbID: String, type: String) async throws -> [TMDbReview] {
-        let resolved = try await ratings(imdbID: imdbID, type: type)
-        guard let id = resolved.tmdbURL?.lastPathComponent, Int(id) != nil else { return [] }
+        guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
+        let id = String(number)
         let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", id, "reviews"],
                                          query: [URLQueryItem(name: "language", value: "en-US")])
         let result = try await client.get(url, headers: headers,

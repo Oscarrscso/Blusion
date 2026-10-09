@@ -266,13 +266,6 @@ extension TMDbRatings {
         guard let imdb = ids.imdbID, LetterboxdRatings.isIMDbID(imdb) else { return nil }
         return imdb
     }
-
-    /// The TMDb id for an IMDb title, from the same lookup the ratings use. Nil when the title is unknown to TMDb.
-    private func tmdbID(imdbID: String, type: String) async throws -> Int? {
-        let resolved = try await ratings(imdbID: imdbID, type: type)
-        guard let id = resolved.tmdbURL?.lastPathComponent else { return nil }
-        return Int(id)
-    }
 }
 
 // MARK: - Images
