@@ -93,7 +93,7 @@ struct PosterRatingsOverlay: View {
     }
 }
 
-/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a dark, very transparent rounded
+/// The floating rating pill: each site's coloured mark, then its score in bold white, on a dark, very transparent rounded
 /// rectangle with no edge. Small, so it reads as a tag on the artwork; it is only as wide as its contents.
 private struct RatingPill: View {
     let ratings: TitleRatings
@@ -110,7 +110,7 @@ private struct RatingPill: View {
                             ReviewSiteIcon(site: site, size: 8, keepsColour: true)
                         }
                         Text(score)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 10, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                     }
