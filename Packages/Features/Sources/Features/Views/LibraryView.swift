@@ -42,6 +42,7 @@ struct LibraryView: View {
                         }
                         .accessibilityIdentifier("library.noMatches")
                     } else {
+                        if !model.continueWatching.isEmpty { continueSection }
                         if !model.saved.isEmpty { savedSection }
                         if !model.watched.isEmpty { watchedSection }
                     }
@@ -187,6 +188,22 @@ struct LibraryView: View {
             GlassChip("Clear all", systemImage: "xmark.circle") { model.clearFilters() }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("library.chip.clear")
+        }
+    }
+
+    private var continueSection: some View {
+        MediaRow("Continue") {
+            ForEach(model.continueWatching) { item in
+                NavigationLink(value: LibraryViewModel.request(for: item)) {
+                    ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster, fraction: item.fraction)
+                }
+                .buttonStyle(PressableCardStyle())
+                .accessibilityIdentifier("library.continue.\(item.id)")
+                .contextMenu {
+                    Button("Mark as Watched") { Task { await model.markWatched(item); await actions?.refresh() } }
+                    Button("Remove from Continue", role: .destructive) { Task { await model.removeFromContinueWatching(item) } }
+                }
+            }
         }
     }
 

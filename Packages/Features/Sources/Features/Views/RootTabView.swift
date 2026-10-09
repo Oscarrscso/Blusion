@@ -71,11 +71,6 @@ struct GalleryDestination: Hashable {
     var section: String?
 }
 
-/// A Continue Watching card's place in a navigation stack: its streams open and the best one plays at once, from the saved position.
-struct ResumeDestination: Hashable {
-    var request: StreamRequest
-}
-
 public struct RootTabView: View {
     private let services: AppServices
     private let initialQuery: String?

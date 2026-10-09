@@ -46,8 +46,8 @@ struct WidgetsManagerView: View {
                         Button(kind.rawValue) { adding = kind }
                             .disabled(model.catalogChoices.isEmpty || (kind == .collection && model.catalogChoices.allSatisfy { $0.genres.isEmpty }))
                     }
-                    Button("Continue Watching") {
-                        Task { await model.add(HomeWidget(title: "Continue Watching", content: .continueWatching)) }
+                    Button("Continue") {
+                        Task { await model.add(HomeWidget(title: "Continue", content: .continueWatching)) }
                     }
                     .disabled(model.widgets.contains { $0.content == .continueWatching })
                 }

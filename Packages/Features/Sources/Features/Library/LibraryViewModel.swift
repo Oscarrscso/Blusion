@@ -33,10 +33,10 @@ public final class LibraryViewModel {
     }
 
     /// True when the Library holds nothing at all, whatever the filter. A filter that matches nothing is not empty.
-    public var isEmpty: Bool { savedEntries.isEmpty && watchedEntries.isEmpty }
+    public var isEmpty: Bool { savedEntries.isEmpty && continueEntries.isEmpty && watchedEntries.isEmpty }
 
     /// True when at least one section has a title to show under the current filter.
-    public var hasMatches: Bool { !(saved.isEmpty && watched.isEmpty) }
+    public var hasMatches: Bool { !(continueWatching.isEmpty && saved.isEmpty && watched.isEmpty) }
 
     /// The genres and year span of everything in the Library, for the filter's pickers.
     public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + continueEntries + watchedEntries) }

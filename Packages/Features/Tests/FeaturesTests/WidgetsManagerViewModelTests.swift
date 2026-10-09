@@ -377,7 +377,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         let tiles = (0..<12).map { CollectionItem(id: "\($0)", title: "Tile \($0)") }
         #expect(model.summary(of: HomeWidget(title: "Tiles", content: .collection(tiles))) == "Collection · 12 tiles")
         #expect(model.summary(of: HomeWidget(title: "One", content: .collection([tiles[0]]))) == "Collection · 1 tile")
-        #expect(model.summary(of: HomeWidget(title: "Continue", content: .continueWatching)) == "Continue Watching")
+        #expect(model.summary(of: HomeWidget(title: "Continue", content: .continueWatching)) == "Continue")
     }
 
     @Test func catalogChoicesListEnabledBrowsableCatalogsOnce() async throws {
