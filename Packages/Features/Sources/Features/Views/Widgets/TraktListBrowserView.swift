@@ -36,19 +36,16 @@ struct TraktListBrowserView: View {
     var body: some View {
         @Bindable var browser = browser
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                titleField
-                sortSection
-                QualitySelector(titles: TraktBrowserViewModel.Tab.allCases.map(\.rawValue), selection: Binding {
-                    TraktBrowserViewModel.Tab.allCases.firstIndex(of: browser.tab) ?? 0
-                } set: { browser.tab = TraktBrowserViewModel.Tab.allCases[$0] }, accessibilityID: "traktBrowser.tab")
-                .padding(.horizontal, metrics.contentMargin)
-                if browser.tab == .lists && browser.trimmedQuery.isEmpty { scopeChips }
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 if let user = browser.browsedUser { userHeader(user) }
                 results
             }
+            .padding(.top, Theme.Spacing.s)
             .padding(.bottom, Theme.Spacing.xxl)
         }
+        // The controls stay put while results scroll; the system's edge effect keeps rows legible under them.
+        .safeAreaInset(edge: .top, spacing: 0) { controls }
+        .scrollEdgeEffectStyle(.soft, for: .top)
         .scrollDismissesKeyboard(.interactively)
         .searchable(text: $browser.query, prompt: browser.tab == .lists ? "Search Trakt lists…" : "Search Trakt users…")
         .textInputAutocapitalization(.never)
@@ -76,34 +73,66 @@ struct TraktListBrowserView: View {
 
     // MARK: Sections
 
-    private var titleField: some View {
-        TextField(titlePlaceholder.isEmpty ? "Widget title (optional)" : titlePlaceholder, text: $title)
-            .submitLabel(.done)
-            .padding(.horizontal, Theme.Spacing.l)
-            .frame(minHeight: 48)
-            .glassCardSurface(cornerRadius: Theme.Radius.surface)
-            .padding(.horizontal, metrics.contentMargin)
-            .accessibilityIdentifier("widgetEditor.title")
+    /// Title, Lists/Users, and one row for the scope chips with the sort menu at its end.
+    private var controls: some View {
+        @Bindable var browser = browser
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            titleField
+            QualitySelector(titles: TraktBrowserViewModel.Tab.allCases.map(\.rawValue), selection: Binding {
+                TraktBrowserViewModel.Tab.allCases.firstIndex(of: browser.tab) ?? 0
+            } set: { browser.tab = TraktBrowserViewModel.Tab.allCases[$0] },
+                            symbols: ["list.bullet.rectangle", "person.2"], accessibilityID: "traktBrowser.tab")
+                .padding(.horizontal, metrics.contentMargin)
+            if browser.tab == .lists || browser.browsedUser != nil { filterRow }
+        }
+        .padding(.vertical, Theme.Spacing.s)
+        .sensoryFeedback(.selection, trigger: sort)
     }
 
-    private var sortSection: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text("Sort")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, metrics.contentMargin)
-            ChipRow {
-                GlassChip("List Default", isSelected: sort == nil) { sort = nil }
-                ForEach(TraktListSort.allCases) { option in
-                    GlassChip(option.title, isSelected: sort == option) { sort = option }
-                }
+    private var titleField: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Image(systemName: "textformat").font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+            TextField(titlePlaceholder.isEmpty ? "Widget title (optional)" : titlePlaceholder, text: $title)
+                .font(.subheadline)
+                .submitLabel(.done)
+                .accessibilityIdentifier("widgetEditor.title")
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(height: 40)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .padding(.horizontal, metrics.contentMargin)
+    }
+
+    private var filterRow: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            if browser.tab == .lists && browser.trimmedQuery.isEmpty && browser.browsedUser == nil {
+                scopeChips
+            } else {
+                Spacer(minLength: 0)
             }
-            .accessibilityIdentifier("traktBrowser.sort")
+            sortMenu
+                .frame(width: 128)
+                .padding(.trailing, metrics.contentMargin)
         }
     }
 
+    private var sortMenu: some View {
+        Menu {
+            Picker("Sort by", selection: $sort) {
+                Text("List Default").tag(TraktListSort?.none)
+                ForEach(TraktListSort.allCases) { option in Text(option.title).tag(TraktListSort?.some(option)) }
+            }
+        } label: {
+            FilterMenuLabel(sort?.title ?? "Sort", systemImage: "arrow.up.arrow.down", isActive: sort != nil)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sort by \(sort?.title ?? "list default")")
+        .accessibilityIdentifier("traktBrowser.sort")
+    }
+
     private var scopeChips: some View {
-        ChipRow {
+        @Bindable var browser = browser
+        return ChipRow {
             ForEach(TraktBrowserViewModel.ListScope.allCases) { scope in
                 GlassChip(scope.rawValue, isSelected: browser.scope == scope) { browser.scope = scope }
             }
@@ -133,11 +162,11 @@ struct TraktListBrowserView: View {
                     .frame(minHeight: 260)
             }
         case .loading:
-            VStack(spacing: Theme.Spacing.m) {
-                ForEach(0..<5, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+            VStack(spacing: Theme.Spacing.s) {
+                ForEach(0..<7, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                         .fill(Theme.surface)
-                        .frame(height: 112)
+                        .frame(height: 68)
                 }
             }
             .padding(.horizontal, metrics.contentMargin)
@@ -160,7 +189,7 @@ struct TraktListBrowserView: View {
     }
 
     private var rows: some View {
-        LazyVStack(spacing: Theme.Spacing.m) {
+        LazyVStack(spacing: Theme.Spacing.s) {
             if browser.showsUsers {
                 ForEach(browser.users) { user in
                     Button {
@@ -188,57 +217,55 @@ struct TraktListBrowserView: View {
     }
 }
 
-/// A Trakt list as a large Liquid Glass row: icon, title, owner, counts and a two-line description.
+/// A Trakt list as a compact Liquid Glass row: name, creator with item count and likes, and a two-line description.
 struct TraktListRow: View {
     let list: TraktListSummary
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
             Image(systemName: list.isPrivate ? "lock.rectangle.stack" : "list.bullet.rectangle")
-                .font(.title3)
+                .font(.body)
                 .foregroundStyle(.secondary)
-                .frame(width: 36, height: 36)
+                .frame(width: 32, height: 32)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
-                    .font(.headline)
-                    .lineLimit(2)
-                Text("by @\(list.username)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: Theme.Spacing.m) {
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("@\(list.username)").lineLimit(1)
                     Label("\(list.itemCount)", systemImage: "film.stack")
                     Label("\(list.likes)", systemImage: "heart")
                 }
-                .font(.caption.weight(.medium))
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 if !list.description.isEmpty {
                     Text(TraktListRow.plain(list.description))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                         .lineLimit(2)
-                        .padding(.top, 2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.title3)
                     .foregroundStyle(.white)
                     .accessibilityHidden(true)
             }
         }
-        .padding(Theme.Spacing.l)
-        .glassCardSurface(cornerRadius: Theme.Radius.surface)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, 10)
+        .frame(minHeight: 56)
+        .glassCardSurface(cornerRadius: Theme.Radius.card)
         .overlay {
             if isSelected {
-                RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous).strokeBorder(.white.opacity(0.8), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(.white.opacity(0.8), lineWidth: 1.5)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -261,21 +288,23 @@ private struct TraktUserRow: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
             Image(systemName: "person.crop.circle")
-                .font(.title2)
+                .font(.title3)
                 .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName ?? "@\(user.username)").font(.headline)
-                if user.displayName != nil { Text("@\(user.username)").font(.subheadline).foregroundStyle(.secondary) }
+                Text(user.displayName ?? "@\(user.username)").font(.subheadline.weight(.semibold)).lineLimit(1)
+                if user.displayName != nil { Text("@\(user.username)").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             }
             Spacer(minLength: 0)
             if user.isVIP { Badge("VIP") }
             Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
         }
-        .padding(Theme.Spacing.l)
-        .frame(minHeight: 64)
-        .glassCardSurface(cornerRadius: Theme.Radius.surface)
-        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, 10)
+        .frame(minHeight: 56)
+        .glassCardSurface(cornerRadius: Theme.Radius.card)
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

@@ -19,23 +19,6 @@ struct WidgetSourcePicker: View {
 
     var body: some View {
         List {
-            ForEach(model.catalogChoices.filter {
-                (!genresOnly || !$0.genres.isEmpty) && (query.isEmpty || "\($0.title) \($0.addonName)".localizedCaseInsensitiveContains(query))
-            }) { choice in
-                if genresOnly {
-                    NavigationLink {
-                        List {
-                            Button("All Genres") { choose(choice, nil) }
-                            ForEach(choice.genres, id: \.self) { genre in Button(genre) { choose(choice, genre) } }
-                        }
-                        .navigationTitle(choice.title)
-                        .scrollContentBackground(.hidden)
-                        .screenBackground()
-                    } label: { label(choice) }
-                } else {
-                    Button { choose(choice, nil) } label: { label(choice) }
-                }
-            }
             if !genresOnly && query.isEmpty {
                 Section("Trakt") {
                     if let openTraktLists {
@@ -54,6 +37,23 @@ struct WidgetSourcePicker: View {
                         Text("Trakt List from Link")
                     }
                     .accessibilityIdentifier("widgetSource.trakt.link")
+                }
+            }
+            ForEach(model.catalogChoices.filter {
+                (!genresOnly || !$0.genres.isEmpty) && (query.isEmpty || "\($0.title) \($0.addonName)".localizedCaseInsensitiveContains(query))
+            }) { choice in
+                if genresOnly {
+                    NavigationLink {
+                        List {
+                            Button("All Genres") { choose(choice, nil) }
+                            ForEach(choice.genres, id: \.self) { genre in Button(genre) { choose(choice, genre) } }
+                        }
+                        .navigationTitle(choice.title)
+                        .scrollContentBackground(.hidden)
+                        .screenBackground()
+                    } label: { label(choice) }
+                } else {
+                    Button { choose(choice, nil) } label: { label(choice) }
                 }
             }
         }
