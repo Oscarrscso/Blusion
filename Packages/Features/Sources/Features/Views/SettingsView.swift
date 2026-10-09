@@ -108,10 +108,6 @@ struct SettingsView: View {
                 Task { await model.setShowsColouredRatingLogos(value) }
             }))
             .accessibilityIdentifier("settings.colouredRatingLogos")
-            Toggle("Episodes match text width", isOn: Binding(get: { model.settings.matchesEpisodeWidthToText }, set: { value in
-                Task { await model.setMatchesEpisodeWidthToText(value) }
-            }))
-            .accessibilityIdentifier("settings.episodeWidthMatchesText")
         }
     }
 

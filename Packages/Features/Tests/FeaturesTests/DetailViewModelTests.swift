@@ -259,6 +259,24 @@ import StremioKitTestSupport
         #expect(!transport.requests.contains { $0.url?.host == "api.themoviedb.org" }, "IMDb already covered the season")
     }
 
+    @Test func episodeWidthToggleIsOffByDefaultSavedAndReadBackOnTheNextPage() async {
+        let settings = InMemorySettingsStore()
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0))
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, settings: settings)
+        let preview = MetaPreview(id: "tt1", type: "series", name: "S")
+        let model = DetailViewModel(preview: preview, services: services)
+        #expect(!model.matchesEpisodeWidthToText)
+        await model.setMatchesEpisodeWidthToText(true)
+        #expect(model.matchesEpisodeWidthToText)
+        #expect(await settings.load().matchesEpisodeWidthToText)
+        let nextPage = DetailViewModel(preview: preview, services: services)
+        await nextPage.load()
+        #expect(nextPage.matchesEpisodeWidthToText)
+        await nextPage.setMatchesEpisodeWidthToText(false)
+        #expect(!(await settings.load().matchesEpisodeWidthToText))
+    }
+
     @Test func trailerURLIsNilWithoutTrailers() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X"), services: offlineServices())
         #expect(model.trailerURL == nil)

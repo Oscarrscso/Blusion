@@ -17,7 +17,8 @@ public final class DetailViewModel {
         didSet { if selectedSeason != oldValue { Task { await loadEpisodeRatings() } } }
     }
     public private(set) var isInLibrary = false
-    /// Episode cards are as wide as the text above them, as chosen in Settings. Read with the details, so the cards never resize on screen.
+    /// Episode cards are as wide as the text above them, as chosen with the toggle beside the season name. The choice is saved, and read
+    /// again when the details load.
     public private(set) var matchesEpisodeWidthToText = false
     /// Seasons whose TMDb episode scores are already in `detail`, or on their way.
     private var episodeRatingSeasons: Set<Int> = []
@@ -151,6 +152,15 @@ public final class DetailViewModel {
         guard !Task.isCancelled else { return }
         if scores.isEmpty { episodeRatingSeasons.remove(season) }
         detail.fillEpisodeRatings(season: season, scores: scores, source: .tmdb)
+    }
+
+    /// Switches the episode cards between their fixed width and the width of the text above them. The cards change at once; the
+    /// choice is then saved, so every title page opens the same way.
+    public func setMatchesEpisodeWidthToText(_ value: Bool) async {
+        matchesEpisodeWidthToText = value
+        var settings = await services.settings.load()
+        settings.matchesEpisodeWidthToText = value
+        await services.settings.save(settings)
     }
 
     /// Library membership, watched marks and saved progress, from the local stores.

@@ -347,32 +347,12 @@ struct DetailView: View {
     /// The season chips and the episodes of the selected season, each a row with its still, progress and watched mark.
     private func episodesSection(pageWidth: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            Menu {
-                ForEach(model.seasons, id: \.self) { season in
-                    Button(season == 0 ? "Specials" : "Season \(season)") { model.selectedSeason = season }
-                }
-                if let season = model.selectedSeason {
-                    Divider()
-                    let watched = model.isSeasonWatched(season)
-                    let name = season == 0 ? "Specials" : "Season \(season)"
-                    Button(watched ? "Mark \(name) as Not Watched" : "Mark \(name) as Watched",
-                           systemImage: watched ? "xmark.circle" : "checkmark.circle") {
-                        Task {
-                            await model.setSeasonWatched(!watched, season: season)
-                            await titleActions.refresh()
-                        }
-                    }
-                    .accessibilityIdentifier("detail.seasonWatched")
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.shelfTitle)
-                    Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                }
+            HStack(spacing: Theme.Spacing.m) {
+                seasonMenu
+                Spacer(minLength: 0)
+                episodeWidthToggle
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, contentMargin)
-            .accessibilityIdentifier("detail.seasonPicker")
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
             }
@@ -387,6 +367,7 @@ struct DetailView: View {
             .contentMargins(.horizontal, contentMargin, for: .scrollContent)
             .softSnappingScroll()
             .scrollClipDisabled()
+            .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
         .padding(.top, sectionSpacing)
         // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
@@ -395,7 +376,57 @@ struct DetailView: View {
         }
     }
 
-    /// The text above the episodes runs from one page margin to the other. With the option on, each card is that wide, so the cards
+    /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
+    private var seasonMenu: some View {
+        Menu {
+            ForEach(model.seasons, id: \.self) { season in
+                Button(season == 0 ? "Specials" : "Season \(season)") { model.selectedSeason = season }
+            }
+            if let season = model.selectedSeason {
+                Divider()
+                let watched = model.isSeasonWatched(season)
+                let name = season == 0 ? "Specials" : "Season \(season)"
+                Button(watched ? "Mark \(name) as Not Watched" : "Mark \(name) as Watched",
+                       systemImage: watched ? "xmark.circle" : "checkmark.circle") {
+                    Task {
+                        await model.setSeasonWatched(!watched, season: season)
+                        await titleActions.refresh()
+                    }
+                }
+                .accessibilityIdentifier("detail.seasonWatched")
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.shelfTitle)
+                Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("detail.seasonPicker")
+    }
+
+    /// Switches the episode cards between their fixed width and the width of the text. The symbol shows the layout in use: a row of
+    /// cards, or one card across the page.
+    private var episodeWidthToggle: some View {
+        let isWide = model.matchesEpisodeWidthToText
+        return Button {
+            Task { await model.setMatchesEpisodeWidthToText(!isWide) }
+        } label: {
+            Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .titleTapHaptic()
+        .accessibilityLabel("Episode width")
+        .accessibilityValue(isWide ? "Full width" : "Fixed width")
+        .accessibilityIdentifier("detail.episodeWidthToggle")
+    }
+
+    /// The text above the episodes runs from one page margin to the other. With the toggle on, each card is that wide, so the cards
     /// line up with it; otherwise they keep their fixed width.
     private func episodeWidth(pageWidth: CGFloat) -> CGFloat {
         model.matchesEpisodeWidthToText ? pageWidth - contentMargin * 2 : metrics.episodeWidth
