@@ -126,8 +126,10 @@ private struct HeroPage: View {
     @Environment(PosterRatingsStore.self) private var ratings
     @State private var heroArtwork: TMDbArtwork?
     @State private var titleTop: CGFloat = 0
-    /// The logo waits for the picture, so it never shows over the grey placeholder.
+    /// The title block waits for the picture, so it never shows over the low-res poster.
     @State private var pictureLoaded = false
+    /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name.
+    @State private var artworkChecked = false
 
     var body: some View {
         let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork)
@@ -171,6 +173,7 @@ private struct HeroPage: View {
             let loaded = await ratings.heroArtwork(for: item)
             guard !Task.isCancelled else { return }
             heroArtwork = loaded
+            artworkChecked = true
         }
     }
 
@@ -178,7 +181,7 @@ private struct HeroPage: View {
         Color.clear
             .overlay {
                 ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
-                             title: item.name, maxPixelSize: 4096, contentMode: .fit,
+                             maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
                     .onLoaded { pictureLoaded = true }
             }
@@ -217,21 +220,26 @@ private struct HeroPage: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
+    /// Blank while the logo is unknown, then the logo (or the name when there is none). Hidden until the picture is on screen, but
+    /// the logo loads as soon as its URL is known, so it is ready when the picture arrives.
     @ViewBuilder
     private var titleBlock: some View {
-        if let logo = item.logo ?? heroArtwork?.logo {
-            // Hidden rather than removed until the picture is on screen, so the title block keeps its height.
-            HeroLogo(url: logo, title: item.name)
-                .opacity(pictureLoaded ? 1 : 0)
-                .animation(.easeOut(duration: 0.25), value: pictureLoaded)
-        } else {
-            Text(item.name)
-                .font(.largeTitle.bold())
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+        Group {
+            if let logo = item.logo ?? heroArtwork?.logo {
+                HeroLogo(url: logo, title: item.name)
+            } else if artworkChecked {
+                Text(item.name)
+                    .font(.largeTitle.bold())
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            } else {
+                Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
+            }
         }
+        .opacity(pictureLoaded ? 1 : 0)
+        .animation(.easeOut(duration: 0.25), value: pictureLoaded)
     }
 
     /// Year, the first two genres and the rating, dot-separated. Parts that are missing are left out by `MetaLine`.
