@@ -62,19 +62,28 @@ private struct ShelfEdgeKey: PreferenceKey {
 }
 
 private struct SoftSnappingScrollModifier: ViewModifier {
+    /// How far the shelf must travel from the last tick before another card crossing ticks. A small nudge across an edge and back is
+    /// not a step between cards, so it stays silent.
+    private static let minimumTravel: CGFloat = 60
+
     /// The card whose leading edge last reached the screen's leading edge. It changes exactly when a card crosses it.
     @State private var leadingID: AnyHashable?
     @State private var isUserScrolling = false
+    @State private var offset: CGFloat = 0
+    @State private var offsetAtLastTick: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
             .scrollTargetBehavior(.viewAligned(limitBehavior: .never))
             .coordinateSpace(name: shelfScrollSpace)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, new in offset = new }
             .onPreferenceChange(ShelfEdgeKey.self) { edges in
                 let leading = edges.filter { $0.minX <= 0 }.max { $0.minX < $1.minX }?.id
                 guard leading != leadingID else { return }
                 leadingID = leading
-                if isUserScrolling, leading != nil { Haptics.scrollSnap() }
+                guard isUserScrolling, leading != nil, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
+                offsetAtLastTick = offset
+                Haptics.scrollSnap()
             }
             .onScrollPhaseChange { _, phase in
                 switch phase {
