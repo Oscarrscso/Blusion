@@ -53,6 +53,10 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   key or the quota runs out, Blusion stops asking for an hour.
 - **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are
   fetched when you open it, cached for 21 days, and shown with the IMDb mark next to each episode's air date.
+- **Best Blu-ray edition:** on a film's page, **Best Blu-ray edition** (under the synopsis) looks the film up on
+  [Best Blurays](https://www.bestblurays.com), a community-edited guide, and shows the release it names as best ("WB 4K Blu-ray"),
+  its video notes, its 4K tier and anything upcoming, with a link to the full comparison. It reads the site's public pages only when you
+  tap (a search for the title, then the page whose IMDb id matches; at most four small requests) and keeps the answer while the page is open.
 - **Watched:** a movie or a whole show can be marked from its title page (a show marks every episode that has aired; clearing asks first).
   The season menu marks one season, and a poster's long-press menu marks a whole show.
 - **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that

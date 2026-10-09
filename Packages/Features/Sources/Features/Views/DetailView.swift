@@ -10,6 +10,7 @@ struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
+    @State private var isShowingBestEdition = false
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
@@ -42,6 +43,7 @@ struct DetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onAppear { Task { await model.refreshUserState() } }
+        .sheet(isPresented: $isShowingBestEdition) { BestEditionSheet(model: model) }
         .accessibilityIdentifier("detail.scroll")
     }
 
@@ -78,6 +80,7 @@ struct DetailView: View {
             actionRow
             synopsis
                 .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+            bestEditionAction
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -86,6 +89,19 @@ struct DetailView: View {
             }
         }
         .padding(.top, Theme.Spacing.s)
+    }
+
+    /// Opens what bestblurays.com says is this film's best edition. Films only; it sits under the synopsis, apart from the play row.
+    @ViewBuilder
+    private var bestEditionAction: some View {
+        if model.canFindBestEdition {
+            Button { isShowingBestEdition = true } label: {
+                Label("Best Blu-ray edition", systemImage: "opticaldisc")
+            }
+            .buttonStyle(.glassCapsule)
+            .accessibilityHint("Looks this film up on Best Blurays")
+            .accessibilityIdentifier("detail.bestEdition")
+        }
     }
 
     /// The one main action. A movie plays itself; a series plays its next episode. While a series' episodes are still arriving,

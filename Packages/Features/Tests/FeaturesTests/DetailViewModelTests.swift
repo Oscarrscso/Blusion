@@ -237,6 +237,63 @@ import StremioKitTestSupport
         #expect(model.score(for: Video(id: "x")) == nil)
     }
 
+    // MARK: best Blu-ray edition
+
+    private let darkKnightPage = #"""
+    <html><head><title>The Dark Knight (2008) 4K Blu-ray Guide</title>
+    <script type="application/ld+json">{"sameAs":["https://www.imdb.com/title/tt0468569"]}</script></head><body>
+    <section><h2><a href="/labels/wb">WB</a> <a href="/tag/4k-blu-ray">4K Blu-ray</a></h2>
+    <p>Best English-friendly &amp; video release<!-- --> · updated 4 months ago</p>
+    <p>UHD tiers</p><a><span>Solid</span></a><p>Compare the discs</p></section></body></html>
+    """#
+
+    private func bestBlurayModel(_ transport: StubTransport, preview: MetaPreview? = nil) -> DetailViewModel {
+        let client = makeClient(transport, retries: 0)
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, bestBlurays: BestBluraysClient(client: client))
+        return DetailViewModel(preview: preview ?? MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008"),
+                               services: services)
+    }
+
+    @Test func aFilmFindsItsBestEditionOnceAndKeepsTheAnswer() async throws {
+        let page = darkKnightPage
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            let body = path == "/films" ? #"<a href="/film/1810-the-dark-knight-rises-2012">r</a><a href="/film/652-the-dark-knight-2008">k</a>"# : page
+            return StubTransport.response(Data(body.utf8), for: request)
+        }
+        let model = bestBlurayModel(transport)
+        #expect(model.canFindBestEdition && model.bestEdition == .idle)
+        await model.findBestEdition()
+        guard case .found(let edition) = model.bestEdition else { Issue.record("expected an edition, got \(model.bestEdition)"); return }
+        #expect(edition.release == "WB 4K Blu-ray" && edition.uhdTier == "Solid" && edition.is4K)
+        #expect(transport.requests.compactMap { $0.url?.path } == ["/films", "/film/652-the-dark-knight-2008"], "year 2008 came from the preview")
+        await model.findBestEdition()
+        #expect(transport.callCount == 2, "an answer is kept; the sheet reopening does not ask the site again")
+    }
+
+    @Test func aFailedLookupCanBeAskedAgain() async throws {
+        let page = darkKnightPage
+        let transport = StubTransport { request, call in
+            if call == 1 { throw AddonError.offline }
+            let body = request.url?.path == "/films" ? #"<a href="/film/652-the-dark-knight-2008">k</a>"# : page
+            return StubTransport.response(Data(body.utf8), for: request)
+        }
+        let model = bestBlurayModel(transport)
+        await model.findBestEdition()
+        guard case .failed(let text) = model.bestEdition else { Issue.record("expected a failure, got \(model.bestEdition)"); return }
+        #expect(!text.isEmpty)
+        await model.findBestEdition()
+        guard case .found = model.bestEdition else { Issue.record("expected an edition, got \(model.bestEdition)"); return }
+    }
+
+    @Test func onlyFilmsWithAnIMDbIDOfferTheLookup() {
+        let transport = StubTransport(data: Data())
+        #expect(!bestBlurayModel(transport, preview: MetaPreview(id: "tt0903747", type: "series", name: "Breaking Bad")).canFindBestEdition)
+        #expect(!bestBlurayModel(transport, preview: MetaPreview(id: "kitsu:1", type: "movie", name: "Anime")).canFindBestEdition)
+        #expect(bestBlurayModel(transport, preview: MetaPreview(id: "tt1375666", type: "movie", name: "Inception")).canFindBestEdition)
+    }
+
     @Test func trailerURLIsNilWithoutTrailers() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X"), services: offlineServices())
         #expect(model.trailerURL == nil)

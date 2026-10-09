@@ -58,6 +58,7 @@ struct RootView: View {
             await environment.seedDefaultAddons()
             #if DEBUG
             await DebugDemoData.installExtraAddons(environment.services)
+            await DebugDemoData.installFakeOMDbIfRequested(environment.services)
             await DebugDemoData.seedIfRequested(environment.services)
             #endif
             isReady = true
@@ -70,6 +71,7 @@ struct RootView: View {
             #endif
             #if DEBUG
             DebugSnapshot.scheduleIfRequested()
+            DebugStress.startIfRequested()
             await DebugHandoffProbe.startIfRequested(environment.services)
             #endif
         }

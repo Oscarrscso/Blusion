@@ -21,6 +21,8 @@ public struct AppServices: Sendable {
     public let widgetContent: WidgetContentService
     /// IMDb and Letterboxd ratings for poster badges.
     public let posterRatings: PosterRatingsStore
+    /// Finds a film's best Blu-ray edition on bestblurays.com, when the viewer asks on its title page.
+    public let bestBlurays: BestBluraysClient
     public let makeEngine: EngineFactory
     /// True once a fallback engine (M6) is linked into the app.
     public let fallbackEngineLinked: Bool
@@ -36,7 +38,7 @@ public struct AppServices: Sendable {
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
-                secretsInKeychain: Bool = true) {
+                secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -49,6 +51,7 @@ public struct AppServices: Sendable {
         self.widgets = widgets ?? InMemoryWidgetStore()
         self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings)
         self.posterRatings = posterRatings ?? PosterRatingsStore()
+        self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
         self.traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())

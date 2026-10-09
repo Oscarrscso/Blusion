@@ -133,6 +133,46 @@ public final class DetailViewModel {
         await refreshUserState()
     }
 
+    // MARK: best Blu-ray edition
+
+    /// Where a lookup of this film's best Blu-ray edition on bestblurays.com stands.
+    public enum BestEditionState: Equatable {
+        case idle
+        case loading
+        case found(BestBlurayEdition)
+        /// The site has a page for the film but has named no best release on it yet.
+        case listedWithoutEdition(title: String, url: URL)
+        /// The site has no page for the film; the link searches it for the title.
+        case notListed(searchURL: URL)
+        case failed(String)
+    }
+
+    public private(set) var bestEdition: BestEditionState = .idle
+
+    /// The lookup is for films: the site is a guide to films' discs.
+    public var canFindBestEdition: Bool { !isSeries && LetterboxdRatings.isIMDbID(detail.id) }
+
+    /// Reads the film's page on bestblurays.com. Done once per page of the app: an answer is kept, and only a failure asks again.
+    public func findBestEdition() async {
+        switch bestEdition {
+        case .loading, .found, .listedWithoutEdition, .notListed: return
+        case .idle, .failed: break
+        }
+        bestEdition = .loading
+        let year = detail.preview.releaseInfo.flatMap { $0.firstMatch(of: /[0-9]{4}/).map { String($0.output) } }
+        do {
+            let result = try await services.bestBlurays.bestEdition(imdbID: detail.id, title: detail.name, year: year)
+            switch result {
+            case .edition(let edition): bestEdition = .found(edition)
+            case .pageWithoutEdition(let title, let url): bestEdition = .listedWithoutEdition(title: title, url: url)
+            case .noPage(let searchURL): bestEdition = .notListed(searchURL: searchURL)
+            }
+        } catch {
+            // Closing the sheet cancels the lookup; that is not a failure to show, only a question to ask again.
+            bestEdition = Task.isCancelled ? .idle : .failed(AddonError.from(error).shortDescription)
+        }
+    }
+
     // MARK: episode scores
 
     /// An episode's score and where it came from: OMDb's IMDb score when there is one, else whatever the addon sent.

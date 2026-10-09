@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build the app for the connected iPhone or iPad and install it there.
 #
-#   scripts/install-iphone.sh [--no-launch]
+#   scripts/install-iphone.sh [--no-launch] [--release]
+#
+# --release installs the optimised build instead (build/iphone-rel.noindex). A Debug build is unoptimised, and SwiftUI screens full
+# of cards run several times slower in it, which can look like a freeze.
 #
 # A Debug build, signed by Xcode with the team in project.yml, built into build/iphone.noindex (Spotlight skips folders named
 # *.noindex, so the build product is never listed on the Mac as one more Blusion). Xcode may renew the provisioning profile
@@ -12,15 +15,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 [[ "$(uname -s)" == "Darwin" ]] || { echo "install-iphone.sh needs macOS and Xcode" >&2; exit 2; }
 LAUNCH=1
-case "${1:-}" in
-  "") ;;
-  --no-launch) LAUNCH=0;;
-  *) sed -n '2,9p' "$0" >&2; exit 64;;
-esac
-
+CONFIG=Debug
 WORK="build/iphone.noindex"
-APP="$ROOT/$WORK/Build/Products/Debug-iphoneos/Blusion.app"
 LOG="build/iphone-build.log"
+for argument in "$@"; do
+  case "$argument" in
+    --no-launch) LAUNCH=0;;
+    --release) CONFIG=Release; WORK="build/iphone-rel.noindex"; LOG="build/iphone-rel.log";;
+    *) sed -n '2,12p' "$0" >&2; exit 64;;
+  esac
+done
+APP="$ROOT/$WORK/Build/Products/$CONFIG-iphoneos/Blusion.app"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 fail() { echo "install-iphone: $1" >&2; exit 1; }
 mkdir -p build
@@ -49,7 +54,7 @@ UDID="${DEVICE%% *}"; NAME="${DEVICE#* }"
 
 xcodegen generate --quiet || fail "xcodegen failed"
 echo "install-iphone: building for $NAME (log: $LOG)"
-xcodebuild -project Blusion.xcodeproj -scheme Blusion -configuration Debug -destination "id=$UDID" \
+xcodebuild -project Blusion.xcodeproj -scheme Blusion -configuration "$CONFIG" -destination "id=$UDID" \
   -derivedDataPath "$WORK" -jobs 4 -allowProvisioningUpdates build >"$LOG" 2>&1 || true
 if ! grep -q '\*\* BUILD SUCCEEDED \*\*' "$LOG"; then
   grep -E 'error:' "$LOG" | sed -E "s#$ROOT/##g" | sort -u | head -40 >&2

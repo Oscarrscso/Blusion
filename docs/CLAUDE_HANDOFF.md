@@ -77,6 +77,17 @@ Three subagents separately added Trakt account support, review-site support, and
 - **Settings is a tab:** the tab bar is Home, Discover, Library, Settings, Search. There is no gear, sheet or Done button any more
   (`AppRouter.showSettings/showAddons/showWidgets` select the tab and set its stack's path), which ends the doubled Done for good.
   Home and Search reload when the viewer leaves the Settings tab, as they did when the sheet closed.
+- **Best Blu-ray edition:** `BestBluraysClient` (StremioKit) reads bestblurays.com's public pages (its robots.txt allows `/films` and
+  `/film/…`): search by title, rank by slug and year, confirm the page's IMDb id, read the `<h2>` above the "Best … release · updated …"
+  line plus video notes, UHD tier and upcoming. Parser tested on trimmed copies of five real pages (`Fixtures/bestblurays`) and checked
+  by hand against six full ones. The site has no API, so a redesign would break it; the tests say where.
+- **Home freeze (open, 2026-10-09):** twelve watchdog reports on the phone (`xcrun devicectl device info files --domain-type
+  systemCrashLogs`) are user force-quits of a frozen app: the main thread is inside one SwiftUI layout pass, in Observation
+  registration/cancel and scroll-behaviour / lazy-placement rules, with no Blusion frame on top. It happens on Home only. A self-scrolling
+  Mac Catalyst run (`BLUSION_AUTOSCROLL=1`, `BLUSION_HANG_MARKER`, `App/DebugStress.swift`) did not reproduce it, and on-device UI tests
+  cannot run (a free developer profile allows 3 apps; AltStore and StikDebug use the other two). Next step is a live sample:
+  `scripts/profile-iphone.sh` while the phone is frozen. `scripts/install-iphone.sh --release` installs the optimised build, since the
+  Debug build is several times slower for card-heavy SwiftUI.
 - **One branch:** work from 2026-10-08 on lands on `claude/blusion-github-e2e-sqx5r4`. The title page keeps the inline Play row
   (Play with Save, Watched and Trailer on one line) from `worktree-detail-backdrop-blur`, which this work was merged with.
 - **Home:** Returning after a cancelled load starts a fresh observation; cancellation no longer replaces rows with errors. Two regression tests cover reload and retry. Home launch routes wait for their navigation stack; a stale Settings model preserves account credentials when changing playback.
