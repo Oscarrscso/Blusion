@@ -62,8 +62,8 @@ public final class HomeViewModel {
         let saved = await services.widgets.load()
         let inProgress = LibraryViewModel.continueWatching(from: await services.progress.all())
         guard current == generation, !Task.isCancelled else { return }
-        continueWatching = inProgress
-        continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: traktPlayback)
+        publishWatching(inProgress)
+        publishEntries(ContinueWatchingEntry.merge(local: await services.progress.all(), remote: traktPlayback))
         isCustomised = saved != nil
         guard !addons.isEmpty else {
             sections = []
@@ -108,15 +108,15 @@ public final class HomeViewModel {
 
     public func refreshContinueWatching(force: Bool = false) async {
         let local = await services.progress.all()
-        continueWatching = LibraryViewModel.continueWatching(from: local)
-        continueEntries = ContinueWatchingEntry.merge(local: local, remote: traktPlayback)
+        publishWatching(LibraryViewModel.continueWatching(from: local))
+        publishEntries(ContinueWatchingEntry.merge(local: local, remote: traktPlayback))
         guard !refreshingPlayback else { return }
         refreshingPlayback = true
         defer { refreshingPlayback = false }
         guard await services.traktAccount.isSignedIn() else {
             traktPlayback = []
-            continueEntries = ContinueWatchingEntry.merge(local: local, remote: [])
-            continueState = .disconnected
+            publishEntries(ContinueWatchingEntry.merge(local: local, remote: []))
+            publishState(.disconnected)
             lastPlaybackRefresh = .distantPast
             return
         }
@@ -125,14 +125,14 @@ public final class HomeViewModel {
                 || (interval > 0 && Date().timeIntervalSince(lastPlaybackRefresh) >= Double(interval)) else { return }
         let previousState = continueState
         lastPlaybackRefresh = Date()
-        continueState = .loading
+        publishState(.loading)
         do {
             let playback = try await services.traktAccount.playback()
             try Task.checkCancellation()
             guard await services.traktAccount.isSignedIn() else {
                 traktPlayback = []
-                continueState = .disconnected
-                continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: [])
+                publishState(.disconnected)
+                publishEntries(ContinueWatchingEntry.merge(local: await services.progress.all(), remote: []))
                 return
             }
             traktPlayback = playback
@@ -145,19 +145,25 @@ public final class HomeViewModel {
                     title: item.request.title, poster: item.preview.poster, position: duration * item.progress / 100,
                     duration: duration, isWatched: false, updatedAt: item.pausedAt, season: item.season, episode: item.episode))
             }
-            continueState = .ready
+            publishState(.ready)
         } catch {
             if Task.isCancelled {
-                continueState = previousState
+                publishState(previousState)
                 lastPlaybackRefresh = .distantPast
                 return
             }
-            continueState = .failed((error as? TraktAccountError)?.message ?? "Couldn’t load Trakt playback. Try again.")
+            publishState(.failed((error as? TraktAccountError)?.message ?? "Couldn’t load Trakt playback. Try again."))
         }
         let updated = await services.progress.all()
-        continueWatching = LibraryViewModel.continueWatching(from: updated)
-        continueEntries = ContinueWatchingEntry.merge(local: updated, remote: traktPlayback)
+        publishWatching(LibraryViewModel.continueWatching(from: updated))
+        publishEntries(ContinueWatchingEntry.merge(local: updated, remote: traktPlayback))
     }
+
+    /// The Continue state is published only when it changes. A refresh that finds the same progress then doesn't redraw anything that
+    /// observes it, which on a long Home is most of the work a refresh would otherwise cause.
+    private func publishEntries(_ value: [ContinueWatchingEntry]) { if value != continueEntries { continueEntries = value } }
+    private func publishWatching(_ value: [WatchProgress]) { if value != continueWatching { continueWatching = value } }
+    private func publishState(_ value: ContinueState) { if value != continueState { continueState = value } }
 
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.
     public func observeAddons() async {

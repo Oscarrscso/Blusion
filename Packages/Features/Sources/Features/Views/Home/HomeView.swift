@@ -114,15 +114,14 @@ struct HomeView: View {
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
-            ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback,
-                                title: section.widget.title, hideTitle: section.widget.hideTitle)
+            HomeContinueRow(model: model, retry: refreshPlayback, title: section.widget.title, hideTitle: section.widget.hideTitle)
         case .unsupported:
             UnsupportedWidgetRow(widget: section.widget)
         }
     }
 
     private var continueRow: some View {
-        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback)
+        HomeContinueRow(model: model, retry: refreshPlayback)
     }
 
     private func refreshPlayback() { Task { await model.refreshContinueWatching(force: true) } }
@@ -144,6 +143,18 @@ struct HomeView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, Theme.Spacing.s)
+    }
+}
+
+/// Reads the Continue Watching state itself, so a refresh redraws this row and not the whole Home.
+struct HomeContinueRow: View {
+    let model: HomeViewModel
+    let retry: () -> Void
+    var title = "Continue Watching"
+    var hideTitle = false
+
+    var body: some View {
+        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: retry, title: title, hideTitle: hideTitle)
     }
 }
 
