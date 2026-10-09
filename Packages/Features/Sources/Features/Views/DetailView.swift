@@ -283,13 +283,13 @@ struct DetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.episodes) { episode in
-                        episodeRow(episode).id(episode.id)
+                        episodeRow(episode).id(episode.id).reportsShelfEdge(id: episode.id)
                     }
                 }
                 .scrollTargetLayout()
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
-            .softSnappingScroll(idType: Video.ID.self)
+            .softSnappingScroll()
             .scrollClipDisabled()
         }
         .padding(.top, Theme.Spacing.xxl)

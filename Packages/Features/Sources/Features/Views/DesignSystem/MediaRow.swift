@@ -102,13 +102,13 @@ struct MediaRow<Content: View>: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(subviews: content()) { card in
-                        card.id(card.id)
+                        card.id(card.id).reportsShelfEdge(id: card.id)
                     }
                 }
                 .scrollTargetLayout()
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
-            .softSnappingScroll(idType: Subview.ID.self)
+            .softSnappingScroll()
             .scrollClipDisabled()
         }
         .environment(\.zoomScope, zoomScope)
