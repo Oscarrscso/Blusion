@@ -48,6 +48,7 @@ struct LibraryView: View {
             }
             .padding(.vertical, Theme.Spacing.l)
         }
+        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle("Library")
         .task { model.attachRatings(ratings) }
@@ -154,8 +155,10 @@ struct LibraryView: View {
             ForEach(model.saved) { item in
                 MediaCardLink(item: item.preview).stretched()
                     .accessibilityIdentifier("library.saved.\(item.id)")
+                    .reportsSectionEdge(id: item.id)
             }
         }
+        .scrollTargetLayout()
         .padding(.horizontal, metrics.pageMargin)
     }
 
@@ -168,9 +171,11 @@ struct LibraryView: View {
                     MediaCardLink(item: preview).stretched()
                         .overlay(alignment: .topTrailing) { Badge("Watched", systemImage: "checkmark").padding(6) }
                         .accessibilityIdentifier("library.watched.\(item.id)")
+                        .reportsSectionEdge(id: item.id)
                         .contextMenu { Button("Mark as Unwatched") { Task { await model.markUnwatched(item); await actions?.refresh() } } }
                 }
             }
+            .scrollTargetLayout()
             .padding(.horizontal, metrics.pageMargin)
         }
     }

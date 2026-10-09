@@ -139,11 +139,13 @@ struct MediaGrid: View {
                 MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
                     .stretched()
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .reportsSectionEdge(id: item.identity)
                     .onAppear {
                         if item.identity == items.last?.identity { onLastAppear?() }
                     }
             }
         }
+        .scrollTargetLayout()
         .padding(.horizontal, metrics.pageMargin)
         .environment(\.zoomScope, zoomScope)
     }

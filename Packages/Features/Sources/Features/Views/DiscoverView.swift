@@ -25,6 +25,7 @@ struct DiscoverView: View {
             }
             .padding(.vertical, Theme.Spacing.l)
         }
+        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle("Discover")
         .task { await model.loadSources() }

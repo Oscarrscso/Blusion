@@ -46,6 +46,7 @@ struct SearchView: View {
             }
             .padding(.vertical, Theme.Spacing.l)
         }
+        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle("Search")
         .searchable(text: $model.query, isPresented: $isSearchPresented,
@@ -116,6 +117,7 @@ struct SearchView: View {
                         .accessibilityIdentifier("search.genre.\(genre.name)")
                     }
                 }
+                .scrollTargetLayout()
                 .padding(.horizontal, metrics.pageMargin)
             }
         }

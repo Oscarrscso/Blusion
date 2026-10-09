@@ -46,9 +46,11 @@ struct StreamPickerView: View {
                 links
                 hiddenHint
             }
+            .scrollTargetLayout()
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
         }
+        .verticalScrollFeel()
         // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding inside it.
         .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
         // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
