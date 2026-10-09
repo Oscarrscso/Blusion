@@ -47,7 +47,7 @@ public final class TitleRatings: Identifiable {
         switch site {
         case .imdb: imdbText
         case .letterboxd: letterboxdText
-        case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f%%", $0) }
+        case .rottenTomatoes: rottenTomatoes.map { String(format: "%.1f", $0 / 10) }
         case .metacritic: metacritic.map { String(format: "%.0f", $0) }
         case .tmdb: tmdb.map { String(format: "%.1f", $0) }
         }
@@ -57,7 +57,7 @@ public final class TitleRatings: Identifiable {
         switch site {
         case .imdb: imdbText.map { "\($0)/10" }
         case .letterboxd: letterboxdText.map { "\($0)/10" }
-        case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f%%", $0) }
+        case .rottenTomatoes: rottenTomatoes.map { String(format: "%.1f/10", $0 / 10) }
         case .metacritic: metacritic.map { String(format: "%.0f/100", $0) }
         case .tmdb: tmdb.map { String(format: "%.1f/10", $0) }
         }

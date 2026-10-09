@@ -184,7 +184,7 @@ import StremioKitTestSupport
         try await waitUntil { entry.metacritic == 82 }
         #expect(entry.imdb == 9 && entry.rottenTomatoes == 91)
         #expect(entry.posterSites == [.imdb, .rottenTomatoes])
-        #expect(entry.text(for: .rottenTomatoes) == "91%" && entry.text(for: .metacritic) == "82/100")
+        #expect(entry.text(for: .rottenTomatoes) == "9.1/10" && entry.text(for: .metacritic) == "82/100")
     }
 
     @Test func tmdbScoresFillPostersAndTheDetailReviewRow() async throws {
@@ -270,7 +270,7 @@ import StremioKitTestSupport
         #expect(entry.posterSites == [.letterboxd, .rottenTomatoes])
         entry.letterboxd = nil
         #expect(entry.posterSites == [.rottenTomatoes, .metacritic])
-        #expect(!entry.isEmpty && entry.shortText(for: .rottenTomatoes) == "91%")
+        #expect(!entry.isEmpty && entry.shortText(for: .rottenTomatoes) == "9.1")
         #expect(entry.shortText(for: .metacritic) == "82")
         entry.rottenTomatoes = nil
         #expect(entry.posterSites == [.metacritic, .tmdb])
