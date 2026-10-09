@@ -17,8 +17,6 @@ struct ArtworkImage: View {
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
     @State private var imageURL: URL?
     @State private var placeholderImage: UIImage?
-    /// Called once the picture for `url` is on screen, from the cache or after a download. See `onLoaded(_:)`.
-    private var onLoad: (() -> Void)?
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
          placeholderURL: URL? = nil, placeholderBlur: CGFloat = 12, imageAlignment: Alignment = .center) {
@@ -90,14 +88,13 @@ struct ArtworkImage: View {
             imageURL = nil
             return
         }
-        if imageURL == url, image != nil { onLoad?(); return }
+        if imageURL == url, image != nil { return }
         if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
             withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
                 image = cached
                 imageURL = url
                 placeholderImage = nil
             }
-            onLoad?()
             return
         }
         // Keep the current artwork visible while a replacement downloads.
@@ -107,14 +104,6 @@ struct ArtworkImage: View {
             imageURL = url
             placeholderImage = nil
         }
-        onLoad?()
-    }
-
-    /// Runs `action` once the picture is on screen. A cached picture counts too, so a view that re-appears still fires it.
-    func onLoaded(_ action: @escaping () -> Void) -> ArtworkImage {
-        var copy = self
-        copy.onLoad = action
-        return copy
     }
 }
 #endif

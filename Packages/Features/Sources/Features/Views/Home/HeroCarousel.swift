@@ -126,8 +126,6 @@ private struct HeroPage: View {
     @Environment(PosterRatingsStore.self) private var ratings
     @State private var heroArtwork: TMDbArtwork?
     @State private var titleTop: CGFloat = 0
-    /// The title block waits for the picture, so it never shows over the low-res poster.
-    @State private var pictureLoaded = false
     /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name.
     @State private var artworkChecked = false
 
@@ -183,7 +181,6 @@ private struct HeroPage: View {
                 ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
                              maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
-                    .onLoaded { pictureLoaded = true }
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
@@ -220,26 +217,21 @@ private struct HeroPage: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// Blank while the logo is unknown, then the logo (or the name when there is none). Hidden until the picture is on screen, but
-    /// the logo loads as soon as its URL is known, so it is ready when the picture arrives.
+    /// The logo as soon as its URL is known. Blank until then, and the name only once the lookup has found no logo.
     @ViewBuilder
     private var titleBlock: some View {
-        Group {
-            if let logo = item.logo ?? heroArtwork?.logo {
-                HeroLogo(url: logo, title: item.name)
-            } else if artworkChecked {
-                Text(item.name)
-                    .font(.largeTitle.bold())
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-            } else {
-                Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
-            }
+        if let logo = item.logo ?? heroArtwork?.logo {
+            HeroLogo(url: logo, title: item.name)
+        } else if artworkChecked {
+            Text(item.name)
+                .font(.largeTitle.bold())
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        } else {
+            Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
         }
-        .opacity(pictureLoaded ? 1 : 0)
-        .animation(.easeOut(duration: 0.25), value: pictureLoaded)
     }
 
     /// Year, the first two genres and the rating, dot-separated. Parts that are missing are left out by `MetaLine`.
