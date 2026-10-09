@@ -93,12 +93,14 @@ public struct RootTabView: View {
     }
 
     /// Outline symbol for an unselected tab; the filled variant only while that tab is selected.
-    private func tabLabel(_ title: String, _ symbol: String, _ tab: LaunchRoute.Tab) -> some View {
-        Label(title, systemImage: router.tab == tab ? "\(symbol).fill" : symbol)
+    private func tabLabel(_ title: String, _ symbol: String, _ tab: LaunchRoute.Tab, selected: LaunchRoute.Tab) -> some View {
+        Label(title, systemImage: selected == tab ? "\(symbol).fill" : symbol)
     }
 
     public var body: some View {
         @Bindable var router = router
+        // Read here, so the tab labels rebuild when the selection changes.
+        let selected = router.tab
         TabView(selection: Binding(get: { router.tab }, set: { tab in
             if tab == .search {
                 router.searchPath = NavigationPath()
@@ -123,7 +125,7 @@ public struct RootTabView: View {
                     router.presentLaunchRoute()
                 }
             } label: {
-                tabLabel("Home", "play.house", .home)
+                tabLabel("Home", "play.house", .home, selected: selected)
             }
             Tab(value: LaunchRoute.Tab.discover) {
                 NavigationStack {
@@ -132,7 +134,7 @@ public struct RootTabView: View {
                 }
                 .zoomTransitions()
             } label: {
-                tabLabel("Discover", "square.grid.2x2", .discover)
+                tabLabel("Discover", "square.grid.2x2", .discover, selected: selected)
             }
             TabSection("Library") {
                 Tab(value: LaunchRoute.Tab.library) {
@@ -142,7 +144,7 @@ public struct RootTabView: View {
                     }
                     .zoomTransitions()
                 } label: {
-                    tabLabel("Library", "books.vertical", .library)
+                    tabLabel("Library", "books.vertical", .library, selected: selected)
                 }
             }
             // Settings is a tab like the rest, so there is no sheet to dismiss and no Done button.
@@ -159,7 +161,7 @@ public struct RootTabView: View {
                         }
                 }
             } label: {
-                tabLabel("Settings", "gearshape", .settings)
+                tabLabel("Settings", "gearshape", .settings, selected: selected)
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
