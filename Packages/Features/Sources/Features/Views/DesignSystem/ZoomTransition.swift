@@ -8,8 +8,6 @@ struct TitleDestination: Hashable {
     let preview: MetaPreview
     let sourceID: String
     var artwork: TMDbArtwork?
-    /// Holds can pop out of their card; ordinary title taps use the native navigation slide.
-    var usesZoomTransition = false
 }
 
 extension EnvironmentValues {
@@ -34,10 +32,14 @@ extension View {
         modifier(ZoomNamespaceProvider())
     }
 
-    /// Marks the artwork a screen zooms out of. Does nothing without a namespace (outside a stack that called `zoomTransitions()`).
+    /// Marks the artwork a screen zooms out of. `cornerRadius` rounds the artwork while it morphs into the screen, so a card keeps its
+    /// corners; leave it nil for full-bleed artwork. Does nothing without a namespace (outside a stack that called `zoomTransitions()`).
     @ViewBuilder
-    func zoomSource(id: String, in namespace: Namespace.ID?) -> some View {
-        if let namespace {
+    func zoomSource(id: String, in namespace: Namespace.ID?, cornerRadius: CGFloat? = nil) -> some View {
+        if let namespace, let cornerRadius {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            matchedTransitionSource(id: id, in: namespace) { $0.clipShape(shape) }
+        } else if let namespace {
             matchedTransitionSource(id: id, in: namespace)
         } else {
             self
