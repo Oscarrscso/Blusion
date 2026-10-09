@@ -1,5 +1,4 @@
 #if canImport(UIKit)
-import PlayerKit
 import StremioKit
 import SwiftUI
 
@@ -105,40 +104,78 @@ struct CollectionRow: View {
 
 /// The titles to resume, as wide cards with their progress. Each opens its streams, where the player resumes.
 struct ContinueWatchingRow: View {
-    let items: [WatchProgress]
+    let items: [ContinueWatchingEntry]
+    let state: HomeViewModel.ContinueState
+    let retry: () -> Void
     var title = "Continue Watching"
     var hideTitle = false
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
-        if !items.isEmpty {
-            MediaRow(title, hideTitle: hideTitle) {
-                ForEach(items) { item in
-                    NavigationLink(value: LibraryViewModel.request(for: item)) {
-                        ProgressCard(title: item.title, subtitle: Self.remaining(item), artwork: item.poster, fraction: item.fraction)
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            if !hideTitle {
+                HStack(spacing: Theme.Spacing.s) {
+                    Text(title)
+                        .font(Theme.Typography.shelfTitle)
+                        .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.gray)
+                        .scaleEffect(0.75)
+                        .opacity(state == .loading ? 1 : 0)
+                        .accessibilityLabel("Refreshing Continue Watching")
+                        .accessibilityHidden(state != .loading)
+                    if !items.isEmpty {
+                        if case .failed(let message) = state {
+                            Button(action: retry) { Image(systemName: "arrow.clockwise") }
+                                .accessibilityLabel(message + " Retry")
+                                .help(message)
+                        } else if state == .disconnected {
+                            Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
+                                .accessibilityLabel("Sign in to Trakt")
+                        }
                     }
-                    .buttonStyle(PressableCardStyle())
-                    .accessibilityIdentifier("board.continue.\(item.id)")
+                    Spacer(minLength: 0)
                 }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Theme.screenPadding)
             }
-            .accessibilityIdentifier("board.continueWatching")
+            if !items.isEmpty {
+                MediaRow(title, hideTitle: true) {
+                    ForEach(items) { item in
+                        NavigationLink(value: item.request) {
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
+                        }
+                        .buttonStyle(PressableCardStyle())
+                        .accessibilityIdentifier("board.continue.\(item.id)")
+                    }
+                }
+            } else {
+                emptyState
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Theme.screenPadding)
+            }
         }
+        .accessibilityIdentifier("board.continueWatching")
     }
 
-    /// "S2 E5 · 52 min left", or "Almost done" under a minute. nil when the runtime is unknown.
-    static func remaining(_ item: WatchProgress) -> String? {
-        guard item.duration > 0 else { return nil }
-        let left = item.duration - item.position
-        let timeLeft: String
-        if left < 60 {
-            timeLeft = "Almost done"
-        } else {
-            let minutes = Int(left / 60)
-            timeLeft = minutes >= 60
-                ? (minutes % 60 == 0 ? "\(minutes / 60) h left" : "\(minutes / 60) h \(minutes % 60) min left")
-                : "\(minutes) min left"
+    @ViewBuilder private var emptyState: some View {
+        switch state {
+        case .loading:
+            EmptyView()
+        case .disconnected:
+            HStack {
+                Text("Sign in to Trakt to see paused movies and episodes.")
+                Spacer(minLength: 8)
+                Button("Sign In") { router.showSettings() }.buttonStyle(.glass)
+            }
+        case .failed(let message):
+            InlineErrorView(message, retry: retry)
+        case .ready:
+            Text("No paused movies or episodes on Trakt.")
         }
-        guard let season = item.season, let episode = item.episode else { return timeLeft }
-        return "S\(season) E\(episode) · \(timeLeft)"
     }
 }
 

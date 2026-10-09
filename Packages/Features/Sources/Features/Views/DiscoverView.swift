@@ -5,6 +5,7 @@ import StremioKit
 struct DiscoverView: View {
     @State private var model: DiscoverViewModel
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
     let onOpenAddons: () -> Void
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
@@ -27,20 +28,21 @@ struct DiscoverView: View {
         .screenBackground()
         .navigationTitle("Discover")
         .task { await model.loadSources() }
-        .refreshable { await model.reload() }
+        .refreshable { await ratings?.refresh(); await model.reload() }
         .accessibilityIdentifier("discover.scroll")
     }
 
     private var filters: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            if model.types.count > 1 {
-                ChipRow {
-                    ForEach(model.types, id: \.self) { type in
-                        GlassChip(ContentTypeName.plural(type), isSelected: model.selectedType == type) {
-                            Task { await model.select(type: type) }
-                        }
-                    }
-                }
+        let types = model.types.filter { $0.lowercased() != "other" }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            if types.count > 1 {
+                QualitySelector(titles: types.map(ContentTypeName.plural), selection: Binding {
+                    types.firstIndex(where: { $0 == model.selectedType }) ?? 0
+                } set: { index in
+                    guard types.indices.contains(index) else { return }
+                    Task { await model.select(type: types[index]) }
+                }, accessibilityID: "discover.filter.type")
+                .padding(.horizontal, metrics.pageMargin)
             }
             Menu {
                 ForEach(model.visibleSources) { source in

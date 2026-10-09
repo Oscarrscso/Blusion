@@ -31,11 +31,17 @@ public final class HomeViewModel {
     public private(set) var sections: [Section] = []
     /// In-progress titles, newest first (`LibraryViewModel.continueWatching(from:)`).
     public private(set) var continueWatching: [WatchProgress] = []
+    public enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
+    public private(set) var continueState: ContinueState = .loading
+    public private(set) var continueEntries: [ContinueWatchingEntry] = []
     /// True when the user has saved their own widget list; false for the automatic layout.
     public private(set) var isCustomised = false
 
     private let services: AppServices
     private var generation = 0
+    private var traktPlayback: [TraktPlaybackItem] = []
+    private var refreshingPlayback = false
+    private var lastPlaybackRefresh = Date.distantPast
 
     public init(services: AppServices) {
         self.services = services
@@ -57,6 +63,7 @@ public final class HomeViewModel {
         let inProgress = LibraryViewModel.continueWatching(from: await services.progress.all())
         guard current == generation, !Task.isCancelled else { return }
         continueWatching = inProgress
+        continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: traktPlayback)
         isCustomised = saved != nil
         guard !addons.isEmpty else {
             sections = []
@@ -74,7 +81,9 @@ public final class HomeViewModel {
 
     /// Pull to refresh: forgets every cached page, then loads again. The rows keep what they show until the new items arrive.
     public func refresh() async {
+        await services.posterRatings.refresh()
         await services.widgetContent.invalidate()
+        await refreshContinueWatching(force: true)
         await load()
     }
 
@@ -92,8 +101,62 @@ public final class HomeViewModel {
     }
 
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
-    public func refreshContinueWatching() async {
-        continueWatching = LibraryViewModel.continueWatching(from: await services.progress.all())
+    public func continueWatchingRefreshInterval() async -> Int {
+        let settings = await services.settings.load()
+        return max(0, settings.continueWatchingRefreshSeconds ?? 300)
+    }
+
+    public func refreshContinueWatching(force: Bool = false) async {
+        let local = await services.progress.all()
+        continueWatching = LibraryViewModel.continueWatching(from: local)
+        continueEntries = ContinueWatchingEntry.merge(local: local, remote: traktPlayback)
+        guard !refreshingPlayback else { return }
+        refreshingPlayback = true
+        defer { refreshingPlayback = false }
+        guard await services.traktAccount.isSignedIn() else {
+            traktPlayback = []
+            continueEntries = ContinueWatchingEntry.merge(local: local, remote: [])
+            continueState = .disconnected
+            lastPlaybackRefresh = .distantPast
+            return
+        }
+        let interval = await continueWatchingRefreshInterval()
+        guard force || lastPlaybackRefresh == .distantPast
+                || (interval > 0 && Date().timeIntervalSince(lastPlaybackRefresh) >= Double(interval)) else { return }
+        let previousState = continueState
+        lastPlaybackRefresh = Date()
+        continueState = .loading
+        do {
+            let playback = try await services.traktAccount.playback()
+            try Task.checkCancellation()
+            guard await services.traktAccount.isSignedIn() else {
+                traktPlayback = []
+                continueState = .disconnected
+                continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: [])
+                return
+            }
+            traktPlayback = playback
+            // Only a real runtime can turn Trakt's percentage into a resume position for Infuse.
+            for item in playback {
+                guard let duration = item.duration else { continue }
+                let previous = await services.progress.progress(for: item.id)
+                if let previous, previous.updatedAt >= item.pausedAt { continue }
+                await services.progress.save(WatchProgress(id: item.id, type: item.preview.type, contentID: item.contentID,
+                    title: item.request.title, poster: item.preview.poster, position: duration * item.progress / 100,
+                    duration: duration, isWatched: false, updatedAt: item.pausedAt, season: item.season, episode: item.episode))
+            }
+            continueState = .ready
+        } catch {
+            if Task.isCancelled {
+                continueState = previousState
+                lastPlaybackRefresh = .distantPast
+                return
+            }
+            continueState = .failed((error as? TraktAccountError)?.message ?? "Couldn’t load Trakt playback. Try again.")
+        }
+        let updated = await services.progress.all()
+        continueWatching = LibraryViewModel.continueWatching(from: updated)
+        continueEntries = ContinueWatchingEntry.merge(local: updated, remote: traktPlayback)
     }
 
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.

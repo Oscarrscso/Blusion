@@ -105,6 +105,12 @@ struct SettingsView: View {
         Section("Accounts") {
             NavigationLink { TraktAccountView(services: services) } label: { Label("Trakt", systemImage: "person.crop.circle") }
                 .accessibilityIdentifier("settings.trakt")
+            Picker("Continue Watching refresh", selection: Binding(get: { model.settings.continueWatchingRefreshSeconds ?? 300 }, set: { value in
+                Task { await model.setContinueWatchingRefreshSeconds(value) }
+            })) {
+                ForEach(SettingsViewModel.continueWatchingRefreshOptions) { Text($0.label).tag($0.value) }
+            }
+            .accessibilityIdentifier("settings.continueWatchingRefresh")
         }
     }
 
@@ -118,6 +124,14 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.tmdbReadToken")
             Button("Save Review Services") { Task { await model.commitReviewCredentials() } }
                 .accessibilityIdentifier("settings.reviews.save")
+            Button("Refresh Ratings") { Task { await model.refreshRatings() } }
+                .accessibilityIdentifier("settings.reviews.refresh")
+            if let error = services.posterRatings.omdbError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("settings.reviews.error")
+            }
             if let url = URL(string: "https://www.omdbapi.com/apikey.aspx") { Link("Get an OMDb key", destination: url) }
             if let url = URL(string: "https://www.themoviedb.org/settings/api") { Link("TMDB API settings", destination: url) }
         } header: {

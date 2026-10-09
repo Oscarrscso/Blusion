@@ -29,6 +29,9 @@ public final class StreamPickerViewModel {
     public private(set) var nobodyCanAnswer = false
     public private(set) var settings = PlaybackSettings()
     public private(set) var hasLoaded = false
+    public private(set) var isAutoPicking = false
+    public private(set) var autoPickMessage: String?
+    public private(set) var autoPickedStream: RankedStream?
 
     private let services: AppServices
     private var sniffTasks: [Task<Void, Never>] = []
@@ -86,6 +89,50 @@ public final class StreamPickerViewModel {
         }
     }
 
+    // MARK: best Blu-ray edition
+
+    /// Where a lookup of this film's best Blu-ray edition on bestblurays.com stands.
+    public enum BestEditionState: Equatable {
+        case idle
+        case loading
+        case found(BestBlurayEdition)
+        /// The site has a page for the film but has named no best release on it yet.
+        case listedWithoutEdition(title: String, url: URL)
+        /// The site has no page for the film; the link searches it for the title.
+        case notListed(searchURL: URL)
+        case failed(String)
+    }
+
+    public private(set) var bestEdition: BestEditionState = .idle
+
+    /// The lookup is for films: the site is a guide to films' discs.
+    public var canFindBestEdition: Bool { request.type == "movie" && LetterboxdRatings.isIMDbID(request.id) }
+
+    /// Reads the film's page on bestblurays.com. Done once per stream picker: an answer is kept, and only a failure asks again.
+    public func findBestEdition() async {
+        guard canFindBestEdition else { return }
+        switch bestEdition {
+        case .loading, .found, .listedWithoutEdition, .notListed: return
+        case .idle, .failed: break
+        }
+        bestEdition = .loading
+        do {
+            let result = try await services.bestBlurays.bestEdition(imdbID: request.id, title: request.title, year: request.year)
+            guard !Task.isCancelled else {
+                bestEdition = .idle
+                return
+            }
+            switch result {
+            case .edition(let edition): bestEdition = .found(edition)
+            case .pageWithoutEdition(let title, let url): bestEdition = .listedWithoutEdition(title: title, url: url)
+            case .noPage(let searchURL): bestEdition = .notListed(searchURL: searchURL)
+            }
+        } catch {
+            // Leaving the stream picker cancels the lookup; it can run again when the page returns.
+            bestEdition = Task.isCancelled ? .idle : .failed(AddonError.from(error).shortDescription)
+        }
+    }
+
     /// The player apps installed on this device. Streams are only handed to these. The view asks once, when the picker opens.
     public func setInstalledPlayers(_ players: Set<ExternalPlayer>) {
         installedPlayers = players
@@ -125,6 +172,32 @@ public final class StreamPickerViewModel {
     public func playBest() async -> Choice? {
         guard let best = listing.best else { return nil }
         return await choose(best)
+    }
+
+    /// Called only by the explicit Auto Pick action. All resolutions, including REMUX, are compared together.
+    public func autoPickBest() async -> Choice? {
+        guard !isAutoPicking else { return nil }
+        isAutoPicking = true
+        autoPickMessage = nil
+        defer { isAutoPicking = false }
+        // The normal fetch already asks every installed addon whose manifest supports this title.
+        // Wait for their releases instead of inventing unsupported resolution-specific addon queries.
+        while isLoading {
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return nil }
+        }
+        guard !Task.isCancelled else { return nil }
+        let candidates = listing.items.filter { item in
+            guard let url = PlaybackPolicy.playbackURL(for: item.stream, config: listing.config) else { return false }
+            return ExternalPlayer.infuse.canPlay(streamURL: url, headers: item.stream.behaviorHints.proxyHeaders?.request ?? [:])
+        }
+        guard let pick = AutoStreamRanking.best(from: candidates, duration: request.expectedDuration) else {
+            autoPickMessage = "No streams compatible with Infuse were found."
+            return nil
+        }
+        guard !Task.isCancelled else { return nil }
+        autoPickedStream = pick.item
+        autoPickMessage = "Selected \(pick.item.quality.resolutionLabel ?? "stream") · \(pick.isRemux ? "REMUX" : pick.item.quality.source?.rawValue ?? "release")"
+        return await handoffChoice(for: pick.item, player: .infuse)
     }
 
     /// The first stream Blusion plays itself after `item`: what "Try the next stream" plays.

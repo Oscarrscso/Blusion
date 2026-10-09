@@ -23,6 +23,7 @@ public final class DetailViewModel {
     private var savedProgress: [String: WatchProgress] = [:]
 
     private let services: AppServices
+    public private(set) var tmdbArtwork: TMDbArtwork?
 
     public init(preview: MetaPreview, services: AppServices) {
         self.preview = preview
@@ -32,6 +33,7 @@ public final class DetailViewModel {
 
     public func load() async {
         isLoading = true
+        async let artwork: Void = loadArtwork()
         let result = await services.browse.detail(for: preview)
         detail = result.detail
         isFallback = result.isFallback
@@ -39,6 +41,20 @@ public final class DetailViewModel {
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
+        await artwork
+    }
+
+    public func refresh() async {
+        await services.posterRatings.refresh()
+        await load()
+    }
+
+    private func loadArtwork() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { return }
+        let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        tmdbArtwork = artwork
     }
 
     /// Library membership, watched marks and saved progress, from the local stores.
@@ -133,46 +149,6 @@ public final class DetailViewModel {
         await refreshUserState()
     }
 
-    // MARK: best Blu-ray edition
-
-    /// Where a lookup of this film's best Blu-ray edition on bestblurays.com stands.
-    public enum BestEditionState: Equatable {
-        case idle
-        case loading
-        case found(BestBlurayEdition)
-        /// The site has a page for the film but has named no best release on it yet.
-        case listedWithoutEdition(title: String, url: URL)
-        /// The site has no page for the film; the link searches it for the title.
-        case notListed(searchURL: URL)
-        case failed(String)
-    }
-
-    public private(set) var bestEdition: BestEditionState = .idle
-
-    /// The lookup is for films: the site is a guide to films' discs.
-    public var canFindBestEdition: Bool { !isSeries && LetterboxdRatings.isIMDbID(detail.id) }
-
-    /// Reads the film's page on bestblurays.com. Done once per page of the app: an answer is kept, and only a failure asks again.
-    public func findBestEdition() async {
-        switch bestEdition {
-        case .loading, .found, .listedWithoutEdition, .notListed: return
-        case .idle, .failed: break
-        }
-        bestEdition = .loading
-        let year = detail.preview.releaseInfo.flatMap { $0.firstMatch(of: /[0-9]{4}/).map { String($0.output) } }
-        do {
-            let result = try await services.bestBlurays.bestEdition(imdbID: detail.id, title: detail.name, year: year)
-            switch result {
-            case .edition(let edition): bestEdition = .found(edition)
-            case .pageWithoutEdition(let title, let url): bestEdition = .listedWithoutEdition(title: title, url: url)
-            case .noPage(let searchURL): bestEdition = .notListed(searchURL: searchURL)
-            }
-        } catch {
-            // Closing the sheet cancels the lookup; that is not a failure to show, only a question to ask again.
-            bestEdition = Task.isCancelled ? .idle : .failed(AddonError.from(error).shortDescription)
-        }
-    }
-
     // MARK: episode scores
 
     /// An episode's score and where it came from: OMDb's IMDb score when there is one, else whatever the addon sent.
@@ -238,10 +214,11 @@ public final class DetailViewModel {
     public func progressFraction(for video: Video) -> Double? { progressFractions[episodeIdentity(video)] }
 
     /// Background artwork for the header, falling back to the poster.
-    public var backdropURL: URL? { detail.preview.background ?? detail.preview.poster }
+    public var backdropURL: URL? { tmdbArtwork?.backdrop ?? detail.preview.background ?? detail.preview.poster }
+    public var portraitArtworkURL: URL? { tmdbArtwork?.portrait ?? detail.preview.poster ?? detail.preview.background }
 
     /// The title's logo (a transparent image), when the addon or the catalog has one.
-    public var logoURL: URL? { detail.preview.logo }
+    public var logoURL: URL? { tmdbArtwork?.logo ?? detail.preview.logo }
 
     /// Year and runtime for a `MetaLine`: "2008", "152 min". Parts the addon left out are skipped. The rating is not here: the page
     /// shows it as a button under the title.

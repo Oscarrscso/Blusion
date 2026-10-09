@@ -44,19 +44,23 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   Left/Right skips 10 seconds, and Esc closes. Reduce Motion keeps cards still.
 - **Settings → Playback:** choose Blusion, Infuse, or Infuse only when Blusion cannot play a format. Automatic best-stream playback is optional.
   Infuse handoff includes the resume position and records progress when its callback returns.
-- **Settings → Appearance:** toggle poster ratings. IMDb ratings come from catalog metadata; movie Letterboxd ratings are fetched and cached when available.
-  Catalogs often leave the IMDb score out (new releases, unrated titles); with an OMDb key saved, a poster without one asks OMDb for it.
+- **Settings → Appearance:** toggle poster ratings. Posters show two available sources, preferring IMDb and movie Letterboxd scores,
+  then Rotten Tomatoes, Metacritic and TMDb. OMDb supplies missing IMDb and critic scores; TMDb needs its optional token below.
+  Titles with fewer than two available scores show only genuine scores. All configured sources are fetched and cached as you browse.
 - **Title details:** small buttons under the title (a site's icon, then its score) open the title on IMDb, Letterboxd, Rotten Tomatoes,
   Metacritic or TMDb. IMDb is always there; the others appear once they have a score. **Settings → Review services** accepts an optional
   OMDb API key (missing IMDb scores, per-episode IMDb scores, Rotten Tomatoes, Metacritic) and a TMDb API Read Access Token for TMDb ratings;
   select **Save Review Services**. Credentials are stored in the Keychain. The free OMDb key allows 1,000 lookups a day; if OMDb refuses the
   key or the quota runs out, Blusion stops asking for an hour.
+  Saving credentials refreshes visible posters and episodes, including cached missing scores. **Refresh Ratings** or pull to refresh
+  checks again while keeping existing scores visible. Title scores refresh weekly, episode seasons daily, and missing scores hourly;
+  temporary failures leave cached scores available offline and can retry after a minute. OMDb errors appear under Review services.
 - **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are
-  fetched when you open it, cached for 21 days, and shown with the IMDb mark next to each episode's air date.
-- **Best Blu-ray edition:** on a film's page, **Best Blu-ray edition** (under the synopsis) looks the film up on
-  [Best Blurays](https://www.bestblurays.com), a community-edited guide, and shows the release it names as best ("WB 4K Blu-ray"),
-  its video notes, its 4K tier and anything upcoming, with a link to the full comparison. It reads the site's public pages only when you
-  tap (a search for the title, then the page whose IMDb id matches; at most four small requests) and keeps the answer while the page is open.
+  fetched when you open it and shown with the IMDb mark after each episode's description.
+- **Best Blu-ray edition:** pressing **Play** on a film automatically looks it up on
+  [Best Blurays](https://www.bestblurays.com) while addons search for streams. The streams page shows the recommended release,
+  video notes, 4K tier and anything upcoming, with a link to the full comparison. The lookup keeps its answer while the stream picker
+  is open and does not delay playback; it makes at most four small requests to match the film's title, year and IMDb id.
 - **Watched:** a movie or a whole show can be marked from its title page (a show marks every episode that has aired; clearing asks first).
   The season menu marks one season, and a poster's long-press menu marks a whole show.
 - **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that
@@ -109,7 +113,7 @@ Snapshot builds carry the bundle id `app.blusion.player.snapshot`, so a run neve
 - Device checks remain open for PiP, AirPlay, lock-screen controls, background playback, hardware decoding, local-network prompts,
   VoiceOver, and accessibility text sizes. See [the device checklist](docs/DEVICE_CHECKLIST.md).
 - A real streaming-server route, the optional MPV fallback build, distribution signing, and App Store submission are not validated by local layout snapshots.
-- Letterboxd lookup depends on its public page format and availability; a missing rating leaves the poster badge absent.
+- Letterboxd lookup depends on its public page format and availability; missing ratings fall back to other available poster scores.
 - Trakt sign-in/sync and optional OMDb/TMDb lookups have stub-based tests; live account checks require user credentials.
 - External-player progress depends on the player returning a callback. A canceled or missing callback cannot supply a new position.
 - SRT and WebVTT are supported by the built-in player; styled or bitmap subtitles need a player that supports them.

@@ -21,7 +21,7 @@ public struct AppServices: Sendable {
     public let widgetContent: WidgetContentService
     /// IMDb and Letterboxd ratings for poster badges.
     public let posterRatings: PosterRatingsStore
-    /// Finds a film's best Blu-ray edition on bestblurays.com, when the viewer asks on its title page.
+    /// Finds a film's best Blu-ray edition on bestblurays.com while its streams are loading.
     public let bestBlurays: BestBluraysClient
     public let makeEngine: EngineFactory
     /// True once a fallback engine (M6) is linked into the app.

@@ -12,13 +12,13 @@ struct StreamRow: View {
     var isBest = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: Theme.Spacing.m) {
                 ResolutionTile(quality: item.quality)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
                         Text(headline)
-                            .font(.headline)
+                            .font(.subheadline.weight(.semibold))
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -26,9 +26,9 @@ struct StreamRow: View {
                     }
                     if !facts.isEmpty {
                         Text(facts.joined(separator: " · "))
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(1)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let routeNote {
@@ -44,45 +44,26 @@ struct StreamRow: View {
                     .foregroundStyle(glyphColor)
                     .accessibilityHidden(true)
             }
-            if !detailLines.isEmpty || !item.alsoProvidedBy.isEmpty { notes }
         }
-        .padding(Theme.Spacing.m + 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surface, in: shape)
-        .overlay { shape.strokeBorder(isBest ? Color.white.opacity(0.34) : Theme.separator, lineWidth: isBest ? 1.2 : 1) }
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
         .contentShape(shape)
         .help(item.route.handoffTarget.map { "Play in \($0.player.displayName)" } ?? "Choose this stream")
     }
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous) }
 
-    /// What the addon wrote about the file, line by line, under a hairline: seeders, languages, the release name. Quieter than the summary
-    /// above it, since it is the addon's wording and often full of its own symbols.
-    private var notes: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Divider().overlay(Theme.separator).padding(.bottom, Theme.Spacing.xs)
-            ForEach(detailLines.indices, id: \.self) { index in
-                Text(detailLines[index])
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            if !item.alsoProvidedBy.isEmpty {
-                Text("Also from \(item.alsoProvidedBy.map(\.name).joined(separator: ", "))")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    /// "4K Dolby Vision", "1080p HDR", "720p". With nothing to say about the picture, the addon's own name for the stream.
+    /// Keep the release name beside the quality badge, rather than repeating the badge's resolution/HDR.
     private var headline: String {
-        var parts: [String] = []
-        if let resolution = item.quality.resolutionLabel { parts.append(resolution) }
-        if item.quality.isDolbyVision { parts.append("Dolby Vision") } else if item.quality.isHDR { parts.append("HDR") }
-        return parts.isEmpty ? item.title : parts.joined(separator: " ")
+        if let filename = item.stream.behaviorHints.filename?.trimmingCharacters(in: .whitespacesAndNewlines), !filename.isEmpty {
+            return (filename as NSString).lastPathComponent
+        }
+        if case .direct(let url) = item.stream.source, !url.pathExtension.isEmpty {
+            return url.lastPathComponent.removingPercentEncoding ?? url.lastPathComponent
+        }
+        return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
     /// The facts a viewer picks a stream by, in the order they usually decide: size, where the file came from, how it is encoded, what the
@@ -107,17 +88,6 @@ struct StreamRow: View {
         case .unsupported: ("Blusion can't play this yet", "exclamationmark.triangle", true)
         case .native, .fallback, .external, .hidden: nil
         }
-    }
-
-    /// The addon's description, line by line as the addon wrote it: its first line is left out when that line already is the title (the addon
-    /// gave no name). Three lines at most, so a long release note cannot take over the card.
-    private var detailLines: [String] {
-        guard let description = item.stream.description else { return [] }
-        var lines = description.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        if item.stream.name == nil, !lines.isEmpty { lines.removeFirst() }
-        return Array(lines.prefix(3))
     }
 
     private var glyph: String {
@@ -218,7 +188,7 @@ struct StreamRowsSkeleton: View {
             ForEach(0..<3, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
                     .fill(Theme.surface)
-                    .frame(height: 118)
+                    .frame(height: 96)
             }
         }
         .shimmering()

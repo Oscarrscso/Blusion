@@ -5,6 +5,8 @@ import StremioKit
 struct SearchView: View {
     @State private var model: SearchViewModel
     @State private var selectedGroup: String?
+    @State private var isSearchPresented = false
+    @FocusState private var isSearchFocused: Bool
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     private let initialQuery: String?
@@ -46,7 +48,18 @@ struct SearchView: View {
         }
         .screenBackground()
         .navigationTitle("Search")
-        .searchable(text: $model.query, prompt: "Shows, Movies, and More")
+        .searchable(text: $model.query, isPresented: $isSearchPresented,
+                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Shows, Movies, and More")
+        .searchFocused($isSearchFocused)
+        .onChange(of: router.searchBrowseRevision) {
+            model.query = ""
+            isSearchPresented = false
+            isSearchFocused = false
+        }
+        .onChange(of: router.searchFocusRevision) {
+            isSearchPresented = true
+            isSearchFocused = true
+        }
         .onChange(of: model.query) {
             selectedGroup = nil
             model.queryDidChange()
@@ -111,10 +124,10 @@ struct SearchView: View {
     @ViewBuilder
     private var results: some View {
         if model.groups.count > 1 {
-            ChipRow {
-                GlassChip("All", isSelected: selectedGroup == nil) { selectedGroup = nil }
+            ChipRow(fittingColumns: min(4, model.groups.count + 1)) {
+                GlassChip("All", isSelected: selectedGroup == nil, fillsWidth: true) { selectedGroup = nil }
                 ForEach(model.groups) { group in
-                    GlassChip(group.title, isSelected: selectedGroup == group.id) { selectedGroup = group.id }
+                    GlassChip(group.title, isSelected: selectedGroup == group.id, fillsWidth: true) { selectedGroup = group.id }
                 }
             }
         }

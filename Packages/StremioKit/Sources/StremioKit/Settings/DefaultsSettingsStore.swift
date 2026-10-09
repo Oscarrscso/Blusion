@@ -10,6 +10,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let playerPreference = "settings.playerPreference"
         public static let showsPosterRatings = "settings.showsPosterRatings"
         public static let autoPlayBestStream = "settings.autoPlayBestStream"
+        public static let continueWatchingRefreshSeconds = "settings.continueWatchingRefreshSeconds"
         public static let serverSecret = "settings.streamingServerURL"
         public static let traktClientSecret = "settings.traktClientID"
         public static let omdbAPIKey = "settings.omdbAPIKey"
@@ -37,7 +38,8 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         return PlaybackSettings(preferredResolution: resolution > 0 ? resolution : nil, subtitleLanguage: language?.isEmpty == false ? language : nil,
                                 streamingServerURL: server, fallbackEngineEnabled: fallback, traktClientID: traktClientID, playerPreference: player,
                                 showsPosterRatings: posterRatings, autoPlayBestStream: defaults.bool(forKey: Keys.autoPlayBestStream),
-                                omdbAPIKey: omdbAPIKey, tmdbReadToken: tmdbReadToken)
+                                omdbAPIKey: omdbAPIKey, tmdbReadToken: tmdbReadToken,
+                                continueWatchingRefreshSeconds: defaults.object(forKey: Keys.continueWatchingRefreshSeconds) as? Int ?? 300)
     }
 
     public func save(_ settings: PlaybackSettings) async {
@@ -55,6 +57,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         defaults.set(settings.playerPreference.rawValue, forKey: Keys.playerPreference)
         defaults.set(settings.showsPosterRatings, forKey: Keys.showsPosterRatings)
         defaults.set(settings.autoPlayBestStream, forKey: Keys.autoPlayBestStream)
+        defaults.set(settings.continueWatchingRefreshSeconds ?? 300, forKey: Keys.continueWatchingRefreshSeconds)
         if let server = settings.streamingServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !server.isEmpty {
             try? await secrets.set(server, for: Keys.serverSecret)
         } else {

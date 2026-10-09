@@ -68,6 +68,35 @@ import Testing
         #expect(await library.contains("movie/tt1"))
     }
 
+    /// A store written with schema V2 keeps its saved titles when reopened with V3, which adds genres and ratings to them.
+    @Test func aVersionTwoStoreMigratesToVersionThreeKeepingItsLibrary() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("blusion-migration-v3-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("blusion.store")
+        let added = Date(timeIntervalSince1970: 1_700_000_000)
+
+        do {
+            let v2 = Schema(versionedSchema: BlusionSchemaV2.self)
+            let container = try ModelContainer(for: v2, configurations: [ModelConfiguration(schema: v2, url: url, cloudKitDatabase: .none)])
+            let context = ModelContext(container)
+            context.insert(BlusionSchemaV2.LibraryEntity(id: "movie/tt1", type: "movie", contentID: "tt1", name: "Old", posterURLString: nil,
+                                                         releaseInfo: "1999", addedAt: added))
+            try context.save()
+        }
+
+        let migrated = try PersistenceContainer.make(url: url)
+        let library = SwiftDataLibraryStore(container: migrated)
+        let kept = try #require(await library.all().first)
+        #expect(kept.name == "Old" && kept.releaseInfo == "1999" && kept.addedAt == added, "the V2 row survived the migration")
+        #expect(kept.genres.isEmpty && kept.imdbRating == nil, "a row from before V3 has no genres or rating")
+
+        await library.add(LibraryItem(id: "series/tt2", type: "series", contentID: "tt2", name: "New", addedAt: added, genres: ["Drama"], imdbRating: 8.1))
+        let reopened = await SwiftDataLibraryStore(container: try PersistenceContainer.make(url: url)).all()
+        #expect(reopened.first { $0.id == "series/tt2" }?.genres == ["Drama"])
+        #expect(reopened.first { $0.id == "series/tt2" }?.imdbRating == 8.1)
+    }
+
     #if targetEnvironment(macCatalyst) || os(macOS)
     /// `Application Support/default.store` belongs to whichever unsandboxed Mac app made it first. The Mac app once opened such
     /// a file, could not read it and ran from memory.
@@ -85,8 +114,9 @@ import Testing
 
     @Test func theSchemaVersionsAreOrdered() {
         #expect(BlusionSchemaV1.versionIdentifier < BlusionSchemaV2.versionIdentifier)
-        #expect(BlusionMigrationPlan.schemas.count == 2)
-        #expect(BlusionMigrationPlan.stages.count == 1)
+        #expect(BlusionSchemaV2.versionIdentifier < BlusionSchemaV3.versionIdentifier)
+        #expect(BlusionMigrationPlan.schemas.count == 3)
+        #expect(BlusionMigrationPlan.stages.count == 2)
     }
 }
 #endif

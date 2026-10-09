@@ -91,6 +91,7 @@ struct LayoutMetrics: Equatable, Sendable {
 }
 
 extension EnvironmentValues {
+    @Entry var isLandscape = false
     /// Set only to force a layout; `layoutMetrics` falls back to the one the size class asks for.
     @Entry var layoutMetricsOverride: LayoutMetrics?
 

@@ -10,6 +10,8 @@ struct StreamPickerView: View {
     @State private var model: StreamPickerViewModel
     @State private var plan: PlaybackPlan?
     @State private var expandedDetails: RankedStream?
+    @State private var autoPickTask: Task<Void, Never>?
+    @State private var hasSelectedManually = false
     /// The sharpness the chips narrow the list to; nil shows every stream.
     @State private var resolutionFilter: Band?
     /// A stream whose format Blusion can't play: the alert offers another player, or the next stream.
@@ -20,6 +22,7 @@ struct StreamPickerView: View {
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
 
     init(request: StreamRequest, services: AppServices) {
         self.services = services
@@ -28,9 +31,11 @@ struct StreamPickerView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 header
                 playBestButton
+                BestEditionView(model: model)
+                    .padding(.horizontal, metrics.pageMargin)
                 resolutionChips
                 failures
                 emptyState
@@ -47,20 +52,23 @@ struct StreamPickerView: View {
         .background(alignment: .top) { ambientBackdrop }
         .screenBackground()
         .scrollEdgeEffectStyle(.soft, for: .top)
+        .scrollEdgeEffectHidden(isLandscape, for: .top)
         // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
         .navigationTitle(model.request.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         .accessibilityIdentifier("streams.list")
+        .task { await model.findBestEdition() }
         .task {
             // Asked once, here: routing hands streams to these players only, and the menus offer only these.
             model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
             if !model.hasLoaded {
                 await model.load()
                 let settings = await services.settings.load()
-                if settings.autoPlayBestStream, model.listing.best != nil { playBest() }
+                if settings.autoPlayBestStream, !hasSelectedManually, let best = model.listing.best { select(best) }
             }
         }
+        .onDisappear { autoPickTask?.cancel() }
         .sheet(item: $expandedDetails) { item in
             NavigationStack {
                 ScrollView {
@@ -105,7 +113,7 @@ struct StreamPickerView: View {
     /// from, the way the TV app tints a screen with its poster. It runs up under the navigation bar.
     @ViewBuilder
     private var ambientBackdrop: some View {
-        if let poster = model.request.poster {
+        if !isLandscape, let poster = model.request.poster {
             ArtworkImage(url: poster, maxPixelSize: 240)
                 .frame(height: 520)
                 .scaleEffect(1.4)
@@ -123,15 +131,12 @@ struct StreamPickerView: View {
     /// Poster, then what is being picked: for an episode "S1 · E3" over its name, for a film its year. On a phone it is centred, as
     /// the title page is; in a wide window it reads from the left.
     private var header: some View {
-        let leading = metrics.isRegular
-        return VStack(alignment: leading ? .leading : .center, spacing: Theme.Spacing.m) {
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
             if let poster = model.request.poster {
                 PosterImage(url: poster, title: model.request.title)
-                    .frame(width: leading ? 120 : 92)
-                    .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
-                    .padding(.top, Theme.Spacing.s)
+                    .frame(width: 54, height: 81)
             }
-            VStack(alignment: leading ? .leading : .center, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 if let eyebrow {
                     Text(eyebrow)
                         .font(Theme.Typography.eyebrow)
@@ -139,16 +144,18 @@ struct StreamPickerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Text(model.request.title)
-                    .font(.title2.bold())
-                    .multilineTextAlignment(leading ? .leading : .center)
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                 status
                     .padding(.top, 2)
             }
         }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, metrics.pageMargin)
+        .padding(.top, Theme.Spacing.s)
     }
 
     /// "S1 · E3" for an episode, the release year for a film.
@@ -190,20 +197,22 @@ struct StreamPickerView: View {
 
     @ViewBuilder
     private var playBestButton: some View {
-        if let best = model.listing.best {
-            Button(playBestTitle(for: best)) { playBest() }
-                .buttonStyle(.primaryAction)
+        if !model.listing.items.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Button { autoPick() } label: {
+                    HStack {
+                        if model.isAutoPicking { ProgressView() } else { Image(systemName: "sparkles") }
+                        Text(model.isAutoPicking ? "Comparing streams…" : "Auto Pick Best Stream")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.primaryActionCompact)
+                .disabled(model.isAutoPicking)
                 .accessibilityIdentifier("streams.playBest")
-                .padding(.horizontal, metrics.pageMargin)
+                if let message = model.autoPickMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
+            }
+            .padding(.horizontal, metrics.pageMargin)
         }
-    }
-
-    /// "Play Best · 4K HDR" in Blusion, "Play Best in Infuse · 4K HDR" for a hand-off.
-    private func playBestTitle(for best: RankedStream) -> String {
-        var title = "Play Best"
-        if let target = best.route.handoffTarget { title += " in \(target.player.displayName)" }
-        let picture = pictureLabel(best)
-        return picture.isEmpty ? title : "\(title) · \(picture)"
     }
 
     // MARK: filtering
@@ -247,30 +256,13 @@ struct StreamPickerView: View {
     @ViewBuilder
     private var resolutionChips: some View {
         if availableBands.count > 1 {
-            ChipRow {
-                GlassChip("All", isSelected: resolutionFilter == nil || !availableBands.contains(resolutionFilter ?? .uhd)) {
-                    withAnimation(.snappy) { resolutionFilter = nil }
-                }
-                ForEach(availableBands, id: \.self) { band in
-                    GlassChip(band.title, isSelected: resolutionFilter == band) {
-                        withAnimation(.snappy) { resolutionFilter = band }
-                    }
-                }
-            }
-            .accessibilityIdentifier("streams.filter")
+            QualitySelector(titles: ["All"] + availableBands.map(\.title), selection: Binding {
+                resolutionFilter.flatMap { availableBands.firstIndex(of: $0).map { $0 + 1 } } ?? 0
+            } set: { index in
+                resolutionFilter = index > 0 && index <= availableBands.count ? availableBands[index - 1] : nil
+            })
+            .padding(.horizontal, metrics.pageMargin)
         }
-    }
-
-    /// "4K HDR", "1080p", "4K Dolby Vision": the picture of a stream in words. Empty when the name said nothing about it.
-    private func pictureLabel(_ item: RankedStream) -> String {
-        var parts: [String] = []
-        if let resolution = item.quality.resolutionLabel { parts.append(resolution) }
-        if item.quality.isDolbyVision {
-            parts.append("Dolby Vision")
-        } else if item.quality.isHDR {
-            parts.append("HDR")
-        }
-        return parts.joined(separator: " ")
     }
 
     // MARK: failures and empty states
@@ -364,15 +356,29 @@ struct StreamPickerView: View {
     }
 
     private func streamButton(_ item: RankedStream) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
         Button {
             select(item)
         } label: {
-            StreamRow(item: item, isBest: item.id == model.listing.best?.id)
+            StreamRow(item: item, isBest: item.id == model.autoPickedStream?.id)
         }
         .buttonStyle(PressableCardStyle())
         .contextMenu { contextActions(for: item) }
         .accessibilityIdentifier("stream.row.\(item.title)")
         .accessibilityHint(hint(for: item))
+        DisclosureGroup("Technical details") {
+            Text([item.stream.behaviorHints.filename, item.stream.description,
+                  item.alsoProvidedBy.isEmpty ? nil : "Also from \(item.alsoProvidedBy.map(\.name).joined(separator: ", "))"]
+                .compactMap { $0 }.joined(separator: "\n"))
+                .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
+        }
+        .font(.caption)
+        .tint(.secondary)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.bottom, 8)
+        }
+        .glassCardSurface()
     }
 
     @ViewBuilder
@@ -416,18 +422,26 @@ struct StreamPickerView: View {
     // MARK: choosing
 
     private func select(_ item: RankedStream) {
+        hasSelectedManually = true
+        autoPickTask?.cancel()
         Task {
             guard let choice = await model.choose(item) else { return }
             present(choice, for: item)
         }
     }
 
-    private func playBest() {
-        guard let best = model.listing.best else { return }
-        select(best)
+    private func autoPick() {
+        hasSelectedManually = true
+        autoPickTask?.cancel()
+        autoPickTask = Task {
+            guard let choice = await model.autoPickBest(), !Task.isCancelled, let item = model.autoPickedStream else { return }
+            present(choice, for: item)
+        }
     }
 
     private func openIn(_ player: ExternalPlayer, _ item: RankedStream) {
+        hasSelectedManually = true
+        autoPickTask?.cancel()
         Task {
             guard let choice = await model.handoffChoice(for: item, player: player) else { return }
             present(choice, for: item)
@@ -435,6 +449,8 @@ struct StreamPickerView: View {
     }
 
     private func playInBlusion(_ item: RankedStream) {
+        hasSelectedManually = true
+        autoPickTask?.cancel()
         guard let choice = model.inAppChoice(for: item) else { return }
         present(choice, for: item)
     }

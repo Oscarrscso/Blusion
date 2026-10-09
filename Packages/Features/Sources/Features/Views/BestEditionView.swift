@@ -2,41 +2,35 @@
 import StremioKit
 import SwiftUI
 
-/// What bestblurays.com names as the best edition of a film, looked up when the sheet opens: the release in large type, what makes it
-/// the pick, its notes and 4K tier, and a link to the page for the full comparison. The answer is kept by the title page's model, so
-/// reopening the sheet is instant.
-struct BestEditionSheet: View {
-    let model: DetailViewModel
-    @Environment(\.dismiss) private var dismiss
+/// Best Blurays' recommendation, shown beside the stream results after Play.
+struct BestEditionView: View {
+    let model: StreamPickerViewModel
+    @State private var isExpanded = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    content
-                    Text("From Best Blurays, a guide to film releases that its community keeps up to date. The page has the full comparison.")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(Theme.screenPadding)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .screenBackground()
-            .navigationTitle("Best Blu-ray edition")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) { dismiss() }
-                        .accessibilityIdentifier("bestEdition.close")
+        if model.canFindBestEdition {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                content.padding(.top, Theme.Spacing.s)
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("Best Blu-ray edition", systemImage: "opticaldisc")
+                        .font(.subheadline.weight(.semibold))
+                    if case .found(let edition) = model.bestEdition {
+                        Text(edition.release).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    } else if case .loading = model.bestEdition {
+                        Text("Checking Best Blurays…").font(.caption).foregroundStyle(.secondary)
+                    } else if case .failed = model.bestEdition {
+                        Text("Couldn’t load edition · Tap to retry").font(.caption).foregroundStyle(.orange)
+                    }
                 }
             }
+            .tint(.secondary)
+            .padding(Theme.Spacing.m)
+            .glassCardSurface()
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: isExpanded)
+            .accessibilityIdentifier("streams.bestEdition")
         }
-        .preferredColorScheme(.dark)
-        .presentationDetents([.medium, .large])
-        .task { await model.findBestEdition() }
-        .accessibilityIdentifier("bestEdition.sheet")
     }
 
     @ViewBuilder
@@ -45,7 +39,7 @@ struct BestEditionSheet: View {
         case .idle, .loading:
             HStack(spacing: Theme.Spacing.m) {
                 ProgressView()
-                Text("Checking Best Blurays for \(model.detail.name)…")
+                Text("Checking Best Blurays for \(model.request.title)…")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -56,7 +50,7 @@ struct BestEditionSheet: View {
         case .listedWithoutEdition(let title, let url):
             message("Best Blurays lists \(title), but has not named a best release for it yet.", link: url, linkTitle: "Open the page")
         case .notListed(let searchURL):
-            message("Best Blurays has no page for \(model.detail.name) yet.", link: searchURL, linkTitle: "Search Best Blurays")
+            message("Best Blurays has no page for \(model.request.title) yet.", link: searchURL, linkTitle: "Search Best Blurays")
         case .failed(let text):
             InlineErrorView(text) { Task { await model.findBestEdition() } }
                 .accessibilityIdentifier("bestEdition.failed")
@@ -70,7 +64,7 @@ struct BestEditionSheet: View {
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)
             Text(edition.release)
-                .font(.title2.bold())
+                .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("bestEdition.release")
             HStack(spacing: Theme.Spacing.s) {
@@ -93,9 +87,7 @@ struct BestEditionSheet: View {
             .padding(.top, Theme.Spacing.xs)
             .accessibilityIdentifier("bestEdition.open")
         }
-        .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface()
     }
 
     private func labelled(_ title: String, _ text: String) -> some View {
@@ -119,9 +111,7 @@ struct BestEditionSheet: View {
             }
             .buttonStyle(.glassCapsule)
         }
-        .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface()
         .accessibilityIdentifier("bestEdition.message")
     }
 }

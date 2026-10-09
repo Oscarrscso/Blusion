@@ -47,15 +47,20 @@ import StremioKitTestSupport
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
-                return StubTransport.response(Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}}},{"movie":{"title":"Remote copy","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
+                return StubTransport.response(
+                    Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}}},{"movie":{"title":"Remote copy","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
             if request.url?.path.hasPrefix("/sync/collection/") == true {
                 return StubTransport.response(Data("[]".utf8), for: request)
             }
             if request.url?.path == "/sync/watched/movies" {
-                return StubTransport.response(Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}},"last_watched_at":"2023-11-14T22:13:20.000Z"}]"#.utf8), for: request)
+                return StubTransport.response(
+                    Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}},"last_watched_at":"2023-11-14T22:13:20.000Z"}]"#.utf8), for: request)
             }
-            return StubTransport.response(Data(#"[{"show":{"title":"Series","ids":{"imdb":"tt3"}},"seasons":[{"number":1,"episodes":[{"number":2,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]"#.utf8), for: request)
+            return StubTransport.response(Data(#"""
+            [{"show":{"title":"Series","ids":{"imdb":"tt3"}},
+              "seasons":[{"number":1,"episodes":[{"number":2,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]
+            """#.utf8), for: request)
         }
         let saved = LibraryItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Local title"), addedAt: when)
         let partial = WatchProgress(id: "movie/tt2", type: "movie", contentID: "tt2", title: "Local movie", position: 50, duration: 100,
@@ -121,7 +126,8 @@ import StremioKitTestSupport
                 return StubTransport.response(Data(#"[{"movie":{"title":"Watch later","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
             if request.url?.path == "/sync/collection/movies" {
-                return StubTransport.response(Data(#"[{"movie":{"title":"Duplicate","ids":{"imdb":"tt1"}}},{"movie":{"title":"Owned movie","ids":{"imdb":"tt2"}}}]"#.utf8), for: request)
+                return StubTransport.response(
+                    Data(#"[{"movie":{"title":"Duplicate","ids":{"imdb":"tt1"}}},{"movie":{"title":"Owned movie","ids":{"imdb":"tt2"}}}]"#.utf8), for: request)
             }
             if request.url?.path == "/sync/collection/shows" {
                 return StubTransport.response(Data(#"[{"show":{"title":"Owned show","ids":{"imdb":"tt3"}}}]"#.utf8), for: request)
@@ -155,6 +161,67 @@ import StremioKitTestSupport
         #expect(model.errorMessage != nil && model.message == nil)
         #expect(await services.library.all().isEmpty)
         #expect(await services.progress.all().isEmpty)
+    }
+
+    @Test func emptyLibraryRefreshImportsTraktWithoutSigningOut() async throws {
+        let tokenJSON = tokenJSON
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/watchlist" {
+                return StubTransport.response(Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
+            }
+            if request.url?.path == "/sync/collection/shows" {
+                return StubTransport.response(Data(#"[{"show":{"title":"Owned show","ids":{"imdb":"tt2"}}}]"#.utf8), for: request)
+            }
+            if request.url?.path == "/sync/watched/movies" {
+                return StubTransport.response(Data(#"[{"movie":{"title":"Watched","ids":{"imdb":"tt3"}},"last_watched_at":"2023-11-14T22:13:20Z"}]"#.utf8), for: request)
+            }
+            return StubTransport.response(Data("[]".utf8), for: request)
+        }
+        let services = try await services(transport: transport)
+        let model = LibraryViewModel(services: services)
+        await model.refresh(now: when)
+        #expect(Set(model.saved.map(\.id)) == ["movie/tt1", "series/tt2"])
+        #expect(model.watched.map(\.id) == ["movie/tt3"])
+        #expect(await services.traktAccount.isSignedIn())
+
+        let calls = transport.callCount
+        model.filter.kinds = [.anime]
+        #expect(!model.hasMatches && !model.isEmpty)
+        await model.refresh(now: when.addingTimeInterval(600))
+        #expect(transport.callCount == calls, "a filter with no matches must not trigger another import")
+    }
+
+    @Test func emptyLibraryRetriesFailedTraktImportsAfterFiveMinutes() async throws {
+        let tokenJSON = tokenJSON
+        let transport = StubTransport { request, call in
+            if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/watchlist" {
+                if call == 2 { return StubTransport.response(Data(), status: 503, for: request) }
+                return StubTransport.response(Data(#"[{"movie":{"title":"Recovered","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
+            }
+            return StubTransport.response(Data("[]".utf8), for: request)
+        }
+        let model = LibraryViewModel(services: try await services(transport: transport))
+        await model.refresh(now: when)
+        #expect(model.isEmpty && model.hasLoaded)
+        let calls = transport.callCount
+        await model.refresh(now: when.addingTimeInterval(299))
+        #expect(transport.callCount == calls)
+        await model.refresh(now: when.addingTimeInterval(300))
+        #expect(model.saved.map(\.id) == ["movie/tt1"])
+        #expect(transport.requests.filter { $0.url?.path == "/sync/watchlist" }.count == 2)
+    }
+
+    @Test func signedOutEmptyLibraryDoesNotTryToImportTrakt() async throws {
+        let transport = StubTransport(data: Data(tokenJSON.utf8))
+        let services = try await services(transport: transport)
+        await services.traktAccount.signOut()
+        let calls = transport.callCount
+        let model = LibraryViewModel(services: services)
+        await model.refresh(now: when)
+        #expect(model.isEmpty && model.hasLoaded)
+        #expect(transport.callCount == calls)
     }
 
     @Test func signOutKeepsLocalLibraryAndHistory() async throws {

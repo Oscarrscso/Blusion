@@ -184,9 +184,9 @@ struct DesignGalleryView: View {
             }
             block("Ratings on artwork: both, IMDb only, and the one-number badge") {
                 HStack(alignment: .bottom, spacing: Theme.Spacing.m) {
-                    ratingSwatch(imdb: "9.0", letterboxd: "9.0")
-                    ratingSwatch(imdb: "8.3", letterboxd: nil)
-                    ratingSwatch(imdb: nil, letterboxd: "3.8")
+                    ratingSwatch(imdb: 9, letterboxd: 4.5)
+                    ratingSwatch(imdb: 8.3, letterboxd: nil)
+                    ratingSwatch(imdb: nil, letterboxd: 1.9)
                     ZStack(alignment: .bottomLeading) {
                         Theme.placeholder.frame(width: 80, height: 40)
                         RatingBadge(9.0).padding(Theme.Spacing.s)
@@ -234,12 +234,12 @@ struct DesignGalleryView: View {
         }
     }
 
-    private func ratingSwatch(imdb: String?, letterboxd: String?) -> some View {
+    private func ratingSwatch(imdb: Double?, letterboxd: Double?) -> some View {
         ZStack(alignment: .bottomLeading) {
             Theme.placeholder
             LinearGradient(colors: [.black.opacity(0), .black.opacity(0.62)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 30)
-            RatingsLine(imdb: imdb, letterboxd: letterboxd)
+            RatingsLine(ratings: TitleRatings(id: "preview", imdb: imdb, letterboxd: letterboxd))
                 .padding(.horizontal, 8)
                 .padding(.bottom, 7)
         }

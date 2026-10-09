@@ -5,8 +5,11 @@ import StremioKit
 
 struct LibraryView: View {
     @State private var model: LibraryViewModel
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var actions: TitleActions?
+    @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
+    @ScaledMetric(relativeTo: .subheadline) private var filterButtonWidth = 110.0
     let onOpenAddons: () -> Void
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
@@ -17,6 +20,7 @@ struct LibraryView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                filters
                 if !model.hasLoaded {
                     SkeletonRow()
                 } else if model.isEmpty {
@@ -28,20 +32,153 @@ struct LibraryView: View {
                     }
                     .accessibilityIdentifier("library.empty")
                 } else {
-                    if !model.continueWatching.isEmpty { continueSection }
-                    if !model.saved.isEmpty { savedSection }
-                    if !model.watched.isEmpty { watchedSection }
+                    if !model.hasMatches {
+                        EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
+                                         message: "Try removing a filter.") {
+                            Button("Clear Filters") { model.clearFilters() }
+                                .buttonStyle(.primaryActionCompact)
+                                .accessibilityIdentifier("library.noMatches.clear")
+                        }
+                        .accessibilityIdentifier("library.noMatches")
+                    } else {
+                        if !model.continueWatching.isEmpty { continueSection }
+                        if !model.saved.isEmpty { savedSection }
+                        if !model.watched.isEmpty { watchedSection }
+                    }
                 }
             }
             .padding(.vertical, Theme.Spacing.l)
         }
         .screenBackground()
         .navigationTitle("Library")
-        .onAppear { Task { await model.load() } }
-        .refreshable { await model.load() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await model.refresh()
+                await actions?.refresh()
+                do {
+                    try await Task.sleep(for: .seconds(300))
+                } catch {
+                    return
+                }
+            }
+        }
+        .refreshable { await ratings?.refresh(); await model.refresh(); await actions?.refresh() }
         .onChange(of: actions?.savedIdentities) { Task { await model.load() } }
         .onChange(of: actions?.watchedIdentities) { Task { await model.load() } }
         .accessibilityIdentifier("library.list")
+    }
+
+    private var filters: some View {
+        @Bindable var model = model
+        let kinds: [LibraryKind] = [.movie, .series, .anime]
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            QualitySelector(titles: ["All"] + kinds.map(\.title), selection: Binding {
+                kinds.firstIndex(where: { model.filter.kinds.contains($0) }).map { $0 + 1 } ?? 0
+            } set: { index in
+                model.filter.kinds = index > 0 && index <= kinds.count ? [kinds[index - 1]] : []
+            }, accessibilityID: "library.filter.kind")
+            .padding(.horizontal, metrics.pageMargin)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            GlassEffectContainer(spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    Menu {
+                        if let range = model.availableYears {
+                            Picker("From", selection: $model.filter.minimumYear) {
+                                Text("Any").tag(Int?.none)
+                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                            }
+                            Picker("To", selection: $model.filter.maximumYear) {
+                                Text("Any").tag(Int?.none)
+                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                            }
+                        } else {
+                            Text("No release years yet")
+                        }
+                    } label: {
+                        filterLabel("Year", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
+                    }
+                    .accessibilityIdentifier("library.filter.year")
+                    Menu {
+                        Button("Any") { model.filter.statuses = [] }
+                        ForEach(WatchStatus.allCases) { status in
+                            Toggle(status.title, isOn: membership(status, in: \.statuses))
+                                .accessibilityIdentifier("library.filter.status.\(status.rawValue)")
+                        }
+                    } label: {
+                        filterLabel("Status", tint: model.filter.statuses.contains(.watched) ? .green
+                                    : model.filter.statuses.contains(.inProgress) ? .orange : .primary, isActive: !model.filter.statuses.isEmpty)
+                    }
+                    .accessibilityIdentifier("library.filter.status")
+                    Menu {
+                        Picker("At least", selection: $model.filter.minimumRating) {
+                            Text("Any").tag(Double?.none)
+                            ForEach([5.0, 6.0, 7.0, 8.0, 9.0], id: \.self) { Text("★ \(LibraryFiltering.ratingText($0))+").tag(Double?.some($0)) }
+                        }
+                    } label: {
+                        filterLabel("Rating", systemImage: "star.fill", tint: .yellow, isActive: model.filter.minimumRating != nil)
+                    }
+                    .accessibilityIdentifier("library.filter.rating")
+                }
+            }
+            Menu {
+                Picker("Sort by", selection: $model.filter.sort) {
+                    ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+                }
+            } label: {
+                filterLabel(model.filter.sort.title, systemImage: "arrow.up.arrow.down", tint: .blue,
+                            isActive: model.filter.sort != .recentlyAdded)
+            }
+            .accessibilityLabel("Sort by \(model.filter.sort.title)")
+            .accessibilityIdentifier("library.sort")
+            if !model.filter.chips.isEmpty { filterChips }
+            }
+            .padding(.horizontal, metrics.pageMargin)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("library.filters")
+    }
+
+    private func filterLabel(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            if let systemImage { Image(systemName: systemImage).font(.caption) }
+            Text(title).lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+        }
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .glassEffect(.regular.tint(tint.opacity(isActive ? 0.25 : 0.08)).interactive(), in: .capsule)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+
+    private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
+        Binding {
+            model.filter[keyPath: keyPath].contains(value)
+        } set: { included in
+            if included {
+                model.filter[keyPath: keyPath].insert(value)
+            } else {
+                model.filter[keyPath: keyPath].remove(value)
+            }
+        }
+    }
+
+    /// The active filters, one chip each (tap to clear it), and a chip that clears them all.
+    private var filterChips: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: filterButtonWidth + 40), spacing: Theme.Spacing.s)],
+                  alignment: .leading, spacing: Theme.Spacing.s) {
+            ForEach(model.filter.chips) { chip in
+                GlassChip(chip.label, systemImage: "xmark") { model.removeFilter(chip) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("library.chip.\(chip.id)")
+            }
+            GlassChip("Clear all", systemImage: "xmark.circle") { model.clearFilters() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("library.chip.clear")
+        }
     }
 
     private var continueSection: some View {

@@ -22,6 +22,12 @@ public final class SettingsViewModel {
         [.init(label: "Off", value: nil)] + LanguageCodes.all.map { .init(label: $0.name, value: $0.code) }
     }
 
+    public static let continueWatchingRefreshOptions: [Option<Int>] = [
+        .init(label: "Manually", value: 0), .init(label: "Every minute", value: 60),
+        .init(label: "Every 5 minutes", value: 300), .init(label: "Every 15 minutes", value: 900),
+        .init(label: "Every 30 minutes", value: 1800),
+    ]
+
     public private(set) var settings = PlaybackSettings()
     public var serverURLText = ""
     /// The Trakt client ID as typed. `commitTraktClientID()` saves it.
@@ -83,6 +89,12 @@ public final class SettingsViewModel {
         await services.settings.save(settings)
     }
 
+    public func setContinueWatchingRefreshSeconds(_ value: Int) async {
+        settings = await services.settings.load()
+        settings.continueWatchingRefreshSeconds = value
+        await services.settings.save(settings)
+    }
+
     /// Also switches the poster ratings in the store the posters read.
     public func setShowsPosterRatings(_ value: Bool) async {
         settings = await services.settings.load()
@@ -108,8 +120,13 @@ public final class SettingsViewModel {
         await services.settings.save(settings)
         await services.posterRatings.setReviewServices(
             omdb: settings.omdbAPIKey.map { OMDbRatings(client: services.client, apiKey: $0) },
-            tmdb: settings.tmdbReadToken.map { TMDbRatings(client: services.client, readAccessToken: $0) })
-        lastMessage = "Review services saved."
+            tmdb: settings.tmdbReadToken.map { TMDbRatings(client: services.client, readAccessToken: $0) }, refreshCache: true)
+        lastMessage = "Review services saved. Ratings will refresh as you browse."
+    }
+
+    public func refreshRatings() async {
+        await services.posterRatings.refresh()
+        lastMessage = "Ratings will refresh as you browse."
     }
 
     /// Saves the streaming server field if it is empty or valid; otherwise leaves the stored value alone.

@@ -14,6 +14,9 @@ enum SettingsDestination: Hashable {
 public final class AppRouter {
     public var tab: LaunchRoute.Tab
     public var homePath = NavigationPath()
+    var searchPath = NavigationPath()
+    var searchBrowseRevision = 0
+    var searchFocusRevision = 0
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
     var settingsPath = NavigationPath()
     var demoPlan: PlaybackPlan?
@@ -77,6 +80,7 @@ public struct RootTabView: View {
     @State private var router: AppRouter
     @State private var resume: ContinueWatchingModel
     @State private var titleActions: TitleActions
+    @State private var isLandscape = false
 
     public init(services: AppServices, route: LaunchRoute = .home, addonLink: Binding<String?> = .constant(nil), userStateRevision: Int = 0) {
         self.services = services
@@ -90,7 +94,17 @@ public struct RootTabView: View {
 
     public var body: some View {
         @Bindable var router = router
-        TabView(selection: $router.tab) {
+        TabView(selection: Binding(get: { router.tab }, set: { tab in
+            if tab == .search {
+                router.searchPath = NavigationPath()
+                if router.tab == .search {
+                    router.searchFocusRevision += 1
+                } else {
+                    router.searchBrowseRevision += 1
+                }
+            }
+            router.tab = tab
+        })) {
             Tab("Home", systemImage: "house.fill", value: LaunchRoute.Tab.home) {
                 NavigationStack(path: $router.homePath) {
                     HomeView(services: services)
@@ -135,7 +149,7 @@ public struct RootTabView: View {
                 }
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {
-                NavigationStack {
+                NavigationStack(path: $router.searchPath) {
                     SearchView(services: services, initialQuery: initialQuery)
                         .appDestinations(services: services)
                 }
@@ -143,6 +157,9 @@ public struct RootTabView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .tabViewSearchActivation(.automatic)
+        .scrollEdgeEffectHidden(isLandscape, for: .top)
+        .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(ResumeAccessoryModifier(model: resume))
         .task(id: router.tab) { await refreshUserState() }
@@ -171,6 +188,8 @@ public struct RootTabView: View {
         .environment(router)
         .environment(services.posterRatings)
         .environment(titleActions)
+        .environment(\.isLandscape, isLandscape)
+        .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .focusedSceneValue(router)
         .preferredColorScheme(.dark)
     }

@@ -284,6 +284,19 @@ public actor TraktAccount {
         return try (decodeEntries(movies.data) + decodeEntries(shows.data)).flatMap(\.watchedItems)
     }
 
+    /// Paused movies and episodes, authenticated with the same persisted/refreshable token as library sync.
+    public func playback() async throws -> [TraktPlaybackItem] {
+        var items: [TraktPlaybackItem] = []
+        var page = 1
+        while true {
+            let result = try await authorizedRequest(path: "sync/playback?page=\(page)&limit=100&extended=full")
+            items += try TraktPlaybackItem.decode(result.data)
+            let pages = result.response.headers["x-pagination-page-count"].flatMap(Int.init) ?? 1
+            guard page < pages else { return items.sorted { $0.pausedAt > $1.pausedAt } }
+            page += 1
+        }
+    }
+
     public func addToWatchlist(_ items: [MetaPreview]) async throws -> Int {
         let payload = Self.watchlistPayload(items)
         guard !payload.isEmpty else { return 0 }

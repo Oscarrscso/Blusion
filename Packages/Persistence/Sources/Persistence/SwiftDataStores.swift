@@ -5,10 +5,10 @@ import StremioKit
 import SwiftData
 
 public enum PersistenceContainer {
-    /// The app's container at the current schema (V2), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
+    /// The app's container at the current schema (V3), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
     /// at `url` (default: `defaultStoreURL()`, or SwiftData's default location where that is nil).
     public static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: BlusionSchemaV2.self)
+        let schema = Schema(versionedSchema: BlusionSchemaV3.self)
         let configuration: ModelConfiguration
         if inMemory {
             configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
@@ -152,7 +152,7 @@ public actor SwiftDataLibraryStore: LibraryStore {
         let entities = (try? context.fetch(FetchDescriptor<LibraryEntity>(sortBy: [SortDescriptor(\.addedAt, order: .reverse)]))) ?? []
         return entities.map {
             LibraryItem(id: $0.id, type: $0.type, contentID: $0.contentID, name: $0.name, poster: $0.posterURLString.flatMap(URL.init(string:)),
-                        releaseInfo: $0.releaseInfo, addedAt: $0.addedAt)
+                        releaseInfo: $0.releaseInfo, addedAt: $0.addedAt, genres: $0.genres, imdbRating: $0.imdbRating)
         }
     }
 
@@ -161,7 +161,8 @@ public actor SwiftDataLibraryStore: LibraryStore {
     public func add(_ item: LibraryItem) async {
         guard fetch(item.id) == nil else { return }
         context.insert(LibraryEntity(id: item.id, type: item.type, contentID: item.contentID, name: item.name,
-                                     posterURLString: item.poster?.absoluteString, releaseInfo: item.releaseInfo, addedAt: item.addedAt))
+                                     posterURLString: item.poster?.absoluteString, releaseInfo: item.releaseInfo, addedAt: item.addedAt,
+                                     genres: item.genres, imdbRating: item.imdbRating))
         try? context.save()
     }
 

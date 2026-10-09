@@ -23,7 +23,7 @@ struct ProgressCard: View {
 
     var body: some View {
         let progress = min(max(fraction, 0), 1)
-        let fixed = width ?? metrics.wideCardWidth
+        let fixed = width ?? (metrics.isRegular ? 180 : 148)
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Color.clear
                 .frame(width: fixed, height: fixed / CardAspect.wide.ratio)

@@ -119,7 +119,7 @@ struct MediaCard: View {
     private var artwork: some View {
         artworkSpace
             .overlay { ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize) }
-            .overlay(alignment: .bottomLeading) {
+            .overlay(alignment: .bottom) {
                 if showsRating && aspect != .wide { PosterRatingsOverlay(item: item) }
             }
             .clipShape(RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous))

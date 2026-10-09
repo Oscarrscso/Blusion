@@ -12,6 +12,17 @@
         }
       }
     },
+    "A title matches if it has any of the chosen genres.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A title matches if it has any of the chosen genres."
+          }
+        }
+      }
+    },
     "About": {
       "extractionState": "manual",
       "localizations": {
@@ -100,6 +111,17 @@
         }
       }
     },
+    "Added": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Added"
+          }
+        }
+      }
+    },
     "Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.": {
       "extractionState": "manual",
       "localizations": {
@@ -177,6 +199,17 @@
         }
       }
     },
+    "Any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any"
+          }
+        }
+      }
+    },
     "Appearance": {
       "extractionState": "manual",
       "localizations": {
@@ -184,6 +217,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appearance"
+          }
+        }
+      }
+    },
+    "At least": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At least"
           }
         }
       }
@@ -206,6 +250,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Back 10 seconds"
+          }
+        }
+      }
+    },
+    "Best Blu-ray edition": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best Blu-ray edition"
           }
         }
       }
@@ -287,6 +342,17 @@
         }
       }
     },
+    "Checking Best Blurays…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking Best Blurays…"
+          }
+        }
+      }
+    },
     "Choose Source": {
       "extractionState": "manual",
       "localizations": {
@@ -316,6 +382,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear"
+          }
+        }
+      }
+    },
+    "Clear Filters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Filters"
           }
         }
       }
@@ -404,6 +481,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue Watching"
+          }
+        }
+      }
+    },
+    "Continue Watching refresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue Watching refresh"
+          }
+        }
+      }
+    },
+    "Couldn’t load edition · Tap to retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load edition · Tap to retry"
           }
         }
       }
@@ -617,6 +716,17 @@
         }
       }
     },
+    "Filter and Sort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter and Sort"
+          }
+        }
+      }
+    },
     "Find something to watch": {
       "extractionState": "manual",
       "localizations": {
@@ -650,6 +760,17 @@
         }
       }
     },
+    "From": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From"
+          }
+        }
+      }
+    },
     "From URL": {
       "extractionState": "manual",
       "localizations": {
@@ -668,6 +789,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gallery"
+          }
+        }
+      }
+    },
+    "Genre": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genre"
+          }
+        }
+      }
+    },
+    "Genres appear here for titles saved from now on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genres appear here for titles saved from now on."
           }
         }
       }
@@ -980,6 +1123,17 @@
         }
       }
     },
+    "Loading Trakt playback…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading Trakt playback…"
+          }
+        }
+      }
+    },
     "Loading episodes": {
       "extractionState": "manual",
       "localizations": {
@@ -1013,6 +1167,39 @@
         }
       }
     },
+    "Mark All Episodes as Unwatched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark All Episodes as Unwatched"
+          }
+        }
+      }
+    },
+    "Mark All Episodes as Watched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark All Episodes as Watched"
+          }
+        }
+      }
+    },
+    "Mark Show as Not Watched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark Show as Not Watched"
+          }
+        }
+      }
+    },
     "Mark as Unwatched": {
       "extractionState": "manual",
       "localizations": {
@@ -1031,6 +1218,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mark as Watched"
+          }
+        }
+      }
+    },
+    "Mark every episode as not watched?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark every episode as not watched?"
           }
         }
       }
@@ -1097,6 +1295,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "No addons yet"
+          }
+        }
+      }
+    },
+    "No paused movies or episodes on Trakt.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No paused movies or episodes on Trakt."
+          }
+        }
+      }
+    },
+    "No release years yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No release years yet"
           }
         }
       }
@@ -1244,6 +1464,17 @@
         }
       }
     },
+    "Open on Best Blurays": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open on Best Blurays"
+          }
+        }
+      }
+    },
     "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
       "extractionState": "manual",
       "localizations": {
@@ -1251,6 +1482,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
+          }
+        }
+      }
+    },
+    "Optional. OMDb fills in IMDb scores that catalogs leave out (on posters and for each episode) and adds Rotten Tomatoes and Metacritic. The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. OMDb fills in IMDb scores that catalogs leave out (on posters and for each episode) and adds Rotten Tomatoes and Metacritic. The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
           }
         }
       }
@@ -1464,6 +1706,17 @@
         }
       }
     },
+    "Rating": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rating"
+          }
+        }
+      }
+    },
     "Ratings on posters": {
       "extractionState": "manual",
       "localizations": {
@@ -1486,6 +1739,17 @@
         }
       }
     },
+    "Refresh Ratings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh Ratings"
+          }
+        }
+      }
+    },
     "Refresh from Trakt": {
       "extractionState": "manual",
       "localizations": {
@@ -1493,6 +1757,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refresh from Trakt"
+          }
+        }
+      }
+    },
+    "Refreshing Continue Watching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing Continue Watching"
+          }
+        }
+      }
+    },
+    "Release year": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release year"
           }
         }
       }
@@ -1816,6 +2102,17 @@
         }
       }
     },
+    "Sign In": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign In"
+          }
+        }
+      }
+    },
     "Sign in to Trakt": {
       "extractionState": "manual",
       "localizations": {
@@ -1823,6 +2120,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sign in to Trakt"
+          }
+        }
+      }
+    },
+    "Sign in to Trakt to see paused movies and episodes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to Trakt to see paused movies and episodes."
           }
         }
       }
@@ -1871,6 +2179,17 @@
         }
       }
     },
+    "Sort by": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort by"
+          }
+        }
+      }
+    },
     "Source": {
       "extractionState": "manual",
       "localizations": {
@@ -1889,6 +2208,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speed"
+          }
+        }
+      }
+    },
+    "Status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
           }
         }
       }
@@ -2014,6 +2344,17 @@
         }
       }
     },
+    "To": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To"
+          }
+        }
+      }
+    },
     "Trailer": {
       "extractionState": "manual",
       "localizations": {
@@ -2076,6 +2417,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try the next stream"
+          }
+        }
+      }
+    },
+    "Type": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type"
           }
         }
       }
@@ -2212,6 +2564,17 @@
         }
       }
     },
+    "Year": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Year"
+          }
+        }
+      }
+    },
     "Your API app": {
       "extractionState": "manual",
       "localizations": {
@@ -2296,6 +2659,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "https://example.com/widgets.json"
+          }
+        }
+      }
+    },
+    "·": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "·"
           }
         }
       }

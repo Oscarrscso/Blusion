@@ -69,14 +69,28 @@ enum Theme {
 extension View {
     /// The app's screen background: pure black edge to edge, like the TV app. Artwork is the only colour on screen.
     func screenBackground() -> some View {
-        background {
-            Theme.background.ignoresSafeArea()
-        }
+        modifier(ScreenBackgroundModifier())
     }
 
     /// A subtle translucent rounded surface for grouped content. Deliberately not glass: glass is for controls over media.
     func cardSurface(cornerRadius: CGFloat = Theme.Radius.surface) -> some View {
         background(Theme.surface, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    func glassCardSurface() -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+        return glassEffect(.regular, in: shape)
+            .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
+    }
+}
+
+private struct ScreenBackgroundModifier: ViewModifier {
+    @Environment(\.isLandscape) private var isLandscape
+
+    func body(content: Content) -> some View {
+        content.background { Theme.background.ignoresSafeArea() }
+            .scrollEdgeEffectHidden(isLandscape, for: .top)
+            .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
     }
 }
 

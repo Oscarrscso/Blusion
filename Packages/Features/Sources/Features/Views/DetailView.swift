@@ -10,9 +10,9 @@ struct DetailView: View {
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
-    @State private var isShowingBestEdition = false
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
 
     init(preview: MetaPreview, services: AppServices) {
@@ -20,87 +20,91 @@ struct DetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                header
-                info
-                    .frame(maxWidth: .infinity, alignment: metrics.isRegular ? .leading : .center)
-                    .padding(.horizontal, metrics.pageMargin)
-                if model.isSeries {
-                    episodesSection
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    feature(in: geometry.size)
+                    if model.isSeries { episodesSection }
+                    credits
+                        .padding(.horizontal, metrics.pageMargin)
+                        .padding(.top, Theme.Spacing.l)
                 }
-                credits
-                    .padding(.horizontal, metrics.pageMargin)
-                    .padding(.top, Theme.Spacing.xxl)
+                .padding(.bottom, Theme.Spacing.xxl)
             }
-            .padding(.bottom, Theme.Spacing.xxl)
+            .refreshable { await model.refresh() }
         }
         .screenBackground()
-        // The scroll view runs under the navigation bar, so the backdrop runs under it too. The scroll-edge blur is off, so the
-        // artwork shows unblurred under the status bar and navigation bar.
-        .ignoresSafeArea(.container, edges: .top)
+        .ignoresSafeArea(.container, edges: isLandscape ? [] : .top)
         .scrollEdgeEffectHidden(true, for: .top)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onAppear { Task { await model.refreshUserState() } }
-        .sheet(isPresented: $isShowingBestEdition) { BestEditionSheet(model: model) }
         .accessibilityIdentifier("detail.scroll")
     }
 
     // MARK: - Header
 
-    /// The backdrop runs under the navigation bar. The logo, or the name, sits low on it, over a fade into the page.
-    private var header: some View {
-        BackdropLayout(isRegular: metrics.isRegular) {
-            ZStack(alignment: metrics.isRegular ? .bottomLeading : .bottom) {
-                ArtworkImage(url: model.backdropURL, maxPixelSize: metrics.isRegular ? 1800 : 1200)
-                BottomFade(length: 0.65)
-                VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.m) {
-                    TitleArt(name: model.detail.name, logo: model.logoURL, alignment: metrics.isRegular ? .leading : .center)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(model.detail.name)
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilityIdentifier("detail.title")
-                    RatingButtonsRow(item: model.detail.preview, alignment: metrics.isRegular ? .leading : .center)
+    @ViewBuilder
+    private func feature(in size: CGSize) -> some View {
+        if isLandscape {
+            let artworkWidth = max(120, (size.width - metrics.pageMargin * 2 - Theme.Spacing.xl) * 0.48)
+            HStack(alignment: .center, spacing: Theme.Spacing.xl) {
+                ArtworkImage(url: model.backdropURL, maxPixelSize: 1400, contentMode: .fit)
+                    .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    titleArt(alignment: .leading)
+                    controls
                 }
-                .padding(.horizontal, metrics.pageMargin)
-                .padding(.bottom, Theme.Spacing.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.vertical, Theme.Spacing.m)
+            synopsis
+                .padding(.horizontal, metrics.pageMargin)
+                .padding(.top, Theme.Spacing.s)
+        } else {
+            ZStack(alignment: .bottom) {
+                ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 1400, contentMode: .fit)
+                BottomFade(length: 0.42)
+                titleArt(alignment: .center)
+                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.bottom, Theme.Spacing.l)
+            }
+            // Navigation bar changes during scrolling must not resize the artwork.
+            .frame(width: size.width, height: min(size.width * 1.5, metrics.heroMaxHeight))
             .clipped()
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                controls
+                synopsis
+            }
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.top, Theme.Spacing.s)
         }
     }
 
-    // MARK: - Under the header
+    private func titleArt(alignment: Alignment) -> some View {
+        TitleArt(name: model.detail.name, logo: model.logoURL, alignment: alignment, compact: isLandscape)
+            .frame(maxWidth: .infinity, alignment: alignment)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(model.detail.name)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("detail.title")
+    }
 
-    /// The part inside the screen margins: from the metadata line down to the synopsis.
-    private var info: some View {
-        VStack(alignment: metrics.isRegular ? .leading : .center, spacing: Theme.Spacing.l) {
+    private var controls: some View {
+        VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.m) {
+            RatingButtonsRow(item: model.detail.preview, alignment: isLandscape ? .leading : .center)
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
-                .multilineTextAlignment(metrics.isRegular ? .leading : .center)
+                .multilineTextAlignment(isLandscape ? .leading : .center)
             actionRow
-            synopsis
-                .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-            bestEditionAction
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("detail.fallbackNote")
             }
-        }
-        .padding(.top, Theme.Spacing.s)
-    }
-
-    /// Opens what bestblurays.com says is this film's best edition. Films only; it sits under the synopsis, apart from the play row.
-    @ViewBuilder
-    private var bestEditionAction: some View {
-        if model.canFindBestEdition {
-            Button { isShowingBestEdition = true } label: {
-                Label("Best Blu-ray edition", systemImage: "opticaldisc")
-            }
-            .buttonStyle(.glassCapsule)
-            .accessibilityHint("Looks this film up on Best Blurays")
-            .accessibilityIdentifier("detail.bestEdition")
         }
     }
 
@@ -128,23 +132,30 @@ struct DetailView: View {
         return model.nextUp.map { model.request(for: $0) }
     }
 
-    /// Play and the circle actions on one line, tops aligned: Play is as tall as the circles, and takes the width they leave.
+    /// Play fills the remaining width beside the circle actions, with even spacing across the row.
     private var actionRow: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            primaryAction
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(maxWidth: metrics.isRegular ? 280 : .infinity)
-            GlassEffectContainer(spacing: Theme.Spacing.s) {
-                HStack(alignment: .top, spacing: Theme.Spacing.s) {
-                    saveAction
-                    watchedAction
-                    if let trailer = model.trailerURL { trailerAction(trailer) }
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: Theme.Spacing.s) {
+                primaryAction.lineLimit(1).minimumScaleFactor(0.8)
+                secondaryActions
             }
-            .fixedSize()
+            VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
+                primaryAction.lineLimit(1).minimumScaleFactor(0.8)
+                secondaryActions
+            }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: isLandscape ? .leading : .center)
+    }
+
+    private var secondaryActions: some View {
+        GlassEffectContainer(spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.s) {
+                saveAction
+                watchedAction
+                if let trailer = model.trailerURL { trailerAction(trailer) }
+            }
+        }
+        .fixedSize()
     }
 
     private var saveAction: some View {
@@ -351,33 +362,20 @@ struct DetailView: View {
 
 // MARK: - Pieces
 
-/// Keeps artwork tall on a phone and wide in a Mac window without measuring every child.
-private struct BackdropLayout: Layout {
-    let isRegular: Bool
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 0
-        return CGSize(width: width, height: min(width * (isRegular ? 0.56 : 1.25), isRegular ? 600 : 480))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for subview in subviews {
-            subview.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
-        }
-    }
-}
-
 /// The logo, or the name while the logo loads and whenever there is none. The logo comes through `ImagePipeline` because
 /// `ArtworkImage` only fills its frame.
 private struct TitleArt: View {
     let name: String
     let logo: URL?
     let alignment: Alignment
+    let compact: Bool
     @State private var image: UIImage?
 
-    init(name: String, logo: URL?, alignment: Alignment) {
+    init(name: String, logo: URL?, alignment: Alignment, compact: Bool = false) {
         self.name = name
         self.logo = logo
         self.alignment = alignment
+        self.compact = compact
     }
 
     var body: some View {
@@ -386,15 +384,15 @@ private struct TitleArt: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 280, maxHeight: 90, alignment: alignment)
+                    .frame(maxWidth: compact ? 220 : 280, maxHeight: compact ? 56 : 80, alignment: alignment)
                     .transition(.opacity)
             } else {
                 Text(name)
-                    .font(.largeTitle.bold())
+                    .font(compact ? .title2.bold() : .largeTitle.bold())
                     .multilineTextAlignment(alignment == .center ? .center : .leading)
                     .foregroundStyle(.white)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.6)
+                    .lineLimit(compact ? 2 : 3)
+                    .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -430,13 +428,13 @@ private struct EpisodeRow: View {
                 Text(video.title)
                     .font(.headline)
                     .lineLimit(2)
-                dateAndScore
                 if let overview = video.overview, !overview.isEmpty {
                     Text(overview)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
+                dateAndScore
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

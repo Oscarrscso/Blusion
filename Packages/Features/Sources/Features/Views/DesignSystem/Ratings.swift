@@ -17,31 +17,27 @@ struct LetterboxdMark: View {
     }
 }
 
-/// "IMDb 9.0" and the Letterboxd mark followed by "9.0", in quiet semibold white. Either may be missing; with neither it draws
-/// nothing. Meant to sit on artwork (it assumes a dark backdrop), so it is white whatever the picture is.
+/// The first two available scores, with their site's mark. Meant to sit on artwork over a dark backdrop.
 struct RatingsLine: View {
-    let imdb: String?
-    let letterboxd: String?
+    let ratings: TitleRatings
     var font: Font = .caption.weight(.semibold)
 
     var body: some View {
-        if imdb != nil || letterboxd != nil {
+        if !ratings.isEmpty {
             HStack(spacing: 7) {
-                if let imdb {
-                    HStack(spacing: 3) {
-                        ReviewSiteIcon(site: .imdb, size: 12)
-                        Text(imdb)
+                ForEach(ratings.posterSites) { site in
+                    if let score = ratings.shortText(for: site) {
+                        HStack(spacing: 3) {
+                            if site == .letterboxd {
+                                LetterboxdMark(dot: 7)
+                            } else {
+                                ReviewSiteIcon(site: site, size: 12)
+                            }
+                            Text(score)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(site.name) rating \(score)")
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("IMDb rating \(imdb)")
-                }
-                if let letterboxd {
-                    HStack(spacing: 3) {
-                        LetterboxdMark(dot: 7)
-                        Text(letterboxd)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Letterboxd rating \(letterboxd)")
                 }
             }
             .font(font)
@@ -54,8 +50,8 @@ struct RatingsLine: View {
 }
 
 /// The ratings of one title over the bottom of its poster: a short black fade, then `RatingsLine`. Reads the environment's
-/// `PosterRatingsStore`; draws nothing without one, when the user switched ratings off, or while neither rating is known.
-/// Only this view observes the title's entry, so a Letterboxd rating that arrives late redraws one poster.
+/// `PosterRatingsStore`; draws nothing without one, when ratings are switched off, or while no scores are known.
+/// Only this view observes the title's entry, so a rating that arrives late redraws one poster.
 struct PosterRatingsOverlay: View {
     let item: MetaPreview
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
@@ -63,17 +59,22 @@ struct PosterRatingsOverlay: View {
     var body: some View {
         if let store, store.isEnabled {
             let ratings = store.ratings(for: item)
-            if !ratings.isEmpty {
-                RatingsLine(imdb: ratings.imdbText, letterboxd: ratings.letterboxdText)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 7)
-                    .padding(.top, 22)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(alignment: .bottom) {
-                        LinearGradient(colors: [.black.opacity(0), .black.opacity(0.62)], startPoint: .top, endPoint: .bottom)
-                    }
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
+            ZStack {
+                if !ratings.isEmpty {
+                    RatingsLine(ratings: ratings)
+                        .padding(.horizontal, 3)
+                        .padding(.bottom, 2)
+                        .padding(.top, 18)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background(alignment: .bottom) {
+                            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.78)], startPoint: .top, endPoint: .bottom)
+                        }
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
+                }
+            }
+            .task(id: "\(item.identity):\(store.reviewServicesRevision)") {
+                _ = store.ratings(for: item)
             }
         }
     }

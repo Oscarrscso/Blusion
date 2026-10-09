@@ -7,12 +7,14 @@ struct GlassChip: View {
     let title: String
     let systemImage: String?
     let isSelected: Bool
+    let fillsWidth: Bool
     let action: () -> Void
 
-    init(_ title: String, systemImage: String? = nil, isSelected: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, systemImage: String? = nil, isSelected: Bool = false, fillsWidth: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
         self.isSelected = isSelected
+        self.fillsWidth = fillsWidth
         self.action = action
     }
 
@@ -20,9 +22,12 @@ struct GlassChip: View {
         Button(action: action) {
             label
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(fillsWidth ? 1 : nil)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(isSelected ? Color.black : Color.primary)
-                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.horizontal, fillsWidth ? Theme.Spacing.s : Theme.Spacing.l)
                 .padding(.vertical, Theme.Spacing.s + 1)
+                .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: fillsWidth ? 44 : nil)
                 .background { if isSelected { Capsule().fill(.white) } }
                 .glassEffect(isSelected ? .identity : .regular.interactive(), in: .capsule)
                 .contentShape(Capsule())
@@ -47,13 +52,22 @@ struct GlassChip: View {
 /// A horizontal scroller of chips. The chips share one `GlassEffectContainer`, so neighbouring glass shapes blend together.
 struct ChipRow<Content: View>: View {
     let content: () -> Content
+    let fittingColumns: Int?
     @Environment(\.layoutMetrics) private var metrics
 
-    init(@ViewBuilder content: @escaping () -> Content) {
+    init(fittingColumns: Int? = nil, @ViewBuilder content: @escaping () -> Content) {
         self.content = content
+        self.fittingColumns = fittingColumns
     }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if let fittingColumns {
+            GlassEffectContainer(spacing: Theme.Spacing.s) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.s), count: max(1, fittingColumns)),
+                          spacing: Theme.Spacing.s) { content() }
+            }
+            .padding(.horizontal, metrics.pageMargin)
+        } else {
         ScrollView(.horizontal, showsIndicators: false) {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
@@ -63,6 +77,7 @@ struct ChipRow<Content: View>: View {
         }
         .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
         .scrollClipDisabled()
+        }
     }
 }
 

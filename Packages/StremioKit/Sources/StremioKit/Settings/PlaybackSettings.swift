@@ -21,10 +21,13 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var showsPosterRatings: Bool
     /// Play starts the best stream at once instead of showing the list of streams first.
     public var autoPlayBestStream: Bool
+    /// Seconds between Trakt playback refreshes. Zero is manual; nil uses the five-minute default for older saved settings.
+    public var continueWatchingRefreshSeconds: Int?
 
     public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
                 traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
-                autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil) {
+                autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil,
+                continueWatchingRefreshSeconds: Int? = 300) {
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL
@@ -35,6 +38,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
         self.autoPlayBestStream = autoPlayBestStream
         self.omdbAPIKey = omdbAPIKey
         self.tmdbReadToken = tmdbReadToken
+        self.continueWatchingRefreshSeconds = continueWatchingRefreshSeconds
     }
 
     public var serverURL: URL? {
