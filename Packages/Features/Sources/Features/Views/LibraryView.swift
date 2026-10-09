@@ -84,35 +84,26 @@ struct LibraryView: View {
                     Menu {
                         ReleaseYearOptions(model: model)
                     } label: {
-                        filterLabel("Year", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
+                        filterLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                     }
                     .accessibilityIdentifier("library.filter.year")
                     Menu {
                         RatingPicker(threshold: $model.filter.minimumRating)
                     } label: {
-                        filterLabel("Rating", systemImage: "star.fill", tint: .yellow, isActive: model.filter.minimumRating != nil)
+                        filterLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil)
                     }
                     .accessibilityIdentifier("library.filter.rating")
                     Menu {
-                        Picker("Added", selection: $model.filter.addedWithin) {
-                            ForEach(AddedWithin.allCases) { Text($0.title).tag($0) }
+                        Picker("Sort by", selection: $model.filter.sort) {
+                            ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
                         }
                     } label: {
-                        filterLabel("Added", isActive: model.filter.addedWithin != .anyTime)
+                        filterLabel(model.filter.sort.title, systemImage: "arrow.up.arrow.down", isActive: model.filter.sort != .recentlyAdded)
                     }
-                    .accessibilityIdentifier("library.filter.added")
+                    .accessibilityLabel("Sort by \(model.filter.sort.title)")
+                    .accessibilityIdentifier("library.sort")
                 }
             }
-            Menu {
-                Picker("Sort by", selection: $model.filter.sort) {
-                    ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
-                }
-            } label: {
-                filterLabel(model.filter.sort.title, systemImage: "arrow.up.arrow.down", tint: .blue,
-                            isActive: model.filter.sort != .recentlyAdded)
-            }
-            .accessibilityLabel("Sort by \(model.filter.sort.title)")
-            .accessibilityIdentifier("library.sort")
             if !model.filter.chips.isEmpty { filterChips }
             }
             .padding(.horizontal, metrics.pageMargin)
