@@ -112,6 +112,12 @@ public final class SettingsViewModel {
         await services.settings.save(settings)
     }
 
+    public func setMatchesEpisodeWidthToText(_ value: Bool) async {
+        settings = await services.settings.load()
+        settings.matchesEpisodeWidthToText = value
+        await services.settings.save(settings)
+    }
+
     /// Saves the Trakt client ID as typed, without surrounding spaces. A blank field removes it.
     public func commitTraktClientID() async {
         settings = await services.settings.load()

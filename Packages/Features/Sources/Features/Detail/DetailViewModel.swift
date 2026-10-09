@@ -17,6 +17,8 @@ public final class DetailViewModel {
         didSet { if selectedSeason != oldValue { Task { await loadEpisodeRatings() } } }
     }
     public private(set) var isInLibrary = false
+    /// Episode cards are as wide as the text above them, as chosen in Settings. Read with the details, so the cards never resize on screen.
+    public private(set) var matchesEpisodeWidthToText = false
     /// Seasons whose TMDb episode scores are already in `detail`, or on their way.
     private var episodeRatingSeasons: Set<Int> = []
     /// Identities (`type/id`) of watched movies and episodes shown on this screen.
@@ -51,9 +53,11 @@ public final class DetailViewModel {
         episodeRatingSeasons.removeAll()
         // The artwork (the logo) starts first and runs beside the details. The other TMDb calls wait for it, so they do not queue ahead.
         async let artwork: Void = loadArtwork()
+        async let playbackSettings = services.settings.load()
         let result = await services.browse.detail(for: preview)
         // A load that was cancelled must not overwrite what the newer load shows.
         guard !Task.isCancelled else { return }
+        matchesEpisodeWidthToText = await playbackSettings.matchesEpisodeWidthToText
         detail = result.detail
         isFallback = result.isFallback
         isLoading = false

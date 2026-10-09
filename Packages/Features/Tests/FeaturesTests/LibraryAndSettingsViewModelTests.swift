@@ -188,6 +188,16 @@ import StremioKitTestSupport
         #expect(reverted.playerPreference == .builtIn && !reverted.autoPlayBestStream)
     }
 
+    @Test func episodeWidthChoiceIsOffByDefaultAndSaved() async {
+        let services = services()
+        let model = SettingsViewModel(services: services)
+        await model.load()
+        #expect(!model.settings.matchesEpisodeWidthToText)
+        await model.setMatchesEpisodeWidthToText(true)
+        #expect(model.settings.matchesEpisodeWidthToText)
+        #expect(await services.settings.load().matchesEpisodeWidthToText)
+    }
+
     @Test func changingPlaybackAfterAccountSetupKeepsTheBuiltInTraktClientID() async {
         let services = services(settings: PlaybackSettings(preferredResolution: 720))
         let settingsModel = SettingsViewModel(services: services)

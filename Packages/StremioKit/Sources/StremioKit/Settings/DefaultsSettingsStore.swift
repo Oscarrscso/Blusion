@@ -10,6 +10,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let playerPreference = "settings.playerPreference"
         public static let showsPosterRatings = "settings.showsPosterRatings"
         public static let showsColouredRatingLogos = "settings.showsColouredRatingLogos"
+        public static let matchesEpisodeWidthToText = "settings.matchesEpisodeWidthToText"
         public static let autoPlayBestStream = "settings.autoPlayBestStream"
         public static let continueWatchingRefreshSeconds = "settings.continueWatchingRefreshSeconds"
         public static let serverSecret = "settings.streamingServerURL"
@@ -43,7 +44,8 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
                                 showsPosterRatings: posterRatings, autoPlayBestStream: defaults.bool(forKey: Keys.autoPlayBestStream),
                                 omdbAPIKey: omdbAPIKey, tmdbReadToken: tmdbReadToken,
                                 continueWatchingRefreshSeconds: defaults.object(forKey: Keys.continueWatchingRefreshSeconds) as? Int ?? 300,
-                                showsColouredRatingLogos: defaults.bool(forKey: Keys.showsColouredRatingLogos))
+                                showsColouredRatingLogos: defaults.bool(forKey: Keys.showsColouredRatingLogos),
+                                matchesEpisodeWidthToText: defaults.bool(forKey: Keys.matchesEpisodeWidthToText))
     }
 
     public func save(_ settings: PlaybackSettings) async {
@@ -61,6 +63,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         defaults.set(settings.playerPreference.rawValue, forKey: Keys.playerPreference)
         defaults.set(settings.showsPosterRatings, forKey: Keys.showsPosterRatings)
         defaults.set(settings.showsColouredRatingLogos, forKey: Keys.showsColouredRatingLogos)
+        defaults.set(settings.matchesEpisodeWidthToText, forKey: Keys.matchesEpisodeWidthToText)
         defaults.set(settings.autoPlayBestStream, forKey: Keys.autoPlayBestStream)
         defaults.set(settings.continueWatchingRefreshSeconds ?? 300, forKey: Keys.continueWatchingRefreshSeconds)
         if let server = settings.streamingServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !server.isEmpty {

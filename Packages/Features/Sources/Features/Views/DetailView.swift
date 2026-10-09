@@ -22,7 +22,8 @@ struct DetailView: View {
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = 150
-    /// Set once the hero picture has loaded, or failed. The title waits for it: the poster shown meanwhile often has the title printed on it.
+    /// Set once the hero picture has loaded or failed, or the timeout has passed. The title waits for it: the poster shown meanwhile
+    /// often has the title printed on it.
     @State private var heroSettled = false
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
@@ -31,6 +32,8 @@ struct DetailView: View {
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
+    /// How long the title waits for the hero picture, counted from opening the page. After this it shows over the poster.
+    private static let heroTimeout: Duration = .seconds(5)
     private var contentMargin: CGFloat { max(metrics.pageMargin, Theme.Spacing.l) }
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
 
@@ -43,7 +46,7 @@ struct DetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     feature(in: geometry.size)
-                    if model.isSeries { episodesSection }
+                    if model.isSeries { episodesSection(pageWidth: geometry.size.width) }
                     credits(in: geometry.size.width)
                         .padding(.top, sectionSpacing)
                     if !model.relatedTitles.isEmpty {
@@ -66,6 +69,11 @@ struct DetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .task(id: heroURL) { await settleHero() }
+        .task {
+            // Starts on opening, so a slow artwork lookup counts against the same five seconds as a slow download.
+            guard (try? await Task.sleep(for: Self.heroTimeout)) != nil else { return }
+            heroSettled = true
+        }
         .onAppear { Task { await model.refreshUserState() } }
         .accessibilityIdentifier("detail.scroll")
     }
@@ -300,7 +308,7 @@ struct DetailView: View {
     // MARK: - Series
 
     /// The season chips and the episodes of the selected season, each a row with its still, progress and watched mark.
-    private var episodesSection: some View {
+    private func episodesSection(pageWidth: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             Menu {
                 ForEach(model.seasons, id: \.self) { season in
@@ -334,7 +342,7 @@ struct DetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.episodes) { episode in
-                        episodeRow(episode).id(episode.id).reportsShelfEdge(id: episode.id)
+                        episodeRow(episode, width: episodeWidth(pageWidth: pageWidth)).id(episode.id).reportsShelfEdge(id: episode.id)
                     }
                 }
                 .scrollTargetLayout()
@@ -350,10 +358,16 @@ struct DetailView: View {
         }
     }
 
-    private func episodeRow(_ video: Video) -> some View {
+    /// The text above the episodes runs from one page margin to the other. With the option on, each card is that wide, so the cards
+    /// line up with it; otherwise they keep their fixed width.
+    private func episodeWidth(pageWidth: CGFloat) -> CGFloat {
+        model.matchesEpisodeWidthToText ? pageWidth - contentMargin * 2 : metrics.episodeWidth
+    }
+
+    private func episodeRow(_ video: Video, width: CGFloat) -> some View {
         NavigationLink(value: model.request(for: video)) {
             EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                       artwork: model.backdropURL, score: model.score(for: video))
+                       artwork: model.backdropURL, score: model.score(for: video), width: width)
         }
         .buttonStyle(PressableCardStyle())
         .titleTapHaptic()
@@ -671,7 +685,7 @@ private struct EpisodeRow: View {
     let watched: Bool
     let artwork: URL?
     let score: DetailViewModel.EpisodeScore?
-    @Environment(\.layoutMetrics) private var metrics
+    let width: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -693,18 +707,18 @@ private struct EpisodeRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: metrics.episodeWidth, alignment: .leading)
+        .frame(width: width, alignment: .leading)
         .multilineTextAlignment(.leading)
         .accessibilityElement(children: .combine)
     }
 
     /// The episode's own still, or the series' backdrop when the addon sent none.
     private var still: some View {
-        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: metrics.episodeWidth * 3)
-            .frame(width: metrics.episodeWidth, height: metrics.episodeWidth / CardAspect.wide.ratio)
+        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: width * 3)
+            .frame(width: width, height: width / CardAspect.wide.ratio)
             .overlay {
                 if !watched, let fraction {
-                    PlaybackProgressOverlay(fraction: fraction, width: metrics.episodeWidth)
+                    PlaybackProgressOverlay(fraction: fraction, width: width)
                 }
             }
             .overlay(alignment: .topTrailing) {

@@ -53,7 +53,8 @@ import Testing
 
         let settings = PlaybackSettings(preferredResolution: 1080, subtitleLanguage: "eng", streamingServerURL: "http://user:pw@192.168.1.9:11470",
                                         fallbackEngineEnabled: false, traktClientID: "client-abc", playerPreference: .infuse,
-                                        showsPosterRatings: false, autoPlayBestStream: true, tmdbReadToken: "tmdb-test-token")
+                                        showsPosterRatings: false, autoPlayBestStream: true, tmdbReadToken: "tmdb-test-token",
+                                        matchesEpisodeWidthToText: true)
         await store.save(settings)
         #expect(await store.load() == settings)
         #expect(await secrets.snapshot[DefaultsSettingsStore.Keys.serverSecret] == "http://user:pw@192.168.1.9:11470")
