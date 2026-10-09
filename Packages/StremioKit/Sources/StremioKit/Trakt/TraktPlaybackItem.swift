@@ -9,6 +9,8 @@ public struct TraktPlaybackItem: Sendable, Equatable, Identifiable {
     public let episode: Int?
     public let episodeTitle: String?
     public let duration: TimeInterval?
+    /// Trakt's id for this paused record, needed to remove it (`DELETE sync/playback/{id}`).
+    public var playbackID: Int? = nil
 
     public var contentID: String {
         if let season, let episode { return "\(preview.id):\(season):\(episode)" }
@@ -42,6 +44,7 @@ private struct PlaybackRow: Decodable {
         let title: String?
         let runtime: Double?
     }
+    let id: Int?
     let type: String?
     let progress: Double?
     let paused_at: String?
@@ -66,7 +69,7 @@ private struct PlaybackRow: Decodable {
                                   releaseInfo: media.year.map(String.init))
         return TraktPlaybackItem(preview: preview, progress: progress, pausedAt: date,
                                  season: isEpisode ? episode?.season : nil, episode: isEpisode ? episode?.number : nil,
-                                 episodeTitle: isEpisode ? episode?.title : nil, duration: duration)
+                                 episodeTitle: isEpisode ? episode?.title : nil, duration: duration, playbackID: id)
     }
 
     private static func date(_ text: String) -> Date? {

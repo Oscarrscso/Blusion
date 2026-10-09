@@ -295,6 +295,11 @@ public actor TraktAccount {
         }
     }
 
+    /// Removes one paused record, so Trakt stops offering it under Continue Watching.
+    public func removePlayback(id: Int) async throws {
+        _ = try await authorizedRequest(path: "sync/playback/\(id)", method: "DELETE")
+    }
+
     public func addToWatchlist(_ items: [MetaPreview]) async throws -> Int {
         let payload = Self.watchlistPayload(items)
         guard !payload.isEmpty else { return 0 }
@@ -349,17 +354,17 @@ public actor TraktAccount {
         return token
     }
 
-    private func authorizedRequest(path: String, body: [String: Any]? = nil) async throws -> HTTPResult {
+    private func authorizedRequest(path: String, body: [String: Any]? = nil, method: String? = nil) async throws -> HTTPResult {
         let (clientID, clientSecret) = try await credentials()
         guard var token = try await loadToken() else { throw TraktAccountError.needsSignIn }
         guard token.clientID == clientID else { throw TraktAccountError.credentialsChanged }
         if token.expiresAt <= now().addingTimeInterval(60) {
             token = try await refreshed(token, clientID: clientID, clientSecret: clientSecret)
         }
-        var result = try await request(path: path, clientID: clientID, accessToken: token.accessToken, body: body)
+        var result = try await request(path: path, clientID: clientID, accessToken: token.accessToken, body: body, method: method)
         if result.response.statusCode == 401 {
             token = try await refreshed(token, clientID: clientID, clientSecret: clientSecret)
-            result = try await request(path: path, clientID: clientID, accessToken: token.accessToken, body: body)
+            result = try await request(path: path, clientID: clientID, accessToken: token.accessToken, body: body, method: method)
         }
         try checkStatus(result)
         return result
@@ -372,11 +377,12 @@ public actor TraktAccount {
         return value
     }
 
-    private func request(path: String, clientID: String? = nil, accessToken: String? = nil, body: [String: Any]? = nil) async throws -> HTTPResult {
+    private func request(path: String, clientID: String? = nil, accessToken: String? = nil, body: [String: Any]? = nil,
+                         method: String? = nil) async throws -> HTTPResult {
         guard let url = URL(string: path, relativeTo: baseURL.appendingPathComponent("/"))?.absoluteURL,
               url.scheme == "https" || url.scheme == "http" else { throw TraktAccountError.network(.invalidURL) }
         var request = URLRequest(url: url, timeoutInterval: 20)
-        request.httpMethod = body == nil ? "GET" : "POST"
+        request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Blusion/1.0", forHTTPHeaderField: "User-Agent")

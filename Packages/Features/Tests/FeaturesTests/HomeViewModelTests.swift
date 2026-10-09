@@ -138,6 +138,16 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(model.continueWatching.map(\.contentID) == ["tt9"])
     }
 
+    @Test func removingAContinueWatchingTitleClearsItsLocalProgress() async throws {
+        let progress = [WatchProgress(id: "movie/tt9", type: "movie", contentID: "tt9", title: "Nine", position: 40, duration: 100, isWatched: false,
+                                      updatedAt: Date())]
+        let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), progress: progress))
+        await model.load()
+        let entry = try #require(model.continueEntries.first)
+        await model.removeFromContinueWatching(entry)
+        #expect(model.continueEntries.isEmpty && model.continueWatching.isEmpty)
+    }
+
     // MARK: Rows that cannot load
 
     @Test func aRowWhoseAddonIsMissingSaysWhyWithoutAskingForAnything() async throws {

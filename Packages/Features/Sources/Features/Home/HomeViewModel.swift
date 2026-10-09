@@ -160,6 +160,21 @@ public final class HomeViewModel {
         continueEntries = ContinueWatchingEntry.merge(local: updated, remote: traktPlayback)
     }
 
+    /// Takes a title off Continue Watching. If Trakt refuses, the card stays and the row shows the retry.
+    public func removeFromContinueWatching(_ entry: ContinueWatchingEntry) async {
+        let playbackID = traktPlayback.first { $0.id == entry.id }?.playbackID
+        do {
+            try await services.removeContinueWatching(identity: entry.id, traktPlaybackID: playbackID)
+        } catch {
+            continueState = .failed((error as? TraktAccountError)?.message ?? "Couldn’t remove it from Trakt. Try again.")
+            return
+        }
+        traktPlayback.removeAll { $0.id == entry.id }
+        let local = await services.progress.all()
+        continueWatching = LibraryViewModel.continueWatching(from: local)
+        continueEntries = ContinueWatchingEntry.merge(local: local, remote: traktPlayback)
+    }
+
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.
     public func observeAddons() async {
         for await addons in await services.registry.updates() {

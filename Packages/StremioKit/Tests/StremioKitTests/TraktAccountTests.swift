@@ -145,6 +145,22 @@ import StremioKitTestSupport
         #expect(transport.requests.last?.url?.path == "/oauth/revoke")
     }
 
+    @Test func playbackRowsKeepTraktsIDAndRemovingOneDeletesOnlyThatRecord() async throws {
+        let row = #"[{"id":42,"progress":40,"paused_at":"2023-11-14T22:13:20.000Z","type":"movie","movie":{"title":"Movie","year":2020,"ids":{"imdb":"tt1"},"runtime":100}}]"#
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            return StubTransport.response(Data(row.utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let items = try await account.playback()
+        #expect(items.map(\.playbackID) == [42])
+        try await account.removePlayback(id: 42)
+        let request = try #require(transport.requests.last)
+        #expect(request.httpMethod == "DELETE" && request.url?.path == "/sync/playback/42")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer access")
+    }
+
     @Test func changedSecretsInvalidateTokensAndChangedClientIDCannotReuseThem() async throws {
         let transport = StubTransport(data: Data(tokenJSON.utf8))
         let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: "client"))

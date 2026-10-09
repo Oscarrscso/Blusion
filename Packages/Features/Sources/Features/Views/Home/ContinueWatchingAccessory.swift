@@ -19,6 +19,16 @@ final class ContinueWatchingModel {
     func refresh() async {
         newest = LibraryViewModel.continueWatching(from: await services.progress.all()).first
     }
+
+    /// Takes the title off Continue Watching. Trakt's record is looked up here, since this model keeps no copy of Trakt's list.
+    func remove(_ item: WatchProgress) async throws {
+        var playbackID: Int?
+        if await services.traktAccount.isSignedIn() {
+            playbackID = try await services.traktAccount.playback().first { $0.id == item.id }?.playbackID
+        }
+        try await services.removeContinueWatching(identity: item.id, traktPlaybackID: playbackID)
+        await refresh()
+    }
 }
 
 /// Attaches the accessory with its `isEnabled` form, which needs iOS 26.1. On iOS 26.0 there is no accessory and Continue Watching stays
@@ -30,7 +40,7 @@ struct ResumeAccessoryModifier: ViewModifier {
         #if targetEnvironment(macCatalyst)
         content.safeAreaInset(edge: .bottom) {
             if let newest = model.newest {
-                ContinueWatchingAccessory(item: newest)
+                ContinueWatchingAccessory(item: newest, onRemove: { Task { try? await model.remove(newest) } })
                     .padding(.vertical, Theme.Spacing.s)
                     .glassEffect(.regular, in: .capsule)
                     .padding(.horizontal, Theme.Spacing.l)
@@ -41,7 +51,7 @@ struct ResumeAccessoryModifier: ViewModifier {
         if #available(iOS 26.1, *) {
             content.tabViewBottomAccessory(isEnabled: model.newest != nil) {
                 if let newest = model.newest {
-                    ContinueWatchingAccessory(item: newest)
+                    ContinueWatchingAccessory(item: newest, onRemove: { Task { try? await model.remove(newest) } })
                 }
             }
         } else {
@@ -55,6 +65,7 @@ struct ResumeAccessoryModifier: ViewModifier {
 /// Home at that title's streams, where the player resumes from the saved position.
 struct ContinueWatchingAccessory: View {
     let item: WatchProgress
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
@@ -77,7 +88,8 @@ struct ContinueWatchingAccessory: View {
         }
         .padding(.horizontal, Theme.Spacing.l)
         .continueWatchingHold(preview: MetaPreview(id: ContentID(item.contentID).baseID, type: item.type,
-                                                  name: item.title, poster: item.poster), request: LibraryViewModel.request(for: item))
+                                                  name: item.title, poster: item.poster), request: LibraryViewModel.request(for: item),
+                                  onRemove: onRemove)
         .accessibilityLabel("Continue watching \(item.title), \(Int((item.fraction * 100).rounded())) percent watched")
         .accessibilityIdentifier("tabbar.continue")
     }

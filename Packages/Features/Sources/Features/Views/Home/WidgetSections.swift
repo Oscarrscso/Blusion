@@ -142,6 +142,7 @@ struct ContinueWatchingRow: View {
     let items: [ContinueWatchingEntry]
     let state: HomeViewModel.ContinueState
     let retry: () -> Void
+    let onRemove: (ContinueWatchingEntry) -> Void
     var title = "Continue"
     var hideTitle = false
     @Environment(AppRouter.self) private var router
@@ -201,7 +202,7 @@ struct ContinueWatchingRow: View {
                             .continueWatchingHold(preview: MetaPreview(id: artworkID, type: item.request.type,
                                                                       name: item.request.seriesName ?? item.request.title,
                                                                       poster: item.request.poster, releaseInfo: item.request.year),
-                                                  request: item.request)
+                                                  request: item.request, onRemove: { onRemove(item) })
                             .id(item.id)
                             .accessibilityIdentifier("board.continue.\(item.id)")
                         }

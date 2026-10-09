@@ -123,7 +123,7 @@ struct HomeView: View {
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
-            ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback,
+            ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue,
                                 title: section.widget.title, hideTitle: section.widget.hideTitle)
         case .unsupported:
             UnsupportedWidgetRow(widget: section.widget)
@@ -131,10 +131,12 @@ struct HomeView: View {
     }
 
     private var continueRow: some View {
-        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback)
+        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue)
     }
 
     private func refreshPlayback() { Task { await model.refreshContinueWatching(force: true) } }
+
+    private func removeContinue(_ item: ContinueWatchingEntry) { Task { await model.removeFromContinueWatching(item) } }
 
     private func retry(_ section: HomeViewModel.Section) {
         Task { await model.retry(sectionID: section.id) }

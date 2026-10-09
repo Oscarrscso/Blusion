@@ -44,14 +44,15 @@ struct ProgressCard: View {
 
 extension View {
     /// A Continue Watching card: a tap opens its streams, and its context menu opens the title from that artwork.
-    func continueWatchingHold(preview: MetaPreview, request: StreamRequest) -> some View {
-        modifier(ContinueWatchingHoldModifier(preview: preview, request: request))
+    func continueWatchingHold(preview: MetaPreview, request: StreamRequest, onRemove: @escaping () -> Void) -> some View {
+        modifier(ContinueWatchingHoldModifier(preview: preview, request: request, onRemove: onRemove))
     }
 }
 
 private struct ContinueWatchingHoldModifier: ViewModifier {
     let preview: MetaPreview
     let request: StreamRequest
+    let onRemove: () -> Void
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.zoomScope) private var zoomScope
@@ -81,6 +82,10 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                 } else {
                     router.homePath.append(preview)
                 }
+            }
+            Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) {
+                Haptics.tap()
+                onRemove()
             }
         }
     }
