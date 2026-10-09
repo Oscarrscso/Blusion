@@ -11,31 +11,31 @@ struct QualitySelector: View {
     var body: some View {
         GeometryReader { geometry in
             let width = max(1, (geometry.size.width - 8) / CGFloat(max(1, titles.count)))
-            ZStack(alignment: .leading) {
+            HStack(spacing: 0) {
+                ForEach(titles.indices, id: \.self) { index in
+                    Button {
+                        if selection != index { selection = index }
+                    } label: {
+                        Text(titles[index])
+                            .font(.subheadline.weight(selection == index ? .bold : .medium))
+                            .foregroundStyle(selection == index ? .primary : .secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .frame(width: width, height: 36)
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == index ? .isSelected : [])
+                    .accessibilityIdentifier("\(accessibilityID).\(titles[index])")
+                }
+            }
+            .background(alignment: .leading) {
                 Capsule()
                     .fill(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0.12)], startPoint: .top, endPoint: .bottom))
                     .overlay { Capsule().strokeBorder(.white.opacity(0.42), lineWidth: 0.8) }
                     .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
                     .frame(width: width, height: 36)
                     .offset(x: CGFloat(selection) * width)
-                HStack(spacing: 0) {
-                    ForEach(titles.indices, id: \.self) { index in
-                        Button {
-                            if selection != index { selection = index }
-                        } label: {
-                            Text(titles[index])
-                                .font(.subheadline.weight(selection == index ? .bold : .medium))
-                                .foregroundStyle(selection == index ? .primary : .secondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .frame(width: width, height: 36)
-                                .contentShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(selection == index ? .isSelected : [])
-                        .accessibilityIdentifier("\(accessibilityID).\(titles[index])")
-                    }
-                }
             }
             .padding(4)
             .glassEffect(.regular.interactive(), in: .capsule)
