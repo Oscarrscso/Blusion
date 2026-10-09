@@ -25,6 +25,8 @@ struct StreamPickerView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.scenePhase) private var scenePhase
+    /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
+    private var streamMargin: CGFloat { Theme.Spacing.l }
 
     init(request: StreamRequest, services: AppServices) {
         self.services = services
@@ -37,7 +39,7 @@ struct StreamPickerView: View {
                 header
                 playBestButton
                 BestEditionView(model: model)
-                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.horizontal, streamMargin)
                 resolutionChips
                 failures
                 emptyState
@@ -159,7 +161,7 @@ struct StreamPickerView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, metrics.pageMargin)
+        .padding(.horizontal, streamMargin)
         .padding(.top, Theme.Spacing.xs)
     }
 
@@ -217,7 +219,7 @@ struct StreamPickerView: View {
                 .accessibilityIdentifier("streams.playBest")
                 if let message = model.autoPickMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
             }
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, streamMargin)
         }
     }
 
@@ -267,7 +269,7 @@ struct StreamPickerView: View {
             } set: { index in
                 resolutionFilter = index > 0 && index <= availableBands.count ? availableBands[index - 1] : nil
             })
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, streamMargin)
         }
     }
 
@@ -278,7 +280,7 @@ struct StreamPickerView: View {
         if !model.listing.failures.isEmpty {
             InlineErrorView(failureText) { Task { await model.retry() } }
                 .accessibilityIdentifier("streams.failures")
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, streamMargin)
         }
     }
 
@@ -292,13 +294,14 @@ struct StreamPickerView: View {
             EmptyStateView("No stream addons", systemImage: "puzzlepiece.extension",
                            message: "Add a stream addon in Settings to watch this title.",
                            actionTitle: "Open Addons", action: { router.showAddons() })
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, streamMargin)
                 .accessibilityIdentifier("streams.nobody")
         } else if model.isOffline {
             OfflineBanner()
+                .padding(.horizontal, streamMargin)
         } else if model.showsNothingFound {
             EmptyStateView("No streams found", systemImage: "film.stack", message: "Your addons have nothing for this title.")
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, streamMargin)
                 .accessibilityIdentifier("streams.none")
         }
     }
@@ -307,7 +310,7 @@ struct StreamPickerView: View {
     private var loadingRows: some View {
         if model.isLoading && model.listing.isEmpty {
             StreamRowsSkeleton()
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, streamMargin)
         }
     }
 
@@ -322,7 +325,7 @@ struct StreamPickerView: View {
                     streamButton(item, isRecommended: item.id == recommended?.id)
                 }
             }
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, streamMargin)
         }
     }
 
@@ -357,7 +360,7 @@ struct StreamPickerView: View {
                 .padding(.top, Theme.Spacing.s)
             }
             .font(.subheadline.weight(.medium))
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, streamMargin)
         }
     }
 
@@ -401,7 +404,7 @@ struct StreamPickerView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, streamMargin)
             .accessibilityIdentifier("streams.hidden")
         }
     }

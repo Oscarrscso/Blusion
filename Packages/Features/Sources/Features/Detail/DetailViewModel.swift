@@ -47,11 +47,8 @@ public final class DetailViewModel {
     public func load() async {
         isLoading = true
         episodeRatingSeasons.removeAll()
+        // The artwork (the logo) starts first and runs beside the details. The other TMDb calls wait for it, so they do not queue ahead.
         async let artwork: Void = loadArtwork()
-        async let reviews: Void = loadReviews()
-        // Cast photos are secondary: they start with the page but never hold up the details or the artwork above.
-        async let credits: Void = loadTitleCredits()
-        async let related: Void = loadRelatedTitles()
         var result = await services.browse.detail(for: preview)
         // Addons can answer nothing when a load is cancelled as the page restarts. One more try fills the page in before the page
         // admits its details are basic.
@@ -69,6 +66,10 @@ public final class DetailViewModel {
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
         await loadEpisodeRatings()
         await artwork
+        // Reviews and cast photos are secondary: they start once the logo has answered, and never hold up the page above.
+        async let reviews: Void = loadReviews()
+        async let credits: Void = loadTitleCredits()
+        async let related: Void = loadRelatedTitles()
         await reviews
         await credits
         await related
