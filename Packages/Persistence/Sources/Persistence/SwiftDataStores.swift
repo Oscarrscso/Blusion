@@ -5,10 +5,10 @@ import StremioKit
 import SwiftData
 
 public enum PersistenceContainer {
-    /// The app's container at the current schema (V3), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
+    /// The app's container at the current schema (V4), migrating older stores forward. `inMemory` is for tests; otherwise the store lives
     /// at `url` (default: `defaultStoreURL()`, or SwiftData's default location where that is nil).
     public static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: BlusionSchemaV3.self)
+        let schema = Schema(versionedSchema: BlusionSchemaV4.self)
         let configuration: ModelConfiguration
         if inMemory {
             configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
@@ -48,7 +48,10 @@ public actor SwiftDataAddonStore: AddonStore {
 
     public func loadAll() async throws -> [AddonRecord] {
         let entities = try context.fetch(FetchDescriptor<AddonEntity>(sortBy: [SortDescriptor(\.order)]))
-        return entities.map { AddonRecord(id: $0.id, manifestData: $0.manifestData, isEnabled: $0.isEnabled, order: $0.order, installedAt: $0.installedAt) }
+        return entities.map {
+            AddonRecord(id: $0.id, manifestData: $0.manifestData, isEnabled: $0.isEnabled, order: $0.order, installedAt: $0.installedAt,
+                        customName: $0.customName)
+        }
     }
 
     public func save(_ records: [AddonRecord]) async throws {
@@ -63,9 +66,10 @@ public actor SwiftDataAddonStore: AddonStore {
                 entity.isEnabled = record.isEnabled
                 entity.order = record.order
                 entity.installedAt = record.installedAt
+                entity.customName = record.customName
             } else {
                 context.insert(AddonEntity(id: record.id, manifestData: record.manifestData, isEnabled: record.isEnabled,
-                                           order: record.order, installedAt: record.installedAt))
+                                           order: record.order, installedAt: record.installedAt, customName: record.customName))
             }
         }
         try context.save()

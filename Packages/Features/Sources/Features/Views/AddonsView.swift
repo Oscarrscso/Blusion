@@ -8,6 +8,10 @@ import UIKit
 struct AddonsView: View {
     @State private var model: AddonsViewModel
     @Environment(AppRouter.self) private var router
+    @Environment(\.openURL) private var openURL
+    /// The addon being renamed, and the name typed so far.
+    @State private var renamingID: UUID?
+    @State private var renameText = ""
 
     init(services: AppServices) {
         _model = State(initialValue: AddonsViewModel(services: services))
@@ -43,6 +47,21 @@ struct AddonsView: View {
             }
         }
         .accessibilityIdentifier("addons.list")
+        .alert("Rename Addon", isPresented: isRenaming) {
+            TextField("Name", text: $renameText)
+                .accessibilityIdentifier("addons.renameField")
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                if let id = renamingID { Task { await model.rename(renameText, id: id) } }
+            }
+            .accessibilityIdentifier("addons.renameSave")
+        } message: {
+            Text("Leave it empty to use the addon's own name.")
+        }
+    }
+
+    private var isRenaming: Binding<Bool> {
+        Binding(get: { renamingID != nil }, set: { if !$0 { renamingID = nil } })
     }
 
     private func installSection(model text: Binding<String>) -> some View {
@@ -139,6 +158,25 @@ struct AddonsView: View {
                 .accessibilityIdentifier("addons.row.\(addon.name)")
                 .swipeActions {
                     Button(role: .destructive) { Task { await model.remove(id: addon.id) } } label: { Label("Remove", systemImage: "trash") }
+                }
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = addon.manifestURL.absoluteString
+                        Haptics.tap()
+                    } label: { Label("Copy Link", systemImage: "doc.on.doc") }
+                    .accessibilityIdentifier("addons.menu.copyLink.\(addon.name)")
+                    Button {
+                        renameText = addon.name
+                        renamingID = addon.id
+                    } label: { Label("Rename", systemImage: "pencil") }
+                    .accessibilityIdentifier("addons.menu.rename.\(addon.name)")
+                    if addon.manifest.behaviorHints.configurable, let url = addon.configureURL {
+                        Button { openURL(url) } label: { Label("Configure", systemImage: "gearshape") }
+                            .accessibilityIdentifier("addons.menu.configure.\(addon.name)")
+                    }
+                    Divider()
+                    Button(role: .destructive) { Task { await model.remove(id: addon.id) } } label: { Label("Remove", systemImage: "trash") }
+                        .accessibilityIdentifier("addons.menu.remove.\(addon.name)")
                 }
             }
             .onMove { offsets, destination in Task { await model.move(fromOffsets: offsets, toOffset: destination) } }

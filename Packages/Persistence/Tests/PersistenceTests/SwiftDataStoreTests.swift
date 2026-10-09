@@ -83,7 +83,10 @@ import Testing
         do {
             let v1 = Schema(versionedSchema: BlusionSchemaV1.self)
             let container = try ModelContainer(for: v1, configurations: [ModelConfiguration(schema: v1, url: url, cloudKitDatabase: .none)])
-            try await SwiftDataAddonStore(container: container).save([record])
+            let context = ModelContext(container)
+            context.insert(BlusionSchemaV1.AddonEntity(id: record.id, manifestData: record.manifestData, isEnabled: record.isEnabled, order: record.order,
+                                                       installedAt: record.installedAt))
+            try context.save()
         }
 
         let migrated = try PersistenceContainer.make(url: url)
@@ -144,8 +147,38 @@ import Testing
     @Test func theSchemaVersionsAreOrdered() {
         #expect(BlusionSchemaV1.versionIdentifier < BlusionSchemaV2.versionIdentifier)
         #expect(BlusionSchemaV2.versionIdentifier < BlusionSchemaV3.versionIdentifier)
-        #expect(BlusionMigrationPlan.schemas.count == 3)
-        #expect(BlusionMigrationPlan.stages.count == 2)
+        #expect(BlusionSchemaV3.versionIdentifier < BlusionSchemaV4.versionIdentifier)
+        #expect(BlusionMigrationPlan.schemas.count == 4)
+        #expect(BlusionMigrationPlan.stages.count == 3)
+    }
+
+    /// A store written before addons could be renamed keeps its addons, with no custom name, and can then save one.
+    @Test func aVersionThreeStoreMigratesToVersionFourKeepingItsAddons() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("blusion-migration-v4-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("blusion.store")
+        let id = UUID()
+        let installed = Date(timeIntervalSince1970: 1_700_000_000)
+
+        do {
+            let v3 = Schema(versionedSchema: BlusionSchemaV3.self)
+            let container = try ModelContainer(for: v3, configurations: [ModelConfiguration(schema: v3, url: url, cloudKitDatabase: .none)])
+            let context = ModelContext(container)
+            context.insert(BlusionSchemaV1.AddonEntity(id: id, manifestData: Data("manifest".utf8), isEnabled: true, order: 1, installedAt: installed))
+            try context.save()
+        }
+
+        let migrated = try PersistenceContainer.make(url: url)
+        let store = SwiftDataAddonStore(container: migrated)
+        let loaded = try await store.loadAll()
+        #expect(loaded == [AddonRecord(id: id, manifestData: Data("manifest".utf8), isEnabled: true, order: 1, installedAt: installed)])
+        #expect(loaded.first?.customName == nil)
+
+        var renamed = try #require(loaded.first)
+        renamed.customName = "My Cinemeta"
+        try await store.save([renamed])
+        #expect(try await store.loadAll().first?.customName == "My Cinemeta")
     }
 }
 #endif

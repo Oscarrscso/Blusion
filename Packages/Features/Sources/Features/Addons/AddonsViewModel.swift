@@ -110,6 +110,11 @@ public final class AddonsViewModel {
         await perform { try await $0.setEnabled(enabled, id: id) }
     }
 
+    /// Blank clears the custom name, so the manifest's own name shows again.
+    public func rename(_ name: String, id: UUID) async {
+        await perform { try await $0.rename(name, id: id) }
+    }
+
     public func move(fromOffsets offsets: IndexSet, toOffset destination: Int) async {
         await perform { try await $0.move(fromOffsets: offsets, toOffset: destination) }
     }
@@ -128,7 +133,7 @@ public final class AddonsViewModel {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let json = (try? encoder.encode(manifest)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
         return AddonDetails(
-            name: manifest.name,
+            name: addon.name,
             version: manifest.version,
             description: manifest.description,
             host: addon.displayHost,

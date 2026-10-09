@@ -35,7 +35,7 @@ public actor AddonRegistry {
                 continue
             }
             loaded.append(InstalledAddon(id: record.id, manifestURL: location.manifestURL, baseURL: location.baseURL, manifest: manifest,
-                                         isEnabled: record.isEnabled, installedAt: record.installedAt))
+                                         isEnabled: record.isEnabled, installedAt: record.installedAt, customName: record.customName))
         }
         addons = loaded
         publish()
@@ -88,6 +88,19 @@ public actor AddonRegistry {
         addons[index].isEnabled = enabled
         do { try await persist() } catch {
             addons[index].isEnabled = previous
+            throw error
+        }
+        publish()
+    }
+
+    /// Sets the name the user gave an addon. Blank or nil clears it, so the manifest's own name shows again.
+    public func rename(_ name: String?, id: UUID) async throws {
+        guard let index = addons.firstIndex(where: { $0.id == id }) else { throw RegistryError.notFound }
+        let previous = addons[index].customName
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        addons[index].customName = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        do { try await persist() } catch {
+            addons[index].customName = previous
             throw error
         }
         publish()
@@ -177,7 +190,8 @@ public actor AddonRegistry {
         let encoder = JSONEncoder()
         do {
             let records = try addons.enumerated().map { index, addon in
-                AddonRecord(id: addon.id, manifestData: try encoder.encode(addon.manifest), isEnabled: addon.isEnabled, order: index, installedAt: addon.installedAt)
+                AddonRecord(id: addon.id, manifestData: try encoder.encode(addon.manifest), isEnabled: addon.isEnabled, order: index,
+                            installedAt: addon.installedAt, customName: addon.customName)
             }
             try await store.save(records)
         } catch { throw RegistryError.storage("save") }

@@ -8,22 +8,30 @@ public struct InstalledAddon: Sendable, Equatable, Identifiable {
     public var manifest: Manifest
     public var isEnabled: Bool
     public var installedAt: Date
+    /// A name the user gave the addon. Nil or blank means the manifest's own name.
+    public var customName: String?
 
-    public init(id: UUID = UUID(), manifestURL: URL, baseURL: URL, manifest: Manifest, isEnabled: Bool = true, installedAt: Date = Date()) {
+    public init(id: UUID = UUID(), manifestURL: URL, baseURL: URL, manifest: Manifest, isEnabled: Bool = true, installedAt: Date = Date(),
+                customName: String? = nil) {
         self.id = id
         self.manifestURL = manifestURL
         self.baseURL = baseURL
         self.manifest = manifest
         self.isEnabled = isEnabled
         self.installedAt = installedAt
+        self.customName = customName
     }
 
-    public var name: String { manifest.name }
+    /// The name the UI shows: the trimmed custom name when there is one, else the manifest's.
+    public var name: String {
+        let trimmed = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? manifest.name : trimmed
+    }
 
     /// Host (and port) only; safe to show.
     public var displayHost: String { Redactor.displayHost(manifestURL) }
 
-    public var summary: AddonSummary { AddonSummary(id: id, name: manifest.name, host: displayHost) }
+    public var summary: AddonSummary { AddonSummary(id: id, name: name, host: displayHost) }
 }
 
 extension InstalledAddon: CustomStringConvertible, CustomDebugStringConvertible {

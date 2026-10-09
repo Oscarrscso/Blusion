@@ -8,13 +8,16 @@ public struct AddonRecord: Sendable, Codable, Equatable, Identifiable {
     public var isEnabled: Bool
     public var order: Int
     public var installedAt: Date
+    /// The user's own name for the addon. Optional, so records saved before renaming decode as nil.
+    public var customName: String?
 
-    public init(id: UUID, manifestData: Data, isEnabled: Bool, order: Int, installedAt: Date) {
+    public init(id: UUID, manifestData: Data, isEnabled: Bool, order: Int, installedAt: Date, customName: String? = nil) {
         self.id = id
         self.manifestData = manifestData
         self.isEnabled = isEnabled
         self.order = order
         self.installedAt = installedAt
+        self.customName = customName
     }
 }
 
