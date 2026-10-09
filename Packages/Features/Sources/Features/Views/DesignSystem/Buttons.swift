@@ -34,7 +34,6 @@ private struct PrimaryActionLabel: View {
             .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
             .pointerInteraction(cornerRadius: 999, highlightColor: .black)
             .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in pressed ? .impact(weight: .light) : nil }
-            .padding(.horizontal, Theme.buttonInset)
     }
 
     private var height: CGFloat {
@@ -67,7 +66,6 @@ struct GlassCapsuleButtonStyle: ButtonStyle {
             .contentShape(Capsule())
             .pointerInteraction(cornerRadius: 999)
             .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in pressed ? .impact(weight: .light) : nil }
-            .padding(.horizontal, Theme.buttonInset)
     }
 }
 
@@ -141,7 +139,6 @@ struct CircleActionRow<Content: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.buttonInset)
     }
 }
 #endif
