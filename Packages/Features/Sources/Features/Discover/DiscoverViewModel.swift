@@ -36,14 +36,9 @@ public final class DiscoverViewModel {
     public var genres: [String] { selectedSource?.catalog.genreOptions ?? [] }
     public var hasSources: Bool { !sources.isEmpty }
 
-    /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
+    /// The types the Discover type control offers, in order: Movies, Series, Anime. Only those the sources provide. Other addon types have no segment.
     public var types: [String] {
-        var order: [String] = []
-        for source in sources where !order.contains(source.type) { order.append(source.type) }
-        return order.enumerated().sorted { lhs, rhs in
-            let (left, right) = (ContentTypeName.sortRank(lhs.element), ContentTypeName.sortRank(rhs.element))
-            return left != right ? left < right : lhs.offset < rhs.offset
-        }.map(\.element)
+        ["movie", "series", "anime"].filter { type in sources.contains { $0.type == type } }
     }
 
     /// The sources of the selected type; every source when no type is selected.
