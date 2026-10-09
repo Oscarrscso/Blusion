@@ -423,7 +423,7 @@ private let bigSample = #"""
                 ]),
                 CollectionItem(id: "h", title: "Hidden", hideTitle: true, imageAspect: .square),
             ])),
-            HomeWidget(id: "continue", title: "Continue Watching", content: .continueWatching),
+            HomeWidget(id: "continue", title: "Continue", content: .continueWatching),
             HomeWidget(id: "other", title: "Other", content: .row(RowConfiguration(source: .unsupported(kind: "anilistCatalog")))),
         ]
         let result = try FusionWidgetCodec.decode(FusionWidgetCodec.encode(widgets), installed: [])

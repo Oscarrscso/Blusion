@@ -142,7 +142,7 @@ struct ContinueWatchingRow: View {
     let items: [ContinueWatchingEntry]
     let state: HomeViewModel.ContinueState
     let retry: () -> Void
-    var title = "Continue Watching"
+    var title = "Continue"
     var hideTitle = false
     @Environment(AppRouter.self) private var router
 
@@ -159,7 +159,7 @@ struct ContinueWatchingRow: View {
                         .tint(.gray)
                         .scaleEffect(0.75)
                         .opacity(state == .loading ? 1 : 0)
-                        .accessibilityLabel("Refreshing Continue Watching")
+                        .accessibilityLabel("Refreshing Continue")
                         .accessibilityHidden(state != .loading)
                     if !items.isEmpty {
                         if case .failed(let message) = state {

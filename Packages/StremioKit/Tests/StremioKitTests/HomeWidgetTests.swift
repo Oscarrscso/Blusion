@@ -41,7 +41,7 @@ import Testing
             HomeWidget(id: "hero", title: "Spotlight", hideTitle: true, content: .hero(row)),
             HomeWidget(id: "row", title: "Row", content: .row(row)),
             HomeWidget(id: "tiles", title: "Tiles", content: .collection(tiles)),
-            HomeWidget(id: "continue", title: "Continue Watching", content: .continueWatching),
+            HomeWidget(id: "continue", title: "Continue", content: .continueWatching),
         ]
         let data = try JSONEncoder().encode(widgets)
         #expect(try JSONDecoder().decode([HomeWidget].self, from: data) == widgets)

@@ -5,7 +5,7 @@ import StremioKitTestSupport
 
 @Suite struct WidgetStoreTests {
     private let layout = [
-        HomeWidget(id: "continue", title: "Continue Watching", content: .continueWatching),
+        HomeWidget(id: "continue", title: "Continue", content: .continueWatching),
         HomeWidget(id: "row", title: "Movies", content: .row(RowConfiguration(source: .traktList(TraktListReference(username: "u", listSlug: "s", listName: "S")),
             limit: 30))),
     ]

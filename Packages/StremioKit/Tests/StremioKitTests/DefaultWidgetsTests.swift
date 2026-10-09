@@ -37,7 +37,7 @@ import StremioKitTestSupport
     @Test func theFixtureGivesSpotlightContinueAndOneRowPerBrowsableCatalog() throws {
         let widgets = DefaultWidgets.make(for: [try cinemeta()])
         #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.row.org.example.cinemeta.movie.top", "auto.row.org.example.cinemeta.series.top"])
-        #expect(widgets.map(\.title) == ["Spotlight", "Continue Watching", "Popular Movies", "Popular Series"])
+        #expect(widgets.map(\.title) == ["Spotlight", "Continue", "Popular Movies", "Popular Series"])
 
         let hero = try #require(configuration(widgets[0]))
         #expect(widgets[0].hideTitle && hero.limit == 8)

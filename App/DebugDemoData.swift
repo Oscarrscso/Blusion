@@ -4,7 +4,7 @@ import Foundation
 import PlayerKit
 import StremioKit
 
-/// `BLUSION_DEMO_DATA=1` fills the library and watch history with a few well-known titles, so Library, Continue Watching and
+/// `BLUSION_DEMO_DATA=1` fills the library and watch history with a few well-known titles, so Library, Continue and
 /// Detail have something to show in a `scripts/snapshot.sh` picture. Only meant for the in-memory stores of a snapshot run.
 enum DebugDemoData {
     /// `BLUSION_EXTRA_ADDONS=<link>[,<link>…]` installs more addons for one run, so a snapshot can show real streams. The links
