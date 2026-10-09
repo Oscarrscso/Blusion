@@ -56,6 +56,7 @@ public final class SettingsViewModel {
         omdbAPIKeyText = settings.omdbAPIKey ?? ""
         tmdbReadTokenText = settings.tmdbReadToken ?? ""
         services.posterRatings.isEnabled = settings.showsPosterRatings
+        services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
         installedAddonCount = await services.registry.addons.count
     }
 
@@ -100,6 +101,14 @@ public final class SettingsViewModel {
         settings = await services.settings.load()
         settings.showsPosterRatings = value
         services.posterRatings.isEnabled = value
+        await services.settings.save(settings)
+    }
+
+    /// Also switches the rating logos in the store they read, so posters and detail rows change at once.
+    public func setShowsColouredRatingLogos(_ value: Bool) async {
+        settings = await services.settings.load()
+        settings.showsColouredRatingLogos = value
+        services.posterRatings.showsColouredLogos = value
         await services.settings.save(settings)
     }
 

@@ -199,6 +199,7 @@ public struct RootTabView: View {
         await titleActions.refresh()
         let settings = await services.settings.load()
         services.posterRatings.isEnabled = settings.showsPosterRatings
+        services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
     }
 }
 

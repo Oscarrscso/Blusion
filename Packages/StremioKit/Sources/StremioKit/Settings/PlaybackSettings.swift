@@ -19,6 +19,8 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var playerPreference: PlayerPreference
     /// IMDb and Letterboxd ratings on posters.
     public var showsPosterRatings: Bool
+    /// Rating logos keep their brand colours. Off by default: they then take the text colour, so they match the rest of the screen.
+    public var showsColouredRatingLogos: Bool
     /// Play starts the best stream at once instead of showing the list of streams first.
     public var autoPlayBestStream: Bool
     /// Seconds between Trakt playback refreshes. Zero is manual; nil uses the five-minute default for older saved settings.
@@ -27,7 +29,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
                 traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
                 autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil,
-                continueWatchingRefreshSeconds: Int? = 300) {
+                continueWatchingRefreshSeconds: Int? = 300, showsColouredRatingLogos: Bool = false) {
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL
@@ -35,6 +37,7 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
         self.traktClientID = traktClientID
         self.playerPreference = playerPreference
         self.showsPosterRatings = showsPosterRatings
+        self.showsColouredRatingLogos = showsColouredRatingLogos
         self.autoPlayBestStream = autoPlayBestStream
         self.omdbAPIKey = omdbAPIKey
         self.tmdbReadToken = tmdbReadToken
