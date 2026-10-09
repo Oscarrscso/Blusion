@@ -91,6 +91,7 @@ struct WidgetsManagerView: View {
                     switch kind {
                     case .row: Task { await model.add(WidgetsManagerViewModel.makeTraktRow(source)) }
                     case .spotlight: Task { await model.add(WidgetsManagerViewModel.makeTraktSpotlight(source)) }
+                    case .banner: Task { await model.add(WidgetsManagerViewModel.makeTraktBanner(source)) }
                     case .collection: break
                     }
                     adding = nil
@@ -99,6 +100,7 @@ struct WidgetsManagerView: View {
                     switch kind {
                     case .row: widget = WidgetsManagerViewModel.makeRow(title: choice.title, choice: choice, genre: genre)
                     case .spotlight: widget = WidgetsManagerViewModel.makeHero(choice: choice, genre: genre)
+                    case .banner: widget = WidgetsManagerViewModel.makeBanner(choice: choice, genre: genre)
                     case .collection: widget = WidgetsManagerViewModel.makeGenreCollection(title: "Genres", choice: choice)
                     }
                     Task { await model.add(widget) }
@@ -126,6 +128,7 @@ struct WidgetsManagerView: View {
     private func symbol(for widget: HomeWidget) -> String {
         switch widget.content {
         case .hero: "sparkles.tv"
+        case .banner: "rectangle.topthird.inset.filled"
         case .row: "rectangle.stack"
         case .collection: "square.grid.2x2"
         case .continueWatching: "play.circle"
@@ -135,7 +138,7 @@ struct WidgetsManagerView: View {
 }
 
 private enum WidgetKind: String, CaseIterable, Identifiable {
-    case row = "Catalog Row", spotlight = "Spotlight", collection = "Genre Collection"
+    case row = "Catalog Row", spotlight = "Spotlight", banner = "Featured Banner", collection = "Genre Collection"
     var id: String { rawValue }
 }
 #endif

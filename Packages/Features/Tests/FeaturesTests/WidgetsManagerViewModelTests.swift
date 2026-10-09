@@ -374,6 +374,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         let row = HomeWidget(title: "Popular", content: .row(RowConfiguration(source: .addonCatalog(popular.reference))))
         #expect(model.summary(of: row) == "Row · Popular Movies · Cinemeta")
         #expect(model.summary(of: WidgetsManagerViewModel.makeHero(choice: popular)) == "Spotlight · Popular Movies · Cinemeta")
+        #expect(model.summary(of: WidgetsManagerViewModel.makeBanner(choice: popular)).hasPrefix("Banner · "))
         let tiles = (0..<12).map { CollectionItem(id: "\($0)", title: "Tile \($0)") }
         #expect(model.summary(of: HomeWidget(title: "Tiles", content: .collection(tiles))) == "Collection · 12 tiles")
         #expect(model.summary(of: HomeWidget(title: "One", content: .collection([tiles[0]]))) == "Collection · 1 tile")
@@ -439,10 +440,10 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
 }
 
 private extension HomeWidget.Content {
-    /// The source of a `.row` or `.hero`, for assertions.
+    /// The source of a `.row`, `.hero` or `.banner`, for assertions.
     var rowSource: WidgetSource? {
         switch self {
-        case .row(let row), .hero(let row): return row.source
+        case .row(let row), .hero(let row), .banner(let row): return row.source
         case .collection, .continueWatching, .unsupported: return nil
         }
     }

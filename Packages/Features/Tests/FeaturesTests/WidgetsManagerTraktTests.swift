@@ -61,6 +61,19 @@ import StremioKitTestSupport
         #expect(row.source == source && row.limit == 8)
     }
 
+    @Test func aTraktListBannerIsTitledAsTheListAndUsesTwentyCards() async throws {
+        let source = WidgetSource.traktList(TraktListReference(username: "u", listSlug: "s", listName: "Best Of"))
+        let widget = WidgetsManagerViewModel.makeTraktBanner(source)
+        #expect(widget.title == "Best Of" && !widget.hideTitle)
+        let vm = try await model(clientID: "key", transport: StubTransport(data: Data()))
+        #expect(vm.summary(of: widget) == "Banner · Trakt list · Best Of by u")
+        guard case .banner(let row) = widget.content else {
+            Issue.record("a banner should be a banner")
+            return
+        }
+        #expect(row.source == source && row.limit == 20)
+    }
+
     @Test func theErrorMessagesAreOneSentenceEach() {
         #expect(WidgetsManagerViewModel.TraktLinkError.needsClientID.message == "Add a Trakt client ID in Settings first.")
         #expect(WidgetsManagerViewModel.TraktLinkError.failed("not found").message.contains("not found"))

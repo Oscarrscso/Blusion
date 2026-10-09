@@ -32,7 +32,7 @@ private let bigSample = #"""
 
     private func config(_ widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
-        case .row(let config), .hero(let config): return config
+        case .row(let config), .hero(let config), .banner(let config): return config
         case .collection, .continueWatching, .unsupported: return nil
         }
     }
@@ -433,6 +433,43 @@ private let bigSample = #"""
 
     @Test func aNonObjectWidgetIsCountedAsOneSkip() throws {
         let result = try decode(#"{"widgets": [[1, 2], {"id": "ok", "type": "blusion.continueWatching"}]}"#)
+        #expect(result.widgets.map(\.id) == ["ok"])
+        #expect(result.skipped == 1)
+    }
+
+    @Test func aHeroBannerDecodesToABannerWithItsSource() throws {
+        let text = #"""
+        { "exportType": "fusionWidgets", "exportVersion": 1, "widgets": [
+          {"cacheTTL":3600,"dataSource":{"kind":"traktList","payload":{"listName":"The Complete Criterion Collection","listSlug":"the-complete-criterion-collection","traktId":10851163,"username":"TwentyWasHere"}},"id":"trakt.9DA25D7B-518C-43C8-BA43-07EBEBD16078","limit":50,"presentation":{"aspectRatio":"poster","badges":{"providers":false,"ratings":true},"cardStyle":"medium"},"title":"Criterion Collection","type":"hero.banner"}
+        ] }
+        """#
+        let result = try decode(text)
+        #expect(result.widgets.map(\.id) == ["trakt.9DA25D7B-518C-43C8-BA43-07EBEBD16078"])
+        #expect(result.widgets.map(\.title) == ["Criterion Collection"])
+        #expect(result.skipped == 0)
+
+        let widget = try #require(result.widgets.first)
+        guard case .banner(let row) = widget.content else {
+            Issue.record("hero.banner should decode to a banner")
+            return
+        }
+        #expect(row.limit == 50 && row.cacheTTL == 3600)
+        #expect(row.presentation.showsRatings && !row.presentation.showsProviders)
+        #expect(row.source == .traktList(TraktListReference(username: "TwentyWasHere", listSlug: "the-complete-criterion-collection",
+                                                            listName: "The Complete Criterion Collection", traktID: 10851163)))
+    }
+
+    @Test func aHeroBannerRoundTripsAndEncodesItsType() throws {
+        let widget = HomeWidget(id: "banner", title: "Featured", content: .banner(RowConfiguration(
+            source: .traktList(TraktListReference(username: "u", listSlug: "s", listName: "S", traktID: nil)), limit: 12)))
+        let data = try FusionWidgetCodec.encode([widget])
+        #expect(String(decoding: data, as: UTF8.self).contains("\"type\" : \"hero.banner\""))
+        let result = try FusionWidgetCodec.decode(data, installed: [])
+        #expect(result.widgets == [widget])
+    }
+
+    @Test func aHeroBannerWithoutASourceIsSkipped() throws {
+        let result = try decode(#"{"widgets": [{"id": "bad", "title": "No source", "type": "hero.banner"}, {"id": "ok", "type": "blusion.continueWatching"}]}"#)
         #expect(result.widgets.map(\.id) == ["ok"])
         #expect(result.skipped == 1)
     }

@@ -86,12 +86,16 @@ public enum FusionWidgetCodec {
             }
             let content: HomeWidget.Content
             switch type {
-            case "row.classic", "row.classic.numbered", "blusion.hero":
+            case "row.classic", "row.classic.numbered", "blusion.hero", "hero.banner":
                 guard let row = rowConfiguration(object, numbered: type == "row.classic.numbered") else {
                     skipped += 1
                     return nil
                 }
-                content = type == "blusion.hero" ? .hero(row) : .row(row)
+                switch type {
+                case "blusion.hero": content = .hero(row)
+                case "hero.banner": content = .banner(row)
+                default: content = .row(row)
+                }
             case "collection.row":
                 guard let tiles = collection(object) else {
                     skipped += 1
@@ -304,6 +308,9 @@ public enum FusionWidgetCodec {
             encodeRow(row, into: &object)
         case .hero(let row):
             object["type"] = "blusion.hero"
+            encodeRow(row, into: &object)
+        case .banner(let row):
+            object["type"] = "hero.banner"
             encodeRow(row, into: &object)
         case .unsupported(let type):
             object["type"] = type

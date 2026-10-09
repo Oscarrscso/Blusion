@@ -17,6 +17,8 @@ public struct HomeWidget: Sendable, Codable, Equatable, Hashable, Identifiable {
     public enum Content: Sendable, Codable, Equatable, Hashable {
         /// A large paging spotlight fed by one source (Blusion only).
         case hero(RowConfiguration)
+        /// Fusion `hero.banner`: a large featured landscape title over a row of smaller cards.
+        case banner(RowConfiguration)
         /// Fusion `row.classic`.
         case row(RowConfiguration)
         /// Fusion `collection.row`: tiles that each open a grid.

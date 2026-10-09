@@ -18,7 +18,7 @@ public final class HomeViewModel {
 
     public struct Section: Identifiable, Equatable {
         public let widget: HomeWidget
-        /// Items of a `.hero` or `.row` widget. `.collection` and `.continueWatching` sections stay `.loaded([])`.
+        /// Items of a `.hero`, `.banner` or `.row` widget. `.collection` and `.continueWatching` sections stay `.loaded([])`.
         public var state: Loadable<[MetaPreview]>
         /// Why a row has nothing to show (addon missing, Trakt client ID needed, unsupported source). nil when fine or still loading.
         public var issue: WidgetSourceError?
@@ -281,10 +281,10 @@ private struct RowResult: Sendable {
     let issue: WidgetSourceError?
 }
 
-/// The configuration of a `.hero` or `.row`, the widgets that load items; nil for the others.
+/// The configuration of a `.hero`, `.banner` or `.row`, the widgets that load items; nil for the others.
 private func loadingConfiguration(_ content: HomeWidget.Content) -> RowConfiguration? {
     switch content {
-    case .hero(let row), .row(let row): return row
+    case .hero(let row), .banner(let row), .row(let row): return row
     case .collection, .continueWatching, .unsupported: return nil
     }
 }

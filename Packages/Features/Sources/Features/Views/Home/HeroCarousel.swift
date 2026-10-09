@@ -241,7 +241,7 @@ private struct HeroPage: View {
 
 /// A title's logo, fitted into a box of fixed size so the text under it never moves when it arrives. Shows the name when the logo
 /// cannot be loaded.
-private struct HeroLogo: View {
+struct HeroLogo: View {
     static let box = CGSize(width: 260, height: 84)
 
     let url: URL

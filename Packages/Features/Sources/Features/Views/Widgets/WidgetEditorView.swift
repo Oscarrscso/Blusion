@@ -21,7 +21,7 @@ struct WidgetEditorView: View {
                 Toggle("Hide title", isOn: $widget.hideTitle)
             }
             switch widget.content {
-            case .row, .hero:
+            case .row, .hero, .banner:
                 rowFields
             case .collection(let tiles):
                 Section("Tiles") {
@@ -93,11 +93,12 @@ struct WidgetEditorView: View {
         }
     }
 
-    /// Puts a source into the widget being edited: a row or spotlight takes it, a collection adds it as a tile named `title`.
+    /// Puts a source into the widget being edited: a row, spotlight or banner takes it, a collection adds it as a tile named `title`.
     private func useSource(_ source: WidgetSource, title: String) {
         switch widget.content {
         case .row(var row): row.source = source; widget.content = .row(row)
         case .hero(var row): row.source = source; widget.content = .hero(row)
+        case .banner(var row): row.source = source; widget.content = .banner(row)
         case .collection(var tiles):
             tiles.append(CollectionItem(title: title, sources: [source]))
             widget.content = .collection(tiles)
@@ -109,11 +110,15 @@ struct WidgetEditorView: View {
     private var row: Binding<RowConfiguration> {
         Binding {
             switch widget.content {
-            case .row(let row), .hero(let row): return row
+            case .row(let row), .hero(let row), .banner(let row): return row
             default: return RowConfiguration(source: .unsupported(kind: ""))
             }
         } set: { value in
-            if case .hero = widget.content { widget.content = .hero(value) } else { widget.content = .row(value) }
+            switch widget.content {
+            case .hero: widget.content = .hero(value)
+            case .banner: widget.content = .banner(value)
+            default: widget.content = .row(value)
+            }
         }
     }
 
@@ -124,6 +129,12 @@ struct WidgetEditorView: View {
                 .accessibilityIdentifier("widgetEditor.source")
             if row.wrappedValue.source.usesTrakt {
                 Text("Trakt lists and feeds need a Trakt client ID in Settings.").font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        if case .banner = widget.content {
+            // Banner cards are always a landscape feature and posters, so only the ratings badge is a choice.
+            Section("Appearance") {
+                Toggle("Show ratings", isOn: row.presentation.showsRatings)
             }
         }
         if case .row = widget.content {

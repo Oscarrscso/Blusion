@@ -84,6 +84,16 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
 
     // MARK: Phases and the automatic layout
 
+    @Test func aSavedBannerLoadsItsItemsLikeAHero() async throws {
+        let banner = HomeWidget(id: "banner", title: "Featured", content: .banner(RowConfiguration(source: .addonCatalog(AddonCatalogReference(
+            manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")))))
+        let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: [banner]))
+        await model.load()
+        #expect(model.isCustomised && model.phase == .ready)
+        #expect(model.sections.map(\.id) == ["banner"])
+        #expect(model.sections[0].state.value?.count == 2)
+    }
+
     @Test func noAddonsMeansTheEmptyStateAndNoSections() async throws {
         let model = HomeViewModel(services: try await services([], transport: answering()))
         #expect(model.phase == .loading)

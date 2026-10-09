@@ -273,6 +273,7 @@ public final class WidgetsManagerViewModel {
         switch widget.content {
         case .row(let row): return "Row · \(describe(row.source))"
         case .hero(let row): return "Spotlight · \(describe(row.source))"
+        case .banner(let row): return "Banner · \(describe(row.source))"
         case .collection(let tiles): return "Collection · \(WidgetsManagerViewModel.plural(tiles.count, "tile"))"
         case .continueWatching: return "Continue"
         case .unsupported(let type): return "Can't show yet · \(type)"
@@ -298,6 +299,11 @@ public final class WidgetsManagerViewModel {
         HomeWidget(title: traktTitle(source), hideTitle: true, content: .hero(RowConfiguration(source: source, limit: 8)))
     }
 
+    /// The featured banner of a Trakt list: its first title large, the rest in a row below.
+    public static func makeTraktBanner(_ source: WidgetSource) -> HomeWidget {
+        HomeWidget(title: traktTitle(source), content: .banner(RowConfiguration(source: source, limit: 20)))
+    }
+
     /// The name a Trakt list or feed is shown under, or "Trakt" for any other source.
     public static func traktTitle(_ source: WidgetSource) -> String {
         switch source {
@@ -311,6 +317,12 @@ public final class WidgetsManagerViewModel {
     public static func makeHero(choice: CatalogChoice, genre: String? = nil) -> HomeWidget {
         let row = RowConfiguration(source: .addonCatalog(catalogReference(choice, genre: genre)), limit: 8)
         return HomeWidget(title: choice.title, hideTitle: true, content: .hero(row))
+    }
+
+    /// The featured banner of one catalog, as the add sheet makes it.
+    public static func makeBanner(choice: CatalogChoice, genre: String? = nil) -> HomeWidget {
+        let row = RowConfiguration(source: .addonCatalog(catalogReference(choice, genre: genre)), limit: 20)
+        return HomeWidget(title: choice.title, content: .banner(row))
     }
 
     /// A collection with one tile per genre of the catalog. Each tile opens that genre's grid.
