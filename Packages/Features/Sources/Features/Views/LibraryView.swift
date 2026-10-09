@@ -178,7 +178,8 @@ struct LibraryView: View {
         MediaRow("Continue Watching") {
             ForEach(model.continueWatching) { item in
                 NavigationLink(value: LibraryViewModel.request(for: item)) {
-                    ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster, fraction: item.fraction)
+                    ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster,
+                                 fraction: item.fraction, duration: item.duration)
                 }
                 .buttonStyle(PressableCardStyle())
                 .titleTapHaptic()
@@ -221,9 +222,8 @@ struct LibraryView: View {
     }
 
     private func progressSubtitle(_ item: WatchProgress) -> String {
-        let remaining = "\(max(0, Int((item.duration - item.position) / 60))) min left"
-        if let season = item.season, let episode = item.episode { return "S\(season), E\(episode) · \(remaining)" }
-        return remaining
+        if let season = item.season, let episode = item.episode { return "S\(season), E\(episode)" }
+        return ""
     }
 }
 
@@ -341,7 +341,7 @@ struct ProgressRow: View {
     let item: WatchProgress
 
     var body: some View {
-        ProgressCard(title: item.title, artwork: item.poster, fraction: item.fraction)
+        ProgressCard(title: item.title, artwork: item.poster, fraction: item.fraction, duration: item.duration)
     }
 }
 #endif

@@ -94,12 +94,10 @@ struct DesignGalleryView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 caption("Up Next: progress inside the art, grey line under")
                 MediaRow("Up Next", onSeeAll: {}) {
-                    ProgressCard(title: "Breaking Bad", subtitle: "S2, E5 · 21 min left",
-                                 artwork: Sample.artwork("tt0903747", "background"), fraction: 0.82)
-                    ProgressCard(title: "Inception", subtitle: "1 hr 3 min left",
-                                 artwork: Sample.artwork("tt1375666", "background"), fraction: 0.35)
-                    ProgressCard(title: "Oppenheimer", subtitle: "2 hr 55 min left",
-                                 artwork: Sample.artwork("tt15398776", "background"), fraction: 0.04)
+                    ProgressCard(title: "Breaking Bad", subtitle: "S2, E5",
+                                 artwork: Sample.artwork("tt0903747", "background"), fraction: 0.82, duration: 2820)
+                    ProgressCard(title: "Inception", artwork: Sample.artwork("tt1375666", "background"), fraction: 0.35, duration: 8880)
+                    ProgressCard(title: "Oppenheimer", artwork: Sample.artwork("tt15398776", "background"), fraction: 0.04, duration: 10800)
                 }
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {

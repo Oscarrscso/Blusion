@@ -186,7 +186,8 @@ struct ContinueWatchingRow: View {
                 MediaRow(title, hideTitle: true) {
                     ForEach(shown) { item in
                         NavigationLink(value: item.request) {
-                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster,
+                                         fraction: item.fraction, duration: item.request.expectedDuration)
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
@@ -264,6 +265,7 @@ struct RowPlaceholder: View {
                             RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous)
                                 .fill(Theme.surfaceStrong)
                                 .frame(width: width, height: width / aspect.ratio)
+                                .mediaArtwork(cornerRadius: aspect.cornerRadius, bordered: aspect != .poster)
                             VStack(alignment: .leading, spacing: 4) {
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)

@@ -37,12 +37,18 @@ struct DiscoverView: View {
         let types = model.types.filter { $0.lowercased() != "other" }
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if types.count > 1 {
-                QualitySelector(titles: types.map(ContentTypeName.plural), selection: Binding {
+                Picker("Type", selection: Binding {
                     types.firstIndex(where: { $0 == model.selectedType }) ?? 0
                 } set: { index in
                     guard types.indices.contains(index) else { return }
                     Task { await model.select(type: types[index]) }
-                }, accessibilityID: "discover.filter.type")
+                }) {
+                    ForEach(types.indices, id: \.self) { index in
+                        Text(ContentTypeName.plural(types[index])).tag(index)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("discover.filter.type")
                 .padding(.horizontal, metrics.pageMargin)
             }
             GlassEffectContainer(spacing: Theme.Spacing.s) {

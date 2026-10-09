@@ -1,35 +1,35 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The TV app's "Up Next" lockup: 16:9 artwork with a thin progress bar inside its bottom edge, and under it the title in
-/// semibold footnote and a grey line such as "S2, E5 · 21 min left". `fraction` is the share watched, 0 to 1; values outside
-/// that range are clamped, and 0 draws no bar. `width` defaults to the layout's wide card width.
+/// A resume card: playback controls over the bottom of the artwork, with the title and episode metadata beneath it.
 struct ProgressCard: View {
     let title: String
     let subtitle: String?
     let artwork: URL?
     let fraction: Double
+    let duration: TimeInterval?
     let width: CGFloat?
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
 
-    init(title: String, subtitle: String? = nil, artwork: URL?, fraction: Double, width: CGFloat? = nil) {
+    init(title: String, subtitle: String? = nil, artwork: URL?, fraction: Double, duration: TimeInterval? = nil, width: CGFloat? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.artwork = artwork
         self.fraction = fraction
+        self.duration = duration
         self.width = width
     }
 
     var body: some View {
-        let progress = min(max(fraction, 0), 1)
+        let progress = fraction.isFinite ? min(max(fraction, 0), 1) : 0
         let fixed = width ?? (metrics.isRegular ? 180 : 148)
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Color.clear
                 .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
                 .overlay { ArtworkImage(url: artwork, title: title, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200)) }
-                .overlay(alignment: .bottom) { if progress > 0 { progressBar(progress, width: fixed) } }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                .overlay { PlaybackProgressOverlay(fraction: progress, duration: duration, width: fixed) }
+                .mediaArtwork()
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Theme.Typography.cardTitle)
@@ -50,21 +50,40 @@ struct ProgressCard: View {
         guard let subtitle, !subtitle.isEmpty else { return " " }
         return subtitle
     }
+}
 
-    /// The card's width is fixed, so the fill is a plain frame: a GeometryReader per card would cost a layout pass per row item.
-    /// A short fade under the bar keeps it legible on a bright still.
-    private func progressBar(_ progress: Double, width: CGFloat) -> some View {
-        let track = width - 2 * Theme.Spacing.m
-        return ZStack(alignment: .leading) {
-            Capsule().fill(.white.opacity(0.32))
-            Capsule().fill(.white).frame(width: track * progress)
-        }
-        .frame(width: track, height: 3)
-        .padding(.bottom, Theme.Spacing.m - 2)
-        .padding(.top, Theme.Spacing.xl)
-        .frame(maxWidth: .infinity)
-        .background(alignment: .bottom) {
-            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
+/// Shared by resume cards and episode stills. A real percentage is enough for the bar; runtime is shown only when known.
+struct PlaybackProgressOverlay: View {
+    let fraction: Double
+    var duration: TimeInterval?
+    let width: CGFloat
+
+    var body: some View {
+        if fraction.isFinite, fraction > 0, fraction < 1 {
+            BottomFade(length: 0.38, strength: 0.9)
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                        Capsule()
+                            .fill(.white.opacity(0.32))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
+                            }
+                            .frame(width: min(96, width * 0.42), height: 3)
+                        if let duration, duration.isFinite, duration > 0 {
+                            let minutes = ((duration * (1 - fraction)).rounded() / 60).rounded(.up)
+                            Text("\(minutes.formatted(.number.precision(.fractionLength(0))))m")
+                                .font(.system(size: 10, weight: .medium))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(Theme.Spacing.s)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 }
