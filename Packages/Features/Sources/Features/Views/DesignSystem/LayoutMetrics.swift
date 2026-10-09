@@ -13,8 +13,8 @@ import SwiftUI
 struct LayoutMetrics: Equatable, Sendable {
     /// True for the wide layout (Mac window, iPad): sidebar navigation, left-aligned hero, readable-width text columns.
     var isRegular: Bool
-    /// Horizontal inset of page content. Zero: headings, shelves and cards run edge to edge, and a shelf's first card starts at the
-    /// screen edge while its last card can scroll fully to the other one.
+    /// Horizontal inset of page content, the same on every page (Home, Discover, Library, Search, title pages): headings, filters and
+    /// grids sit inside it, and shelves scroll edge to edge with their first and last cards inset by it.
     var pageMargin: CGFloat
     /// Vertical gap between two shelves (or sections) on a page.
     var shelfSpacing: CGFloat
@@ -44,13 +44,13 @@ struct LayoutMetrics: Equatable, Sendable {
     var heroMaxHeight: CGFloat
 
     static let compact = LayoutMetrics(
-        isRegular: false, pageMargin: 0, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12, gridRowSpacing: 16,
+        isRegular: false, pageMargin: Theme.Spacing.l, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12, gridRowSpacing: 16,
         posterWidth: 112, wideCardWidth: 260, squareWidth: 124, tileWidth: 200, episodeWidth: 250, avatarSize: 72,
         readableWidth: .infinity, heroHeightFraction: 0.66, heroMaxHeight: 640
     )
 
     static let regular = LayoutMetrics(
-        isRegular: true, pageMargin: 0, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16, gridRowSpacing: 20,
+        isRegular: true, pageMargin: Theme.Spacing.l, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16, gridRowSpacing: 20,
         posterWidth: 160, wideCardWidth: 300, squareWidth: 176, tileWidth: 260, episodeWidth: 280, avatarSize: 88,
         readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
     )

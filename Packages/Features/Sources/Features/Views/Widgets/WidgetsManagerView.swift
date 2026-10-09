@@ -11,6 +11,7 @@ struct WidgetsManagerView: View {
     @State private var showsReset = false
     @State private var showsPendingImport = false
     @State private var copied = false
+    @Environment(AppRouter.self) private var router
 
     init(services: AppServices) {
         self.services = services
@@ -83,7 +84,13 @@ struct WidgetsManagerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("widgets.manager")
         .toolbar { EditButton() }
-        .task { await model.load() }
+        .task {
+            await model.load()
+            if router.addsWidgetOnOpen {
+                router.addsWidgetOnOpen = false
+                creating = .widget
+            }
+        }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
         .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
         .sheet(isPresented: $showsGenreCollection) {

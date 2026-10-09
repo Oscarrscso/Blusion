@@ -22,6 +22,8 @@ public final class AppRouter {
     var demoPlan: PlaybackPlan?
     var addonInstallText: String?
     var userStateRevision = 0
+    /// Set by Home's plus button: the widgets manager opens straight onto a new widget, then clears it.
+    var addsWidgetOnOpen = false
     /// Navigation values must wait until their stacks and destinations have appeared.
     private var pendingLaunchRoute: LaunchRoute?
 
@@ -54,7 +56,10 @@ public final class AppRouter {
     public func showAddons() { showSettings(.addons) }
 
     /// The Settings tab, opened on the Home widgets manager.
-    public func showWidgets() { showSettings(.widgets) }
+    public func showWidgets(adding: Bool = false) {
+        addsWidgetOnOpen = adding
+        showSettings(.widgets)
+    }
 
     private func showSettings(_ screen: LaunchRoute.Sheet) {
         switch screen {

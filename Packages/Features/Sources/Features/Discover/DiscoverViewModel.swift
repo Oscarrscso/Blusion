@@ -19,6 +19,8 @@ public final class DiscoverViewModel {
     /// The content type of `selectedSource`; nil until a source is selected.
     public private(set) var selectedType: String?
     public private(set) var selectedGenre: String?
+    /// True when the type control is on "All": the catalog menu then lists the sources of every type.
+    public private(set) var showsAllTypes = false
     public private(set) var items: [MetaPreview] = []
     public private(set) var state: State = .idle
     public private(set) var canLoadMore = false
@@ -46,9 +48,9 @@ public final class DiscoverViewModel {
         }.map(\.element)
     }
 
-    /// The sources of the selected type; every source when no type is selected.
+    /// The sources of the selected type; every source on "All" or when no type is selected.
     public var visibleSources: [CatalogSource] {
-        guard let selectedType else { return sources }
+        guard !showsAllTypes, let selectedType else { return sources }
         return sources.filter { $0.type == selectedType }
     }
 
@@ -69,7 +71,15 @@ public final class DiscoverViewModel {
 
     /// Switches to a content type: selects that type's first source and reloads. Unknown types change nothing.
     public func select(type: String) async {
+        showsAllTypes = false
         guard let first = sources.first(where: { $0.type == type }) else { return }
+        await select(source: first)
+    }
+
+    /// Switches to "All": every type's sources are offered, and the current source stays (or the first one is selected).
+    public func selectAllTypes() async {
+        showsAllTypes = true
+        guard selectedSource == nil, let first = sources.first else { return }
         await select(source: first)
     }
 

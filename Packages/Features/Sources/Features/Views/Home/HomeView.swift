@@ -125,22 +125,31 @@ struct HomeView: View {
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 
+    /// Add and edit sit side by side: a plus (a new widget) and a wrench (the widgets manager), each a glass squircle.
     private var customizeButton: some View {
-        Button {
-            router.showWidgets()
-        } label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .contentShape(Circle())
+        GlassEffectContainer(spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.s) {
+                customizeSymbol("plus", label: "Add Widget", identifier: "home.addWidget") { router.showWidgets(adding: true) }
+                customizeSymbol("wrench.fill", label: "Edit Widgets", identifier: "home.customize") { router.showWidgets() }
+            }
         }
-        .buttonStyle(.plain)
         .padding(.trailing, homeMetrics.pageMargin)
         .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
-        .accessibilityLabel("Customize Home")
-        .accessibilityIdentifier("home.customize")
+    }
+
+    private func customizeSymbol(_ name: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        return Button(action: action) {
+            Image(systemName: name)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 46, height: 46)
+                .glassEffect(.regular.interactive(), in: shape)
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {

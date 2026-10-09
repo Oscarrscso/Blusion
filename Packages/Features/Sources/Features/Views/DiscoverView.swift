@@ -15,7 +15,7 @@ struct DiscoverView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
+            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
                 if model.hasSources {
                     filters
                     results
@@ -37,20 +37,21 @@ struct DiscoverView: View {
         let types = model.types.filter { ["movie", "series"].contains($0.lowercased()) }
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if types.count > 1 {
-                ContinueKindSwitch(selection: Binding {
-                    model.selectedType?.lowercased() == "series" ? .series : .movies
-                } set: { kind in
-                    let type = kind == .series ? "series" : "movie"
+                QualitySelector(titles: ["All", "Movies", "Series"], selection: Binding {
+                    model.showsAllTypes ? 0 : model.selectedType?.lowercased() == "series" ? 2 : 1
+                } set: { index in
+                    guard index > 0 else { Task { await model.selectAllTypes() }; return }
+                    let type = index == 2 ? "series" : "movie"
                     guard let selected = types.first(where: { $0.lowercased() == type }) else { return }
                     Task { await model.select(type: selected) }
-                }, kinds: [.movies, .series], showsTitles: true, accessibilityID: "discover.filter.type")
+                }, symbols: ["square.grid.2x2", "film", "tv"], accessibilityID: "discover.filter.type")
                 .padding(.horizontal, metrics.pageMargin)
             }
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
                         ForEach(model.visibleSources) { source in
-                            Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
+                            Button("\(source.title) · \(model.showsAllTypes ? ContentTypeName.plural(source.type) : source.addon.name)") { Task { await model.select(source: source) } }
                         }
                     } label: {
                         FilterMenuLabel(model.selectedSource?.title ?? "Catalog", systemImage: "square.stack")

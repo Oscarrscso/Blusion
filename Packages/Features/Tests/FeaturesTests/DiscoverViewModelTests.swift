@@ -25,6 +25,23 @@ import StremioKitTestSupport
         #expect(model.canLoadMore)
     }
 
+    @Test func allTypesKeepsTheSourceAndOffersEveryCatalog() async throws {
+        let server = try MockServer.shared()
+        let services = services(server)
+        _ = try await services.registry.install(from: server.catalogManifestURL().absoluteString)
+        let model = DiscoverViewModel(services: services)
+        await model.loadSources()
+        let source = model.selectedSource
+        await model.selectAllTypes()
+        #expect(model.showsAllTypes)
+        #expect(model.selectedSource == source)
+        #expect(model.visibleSources == model.sources)
+        if let type = model.types.first {
+            await model.select(type: type)
+            #expect(!model.showsAllTypes)
+        }
+    }
+
     @Test func nothingInstalledMeansNoSources() async throws {
         let model = DiscoverViewModel(services: services(try MockServer.shared()))
         await model.loadSources()
