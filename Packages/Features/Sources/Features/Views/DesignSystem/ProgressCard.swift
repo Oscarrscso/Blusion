@@ -101,8 +101,6 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                 heldOpen = false
             }
         }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { openStreams() }
     }
 }
 
