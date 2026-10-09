@@ -190,7 +190,7 @@ private struct HeroPage: View {
         Color.clear
             .overlay {
                 ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
-                             maxPixelSize: 4096, contentMode: .fit,
+                             maxPixelSize: 4096, contentMode: isLandscape ? .fit : .fill,
                              placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)

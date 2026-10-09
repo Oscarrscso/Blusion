@@ -84,7 +84,7 @@ struct DetailView: View {
                 .frame(width: size.width, height: height)
                 .overlay(alignment: .top) {
                     ZStack(alignment: .bottom) {
-                        ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fit,
+                        ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
                                      placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
                         BottomFade(length: 0.42)
                     }

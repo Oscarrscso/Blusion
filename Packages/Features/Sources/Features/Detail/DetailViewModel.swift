@@ -52,7 +52,15 @@ public final class DetailViewModel {
         // Cast photos are secondary: they start with the page but never hold up the details or the artwork above.
         async let credits: Void = loadTitleCredits()
         async let related: Void = loadRelatedTitles()
-        let result = await services.browse.detail(for: preview)
+        var result = await services.browse.detail(for: preview)
+        // Addons can answer nothing when a load is cancelled as the page restarts. One more try fills the page in before the page
+        // admits its details are basic.
+        if result.isFallback && !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(500))
+            result = await services.browse.detail(for: preview)
+        }
+        // A load that was cancelled must not overwrite what the newer load shows.
+        guard !Task.isCancelled else { return }
         detail = result.detail
         isFallback = result.isFallback
         isLoading = false
