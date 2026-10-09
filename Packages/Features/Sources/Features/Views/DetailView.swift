@@ -447,26 +447,15 @@ private struct EpisodeRow: View {
     private var still: some View {
         ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: metrics.episodeWidth * 3)
             .frame(width: metrics.episodeWidth, height: metrics.episodeWidth / CardAspect.wide.ratio)
-            .overlay(alignment: .bottom) { progressBar }
+            .overlay {
+                if !watched, let fraction {
+                    PlaybackProgressOverlay(fraction: fraction, width: metrics.episodeWidth)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if watched { checkmark }
             }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
-    }
-
-    /// Only for an episode that is partly watched: a thin line along the bottom edge of the still.
-    @ViewBuilder
-    private var progressBar: some View {
-        if let fraction, !watched {
-            Rectangle()
-                .fill(.white.opacity(0.25))
-                .frame(width: metrics.episodeWidth, height: 3)
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(.white)
-                        .frame(width: metrics.episodeWidth * min(max(fraction, 0), 1), height: 3)
-                }
-        }
+            .mediaArtwork(cornerRadius: Theme.Radius.small)
     }
 
     private var checkmark: some View {

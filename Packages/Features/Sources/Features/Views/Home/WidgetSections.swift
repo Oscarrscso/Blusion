@@ -185,8 +185,12 @@ struct ContinueWatchingRow: View {
             if !shown.isEmpty {
                 MediaRow(title, hideTitle: true) {
                     ForEach(shown) { item in
+                        let artworkID = ContentID(item.request.id).baseID
                         NavigationLink(value: item.request) {
-                            ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle,
+                                         artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
+                                         logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
+                                         duration: item.request.expectedDuration)
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
@@ -198,7 +202,7 @@ struct ContinueWatchingRow: View {
                 Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: (metrics.isRegular ? 180 : 148) / CardAspect.wide.ratio + 44, alignment: .top)
+                    .frame(maxWidth: .infinity, minHeight: (metrics.isRegular ? 180 : 148) / CardAspect.wide.ratio, alignment: .top)
                     .padding(.horizontal, Theme.screenPadding)
             } else {
                 emptyState
@@ -264,6 +268,7 @@ struct RowPlaceholder: View {
                             RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous)
                                 .fill(Theme.surfaceStrong)
                                 .frame(width: width, height: width / aspect.ratio)
+                                .mediaArtwork(cornerRadius: aspect.cornerRadius)
                             VStack(alignment: .leading, spacing: 4) {
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
                                 Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)

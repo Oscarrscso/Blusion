@@ -67,7 +67,7 @@ struct PosterImage: View {
     var body: some View {
         ArtworkImage(url: url, title: title, maxPixelSize: 480)
             .aspectRatio(CardAspect.poster.ratio, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.poster, style: .continuous))
+            .mediaArtwork(cornerRadius: Theme.Radius.poster)
             .accessibilityHidden(true)
     }
 }

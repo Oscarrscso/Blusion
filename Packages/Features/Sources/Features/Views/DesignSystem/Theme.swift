@@ -37,6 +37,7 @@ enum Theme {
     static let surface = Color.white.opacity(0.11)
     static let surfaceStrong = Color.white.opacity(0.18)
     static let separator = Color.white.opacity(0.12)
+    static let artworkBorder = Color.white.opacity(0.22)
     /// Flat grey shown where artwork is still loading. Opaque, so a card never shows what is behind it.
     static let placeholder = Color(white: 0.11)
     static let brandStart = Color(red: 0.12, green: 0.30, blue: 0.86)
@@ -81,6 +82,27 @@ extension View {
         let shape = RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
         return glassEffect(.regular, in: shape)
             .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
+    }
+
+    /// The same inset, one-pixel hairline for posters, cards and tiles. Full-screen hero artwork does not use it.
+    func mediaArtwork(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
+        modifier(MediaArtworkModifier(cornerRadius: cornerRadius))
+    }
+}
+
+private struct MediaArtworkModifier: ViewModifier {
+    let cornerRadius: CGFloat
+    @Environment(\.pixelLength) private var pixelLength
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .clipShape(shape)
+            .overlay {
+                shape.strokeBorder(Theme.artworkBorder, lineWidth: pixelLength)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 

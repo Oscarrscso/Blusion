@@ -1,70 +1,119 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The TV app's "Up Next" lockup: 16:9 artwork with a thin progress bar inside its bottom edge, and under it the title in
-/// semibold footnote and a grey line such as "S2, E5 · 21 min left". `fraction` is the share watched, 0 to 1; values outside
-/// that range are clamped, and 0 draws no bar. `width` defaults to the layout's wide card width.
+/// Landscape artwork with a centered title logo and a compact playback row inside its bottom fade.
 struct ProgressCard: View {
     let title: String
     let subtitle: String?
     let artwork: URL?
+    let logo: URL?
     let fraction: Double
+    let duration: TimeInterval?
     let width: CGFloat?
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
+    @State private var logoImage: UIImage?
 
-    init(title: String, subtitle: String? = nil, artwork: URL?, fraction: Double, width: CGFloat? = nil) {
+    init(title: String, subtitle: String? = nil, artwork: URL?, logo: URL? = nil, fraction: Double,
+         duration: TimeInterval? = nil, width: CGFloat? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.artwork = artwork
+        self.logo = logo
         self.fraction = fraction
+        self.duration = duration
         self.width = width
+        _logoImage = State(initialValue: logo.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 400) })
     }
 
     var body: some View {
-        let progress = min(max(fraction, 0), 1)
+        let progress = fraction.isFinite ? min(max(fraction, 0), 1) : 0
         let fixed = width ?? (metrics.isRegular ? 180 : 148)
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Color.clear
-                .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
-                .overlay { ArtworkImage(url: artwork, title: title, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200)) }
-                .overlay(alignment: .bottom) { if progress > 0 { progressBar(progress, width: fixed) } }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(Theme.Typography.cardTitle)
-                    .lineLimit(1)
-                Text(subtitleLine)
-                    .font(Theme.Typography.cardSubtitle)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        let overlay = PlaybackProgressOverlay(fraction: progress, duration: duration, episode: subtitle, width: fixed)
+        Color.clear
+            .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
+            .overlay { ArtworkImage(url: artwork, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200)) }
+            .overlay { overlay }
+            .overlay {
+                Group {
+                    if let logoImage {
+                        Image(uiImage: logoImage).resizable().scaledToFit()
+                    } else {
+                        Text(title)
+                            .font(Theme.Typography.cardTitle)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .frame(width: fixed * 0.65, height: fixed / CardAspect.wide.ratio * 0.32)
+                .shadow(color: .black.opacity(0.4), radius: 2)
+                .allowsHitTesting(false)
             }
-            .frame(width: fixed, alignment: .leading)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([title, subtitle, "\(Int((progress * 100).rounded())) percent watched"].compactMap { $0 }
-            .filter { !$0.isEmpty }.joined(separator: ", "))
+            .mediaArtwork()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([title, subtitle, overlay.remainingTime, "\(Int((progress * 100).rounded())) percent watched"].compactMap { $0 }
+                .filter { !$0.isEmpty }.joined(separator: ", "))
+            .task(id: logo) {
+                guard let logo else { logoImage = nil; return }
+                let image = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 400)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.25)) { logoImage = image }
+            }
+    }
+}
+
+/// Shared playback styling. Unknown runtime leaves the time label out; unwatched and completed artwork has no playback overlay.
+struct PlaybackProgressOverlay: View {
+    let fraction: Double
+    var duration: TimeInterval?
+    var episode: String?
+    let width: CGFloat
+
+    private var hasProgress: Bool { fraction.isFinite && fraction > 0 && fraction < 1 }
+
+    var remainingTime: String? {
+        guard hasProgress, let duration, duration.isFinite, duration > 0 else { return nil }
+        let minutes = ((duration * (1 - fraction)).rounded() / 60).rounded(.up)
+        return "\(minutes.formatted(.number.precision(.fractionLength(0))))m"
     }
 
-    private var subtitleLine: String {
-        guard let subtitle, !subtitle.isEmpty else { return " " }
-        return subtitle
-    }
-
-    /// The card's width is fixed, so the fill is a plain frame: a GeometryReader per card would cost a layout pass per row item.
-    /// A short fade under the bar keeps it legible on a bright still.
-    private func progressBar(_ progress: Double, width: CGFloat) -> some View {
-        let track = width - 2 * Theme.Spacing.m
-        return ZStack(alignment: .leading) {
-            Capsule().fill(.white.opacity(0.32))
-            Capsule().fill(.white).frame(width: track * progress)
-        }
-        .frame(width: track, height: 3)
-        .padding(.bottom, Theme.Spacing.m - 2)
-        .padding(.top, Theme.Spacing.xl)
-        .frame(maxWidth: .infinity)
-        .background(alignment: .bottom) {
-            LinearGradient(colors: [.black.opacity(0), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom)
+    var body: some View {
+        if hasProgress {
+            BottomFade(length: 0.40)
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                        Capsule()
+                            .fill(.white.opacity(0.32))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
+                            }
+                            .frame(width: min(52, width * 0.20), height: 3)
+                        if let remainingTime {
+                            Text(remainingTime)
+                                .font(.system(size: 10, weight: .medium))
+                                .monospacedDigit()
+                                .fixedSize()
+                        }
+                        if let episode, !episode.isEmpty {
+                            Text(episode)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.black)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.vertical, 2)
+                                .background(.white.opacity(0.92), in: Capsule())
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(Theme.Spacing.s)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 }

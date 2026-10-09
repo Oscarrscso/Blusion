@@ -57,7 +57,7 @@ struct ContinueWatchingAccessory: View {
             HStack(spacing: Theme.Spacing.m) {
                 ArtworkImage(url: item.poster, title: item.title, maxPixelSize: 120)
                     .frame(width: 30, height: 45)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .mediaArtwork(cornerRadius: 6)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.title)

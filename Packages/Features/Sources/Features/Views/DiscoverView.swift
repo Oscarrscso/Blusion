@@ -38,12 +38,13 @@ struct DiscoverView: View {
         let types = model.types.filter { ["movie", "series"].contains($0.lowercased()) }
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if types.count > 1 {
-                QualitySelector(titles: types.map(ContentTypeName.plural), selection: Binding {
-                    types.firstIndex(where: { $0 == model.selectedType }) ?? 0
-                } set: { index in
-                    guard types.indices.contains(index) else { return }
-                    Task { await model.select(type: types[index]) }
-                }, accessibilityID: "discover.filter.type")
+                ContinueKindSwitch(selection: Binding {
+                    model.selectedType?.lowercased() == "series" ? .series : .movies
+                } set: { kind in
+                    let type = kind == .series ? "series" : "movie"
+                    guard let selected = types.first(where: { $0.lowercased() == type }) else { return }
+                    Task { await model.select(type: selected) }
+                }, kinds: [.movies, .series], showsTitles: true, accessibilityID: "discover.filter.type")
                 .padding(.horizontal, metrics.pageMargin)
             }
             GlassEffectContainer(spacing: Theme.Spacing.s) {
