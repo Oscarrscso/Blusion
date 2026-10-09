@@ -69,6 +69,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
         }
         .buttonStyle(PressableCardStyle())
         // The hold is the system context menu: a custom long-press gesture here blocked the row's horizontal scroll.
+        // The preview is the card itself, so the menu matches its width and sits directly under the thumbnail.
         .contextMenu {
             Button("Open title", systemImage: "info.circle") {
                 Haptics.scrollSnap()
@@ -79,6 +80,8 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                     router.homePath.append(preview)
                 }
             }
+        } preview: {
+            content
         }
     }
 }
