@@ -33,6 +33,7 @@ struct ProgressCard: View {
         Color.clear
             .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
             .overlay { ArtworkImage(url: artwork, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200)) }
+            .overlay { Color.black.opacity(0.32).allowsHitTesting(false) }
             .overlay { overlay }
             .overlay {
                 Group {

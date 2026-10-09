@@ -70,13 +70,13 @@ struct LibraryView: View {
 
     private var filters: some View {
         @Bindable var model = model
-        let kinds: [LibraryKind] = [.movie, .series, .anime]
+        let kinds: [LibraryKind] = [.movie, .series]
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             QualitySelector(titles: ["All"] + kinds.map(\.title), selection: Binding {
                 kinds.firstIndex(where: { model.filter.kinds.contains($0) }).map { $0 + 1 } ?? 0
             } set: { index in
                 model.filter.kinds = index > 0 && index <= kinds.count ? [kinds[index - 1]] : []
-            }, accessibilityID: "library.filter.kind")
+            }, symbols: ["square.grid.2x2", "film", "tv"], accessibilityID: "library.filter.kind")
             .padding(.horizontal, metrics.pageMargin)
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             GlassEffectContainer(spacing: Theme.Spacing.s) {

@@ -1,54 +1,60 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// One connected glass control. Dragging changes the filter as the thumb crosses a segment.
+/// The shared glass pill for media types and quality filters, with a sliding white selection.
 struct QualitySelector: View {
     let titles: [String]
     @Binding var selection: Int
+    var symbols: [String] = []
+    var showsTitles = true
     var accessibilityID = "streams.filter"
+    @Namespace private var segment
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geometry in
-            let width = max(1, (geometry.size.width - 8) / CGFloat(max(1, titles.count)))
-            HStack(spacing: 0) {
+            let width = max(1, (geometry.size.width - 6 - CGFloat(max(0, titles.count - 1)) * 2) / CGFloat(max(1, titles.count)))
+            HStack(spacing: 2) {
                 ForEach(titles.indices, id: \.self) { index in
                     Button {
                         if selection != index { selection = index }
                     } label: {
-                        Text(titles[index])
-                            .font(.subheadline.weight(selection == index ? .bold : .medium))
-                            .foregroundStyle(selection == index ? .primary : .secondary)
+                        HStack(spacing: Theme.Spacing.xs) {
+                            if symbols.indices.contains(index) { Image(systemName: symbols[index]) }
+                            if showsTitles { Text(titles[index]) }
+                        }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(selection == index ? Color.black : Color.primary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
-                            .frame(width: width, height: 36)
-                            .contentShape(Capsule())
+                            .padding(.horizontal, showsTitles ? Theme.Spacing.s : 0)
+                            .frame(width: width, height: showsTitles ? 38 : 30)
+                            .background {
+                                if selection == index {
+                                    Capsule().fill(.white).matchedGeometryEffect(id: "segment", in: segment)
+                                }
+                            }
+                            .contentShape(Rectangle().inset(by: showsTitles ? 0 : -7))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selection == index ? .isSelected : [])
-                    .accessibilityIdentifier("\(accessibilityID).\(titles[index])")
+                    .accessibilityLabel(titles[index])
+                    .accessibilityIdentifier("\(accessibilityID).\(showsTitles ? titles[index] : titles[index].lowercased())")
                 }
             }
-            .background(alignment: .leading) {
-                Capsule()
-                    .fill(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0.12)], startPoint: .top, endPoint: .bottom))
-                    .overlay { Capsule().strokeBorder(.white.opacity(0.42), lineWidth: 0.8) }
-                    .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
-                    .frame(width: width, height: 36)
-                    .offset(x: CGFloat(selection) * width)
-            }
-            .padding(4)
+            .padding(3)
             .glassEffect(.regular.interactive(), in: .capsule)
-            .overlay { Capsule().strokeBorder(.white.opacity(0.16), lineWidth: 0.7) }
             .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { value in
-                guard !titles.isEmpty, abs(value.translation.width) > abs(value.translation.height) else { return }
-                let index = min(titles.count - 1, max(0, Int((value.location.x - 4) / width)))
+                guard showsTitles, !titles.isEmpty, abs(value.translation.width) > abs(value.translation.height) else { return }
+                let index = min(titles.count - 1, max(0, Int((value.location.x - 3) / (width + 2))))
                 if selection != index { selection = index }
             })
-            .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.8), value: selection)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.28), value: selection)
             .sensoryFeedback(.selection, trigger: selection)
         }
-        .frame(height: 44)
+        .frame(width: showsTitles ? nil : CGFloat(titles.count * 38 + 4), height: showsTitles ? 44 : 36)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Show")
         .accessibilityIdentifier(accessibilityID)
     }
 }
