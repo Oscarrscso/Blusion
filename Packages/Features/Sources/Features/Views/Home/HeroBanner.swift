@@ -116,7 +116,7 @@ private struct BannerFeature: View {
                 LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .black.opacity(0), location: 1)],
                                startPoint: .top, endPoint: .bottom)
             }
-            .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: HeroBanner.cornerRadius)
+            .zoomSource(id: sourceID, in: zoomNamespace)
             .overlay(alignment: .top) {
                 LinearGradient(colors: [.black.opacity(0.35), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
                     .frame(height: 110)
