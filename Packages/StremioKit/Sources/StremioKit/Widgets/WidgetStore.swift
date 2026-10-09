@@ -41,7 +41,16 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
         guard let data = defaults.data(forKey: Self.key),
               let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
               envelope.version == Self.currentVersion else { return nil }
-        return envelope.widgets
+        return envelope.widgets.map(Self.renamingContinueWatching)
+    }
+
+    /// The Continue rail was called "Continue Watching" until it was renamed. A layout saved before then keeps that title, so it is
+    /// renamed as it loads. A title the user chose themselves is left alone.
+    static func renamingContinueWatching(_ widget: HomeWidget) -> HomeWidget {
+        guard case .continueWatching = widget.content, widget.title == "Continue Watching" else { return widget }
+        var renamed = widget
+        renamed.title = "Continue"
+        return renamed
     }
 
     public func save(_ widgets: [HomeWidget]?) async {

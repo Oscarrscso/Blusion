@@ -36,6 +36,17 @@ import StremioKitTestSupport
         #expect(await store.load() == nil)
     }
 
+    @Test func aLayoutSavedUnderTheOldContinueTitleLoadsAsContinue() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = DefaultsWidgetStore(defaults: defaults)
+        await store.save([HomeWidget(id: "continue", title: "Continue Watching", content: .continueWatching),
+                          HomeWidget(id: "row", title: "Continue Watching", content: .row(RowConfiguration(source: .traktList(TraktListReference(username: "u", listSlug: "s", listName: "S")), limit: 30)))])
+        let loaded = try #require(await store.load())
+        #expect(loaded[0].title == "Continue", "the rail's old name is renamed as the layout loads")
+        #expect(loaded[1].title == "Continue Watching", "only the Continue rail is renamed, never a row the user titled that way")
+    }
+
     @Test func theDefaultsStoreRoundTripsInTheVersionedWrapper() async throws {
         let (defaults, name) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
