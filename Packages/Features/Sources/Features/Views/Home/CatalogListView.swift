@@ -20,7 +20,6 @@ struct CatalogListView: View {
             content
                 .padding(.vertical, Theme.Spacing.l)
         }
-        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle(request.title)
         .navigationBarTitleDisplayMode(.large)

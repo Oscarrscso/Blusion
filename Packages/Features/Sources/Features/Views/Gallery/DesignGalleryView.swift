@@ -30,7 +30,6 @@ struct DesignGalleryView: View {
             }
             .padding(.vertical, Theme.Spacing.l)
         }
-        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle("Gallery")
         .navigationBarTitleDisplayMode(.inline)

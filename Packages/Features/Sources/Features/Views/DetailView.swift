@@ -26,22 +26,18 @@ struct DetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     feature(in: geometry.size)
-                    if model.isSeries { episodesSection.reportsSectionEdge(id: "episodes") }
+                    if model.isSeries { episodesSection }
                     credits
                         .padding(.horizontal, metrics.pageMargin)
                         .padding(.top, Theme.Spacing.l)
-                        .reportsSectionEdge(id: "credits")
                     if !model.relatedTitles.isEmpty {
                         related
                             .padding(.horizontal, metrics.pageMargin)
                             .padding(.top, Theme.Spacing.xl)
-                            .reportsSectionEdge(id: "related")
                     }
                 }
-                .scrollTargetLayout()
                 .padding(.bottom, Theme.Spacing.xxl)
             }
-            .verticalScrollFeel()
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }

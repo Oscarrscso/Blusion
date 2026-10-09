@@ -25,11 +25,6 @@ enum Haptics {
     static func scrollSnapSoft() {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
     }
-
-    /// The click of a vertical scroller passing a section: between the page snap and the shelf's soft click.
-    static func scrollSection() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.65)
-    }
 }
 
 extension View {
@@ -54,75 +49,6 @@ extension View {
                                        value: [ShelfEdge(id: AnyHashable(id), minX: proxy.frame(in: .named(shelfScrollSpace)).minX)])
             }
         }
-    }
-}
-
-extension View {
-    /// The one scroll feel for a vertical scroller: sections align to the top as the scroll settles, and a click ticks as each section's
-    /// top passes the top of the screen. Its sections must call `reportsSectionEdge(id:)`, and the scroller's direct content must call
-    /// `scrollTargetLayout()`. Sits between the homepage's page snap and the shelves' soft snap.
-    func verticalScrollFeel() -> some View {
-        modifier(VerticalScrollFeelModifier())
-    }
-
-    /// Tell the enclosing `verticalScrollFeel` where this section sits, so it can tick as the section passes the top.
-    func reportsSectionEdge<ID: Hashable>(id: ID) -> some View {
-        background {
-            GeometryReader { proxy in
-                Color.clear.preference(key: SectionEdgeKey.self,
-                                       value: [SectionEdge(id: AnyHashable(id), minY: proxy.frame(in: .named(verticalScrollSpace)).minY)])
-            }
-        }
-    }
-}
-
-/// The coordinate space of a vertical scroller's viewport. Its own name, so a shelf's cards never report into it.
-private let verticalScrollSpace = "verticalScrollFeel"
-
-private struct SectionEdge: Equatable {
-    let id: AnyHashable
-    let minY: CGFloat
-}
-
-private struct SectionEdgeKey: PreferenceKey {
-    static var defaultValue: [SectionEdge] { [] }
-
-    static func reduce(value: inout [SectionEdge], nextValue: () -> [SectionEdge]) {
-        value += nextValue()
-    }
-}
-
-private struct VerticalScrollFeelModifier: ViewModifier {
-    /// How far the scroller must move from the last click before another section passing ticks. Between the shelf's 60 and 120.
-    private static let minimumTravel: CGFloat = 90
-
-    @State private var leadingID: AnyHashable?
-    @State private var isUserScrolling = false
-    @State private var offset: CGFloat = 0
-    @State private var offsetAtLastTick: CGFloat = 0
-
-    func body(content: Content) -> some View {
-        content
-            .scrollTargetBehavior(.viewAligned(limitBehavior: .never))
-            .coordinateSpace(name: verticalScrollSpace)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, new in offset = new }
-            .onPreferenceChange(SectionEdgeKey.self) { edges in
-                let leading = edges.filter { $0.minY <= 0 }.max { $0.minY < $1.minY }?.id
-                guard leading != leadingID else { return }
-                leadingID = leading
-                guard isUserScrolling, leading != nil, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
-                offsetAtLastTick = offset
-                Haptics.scrollSection()
-            }
-            .onScrollPhaseChange { _, phase in
-                switch phase {
-                case .interacting, .decelerating:
-                    isUserScrolling = true
-                default:
-                    isUserScrolling = false
-                }
-            }
-            .onDisappear { isUserScrolling = false }
     }
 }
 

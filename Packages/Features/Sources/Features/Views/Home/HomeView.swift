@@ -90,15 +90,13 @@ struct HomeView: View {
                     OfflineBanner()
                 } else {
                     ForEach(model.sections) { section in
-                        if model.isCustomised || !isEmptyRow(section) { sectionView(section).reportsSectionEdge(id: section.id) }
+                        if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
                     }
                 }
                 customizeButton
             }
-            .scrollTargetLayout()
             .padding(.bottom, Theme.Spacing.xxl)
         }
-        .verticalScrollFeel()
         .accessibilityIdentifier("board.rows")
         .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
             heroPull = value
