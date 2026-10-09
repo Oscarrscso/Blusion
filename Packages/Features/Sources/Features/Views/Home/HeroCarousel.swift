@@ -196,15 +196,18 @@ private struct HeroPage: View {
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
 
-    /// Clear over the picture, then the screen's own background at the bottom: the artwork fades into the screen, and the title sits on
-    /// a dark ground whatever the picture is.
+    /// A light band at the top for the status bar, then clear over the picture, then the screen's own background at the bottom: the
+    /// artwork fades into the screen, and the title sits on a dark ground whatever the picture is. The shade starts only just above
+    /// the caption, so the upper half of each picture is shown as it is.
     private var scrim: some View {
         LinearGradient(stops: [
-            .init(color: Theme.background.opacity(0.7), location: 0),
-            .init(color: .clear, location: 0.14),
-            .init(color: .clear, location: 0.36),
-            .init(color: Theme.background.opacity(0.62), location: 0.58),
-            .init(color: Theme.background.opacity(0.9), location: 0.76),
+            .init(color: Theme.background.opacity(0.5), location: 0),
+            .init(color: .clear, location: 0.12),
+            .init(color: .clear, location: 0.52),
+            .init(color: Theme.background.opacity(0.2), location: 0.6),
+            .init(color: Theme.background.opacity(0.6), location: 0.68),
+            .init(color: Theme.background.opacity(0.9), location: 0.78),
+            .init(color: Theme.background, location: 0.9),
             .init(color: Theme.background, location: 1),
         ], startPoint: .top, endPoint: .bottom)
     }

@@ -14,6 +14,8 @@ struct DetailView: View {
         case shortest = "Shortest review"
     }
 
+    private enum HeroPictureStatus { case pending, loaded, failed }
+
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
@@ -25,6 +27,9 @@ struct DetailView: View {
     /// Set once the hero picture has loaded or failed, or the timeout has passed. The title waits for it: the poster shown meanwhile
     /// often has the title printed on it.
     @State private var heroSettled = false
+    /// Where the hero picture's download stands. It changes on every finish, so the spinner over the hero updates even after the
+    /// timeout has already revealed the title.
+    @State private var heroPicture = HeroPictureStatus.pending
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -90,9 +95,30 @@ struct DetailView: View {
     /// Waits for the hero picture to finish. `ImagePipeline` shares this download with the `ArtworkImage` showing it, so no extra request.
     private func settleHero() async {
         guard let heroURL else { return }
-        _ = try? await ImagePipeline.shared.image(for: heroURL, maxPixelSize: 4096)
+        heroPicture = .pending
+        let picture = try? await ImagePipeline.shared.image(for: heroURL, maxPixelSize: 4096)
         guard !Task.isCancelled else { return }
+        heroPicture = picture == nil ? .failed : .loaded
         heroSettled = true
+    }
+
+    /// The spinner over the hero until its picture is decoded: while the artwork lookup runs, then while the picture downloads. A
+    /// failed download stops it. `ImagePipeline` caches a picture before it is returned, so a cached one never shows the spinner.
+    private var isHeroLoading: Bool {
+        guard let heroURL else { return model.isLoadingArtwork }
+        return heroPicture != .failed && ImagePipeline.shared.cachedImage(for: heroURL, maxPixelSize: 4096) == nil
+    }
+
+    /// A small native spinner in the middle of the hero, shown while `isHeroLoading`.
+    @ViewBuilder
+    private var heroSpinner: some View {
+        if isHeroLoading {
+            ProgressView()
+                .controlSize(.regular)
+                .tint(.white)
+                .transition(.opacity)
+                .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder
@@ -103,6 +129,7 @@ struct DetailView: View {
                 ArtworkImage(url: heroURL, maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
+                    .overlay { heroSpinner }
                     .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -139,6 +166,8 @@ struct DetailView: View {
                 }
                 .frame(width: size.width, height: height + scrollPull)
                 .clipped()
+                .overlay { heroSpinner }
+                .animation(.easeOut(duration: 0.25), value: isHeroLoading)
                 .offset(y: -scrollPull)
             }
         }
@@ -285,17 +314,21 @@ struct DetailView: View {
     @ViewBuilder
     private var synopsis: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
+            // A rough test: four lines of body text hold about 150 characters at phone width, so anything longer may be cut off.
+            let isLong = description.count > 120
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 Text(description)
                     .font(.body)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(isDescriptionExpanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
-                // A rough test: four lines of body text hold about 150 characters at phone width, so anything longer may be cut off.
-                if description.count > 120 {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) { isDescriptionExpanded.toggle() }
-                    } label: {
+                    .contentShape(Rectangle())
+                    // A double tap folds or opens the synopsis too, as it does a review. Short ones have nothing to fold.
+                    .onTapGesture(count: 2) {
+                        if isLong { toggleDescription() }
+                    }
+                if isLong {
+                    Button(action: toggleDescription) {
                         Text(isDescriptionExpanded ? "Less" : "More")
                             .font(.body.weight(.semibold))
                     }
@@ -303,6 +336,10 @@ struct DetailView: View {
                 }
             }
         }
+    }
+
+    private func toggleDescription() {
+        withAnimation(.easeInOut(duration: 0.25)) { isDescriptionExpanded.toggle() }
     }
 
     // MARK: - Series
@@ -567,7 +604,9 @@ private struct ReviewCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 HStack {
-                    Text(review.author).font(.headline).lineLimit(1)
+                    // Short cards cut a long name to one line; an expanded card has the width, so the name wraps in full.
+                    Text(review.author).font(.headline).lineLimit(isExpanded ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     if let rating = review.rating {
                         let stars = min(10, max(0, rating)).rounded() / 2
