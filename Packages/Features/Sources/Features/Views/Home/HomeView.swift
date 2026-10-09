@@ -125,31 +125,24 @@ struct HomeView: View {
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 
-    /// Add and edit sit side by side: a plus (a new widget) and a wrench (the widgets manager), each a glass squircle.
+    /// One glass squircle that opens the widgets page, where widgets are added and edited.
     private var customizeButton: some View {
-        GlassEffectContainer(spacing: Theme.Spacing.s) {
-            HStack(spacing: Theme.Spacing.s) {
-                customizeSymbol("plus", label: "Add Widget", identifier: "home.addWidget") { router.showWidgets(adding: true) }
-                customizeSymbol("wrench.fill", label: "Edit Widgets", identifier: "home.customize") { router.showWidgets() }
-            }
-        }
-        .padding(.trailing, homeMetrics.pageMargin)
-        .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
-    }
-
-    private func customizeSymbol(_ name: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-        return Button(action: action) {
-            Image(systemName: name)
-                .font(.system(size: 18, weight: .semibold))
+        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+        return Button {
+            router.showWidgets()
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 46, height: 46)
+                .frame(width: 48, height: 48)
                 .glassEffect(.regular.interactive(), in: shape)
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(identifier)
+        .padding(.trailing, homeMetrics.pageMargin)
+        .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
+        .accessibilityLabel("Widgets")
+        .accessibilityIdentifier("home.customize")
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {

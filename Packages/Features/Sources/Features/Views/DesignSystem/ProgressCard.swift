@@ -65,7 +65,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
             router.homePath.append(request)
         } label: {
             content
-                .zoomSource(id: sourceID, in: zoomNamespace)
+                .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: CardAspect.wide.cornerRadius)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
@@ -77,11 +77,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
             Button("Open title", systemImage: "info.circle") {
                 Haptics.scrollSnap()
                 router.open(.home)
-                if zoomNamespace != nil {
-                    router.homePath.append(TitleDestination(preview: preview, sourceID: sourceID, usesZoomTransition: true))
-                } else {
-                    router.homePath.append(preview)
-                }
+                router.homePath.append(TitleDestination(preview: preview, sourceID: sourceID))
             }
             Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) {
                 Haptics.tap()

@@ -137,7 +137,7 @@ struct MediaCard: View {
                 }
             }
             .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
-            .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
+            .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace, cornerRadius: artworkAspect.cornerRadius)
     }
 
     /// The artwork's box. A fixed card already knows its width, so its height is set outright: an aspect-ratio box would take
