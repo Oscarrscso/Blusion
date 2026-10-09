@@ -178,12 +178,12 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         let transport = answering()
         let saved = [
             HomeWidget(id: "trakt", title: "Trakt", content: .row(RowConfiguration(source: .traktList(
-                TraktListReference(username: "u", listSlug: "s", listName: "S"))))),
+                TraktListReference(username: "me", listSlug: "s", listName: "S", isPrivate: true))))),
             HomeWidget(id: "anilist", title: "AniList", content: .row(RowConfiguration(source: .unsupported(kind: "anilistCatalog")))),
         ]
         let model = HomeViewModel(services: try await services([cinemeta], transport: transport, widgets: saved))
         await model.load()
-        #expect(model.sections.map(\.issue) == [.needsTraktClientID, .unsupported(kind: "anilistCatalog")])
+        #expect(model.sections.map(\.issue) == [.needsTraktSignIn, .unsupported(kind: "anilistCatalog")])
         #expect(model.sections.allSatisfy { $0.state == .loaded([]) })
         #expect(transport.callCount == 0)
     }

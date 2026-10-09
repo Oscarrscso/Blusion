@@ -29,13 +29,11 @@ import StremioKitTestSupport
         #expect(transport.callCount == 0)
     }
 
-    @Test func aListNeedsTheClientIDBeforeAnyRequest() async throws {
-        let transport = StubTransport(data: Data())
+    @Test func aListLinkWithoutAClientIDIsReadWithBlusionsOwn() async throws {
+        let transport = StubTransport(data: Data(#"{"name":"Daily Picks","ids":{"trakt":1}}"#.utf8))
         let vm = try await model(clientID: "  ", transport: transport)
-        await #expect(throws: WidgetsManagerViewModel.TraktLinkError.needsClientID) {
-            try await vm.traktList(fromLink: "trakt.tv/users/a/lists/b")
-        }
-        #expect(transport.callCount == 0)
+        _ = try await vm.traktList(fromLink: "trakt.tv/users/a/lists/b")
+        #expect(transport.requests.last?.value(forHTTPHeaderField: "trakt-api-key") == TraktClient.defaultClientID)
     }
 
     @Test func aTraktFeedRowIsTitledByTheFeedAndDescribedAsTrakt() async throws {
@@ -75,7 +73,6 @@ import StremioKitTestSupport
     }
 
     @Test func theErrorMessagesAreOneSentenceEach() {
-        #expect(WidgetsManagerViewModel.TraktLinkError.needsClientID.message == "Add a Trakt client ID in Settings first.")
         #expect(WidgetsManagerViewModel.TraktLinkError.failed("not found").message.contains("not found"))
     }
 }

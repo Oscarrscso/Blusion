@@ -2,9 +2,15 @@
 import StremioKit
 import SwiftUI
 
+/// Where a widget's items come from: a catalog of an installed addon, or Trakt. With `genresOnly` (a collection tile) it lists catalogs
+/// that have genres and asks for one; otherwise a catalog is chosen whole and the editor offers the genre filter.
 struct WidgetSourcePicker: View {
     let model: WidgetsManagerViewModel
     var genresOnly = false
+    /// True when the picker is a sheet, which needs its own way out; pushed on a stack it has Back.
+    var showsCancel = false
+    /// Opens the Trakt list browser. nil hides it (collections take addon genres only).
+    var openTraktLists: (() -> Void)?
     /// A Trakt list or feed was chosen. Collections take addon genres only, so Trakt is not offered for them.
     var chooseTrakt: (WidgetSource) -> Void = { _ in }
     let choose: (WidgetsManagerViewModel.CatalogChoice, String?) -> Void
@@ -16,9 +22,7 @@ struct WidgetSourcePicker: View {
             ForEach(model.catalogChoices.filter {
                 (!genresOnly || !$0.genres.isEmpty) && (query.isEmpty || "\($0.title) \($0.addonName)".localizedCaseInsensitiveContains(query))
             }) { choice in
-                if choice.genres.isEmpty || genresOnly {
-                    Button { choose(choice, nil) } label: { label(choice) }
-                } else {
+                if genresOnly {
                     NavigationLink {
                         List {
                             Button("All Genres") { choose(choice, nil) }
@@ -28,10 +32,18 @@ struct WidgetSourcePicker: View {
                         .scrollContentBackground(.hidden)
                         .screenBackground()
                     } label: { label(choice) }
+                } else {
+                    Button { choose(choice, nil) } label: { label(choice) }
                 }
             }
             if !genresOnly && query.isEmpty {
                 Section("Trakt") {
+                    if let openTraktLists {
+                        Button { openTraktLists() } label: {
+                            Label("Trakt Lists", systemImage: "list.bullet.rectangle")
+                        }
+                        .accessibilityIdentifier("widgetSource.trakt.lists")
+                    }
                     ForEach(TraktFeed.allCases, id: \.self) { feed in
                         Button { chooseTrakt(.traktFeed(feed)) } label: { Text(feed.title) }
                             .accessibilityIdentifier("widgetSource.trakt.\(feed.rawValue)")
@@ -50,7 +62,7 @@ struct WidgetSourcePicker: View {
         .scrollContentBackground(.hidden)
         .screenBackground()
         .accessibilityIdentifier("widgetSource.list")
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        .toolbar { if showsCancel { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
     }
 
     private func label(_ choice: WidgetsManagerViewModel.CatalogChoice) -> some View {
@@ -68,7 +80,6 @@ private struct TraktListLinkForm: View {
     @State private var link = ""
     @State private var isReading = false
     @State private var problem: String?
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         List {
@@ -101,7 +112,6 @@ private struct TraktListLinkForm: View {
             let list = try await model.traktList(fromLink: link)
             problem = nil
             chooseTrakt(.traktList(list))
-            dismiss()
         } catch let error as WidgetsManagerViewModel.TraktLinkError {
             problem = error.message
         } catch {

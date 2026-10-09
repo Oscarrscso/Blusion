@@ -30,6 +30,8 @@ public struct AppServices: Sendable {
     public let handoffs: any HandoffStore
     public let searchHistory: any SearchHistoryStore
     public let traktAccount: TraktAccount
+    /// The one Trakt client: public reads with the client ID, signed-in reads through `traktAccount`, browse pages cached.
+    public let trakt: TraktClient
     /// False in a Mac build that the system keeps away from the Keychain: addon links and credentials are then in a private file.
     public let secretsInKeychain: Bool
 
@@ -38,7 +40,7 @@ public struct AppServices: Sendable {
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
-                secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil) {
+                trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -49,12 +51,16 @@ public struct AppServices: Sendable {
         self.progress = progress ?? InMemoryProgressStore()
         self.library = library ?? InMemoryLibraryStore()
         self.widgets = widgets ?? InMemoryWidgetStore()
-        self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings)
+        let traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())
+        let trakt = trakt ?? TraktClient(client: client, account: traktAccount, cache: TraktBrowseCache())
+        self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt,
+                                                                   account: traktAccount)
         self.posterRatings = posterRatings ?? PosterRatingsStore()
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
-        self.traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())
+        self.traktAccount = traktAccount
+        self.trakt = trakt
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
         self.secretsInKeychain = secretsInKeychain

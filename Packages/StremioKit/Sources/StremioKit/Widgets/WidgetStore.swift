@@ -29,6 +29,30 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
     private struct Envelope: Codable {
         var version: Int
         var widgets: [HomeWidget]
+
+        init(version: Int, widgets: [HomeWidget]) {
+            self.version = version
+            self.widgets = widgets
+        }
+
+        /// One widget that cannot be read (written by a newer build, or edited by hand) is left out instead of losing the whole layout.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decode(Int.self, forKey: .version)
+            var list = try container.nestedUnkeyedContainer(forKey: .widgets)
+            var decoded: [HomeWidget] = []
+            while !list.isAtEnd {
+                if let widget = try? list.decode(HomeWidget.self) {
+                    decoded.append(widget)
+                } else {
+                    _ = try? list.decode(Skipped.self)
+                }
+            }
+            widgets = decoded
+        }
+
+        private enum CodingKeys: String, CodingKey { case version, widgets }
+        private struct Skipped: Decodable {}
     }
 
     private let defaults: UserDefaults

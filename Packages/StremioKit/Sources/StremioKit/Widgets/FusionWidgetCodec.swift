@@ -186,7 +186,9 @@ public enum FusionWidgetCodec {
         func traktList(_ payload: [String: Any]) -> WidgetSource? {
             guard let username = Read.text(payload["username"]), let slug = Read.text(payload["listSlug"]) else { return nil }
             return .traktList(TraktListReference(username: username, listSlug: slug, listName: Read.text(payload["listName"]) ?? slug,
-                                                 traktID: Read.integer(payload["traktId"])))
+                                                 traktID: Read.integer(payload["traktId"]),
+                                                 sort: Read.text(payload["blusionSort"]).flatMap(TraktListSort.init(rawValue:)),
+                                                 isPrivate: (payload["blusionPrivate"] as? Bool) == true ? true : nil))
         }
 
         /// A Trakt feed by its `feed` name. Blusion writes these; an unknown name is unsupported rather than guessed.
@@ -367,6 +369,9 @@ public enum FusionWidgetCodec {
             } else {
                 payload["traktId"] = NSNull()
             }
+            // Blusion's own keys: Fusion ignores them, and a file without them reads as the list's own order, public.
+            if let sort = list.sort { payload["blusionSort"] = sort.rawValue }
+            if list.needsAccount { payload["blusionPrivate"] = true }
             return ["kind": "traktList", "payload": payload]
         case .traktFeed(let feed):
             return ["kind": "blusion.traktFeed", "payload": ["feed": feed.rawValue]]

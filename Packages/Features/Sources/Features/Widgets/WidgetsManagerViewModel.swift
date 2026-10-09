@@ -25,13 +25,11 @@ public final class WidgetsManagerViewModel {
     /// Why a Trakt list link could not be added. `message` is one plain sentence for the user.
     public enum TraktLinkError: Error, Equatable, Sendable {
         case notAListLink
-        case needsClientID
         case failed(String)
 
         public var message: String {
             switch self {
             case .notAListLink: return "That isn't a Trakt list link. Paste an address like trakt.tv/users/name/lists/list-name."
-            case .needsClientID: return "Add a Trakt client ID in Settings first."
             case .failed(let reason): return "Trakt couldn't read this list (\(reason))."
             }
         }
@@ -123,15 +121,12 @@ public final class WidgetsManagerViewModel {
         await services.widgetContent.invalidate()
     }
 
-    /// The public Trakt list a pasted link names, read from Trakt so the row gets its real name. Needs the client ID in Settings.
+    /// The public Trakt list a pasted link names, read from Trakt so the row gets its real name.
     public func traktList(fromLink text: String) async throws -> TraktListReference {
         guard let parts = TraktClient.listReference(fromLink: text) else { throw TraktLinkError.notAListLink }
-        let settings = await services.settings.load()
-        guard let clientID = settings.traktClientID?.trimmingCharacters(in: .whitespacesAndNewlines), !clientID.isEmpty else {
-            throw TraktLinkError.needsClientID
-        }
+        let clientID = await TraktClient.clientID(in: services.settings)
         do {
-            let info = try await TraktClient(client: services.client).listInfo(username: parts.username, listSlug: parts.listSlug, clientID: clientID)
+            let info = try await services.trakt.listInfo(username: parts.username, listSlug: parts.listSlug, clientID: clientID)
             return TraktListReference(username: parts.username, listSlug: parts.listSlug, listName: info.name, traktID: info.traktID)
         } catch {
             throw TraktLinkError.failed(AddonError.from(error).shortDescription.lowercased())
@@ -260,7 +255,8 @@ public final class WidgetsManagerViewModel {
             parts.append(match.addon.name)
             return parts.joined(separator: " · ")
         case .traktList(let list):
-            return "Trakt list · \(list.listName) by \(list.username)"
+            let sort = list.sort.map { " · \($0.title)" } ?? ""
+            return "Trakt list · \(list.listName) by \(list.username)\(sort)"
         case .traktFeed(let feed):
             return "Trakt · \(feed.title)"
         case .unsupported(let kind):
@@ -278,6 +274,26 @@ public final class WidgetsManagerViewModel {
         case .continueWatching: return "Continue"
         case .unsupported(let type): return "Can't show yet · \(type)"
         }
+    }
+
+    /// The name a source gives a widget unless the user types another: the genre or catalog title, the Trakt list or feed name.
+    public func autoTitle(for source: WidgetSource) -> String {
+        switch source {
+        case .addonCatalog(let reference):
+            if let genre = reference.genre, !genre.isEmpty { return genre }
+            guard let match = reference.resolve(in: installedAddons) else { return "" }
+            return DefaultWidgets.rowTitle(catalogName: match.catalog.name, type: match.catalog.type)
+        case .traktList, .traktFeed:
+            return WidgetsManagerViewModel.traktTitle(source)
+        case .unsupported:
+            return ""
+        }
+    }
+
+    /// The genres a catalog offers as a filter; empty when it has none or its addon is not installed.
+    public func genres(for source: WidgetSource) -> [String] {
+        guard case .addonCatalog(let reference) = source, let match = reference.resolve(in: installedAddons) else { return [] }
+        return match.catalog.genreOptions
     }
 
     // MARK: Making widgets

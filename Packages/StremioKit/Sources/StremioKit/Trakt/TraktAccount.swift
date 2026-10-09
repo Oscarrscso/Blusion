@@ -248,6 +248,12 @@ public actor TraktAccount {
         try? await secrets.remove(Keys.redirectURI)
     }
 
+    /// A signed-in GET of an API path with its query, such as `users/me/lists`, for the Trakt list browser. The token is refreshed like
+    /// every call here. Throws `needsSignIn` when nobody is signed in.
+    public func get(_ path: String) async throws -> HTTPResult {
+        try await authorizedRequest(path: path)
+    }
+
     public func watchlist() async throws -> [MetaPreview] {
         var items: [MetaPreview] = []
         var page = 1

@@ -33,8 +33,13 @@ public enum TraktFeed: String, Sendable, Codable, CaseIterable, Hashable {
     }
 }
 
-/// Reads public Trakt lists as catalog items. The Trakt API key is the client ID the user supplies in Settings; the app ships none.
+/// Reads Trakt lists and feeds as catalog items, and browses lists and users. The API key is a public client ID, not a secret: the one the
+/// user set in Settings, else Blusion's own (`TraktClient.defaultClientID`). Calls that need the user's account go through `TraktAccount`.
 public struct TraktClient: Sendable {
+    /// Blusion's Trakt API client ID. It is sent as the `trakt-api-key` header; Trakt treats it as public, so it is no OAuth secret.
+    /// `TraktAccount.defaultClientID` is the one definition.
+    public static let defaultClientID = TraktAccount.defaultClientID
+
     /// `https://api.trakt.tv`. Built from components, so there is no force unwrap; the fallback is never used in practice.
     public static let defaultBaseURL: URL = {
         var components = URLComponents()
@@ -45,19 +50,34 @@ public struct TraktClient: Sendable {
 
     private static let pathCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
-    private let client: AddonClient
-    private let baseURL: URL
+    let client: AddonClient
+    let baseURL: URL
+    private let account: TraktAccount?
+    private let cache: TraktBrowseCache?
 
-    public init(client: AddonClient, baseURL: URL = TraktClient.defaultBaseURL) {
+    /// `account` serves the calls that need a signed-in user (private lists, My Lists, Liked Lists, user search). `cache` keeps
+    /// browse pages for a few minutes so searching and paging do not repeat requests.
+    public init(client: AddonClient, baseURL: URL = TraktClient.defaultBaseURL, account: TraktAccount? = nil, cache: TraktBrowseCache? = nil) {
         self.client = client
         self.baseURL = baseURL
+        self.account = account
+        self.cache = cache
     }
 
-    /// One page of a public list. Movies map to type `movie`, shows to `series`; other entries, and entries without an IMDb id, are dropped.
+    /// The Trakt API key to use: the client ID in Settings when one is set, else Blusion's own.
+    public static func clientID(in settings: any SettingsStore) async -> String {
+        let stored = await settings.load().traktClientID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stored.flatMap { $0.isEmpty ? nil : $0 } ?? defaultClientID
+    }
+
+    /// One page of a list. Movies map to type `movie`, shows to `series`; other entries, and entries without an IMDb id, are dropped.
+    /// Without a sort the list keeps its own order. A private list is read with the user's sign-in.
     public func listItems(_ list: TraktListReference, clientID: String, page: Int = 1, limit: Int = 50) async throws -> [MetaPreview] {
-        guard let user = Self.segment(list.username), let slug = Self.segment(list.listSlug),
-              let url = apiURL("users/\(user)/lists/\(slug)/items", page: page, limit: limit) else { throw AddonError.invalidURL }
-        let result = try await client.get(url, headers: Self.headers(clientID))
+        guard let user = Self.segment(list.username), let slug = Self.segment(list.listSlug) else { throw AddonError.invalidURL }
+        var path = "users/\(user)/lists/\(slug)/items"
+        if let sort = list.sort { path += "/movie,show/\(sort.apiValue.by)/\(sort.apiValue.how)" }
+        let query = "page=\(max(page, 1))&limit=\(min(max(limit, 1), 100))&extended=full"
+        let result = try await send(path, query: query, clientID: clientID, authorised: list.needsAccount)
         return try Self.previews(from: result.data)
     }
 
@@ -81,6 +101,52 @@ public struct TraktClient: Sendable {
         }
     }
 
+    // MARK: Browsing lists and users
+
+    /// Popular or trending public lists. No sign-in needed.
+    public func lists(_ feed: TraktListFeed, clientID: String, page: Int = 1, limit: Int = 20, refresh: Bool = false) async throws -> TraktPage<TraktListSummary> {
+        let result = try await send(feed.path, query: Self.pageQuery(page, limit), clientID: clientID, authorised: false, refresh: refresh)
+        return try Self.listPage(from: result, page: page)
+    }
+
+    /// Public lists matching a text search. No sign-in needed.
+    public func searchLists(query: String, clientID: String, page: Int = 1, limit: Int = 20, refresh: Bool = false) async throws -> TraktPage<TraktListSummary> {
+        let text = "query=\(Self.encode(query))&\(Self.pageQuery(page, limit))"
+        let result = try await send("search/list", query: text, clientID: clientID, authorised: false, refresh: refresh)
+        return try Self.listPage(from: result, page: page)
+    }
+
+    /// The public lists of one user. Trakt returns them all at once.
+    public func userLists(username: String, clientID: String, refresh: Bool = false) async throws -> TraktPage<TraktListSummary> {
+        guard let user = Self.segment(username) else { throw AddonError.invalidURL }
+        let result = try await send("users/\(user)/lists", query: "", clientID: clientID, authorised: false, refresh: refresh)
+        return try Self.listPage(from: result, page: 1)
+    }
+
+    /// The signed-in user's own lists, private ones included. Needs the Trakt sign-in.
+    public func myLists(clientID: String, refresh: Bool = false) async throws -> TraktPage<TraktListSummary> {
+        let result = try await send("users/me/lists", query: "", clientID: clientID, authorised: true, refresh: refresh)
+        return try Self.listPage(from: result, page: 1)
+    }
+
+    /// Lists the signed-in user liked. Needs the Trakt sign-in.
+    public func likedLists(clientID: String, page: Int = 1, limit: Int = 20, refresh: Bool = false) async throws -> TraktPage<TraktListSummary> {
+        let result = try await send("users/likes/lists", query: Self.pageQuery(page, limit), clientID: clientID, authorised: true, refresh: refresh)
+        return try Self.listPage(from: result, page: page)
+    }
+
+    /// Users matching a text search. Trakt answers this only for a signed-in user.
+    public func searchUsers(query: String, clientID: String, page: Int = 1, limit: Int = 20, refresh: Bool = false) async throws -> TraktPage<TraktUserSummary> {
+        let text = "query=\(Self.encode(query))&\(Self.pageQuery(page, limit))"
+        let result = try await send("search/user", query: text, clientID: clientID, authorised: true, refresh: refresh)
+        do {
+            let entries = try JSONDecoder().decode([LossyUserEntry].self, from: result.data)
+            return TraktPage(items: entries.compactMap(\.user), page: max(page, 1), pageCount: Self.pageCount(result))
+        } catch {
+            throw AddonError.invalidJSON
+        }
+    }
+
     /// The owner and slug of a `trakt.tv/users/<user>/lists/<slug>` link. A link without a scheme is accepted. nil when the text is not a list link.
     public static func listReference(fromLink text: String) -> (username: String, listSlug: String)? {
         var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -92,6 +158,26 @@ public struct TraktClient: Sendable {
         return (parts[1], parts[3])
     }
 
+    /// One GET with the API headers. `authorised` goes through the signed-in account (which refreshes its token); anything else is a
+    /// public read. Browse results are kept for a few minutes unless `refresh` asks again.
+    private func send(_ path: String, query: String, clientID: String, authorised: Bool, refresh: Bool = false) async throws -> HTTPResult {
+        let relative = query.isEmpty ? path : "\(path)?\(query)"
+        let key = "\(authorised ? "account" : "public")|\(clientID)|\(relative)"
+        if !refresh, let cached = await cache?.value(for: key) { return cached }
+        let result: HTTPResult
+        if authorised {
+            guard let account else { throw TraktAccountError.needsSignIn }
+            result = try await account.get(relative)
+        } else {
+            var base = baseURL.absoluteString
+            while base.hasSuffix("/") { base.removeLast() }
+            guard let url = URL(string: "\(base)/\(relative)") else { throw AddonError.invalidURL }
+            result = try await client.get(url, headers: Self.headers(clientID))
+        }
+        await cache?.store(result, for: key)
+        return result
+    }
+
     /// `base/<path>?page=…&limit=…&extended=full`. Lists keep their page and limit; a feed's `paged` is false only for a single object.
     private func apiURL(_ path: String, page: Int, limit: Int, paged: Bool = true) -> URL? {
         var base = baseURL.absoluteString
@@ -100,12 +186,33 @@ public struct TraktClient: Sendable {
         return URL(string: "\(base)/\(path)\(query)")
     }
 
+    private static func pageQuery(_ page: Int, _ limit: Int) -> String {
+        "page=\(max(page, 1))&limit=\(min(max(limit, 1), 100))"
+    }
+
     private static func headers(_ clientID: String) -> [String: String] {
         ["trakt-api-version": "2", "trakt-api-key": clientID, "Content-Type": "application/json"]
     }
 
     private static func segment(_ text: String) -> String? {
         text.addingPercentEncoding(withAllowedCharacters: pathCharacters)
+    }
+
+    private static func encode(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).addingPercentEncoding(withAllowedCharacters: pathCharacters) ?? ""
+    }
+
+    private static func pageCount(_ result: HTTPResult) -> Int {
+        max(result.response.headers["x-pagination-page-count"].flatMap(Int.init) ?? 1, 1)
+    }
+
+    private static func listPage(from result: HTTPResult, page: Int) throws -> TraktPage<TraktListSummary> {
+        do {
+            let entries = try JSONDecoder().decode([LossyListEntry].self, from: result.data)
+            return TraktPage(items: entries.compactMap(\.list), page: max(page, 1), pageCount: pageCount(result))
+        } catch {
+            throw AddonError.invalidJSON
+        }
     }
 
     /// The response must be an array; a bad element is dropped rather than failing the page.

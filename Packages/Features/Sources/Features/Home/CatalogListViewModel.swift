@@ -75,7 +75,7 @@ public final class CatalogListViewModel {
             }
             guard current == generation else { return }
             items = CatalogListViewModel.appending(page, to: [])
-            receivedCount = page.count
+            receivedCount = CatalogListViewModel.advance(0, by: page, source: sources.count == 1 ? sources[0] : nil)
             canLoadMore = sources.count == 1 && !page.isEmpty
             state = .loaded
         } catch {
@@ -93,7 +93,7 @@ public final class CatalogListViewModel {
         do {
             let page = try await services.widgetContent.items(for: source, limit: CatalogListViewModel.pageSize, skip: receivedCount)
             guard current == generation else { return }
-            receivedCount += page.count
+            receivedCount = CatalogListViewModel.advance(receivedCount, by: page, source: source)
             items = CatalogListViewModel.appending(page, to: items)
             canLoadMore = !page.isEmpty
             state = .loaded
@@ -102,6 +102,13 @@ public final class CatalogListViewModel {
             // Keeps what is there; scrolling to the end again tries the page once more.
             state = .loaded
         }
+    }
+
+    /// Where the next page starts. An addon's `skip` counts the items it sent, which is the page's length. A Trakt source is asked by page
+    /// number, and Trakt drops entries it cannot show (no IMDb id), so a short page still used up a whole page of the list.
+    private static func advance(_ received: Int, by page: [MetaPreview], source: WidgetSource?) -> Int {
+        guard let source, source.usesTrakt else { return received + page.count }
+        return received + pageSize
     }
 
     /// `page` added after `list`, leaving out any item whose type and id are already in it.

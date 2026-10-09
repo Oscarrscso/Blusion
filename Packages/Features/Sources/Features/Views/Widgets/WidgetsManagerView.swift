@@ -5,7 +5,8 @@ import SwiftUI
 struct WidgetsManagerView: View {
     let services: AppServices
     @State private var model: WidgetsManagerViewModel
-    @State private var adding: WidgetKind?
+    @State private var creating: NewWidgetRoute?
+    @State private var showsGenreCollection = false
     @State private var showsImport = false
     @State private var showsReset = false
     @State private var showsPendingImport = false
@@ -42,18 +43,17 @@ struct WidgetsManagerView: View {
             .accessibilityIdentifier("widgets.list")
             Section("Add") {
                 Menu("Add Widget", systemImage: "plus") {
-                    ForEach(WidgetKind.allCases) { kind in
-                        Button(kind.rawValue) { adding = kind }
-                            .disabled(model.catalogChoices.isEmpty || (kind == .collection && model.catalogChoices.allSatisfy { $0.genres.isEmpty }))
-                    }
-                    Button("Continue") {
+                    Button("New Widget", systemImage: "rectangle.stack.badge.plus") { creating = .widget }
+                    Button("Genre Collection", systemImage: "square.grid.2x2") { showsGenreCollection = true }
+                        .disabled(model.catalogChoices.allSatisfy { $0.genres.isEmpty })
+                    Button("Continue Watching", systemImage: "play.circle") {
                         Task { await model.add(HomeWidget(title: "Continue", content: .continueWatching)) }
                     }
                     .disabled(model.widgets.contains { $0.content == .continueWatching })
                 }
                 .accessibilityIdentifier("widgets.add")
                 if model.catalogChoices.isEmpty {
-                    Text("Install an addon with catalogs to add more rows.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             Section("Import & export") {
@@ -84,27 +84,13 @@ struct WidgetsManagerView: View {
         .accessibilityIdentifier("widgets.manager")
         .toolbar { EditButton() }
         .task { await model.load() }
-        .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model) }
-        .sheet(item: $adding) { kind in
+        .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
+        .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
+        .sheet(isPresented: $showsGenreCollection) {
             NavigationStack {
-                WidgetSourcePicker(model: model, genresOnly: kind == .collection, chooseTrakt: { source in
-                    switch kind {
-                    case .row: Task { await model.add(WidgetsManagerViewModel.makeTraktRow(source)) }
-                    case .spotlight: Task { await model.add(WidgetsManagerViewModel.makeTraktSpotlight(source)) }
-                    case .banner: Task { await model.add(WidgetsManagerViewModel.makeTraktBanner(source)) }
-                    case .collection: break
-                    }
-                    adding = nil
-                }) { choice, genre in
-                    let widget: HomeWidget
-                    switch kind {
-                    case .row: widget = WidgetsManagerViewModel.makeRow(title: choice.title, choice: choice, genre: genre)
-                    case .spotlight: widget = WidgetsManagerViewModel.makeHero(choice: choice, genre: genre)
-                    case .banner: widget = WidgetsManagerViewModel.makeBanner(choice: choice, genre: genre)
-                    case .collection: widget = WidgetsManagerViewModel.makeGenreCollection(title: "Genres", choice: choice)
-                    }
-                    Task { await model.add(widget) }
-                    adding = nil
+                WidgetSourcePicker(model: model, genresOnly: true, showsCancel: true) { choice, _ in
+                    Task { await model.add(WidgetsManagerViewModel.makeGenreCollection(title: "Genres", choice: choice)) }
+                    showsGenreCollection = false
                 }
             }
         }
@@ -137,8 +123,9 @@ struct WidgetsManagerView: View {
     }
 }
 
-private enum WidgetKind: String, CaseIterable, Identifiable {
-    case row = "Catalog Row", spotlight = "Spotlight", banner = "Featured Banner", collection = "Genre Collection"
-    var id: String { rawValue }
+/// A screen pushed to make a new widget.
+private enum NewWidgetRoute: Hashable, Identifiable {
+    case widget
+    var id: Self { self }
 }
 #endif

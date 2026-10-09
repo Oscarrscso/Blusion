@@ -121,7 +121,10 @@ final class AppEnvironment {
         if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
             snapshots = FileWidgetSnapshotStore(directory: caches.appendingPathComponent("WidgetSnapshots", isDirectory: true))
         }
-        let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, snapshots: snapshots)
+        let traktAccount = TraktAccount(settings: settings, secrets: secrets)
+        let trakt = TraktClient(client: client, account: traktAccount, cache: TraktBrowseCache())
+        let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt, account: traktAccount,
+                                                 snapshots: snapshots)
         let ratingsCache: any RatingsCache
         if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
             ratingsCache = FileRatingsCache(fileURL: caches.appendingPathComponent("poster-ratings.json"))
@@ -130,10 +133,9 @@ final class AppEnvironment {
         }
         let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache, logger: logger)
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
-        let traktAccount = TraktAccount(settings: settings, secrets: secrets)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,
-                                   posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount,
+                                   posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount, trakt: trakt,
                                    secretsInKeychain: secretsInKeychain)
         let seedsDefaults = !uiTesting || environment["BLUSION_SEED_DEFAULTS"] == "1"
         let seeder = seedsDefaults ? DefaultAddonSeeder(registry: registry, flags: DefaultsFlagStore(defaults: settingsDefaults)) : nil

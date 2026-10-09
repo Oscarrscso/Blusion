@@ -160,19 +160,28 @@ public struct AddonCatalogReference: Sendable, Codable, Equatable, Hashable {
     }
 }
 
-/// A public Trakt list: `https://trakt.tv/users/<username>/lists/<listSlug>`.
+/// A Trakt list: `https://trakt.tv/users/<username>/lists/<listSlug>`.
 public struct TraktListReference: Sendable, Codable, Equatable, Hashable {
     public var username: String
     public var listSlug: String
     public var listName: String
     public var traktID: Int?
+    /// How the widget orders the list; nil keeps the list's own order. Saved layouts from before sorting have no value.
+    public var sort: TraktListSort?
+    /// True for a list that is not public (one of the user's own), which is read with their Trakt sign-in. Missing means public.
+    public var isPrivate: Bool?
 
-    public init(username: String, listSlug: String, listName: String, traktID: Int? = nil) {
+    public init(username: String, listSlug: String, listName: String, traktID: Int? = nil, sort: TraktListSort? = nil, isPrivate: Bool? = nil) {
         self.username = username
         self.listSlug = listSlug
         self.listName = listName
         self.traktID = traktID
+        self.sort = sort
+        self.isPrivate = isPrivate
     }
+
+    /// True when only the signed-in owner can read this list.
+    public var needsAccount: Bool { isPrivate == true }
 }
 
 extension WidgetSource {

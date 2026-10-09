@@ -87,13 +87,13 @@ import StremioKitTestSupport
         #expect(info.name == "my-list" && info.traktID == nil)
     }
 
-    @Test func aFeedRowLoadsOnlyWithAClientIDAndNeverRequestsWithout() async throws {
+    @Test func aFeedRowWithoutAClientIDUsesBlusionsOwn() async throws {
         let transport = StubTransport(data: Data(popularShows.utf8))
         let (service, _) = try await makeFeedService(transport: transport, clientID: nil)
         let source = WidgetSource.traktFeed(.showsPopular)
-        #expect(await service.issue(with: source) == .needsTraktClientID)
-        await #expect(throws: WidgetSourceError.needsTraktClientID) { try await service.items(for: source, cacheTTL: 0) }
-        #expect(transport.callCount == 0)
+        #expect(await service.issue(with: source) == nil)
+        _ = try await service.items(for: source, cacheTTL: 0)
+        #expect(transport.requests.last?.value(forHTTPHeaderField: "trakt-api-key") == TraktClient.defaultClientID)
     }
 
     @Test func aFeedRowLoadsWithTheClientID() async throws {

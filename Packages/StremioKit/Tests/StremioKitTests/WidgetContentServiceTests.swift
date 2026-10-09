@@ -299,20 +299,33 @@ private func catalogResponse(for request: URLRequest) -> HTTPResult {
         #expect(transport.callCount == 0)
     }
 
-    @Test func aTraktListWithoutAClientIDNeverRequests() async throws {
-        let transport = StubTransport { request, _ in catalogResponse(for: request) }
+    @Test func aTraktListWithoutAClientIDFallsBackToBlusionsOwn() async throws {
+        let transport = StubTransport { request, _ in
+            if request.url?.host == "api.trakt.tv" {
+                return StubTransport.response(Data(#"[{"type":"movie","movie":{"title":"Film","ids":{"imdb":"tt42"}}}]"#.utf8), for: request)
+            }
+            return catalogResponse(for: request)
+        }
         let (service, _) = try await makeService(transport: transport)
-        await #expect(throws: WidgetSourceError.needsTraktClientID) { try await service.items(for: traktList, cacheTTL: 0) }
-        let issue = await service.issue(with: traktList)
-        #expect(issue == .needsTraktClientID)
-        #expect(transport.callCount == 0)
+        let items = try await service.items(for: traktList, cacheTTL: 0)
+        #expect(items.map(\.id) == ["tt42"])
+        #expect(await service.issue(with: traktList) == nil)
+        #expect(transport.requests.last?.value(forHTTPHeaderField: "trakt-api-key") == TraktClient.defaultClientID)
+        #expect(TraktClient.defaultClientID == "uWo0Ywaz_S4_-uH6KDVh6G8bahxb2bD_pIUz2DgIDno")
     }
 
     @Test func aBlankTraktClientIDCountsAsNoneAtAll() async throws {
         let transport = StubTransport { request, _ in catalogResponse(for: request) }
-        let (service, _) = try await makeService(transport: transport, settings: PlaybackSettings(traktClientID: "   "))
-        let issue = await service.issue(with: traktList)
-        #expect(issue == .needsTraktClientID)
+        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: "   "))
+        #expect(await TraktClient.clientID(in: settings) == TraktClient.defaultClientID)
+        _ = transport
+    }
+
+    @Test func aPrivateTraktListNeedsTheSignInBeforeAnyRequest() async throws {
+        let transport = StubTransport { request, _ in catalogResponse(for: request) }
+        let (service, _) = try await makeService(transport: transport)
+        let source = WidgetSource.traktList(TraktListReference(username: "me", listSlug: "secret", listName: "Secret", isPrivate: true))
+        #expect(await service.issue(with: source) == .needsTraktSignIn)
         #expect(transport.callCount == 0)
     }
 

@@ -4,8 +4,10 @@ import Foundation
 public enum WidgetSourceError: Error, Equatable, Sendable {
     /// No installed, enabled addon has this catalog.
     case addonMissing(host: String?)
-    /// A Trakt list, but no Trakt client ID is set in Settings.
+    /// A Trakt list, but no Trakt client ID is set in Settings. Blusion falls back to its own, so this is rare.
     case needsTraktClientID
+    /// One of the user's private Trakt lists, but they are not signed in to Trakt.
+    case needsTraktSignIn
     case unsupported(kind: String)
     /// The request itself failed.
     case addon(AddonError)
@@ -15,6 +17,7 @@ public enum WidgetSourceError: Error, Equatable, Sendable {
         case .addonMissing(let host?): return "The addon for this row (\(host)) isn't installed or is turned off."
         case .addonMissing(nil): return "The addon for this row isn't installed or is turned off."
         case .needsTraktClientID: return "Add a Trakt client ID in Settings to show Trakt lists."
+        case .needsTraktSignIn: return "Sign in to Trakt to show this private list."
         case .unsupported: return "Blusion can't show this kind of row yet."
         case .addon(let error): return "The addon couldn't load this row: \(error.shortDescription.lowercased())."
         }
@@ -28,16 +31,19 @@ public final class WidgetContentService: Sendable {
     private let client: AddonClient
     private let settings: any SettingsStore
     private let trakt: TraktClient
+    private let account: TraktAccount?
     private let snapshots: (any WidgetSnapshotStore)?
     private let now: @Sendable () -> Date
     private let cache = WidgetItemCache()
 
     public init(registry: AddonRegistry, client: AddonClient, settings: any SettingsStore,
-                trakt: TraktClient? = nil, snapshots: (any WidgetSnapshotStore)? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+                trakt: TraktClient? = nil, account: TraktAccount? = nil, snapshots: (any WidgetSnapshotStore)? = nil,
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.registry = registry
         self.client = client
         self.settings = settings
-        self.trakt = trakt ?? TraktClient(client: client)
+        self.account = account
+        self.trakt = trakt ?? TraktClient(client: client, account: account)
         self.snapshots = snapshots
         self.now = now
     }
@@ -110,9 +116,11 @@ public final class WidgetContentService: Sendable {
         case .addonCatalog(let reference):
             let addons = await registry.addons
             return reference.resolve(in: addons) == nil ? .addonMissing(host: reference.host) : nil
-        case .traktList, .traktFeed:
-            let clientID = await traktClientID()
-            return clientID == nil ? .needsTraktClientID : nil
+        case .traktList(let list):
+            guard list.needsAccount else { return nil }
+            return await account?.isSignedIn() == true ? nil : .needsTraktSignIn
+        case .traktFeed:
+            return nil
         case .unsupported(let kind):
             return .unsupported(kind: kind)
         }
@@ -148,15 +156,17 @@ public final class WidgetContentService: Sendable {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }
         case .traktList(let list):
-            guard let clientID = await traktClientID() else { throw WidgetSourceError.needsTraktClientID }
+            let clientID = await traktClientID()
             do {
                 let items = try await trakt.listItems(list, clientID: clientID, page: skip / limit + 1, limit: limit)
                 return Array(items.prefix(limit))
+            } catch TraktAccountError.needsSignIn {
+                throw WidgetSourceError.needsTraktSignIn
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }
         case .traktFeed(let feed):
-            guard let clientID = await traktClientID() else { throw WidgetSourceError.needsTraktClientID }
+            let clientID = await traktClientID()
             do {
                 let items = try await trakt.feedItems(feed, clientID: clientID, page: skip / limit + 1, limit: limit)
                 return Array(items.prefix(limit))
@@ -168,11 +178,9 @@ public final class WidgetContentService: Sendable {
         }
     }
 
-    /// The Trakt client ID from Settings, trimmed; nil when none is set.
-    private func traktClientID() async -> String? {
-        let current = await settings.load()
-        guard let clientID = current.traktClientID?.trimmingCharacters(in: .whitespacesAndNewlines), !clientID.isEmpty else { return nil }
-        return clientID
+    /// The Trakt API key: the client ID in Settings, else Blusion's own.
+    private func traktClientID() async -> String {
+        await TraktClient.clientID(in: settings)
     }
 
     private static func interleave(_ lists: [[MetaPreview]], limit: Int) -> [MetaPreview] {
