@@ -28,7 +28,7 @@ struct AddonsView: View {
         .navigationTitle("Addons")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton().buttonStyle(.glass).foregroundStyle(.white) } }
+            if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton() } }
         }
         .navigationDestination(for: UUID.self) { id in
             if let addon = model.addons.first(where: { $0.id == id }) {
