@@ -27,9 +27,17 @@ public final class LibraryViewModel {
     private var visibleContinue: [LibraryEntry] = []
     private var visibleWatched: [LibraryEntry] = []
     private var lastTraktPull = Date.distantPast
+    /// Where the scores from the rating sites other than IMDb come from. Nil until the view attaches it.
+    @ObservationIgnored private var ratings: PosterRatingsStore?
 
     public init(services: AppServices) {
         self.services = services
+    }
+
+    /// Lets the rating filter look up Letterboxd, Rotten Tomatoes and Metacritic scores. Titles re-filter as each score arrives.
+    public func attachRatings(_ store: PosterRatingsStore?) {
+        ratings = store
+        applyFilter()
     }
 
     /// True when the Library holds nothing at all, whatever the filter. A filter that matches nothing is not empty.
@@ -124,14 +132,32 @@ public final class LibraryViewModel {
 
     private func applyFilter() {
         let now = Date()
+        let filter = filter
         // Continue Watching is a list of where the viewer left off, so "recently added" there means "recently watched".
         var continueFilter = filter
         if continueFilter.sort == .recentlyAdded { continueFilter.sort = .recentlyWatched }
-        visibleSaved = LibraryFiltering.apply(filter, to: savedEntries, now: now)
-        visibleContinue = LibraryFiltering.apply(continueFilter, to: continueEntries, now: now)
-        visibleWatched = LibraryFiltering.apply(filter, to: watchedEntries, now: now)
+        let (savedEntries, continueEntries, watchedEntries) = (self.savedEntries, self.continueEntries, self.watchedEntries)
+        let score = scoreLookup(for: filter)
+        // Reading each title's score inside the tracking block means a score that arrives later re-runs the filter on its own.
+        let (visibleSaved, visibleContinue, visibleWatched) = withObservationTracking {
+            (LibraryFiltering.apply(filter, to: savedEntries, now: now, score: score),
+             LibraryFiltering.apply(continueFilter, to: continueEntries, now: now, score: score),
+             LibraryFiltering.apply(filter, to: watchedEntries, now: now, score: score))
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.applyFilter() }
+        }
+        self.visibleSaved = visibleSaved
+        self.visibleContinue = visibleContinue
+        self.visibleWatched = visibleWatched
         saved = visibleSaved.compactMap(\.item)
         continueWatching = visibleContinue.compactMap(\.progress)
         watched = visibleWatched.compactMap(\.progress)
+    }
+
+    /// Every site's score for a title comes from the rating store, which starts a lookup for it if it has none yet. Without a
+    /// threshold no score is needed, so nothing is looked up.
+    private func scoreLookup(for filter: LibraryFilter) -> LibraryFiltering.ScoreLookup {
+        guard filter.minimumRating != nil, let store = ratings else { return LibraryFiltering.catalogueScores }
+        return { entry, source in store.ratings(for: entry.preview).score(for: source) }
     }
 }

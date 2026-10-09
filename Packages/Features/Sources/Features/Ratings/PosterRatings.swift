@@ -24,6 +24,16 @@ public final class TitleRatings: Identifiable {
         self.catalogIMDb = imdb
     }
 
+    /// The site's own score, on its own scale; nil until that site has answered for this title.
+    public func score(for source: RatingSource) -> Double? {
+        switch source {
+        case .letterboxd: letterboxd
+        case .imdb: imdb
+        case .rottenTomatoes: rottenTomatoes
+        case .metacritic: metacritic
+        }
+    }
+
     public var imdbText: String? { imdb.map { String(format: "%.1f", $0) } }
     public var letterboxdText: String? { letterboxd.map { String(format: "%.1f", $0 * 2) } }
     /// Prefer IMDb and Letterboxd, then fill either missing score from the other available sites.

@@ -80,11 +80,11 @@ struct SettingsView: View {
             .accessibilityIdentifier("settings.autoPlay")
             Picker("Preferred quality",
                    selection: Binding(get: { model.settings.preferredResolution },
-                                      set: { value in Task { await model.setPreferredResolution(value) } })) {
+                                      set: { value in Haptics.selection(); Task { await model.setPreferredResolution(value) } })) {
                 ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
             }
             .accessibilityIdentifier("settings.resolution")
-            Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in Task { await model.setSubtitleLanguage(value) } })) {
+            Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in Haptics.selection(); Task { await model.setSubtitleLanguage(value) } })) {
                 ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
             }
             .accessibilityIdentifier("settings.subtitleLanguage")
@@ -187,7 +187,7 @@ struct SettingsView: View {
     private var fallbackSection: some View {
         Section {
             Toggle("Use the fallback player", isOn: Binding(get: { model.settings.fallbackEngineEnabled },
-                                    set: { value in Task { await model.setFallbackEngineEnabled(value) } }))
+                                    set: { value in Haptics.selection(); Task { await model.setFallbackEngineEnabled(value) } }))
                 .accessibilityIdentifier("settings.fallbackToggle")
         } header: {
             Text("Fallback player")

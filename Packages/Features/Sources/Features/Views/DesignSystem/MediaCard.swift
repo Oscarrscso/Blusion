@@ -214,6 +214,7 @@ struct MediaCardLink: View {
             stretches ? card.stretched() : card
         }
         .buttonStyle(PressableCardStyle())
+        .titleTapHaptic()
         .help(item.name)
         .contextMenu {
             if let actions {

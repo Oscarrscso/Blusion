@@ -132,17 +132,16 @@ struct DetailView: View {
         return model.nextUp.map { model.request(for: $0) }
     }
 
-    /// Play fills the remaining width beside the circle actions, with even spacing across the row.
+    /// Play fills the remaining width beside the circle actions, on one line. The label shrinks before the row ever stacks, so a long
+    /// "Resume S3 · E12" stays beside Save, Watched and Trailer.
     private var actionRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: Theme.Spacing.s) {
-                primaryAction.lineLimit(1).minimumScaleFactor(0.8)
-                secondaryActions
-            }
-            VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
-                primaryAction.lineLimit(1).minimumScaleFactor(0.8)
-                secondaryActions
-            }
+        HStack(alignment: .center, spacing: Theme.Spacing.s) {
+            primaryAction
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity)
+            secondaryActions
+                .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: isLandscape ? .leading : .center)
     }
@@ -304,6 +303,7 @@ struct DetailView: View {
                        artwork: model.backdropURL, score: model.score(for: video))
         }
         .buttonStyle(PressableCardStyle())
+        .titleTapHaptic()
         .contextMenu {
             let watched = model.isWatched(video)
             Button(watched ? "Mark as not watched" : "Mark as watched", systemImage: watched ? "xmark.circle" : "checkmark.circle") {
