@@ -5,7 +5,6 @@ import StremioKit
 
 struct LibraryView: View {
     @State private var model: LibraryViewModel
-    @State private var showsFilters = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var actions: TitleActions?
@@ -51,15 +50,6 @@ struct LibraryView: View {
         }
         .screenBackground()
         .navigationTitle("Library")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showsFilters = true } label: {
-                    Label("Filter and Sort", systemImage: model.filter.isNarrowing ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                }
-                .accessibilityIdentifier("library.filter")
-            }
-        }
-        .sheet(isPresented: $showsFilters) { LibraryFilterSheet(model: model) }
         .task { model.attachRatings(ratings) }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
@@ -115,6 +105,27 @@ struct LibraryView: View {
                         filterLabel("Rating", systemImage: "star.fill", tint: .yellow, isActive: model.filter.minimumRating != nil)
                     }
                     .accessibilityIdentifier("library.filter.rating")
+                    Menu {
+                        let genres = model.availableGenres
+                        if genres.isEmpty {
+                            Text("Genres appear here for titles saved from now on.")
+                        } else {
+                            ForEach(genres, id: \.self) { genre in
+                                Toggle(genre, isOn: membership(genre, in: \.genres))
+                            }
+                        }
+                    } label: {
+                        filterLabel("Genre", isActive: !model.filter.genres.isEmpty)
+                    }
+                    .accessibilityIdentifier("library.filter.genre")
+                    Menu {
+                        Picker("Added", selection: $model.filter.addedWithin) {
+                            ForEach(AddedWithin.allCases) { Text($0.title).tag($0) }
+                        }
+                    } label: {
+                        filterLabel("Added", isActive: model.filter.addedWithin != .anyTime)
+                    }
+                    .accessibilityIdentifier("library.filter.added")
                 }
             }
             Menu {
@@ -255,90 +266,6 @@ struct ReleaseYearOptions: View {
 
     @ViewBuilder private func choice(_ title: String, isOn: Bool) -> some View {
         if isOn { Label(title, systemImage: "checkmark") } else { Text(title) }
-    }
-}
-
-/// The filter and sort controls, in a sheet. Every change applies at once; "Clear Filters" removes them all and keeps the sort.
-struct LibraryFilterSheet: View {
-    @Bindable var model: LibraryViewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Type") {
-                    ForEach(LibraryKind.allCases) { kind in
-                        Toggle(kind.title, isOn: membership(kind, in: \.kinds))
-                            .accessibilityIdentifier("library.filter.kind.\(kind.rawValue)")
-                    }
-                }
-                Section("Status") {
-                    ForEach(WatchStatus.allCases) { status in
-                        Toggle(status.title, isOn: membership(status, in: \.statuses))
-                            .accessibilityIdentifier("library.filter.status.\(status.rawValue)")
-                    }
-                }
-                Section("Release year") {
-                    ReleaseYearOptions(model: model)
-                }
-                Section {
-                    let genres = model.availableGenres
-                    if genres.isEmpty {
-                        Text("Genres appear here for titles saved from now on.").font(.footnote).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(genres, id: \.self) { genre in
-                            Toggle(genre, isOn: membership(genre, in: \.genres))
-                        }
-                    }
-                } header: {
-                    Text("Genre")
-                } footer: {
-                    Text("A title matches if it has any of the chosen genres.")
-                }
-                Section {
-                    RatingPicker(threshold: $model.filter.minimumRating)
-                } header: {
-                    Text("Rating")
-                } footer: {
-                    Text("Ratings are out of 10, using the best score available for each title.")
-                }
-                Section("Added") {
-                    Picker("Added", selection: $model.filter.addedWithin) {
-                        ForEach(AddedWithin.allCases) { Text($0.title).tag($0) }
-                    }
-                }
-                Section("Sort by") {
-                    Picker("Sort by", selection: $model.filter.sort) {
-                        ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
-                    }
-                    .accessibilityIdentifier("library.sort")
-                }
-                Section {
-                    Button("Clear Filters", role: .destructive) { model.clearFilters() }
-                        .disabled(!model.filter.isNarrowing)
-                        .accessibilityIdentifier("library.filter.clear")
-                }
-            }
-            .sensoryFeedback(.selection, trigger: model.filter)
-            .navigationTitle("Filter and Sort")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
-            }
-        }
-    }
-
-    /// A toggle for one member of a filter set: on adds it, off removes it.
-    private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
-        Binding {
-            model.filter[keyPath: keyPath].contains(value)
-        } set: { included in
-            if included {
-                model.filter[keyPath: keyPath].insert(value)
-            } else {
-                model.filter[keyPath: keyPath].remove(value)
-            }
-        }
     }
 }
 
