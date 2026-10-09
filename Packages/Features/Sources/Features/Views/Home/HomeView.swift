@@ -72,31 +72,35 @@ struct HomeView: View {
     }
 
     private var ready: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                if !model.sections.contains(where: { if case .continueWatching = $0.widget.content { true } else { false } }) {
-                    continueRow
-                }
-                if model.isOffline {
-                    ForEach(model.sections) { section in
-                        if case .continueWatching = section.widget.content { sectionView(section) }
+        // The screen's width sizes the spotlight. It is read outside the scroll view, so the height it gets never depends on the
+        // navigation bar or the scroll position (the same way the title page sizes its artwork).
+        GeometryReader { geometry in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                    if !model.sections.contains(where: { if case .continueWatching = $0.widget.content { true } else { false } }) {
+                        continueRow
                     }
-                    OfflineBanner()
-                } else {
-                    ForEach(model.sections) { section in
-                        if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
+                    if model.isOffline {
+                        ForEach(model.sections) { section in
+                            if case .continueWatching = section.widget.content { sectionView(section, width: geometry.size.width) }
+                        }
+                        OfflineBanner()
+                    } else {
+                        ForEach(model.sections) { section in
+                            if model.isCustomised || !isEmptyRow(section) { sectionView(section, width: geometry.size.width) }
+                        }
                     }
+                    customizeButton
                 }
-                customizeButton
+                .padding(.bottom, Theme.Spacing.xxl)
             }
-            .padding(.bottom, Theme.Spacing.xxl)
+            .accessibilityIdentifier("board.rows")
+            .contentMargins(.top, 0, for: .scrollContent)
+            .screenBackground()
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
+            .ignoresSafeArea(.container, edges: heroIsFirst && !isLandscape ? .top : [])
         }
-        .accessibilityIdentifier("board.rows")
-        .contentMargins(.top, 0, for: .scrollContent)
-        .screenBackground()
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
-        .ignoresSafeArea(.container, edges: heroIsFirst && !isLandscape ? .top : [])
     }
 
     private func isEmptyRow(_ section: HomeViewModel.Section) -> Bool {
@@ -105,10 +109,10 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private func sectionView(_ section: HomeViewModel.Section) -> some View {
+    private func sectionView(_ section: HomeViewModel.Section, width: CGFloat) -> some View {
         switch section.widget.content {
         case .hero:
-            HeroSection(section: section, onRetry: { retry(section) })
+            HeroSection(section: section, width: width, onRetry: { retry(section) })
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) })
         case .collection(let items):

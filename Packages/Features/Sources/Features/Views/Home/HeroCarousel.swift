@@ -6,6 +6,8 @@ import SwiftUI
 /// it cannot load.
 struct HeroSection: View {
     let section: HomeViewModel.Section
+    /// The width of the screen the spotlight spans.
+    let width: CGFloat
     let onRetry: () -> Void
     @Environment(\.layoutMetrics) private var metrics
 
@@ -22,9 +24,9 @@ struct HeroSection: View {
     private var content: some View {
         switch section.state {
         case .idle, .loading:
-            HeroPlaceholder()
+            HeroPlaceholder(width: width)
         case .loaded(let items) where !items.isEmpty:
-            HeroCarousel(items: items)
+            HeroCarousel(items: items, width: width)
         case .loaded:
             if let issue = section.issue {
                 IssueMessage(issue: issue)
@@ -40,22 +42,23 @@ struct HeroSection: View {
 /// line and a "Details" button over the bottom of it.
 struct HeroCarousel: View {
     let items: [MetaPreview]
+    /// The width of the screen; the height follows from it, so it is known on the first layout pass.
+    let width: CGFloat
     @Environment(\.layoutMetrics) private var metrics
     /// The page on screen, counted from 0, read from the scroll position.
     @State private var index = 0
 
     var body: some View {
-        // The height follows from the width the screen offers, so it is known on the first layout pass. A height the pages worked out
-        // later made the list above jump.
+        // The size comes from the screen's width alone. A height taken from the scroll view changed while scrolling (the navigation bar
+        // moves), which made the artwork jump.
+        let height = metrics.heroHeight(forWidth: width)
         Color.clear
-            .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(width: width, height: height)
             .overlay {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
                         ForEach(items, id: \.identity) { item in
-                            HeroPage(item: item)
-                                .containerRelativeFrame(.horizontal)
+                            HeroPage(item: item, size: CGSize(width: width, height: height))
                         }
                     }
                     .scrollTargetLayout()
@@ -89,11 +92,11 @@ struct HeroCarousel: View {
 
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
+    let width: CGFloat
     @Environment(\.layoutMetrics) private var metrics
     var body: some View {
         Color.clear
-            .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(width: width, height: metrics.heroHeight(forWidth: width))
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)
