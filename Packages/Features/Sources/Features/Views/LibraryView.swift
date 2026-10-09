@@ -93,18 +93,7 @@ struct LibraryView: View {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
-                        if let range = model.availableYears {
-                            Picker("From", selection: $model.filter.minimumYear) {
-                                Text("Any").tag(Int?.none)
-                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
-                            }
-                            Picker("To", selection: $model.filter.maximumYear) {
-                                Text("Any").tag(Int?.none)
-                                ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
-                            }
-                        } else {
-                            Text("No release years yet")
-                        }
+                        ReleaseYearPicker(model: model)
                     } label: {
                         filterLabel("Year", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                     }
@@ -242,6 +231,35 @@ struct RatingPicker: View {
     }
 }
 
+/// One release year at a time, from the 1930s to 2029, grouped by decade. Choosing a year sets both ends of the filter to it.
+struct ReleaseYearPicker: View {
+    @Bindable var model: LibraryViewModel
+
+    var body: some View {
+        Picker("Year", selection: yearSelection) {
+            Text("Any").tag(Int?.none)
+            ForEach(Array(stride(from: 1930, through: 2020, by: 10)), id: \.self) { decade in
+                Section("\(decade)s") {
+                    ForEach(decade..<decade + 10, id: \.self) { year in
+                        Text(String(year)).tag(Int?.some(year))
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("library.filter.year.picker")
+    }
+
+    private var yearSelection: Binding<Int?> {
+        Binding {
+            guard let low = model.filter.minimumYear, low == model.filter.maximumYear else { return nil }
+            return low
+        } set: { year in
+            model.filter.minimumYear = year
+            model.filter.maximumYear = year
+        }
+    }
+}
+
 /// The filter and sort controls, in a sheet. Every change applies at once; "Clear Filters" removes them all and keeps the sort.
 struct LibraryFilterSheet: View {
     @Bindable var model: LibraryViewModel
@@ -263,18 +281,7 @@ struct LibraryFilterSheet: View {
                     }
                 }
                 Section("Release year") {
-                    if let range = model.availableYears {
-                        Picker("From", selection: $model.filter.minimumYear) {
-                            Text("Any").tag(Int?.none)
-                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
-                        }
-                        Picker("To", selection: $model.filter.maximumYear) {
-                            Text("Any").tag(Int?.none)
-                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
-                        }
-                    } else {
-                        Text("No release years yet").foregroundStyle(.secondary)
-                    }
+                    ReleaseYearPicker(model: model)
                 }
                 Section {
                     let genres = model.availableGenres

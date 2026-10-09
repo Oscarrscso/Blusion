@@ -34,7 +34,8 @@ struct DiscoverView: View {
 
     /// The same filter row as the Library: the type control, menus that show their active choice, and removable chips under them.
     private var filters: some View {
-        let types = model.types.filter { $0.lowercased() != "other" }
+        // Movies and Series only: the other catalogue types stay out of the type control.
+        let types = model.types.filter { ["movie", "series"].contains($0.lowercased()) }
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if types.count > 1 {
                 QualitySelector(titles: types.map(ContentTypeName.plural), selection: Binding {
