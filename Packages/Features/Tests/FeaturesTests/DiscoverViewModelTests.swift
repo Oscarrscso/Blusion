@@ -140,7 +140,7 @@ import StremioKitTestSupport
         let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: StubTransport(data: Data(#"{"metas":[]}"#.utf8)))
         let model = DiscoverViewModel(services: AppServices(registry: registry, client: client))
         await model.loadSources()
-        #expect(model.types == ["movie", "anime", "tv", "zeta", "alpha"], "by rank, then the order the types first appear in")
+        #expect(model.types == ["movie"], "only movies and series get a segment, so tv, zeta, alpha and anime are left out")
         #expect(model.selectedType == "movie")
     }
 

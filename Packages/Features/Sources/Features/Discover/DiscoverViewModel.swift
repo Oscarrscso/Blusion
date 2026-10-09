@@ -36,10 +36,10 @@ public final class DiscoverViewModel {
     public var genres: [String] { selectedSource?.catalog.genreOptions ?? [] }
     public var hasSources: Bool { !sources.isEmpty }
 
-    /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
+    /// Distinct content types of `sources` that Discover shows, movies and series only: by `ContentTypeName.sortRank`, then by first appearance.
     public var types: [String] {
         var order: [String] = []
-        for source in sources where !order.contains(source.type) { order.append(source.type) }
+        for source in sources where !order.contains(source.type) && ["movie", "series"].contains(source.type) { order.append(source.type) }
         return order.enumerated().sorted { lhs, rhs in
             let (left, right) = (ContentTypeName.sortRank(lhs.element), ContentTypeName.sortRank(rhs.element))
             return left != right ? left < right : lhs.offset < rhs.offset
