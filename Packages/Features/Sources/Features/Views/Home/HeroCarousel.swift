@@ -111,6 +111,8 @@ private struct HeroPage: View {
     static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
 
     let item: MetaPreview
+    /// The page's size: the screen's width and the spotlight's height.
+    let size: CGSize
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
 
@@ -125,12 +127,17 @@ private struct HeroPage: View {
             .accessibilityLabel(item.name)
             caption
         }
+        .frame(width: size.width, height: size.height)
     }
 
+    /// The poster, drawn the way the title page draws its artwork: fitted into a frame of fixed size and clipped, so the picture never
+    /// moves when the layout around it does.
     private var artwork: some View {
         Color.clear
-            .overlay { ArtworkImage(url: item.background ?? item.poster, title: item.name, maxPixelSize: 1400) }
+            .overlay { ArtworkImage(url: item.poster ?? item.background, title: item.name, maxPixelSize: 1400, contentMode: .fit) }
             .overlay { scrim }
+            .frame(width: size.width, height: size.height)
+            .clipped()
             .contentShape(Rectangle())
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
