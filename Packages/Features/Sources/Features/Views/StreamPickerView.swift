@@ -380,6 +380,13 @@ struct StreamPickerView: View {
             StreamTechnicalDetails(item: item)
         }
         .glassCardSurface()
+        .overlay {
+            if isRecommended {
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .strokeBorder(Theme.brandGradient, lineWidth: 2)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     @ViewBuilder

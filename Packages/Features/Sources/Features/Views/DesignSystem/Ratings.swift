@@ -161,8 +161,6 @@ struct ReviewSiteIcon: View {
 /// Meant to sit over artwork, so the text is white.
 struct RatingButtonsRow: View {
     let item: MetaPreview
-    /// Where the buttons sit when the row is wider than they are.
-    var alignment: Alignment = .center
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
@@ -185,28 +183,35 @@ struct RatingButtonsRow: View {
 
     private func buttons(ratings: TitleRatings?) -> some View {
         let sites = ReviewSite.allCases.filter { $0 == .imdb || ratings?.shortText(for: $0) != nil }
-        return GlassEffectContainer(spacing: 6) {
-            ViewThatFits(in: .horizontal) {
-                row(sites, ratings: ratings)
-                ScrollView(.horizontal) { row(sites, ratings: ratings) }
-                    .scrollIndicators(.hidden)
-                    .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
-                    .scrollClipDisabled()
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: alignment)
-        .accessibilityIdentifier("detail.reviews")
-    }
-
-    private func row(_ sites: [ReviewSite], ratings: TitleRatings?) -> some View {
-        HStack(spacing: 6) {
-            ForEach(sites) { site in
-                if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
-                    RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
-                                 isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name)
+        return GeometryReader { geometry in
+            let gap = min(6, max(4, (geometry.size.width - CGFloat(sites.count) * 64) / CGFloat(max(1, sites.count - 1))))
+            let pillWidth = (geometry.size.width - gap * CGFloat(sites.count - 1)) / CGFloat(sites.count)
+            let inset = min(10, max(2, (pillWidth - 54) / 2))
+            GlassEffectContainer(spacing: gap) {
+                HStack(spacing: gap) {
+                    ForEach(sites) { site in
+                        if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
+                            RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
+                                         isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name,
+                                         horizontalInset: inset)
+                                .overlay(alignment: .leading) {
+                                    if site != sites.first {
+                                        Rectangle()
+                                            .fill(.white.opacity(0.2))
+                                            .frame(width: 1, height: 20)
+                                            .frame(width: gap)
+                                            .offset(x: -gap)
+                                            .accessibilityHidden(true)
+                                            .allowsHitTesting(false)
+                                    }
+                                }
+                        }
+                    }
                 }
             }
         }
+        .frame(height: 28)
+        .accessibilityIdentifier("detail.reviews")
     }
 }
 
@@ -218,6 +223,7 @@ struct RatingButton: View {
     /// True when the link is a search on the site, not the title's own page.
     let isSearch: Bool
     let title: String
+    var horizontalInset: CGFloat = 10
 
     var body: some View {
         Link(destination: url) {
@@ -229,9 +235,12 @@ struct RatingButton: View {
                         .font(.system(size: 13, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
             }
-            .padding(.horizontal, score == nil ? 9 : 10)
+            .padding(.horizontal, horizontalInset)
+            .frame(maxWidth: .infinity)
             .frame(height: 28)
             .glassEffect(.regular.interactive(), in: .capsule)
             .contentShape(Capsule())

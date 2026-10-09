@@ -7,7 +7,7 @@ import StremioKit
 /// Blusion cannot play it. The technical details fold away in a section of their own, so tapping the card always plays.
 struct StreamRow: View {
     let item: RankedStream
-    /// True for the stream Auto Pick recommends: a quiet "Best match" over the badges, and nothing else on the card changes.
+    /// True for the stream Auto Pick recommends, shown with a "Best match" label.
     var isBest = false
     /// True when the release name says REMUX. Found in the name, the same way Auto Pick finds it.
     var isRemux = false

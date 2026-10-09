@@ -2,6 +2,7 @@ import SwiftUI
 import Features
 import StremioKit
 import UIKit
+import SafariServices
 
 @main
 struct BlusionApp: App {
@@ -48,6 +49,21 @@ struct RootView: View {
         #if targetEnvironment(macCatalyst)
         .modifier(MacWindowSize())
         #endif
+        .environment(\.openURL, OpenURLAction { url in
+            guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return .systemAction }
+            // Present over the current screen, including links inside an existing sheet.
+            guard var presenter = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })?
+                .windows.first(where: \.isKeyWindow)?.rootViewController else { return .systemAction }
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            let browser = SFSafariViewController(url: url)
+            browser.modalPresentationStyle = .pageSheet
+            presenter.present(browser, animated: true)
+            return .handled
+        })
         .task {
             try? await environment.services.registry.load()
             let settings = await environment.services.settings.load()

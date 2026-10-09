@@ -7,11 +7,20 @@ import UIKit
 /// metadata line, the main action, round secondary actions, the synopsis, then for a series its seasons and episodes, and last
 /// the credits.
 struct DetailView: View {
+    private enum ReviewSort: String, CaseIterable {
+        case highestRated = "Highest rated"
+        case lowestRated = "Lowest rated"
+        case longest = "Longest review"
+        case shortest = "Shortest review"
+    }
+
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isConfirmingUnmarkShow = false
+    @State private var reviewSort = ReviewSort.highestRated
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
+    @State private var renderedLogoHeight: CGFloat = 150
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -19,6 +28,8 @@ struct DetailView: View {
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
+    private var contentMargin: CGFloat { max(metrics.pageMargin, Theme.Spacing.l) }
+    private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork))
@@ -31,12 +42,10 @@ struct DetailView: View {
                     feature(in: geometry.size)
                     if model.isSeries { episodesSection }
                     credits
-                        .padding(.horizontal, metrics.pageMargin)
-                        .padding(.top, Theme.Spacing.l)
+                        .padding(.top, sectionSpacing)
                     if !model.relatedTitles.isEmpty {
                         related
-                            .padding(.horizontal, metrics.pageMargin)
-                            .padding(.top, Theme.Spacing.xl)
+                            .padding(.top, sectionSpacing)
                     }
                 }
                 .padding(.bottom, Theme.Spacing.xxl)
@@ -62,7 +71,7 @@ struct DetailView: View {
     @ViewBuilder
     private func feature(in size: CGSize) -> some View {
         if isLandscape {
-            let artworkWidth = max(120, (size.width - metrics.pageMargin * 2 - Theme.Spacing.xl) * 0.48)
+            let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 ArtworkImage(url: model.backdropURL, maxPixelSize: 4096, contentMode: .fit,
                              placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
@@ -75,38 +84,36 @@ struct DetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, contentMargin)
             .padding(.vertical, Theme.Spacing.m)
             synopsis
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, contentMargin)
                 .padding(.top, Theme.Spacing.s)
         } else {
             let height = min(size.width * 1.5, metrics.heroMaxHeight)
-            // The layout keeps the hero's height. The artwork is an overlay that stretches downward only when the page is pulled past its
-            // top: its top stays at the screen's top and its bottom follows the finger. Scrolling leaves it where it is.
-            Color.clear
-                .frame(width: size.width, height: height)
-                .overlay(alignment: .top) {
-                    ZStack(alignment: .bottom) {
-                        ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
-                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
-                        BottomFade(length: 0.42)
-                    }
-                    .frame(width: size.width, height: height + scrollPull)
-                    .clipped()
-                    .offset(y: -scrollPull)
-                }
-                .overlay(alignment: .bottom) {
+            VStack(spacing: 0) {
+                // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
+                Color.clear
+                    .frame(height: max(0, height - renderedLogoHeight - Theme.Spacing.xl))
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
-                        .padding(.horizontal, metrics.pageMargin)
-                        .padding(.bottom, Theme.Spacing.s)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
+                    controls
+                    synopsis
+                    RatingButtonsRow(item: model.detail.preview)
                 }
-            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                controls
-                synopsis
+                .padding(.horizontal, contentMargin)
             }
-            .padding(.horizontal, metrics.pageMargin)
-            .padding(.top, Theme.Spacing.xs)
+            .background(alignment: .top) {
+                ZStack(alignment: .bottom) {
+                    ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
+                                 placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
+                    BottomFade(length: 0.42)
+                }
+                .frame(width: size.width, height: height + scrollPull)
+                .clipped()
+                .offset(y: -scrollPull)
+            }
         }
     }
 
@@ -121,12 +128,9 @@ struct DetailView: View {
 
     private var controls: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.m) {
-            actionRow
-                // Kept clear of the page's scroll indicator on the right edge.
-                .padding(.horizontal, isLandscape ? 0 : Theme.Spacing.xl)
-            RatingButtonsRow(item: model.detail.preview, alignment: isLandscape ? .leading : .center)
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(isLandscape ? .leading : .center)
+            actionRow
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -240,7 +244,7 @@ struct DetailView: View {
         }
     }
 
-    /// Opens the trailer on YouTube, in the YouTube app when it is installed.
+    /// Opens the trailer with the app's shared web link handler.
     private func trailerAction(_ url: URL) -> some View {
         CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {
             openURL(url)
@@ -300,7 +304,7 @@ struct DetailView: View {
                 }
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, contentMargin)
             .accessibilityIdentifier("detail.seasonPicker")
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
@@ -313,11 +317,11 @@ struct DetailView: View {
                 }
                 .scrollTargetLayout()
             }
-            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .contentMargins(.horizontal, contentMargin, for: .scrollContent)
             .softSnappingScroll()
             .scrollClipDisabled()
         }
-        .padding(.top, Theme.Spacing.xxl)
+        .padding(.top, sectionSpacing)
         // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
         .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading)") {
             await model.loadEpisodeScores(season: model.selectedSeason)
@@ -345,14 +349,54 @@ struct DetailView: View {
 
     // MARK: - Credits
 
+    private var sortedReviews: [TMDbReview] {
+        model.reviews.sorted {
+            switch reviewSort {
+            case .longest:
+                return $0.content.count > $1.content.count
+            case .shortest:
+                return $0.content.count < $1.content.count
+            case .highestRated, .lowestRated:
+                guard let left = $0.rating else { return false }
+                guard let right = $1.rating else { return true }
+                return reviewSort == .highestRated ? left > right : left < right
+            }
+        }
+    }
+
     private var credits: some View {
-        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
+            if isLandscape {
+                RatingButtonsRow(item: model.detail.preview)
+                    .padding(.horizontal, contentMargin)
+            }
             if !model.reviews.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                    SectionHeader("TMDb Reviews")
+                    HStack(spacing: 0) {
+                        Text("TMDb Reviews")
+                            .font(Theme.Typography.shelfTitle)
+                            .accessibilityAddTraits(.isHeader)
+                        Menu {
+                            Picker("Sort reviews", selection: $reviewSort) {
+                                ForEach(ReviewSort.allCases, id: \.self) { sort in
+                                    Text(sort.rawValue).tag(sort)
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Sort TMDb reviews")
+                        .accessibilityValue(reviewSort.rawValue)
+                        .accessibilityIdentifier("detail.reviews.sort")
+                    }
+                    .padding(.horizontal, contentMargin)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: metrics.cardSpacing) {
-                            ForEach(model.reviews) { review in
+                            ForEach(sortedReviews) { review in
                                 ReviewCard(review: review)
                                     .frame(width: metrics.isRegular ? 340 : 280)
                                     .reportsShelfEdge(id: review.id)
@@ -360,42 +404,54 @@ struct DetailView: View {
                         }
                         .scrollTargetLayout()
                     }
+                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
                     .softSnappingScroll()
+                    .scrollClipDisabled()
                 }
             }
             if let people = model.castAndCrew, !people.isEmpty {
-                // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
-                SectionHeader("Cast & Crew")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                        ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
-                    }
-                    .scrollTargetLayout()
-                }
-                .softSnappingScroll()
-                .accessibilityIdentifier("detail.castCarousel")
-            } else if !model.detail.cast.isEmpty {
-                // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
-                SectionHeader("Cast & Crew")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                        ForEach(model.detail.cast, id: \.self) { name in
-                            VStack(spacing: 8) {
-                                Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
-                                    .font(.title2.weight(.medium))
-                                    .frame(width: metrics.avatarSize, height: metrics.avatarSize)
-                                    .background(Theme.surfaceStrong, in: Circle())
-                                Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
-                            }
-                            .frame(width: metrics.avatarSize + 12)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(name)
-                            .reportsShelfEdge(id: name)
+                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                    // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
+                    SectionHeader("Cast & Crew")
+                        .padding(.horizontal, contentMargin)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                            ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
                         }
+                        .scrollTargetLayout()
                     }
-                    .scrollTargetLayout()
+                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
+                    .softSnappingScroll()
+                    .scrollClipDisabled()
+                    .accessibilityIdentifier("detail.castCarousel")
                 }
-                .softSnappingScroll()
+            } else if !model.detail.cast.isEmpty {
+                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                    // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
+                    SectionHeader("Cast & Crew")
+                        .padding(.horizontal, contentMargin)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                            ForEach(model.detail.cast, id: \.self) { name in
+                                VStack(spacing: 8) {
+                                    Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
+                                        .font(.title2.weight(.medium))
+                                        .frame(width: metrics.avatarSize, height: metrics.avatarSize)
+                                        .background(Theme.surfaceStrong, in: Circle())
+                                    Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
+                                }
+                                .frame(width: metrics.avatarSize + 12)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(name)
+                                .reportsShelfEdge(id: name)
+                            }
+                        }
+                        .scrollTargetLayout()
+                    }
+                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
+                    .softSnappingScroll()
+                    .scrollClipDisabled()
+                }
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionHeader("Information")
@@ -406,6 +462,7 @@ struct DetailView: View {
                 information("Writers", model.detail.writers.joined(separator: ", "))
             }
             .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+            .padding(.horizontal, contentMargin)
         }
     }
 
@@ -413,6 +470,7 @@ struct DetailView: View {
     private var related: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("More Like This")
+                .padding(.horizontal, contentMargin)
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.relatedTitles) { title in
@@ -427,6 +485,7 @@ struct DetailView: View {
                 }
                 .scrollTargetLayout()
             }
+            .contentMargins(.horizontal, contentMargin, for: .scrollContent)
             .scrollClipDisabled()
             .softSnappingScroll()
             .accessibilityIdentifier("detail.related")
@@ -454,9 +513,17 @@ private struct ReviewCard: View {
                 Text(review.author).font(.headline).lineLimit(1)
                 Spacer(minLength: 8)
                 if let rating = review.rating {
-                    Label(rating.formatted(.number.precision(.fractionLength(0...1))), systemImage: "star.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    let stars = min(10, max(0, rating)).rounded() / 2
+                    HStack(spacing: 2) {
+                        ForEach(0..<5) { index in
+                            Image(systemName: stars >= Double(index + 1) ? "star.fill" :
+                                    stars >= Double(index) + 0.5 ? "star.leadinghalf.filled" : "star")
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                 }
             }
             Text(LocalizedStringKey(review.content))
@@ -498,11 +565,12 @@ private struct TitleArt: View {
     var body: some View {
         Group {
             if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: compact ? 220 : CGFloat.infinity, maxHeight: compact ? 56 : 150, alignment: alignment)
-                    .transition(.opacity)
+                LogoLayout(imageSize: image.size, maxWidth: compact ? 220 : .infinity, maxHeight: compact ? 56 : 150) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                }
+                .transition(.opacity)
             } else {
                 Text(name)
                     .font(compact ? .title2.bold() : .largeTitle.bold())
@@ -522,6 +590,24 @@ private struct TitleArt: View {
             guard !Task.isCancelled, let loaded else { return }
             withAnimation(.easeOut(duration: 0.25)) { image = loaded }
         }
+    }
+}
+
+/// Reports the fitted image bounds instead of a taller frame containing empty space.
+private struct LogoLayout: Layout {
+    let imageSize: CGSize
+    let maxWidth: CGFloat
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let width = min(proposal.width ?? imageSize.width, maxWidth)
+        let scale = min(width / imageSize.width, maxHeight / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
     }
 }
 
