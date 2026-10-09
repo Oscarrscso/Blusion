@@ -21,18 +21,25 @@ jobs:
   host-linux:
     name: Host layer (Linux, Swift 6.3)
     runs-on: ubuntu-24.04
-    container: swift:6.3.3-noble
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: Trust the checkout inside the container
-        # The workspace is owned by the runner user, not root; git (used by verify.sh to list sources) refuses it without this.
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Install node, ffmpeg, curl, python
+      - uses: actions/checkout@v6
+      - name: Install host tools and Swift dependencies
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends nodejs ffmpeg curl python3 ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg curl python3 python3-yaml ca-certificates \
+            binutils gnupg2 libc6-dev libcurl4-openssl-dev libedit2 libgcc-13-dev libncurses-dev \
+            libpython3-dev libsqlite3-0 libstdc++-13-dev libxml2-dev libz3-dev pkg-config zlib1g-dev
           node --version
+      - name: Install Swift 6.3.3
+        # Swiftly downloads and verifies the toolchain from swift.org, avoiding Docker Hub's anonymous pull limit.
+        run: |
+          curl -fL --retry 3 https://download.swift.org/swiftly/linux/swiftly-1.1.2-x86_64.tar.gz -o "$RUNNER_TEMP/swiftly.tar.gz"
+          tar -xzf "$RUNNER_TEMP/swiftly.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/swiftly" init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
+          . "$HOME/.local/share/swiftly/env.sh"
+          swiftly install 6.3.3 --assume-yes
+          echo "$SWIFTLY_BIN_DIR" >> "$GITHUB_PATH"
           swift --version
       - name: verify.sh (host layer)
         run: ./scripts/verify.sh
@@ -44,7 +51,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Toolchain info
         run: |
           xcodebuild -version
@@ -59,7 +66,7 @@ jobs:
           SHOT: ci-launch
       - name: Upload screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-verify
           path: |
@@ -80,7 +87,7 @@ jobs:
     continue-on-error: true
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install tools
         run: brew install xcodegen swiftlint ffmpeg xcbeautify
       - name: verify.sh milestone with the fallback engine
@@ -90,7 +97,7 @@ jobs:
         run: ./scripts/size-report.sh
       - name: Upload screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: macos-fallback
           path: |

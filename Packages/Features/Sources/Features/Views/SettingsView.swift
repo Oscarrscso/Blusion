@@ -84,7 +84,10 @@ struct SettingsView: View {
                 ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
             }
             .accessibilityIdentifier("settings.resolution")
-            Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in Haptics.selection(); Task { await model.setSubtitleLanguage(value) } })) {
+            Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in
+                Haptics.selection()
+                Task { await model.setSubtitleLanguage(value) }
+            })) {
                 ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
             }
             .accessibilityIdentifier("settings.subtitleLanguage")

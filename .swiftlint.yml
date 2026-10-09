@@ -21,7 +21,7 @@ only_rules:
   - unused_closure_parameter
   - vertical_whitespace
   - void_return
-  - redundant_optional_initialization
+  - implicit_optional_initialization
   - shorthand_operator
   - line_length
 line_length:

@@ -78,6 +78,17 @@
         }
       }
     },
+    "Add List": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add List"
+          }
+        }
+      }
+    },
     "Add Tile": {
       "extractionState": "manual",
       "localizations": {
@@ -188,6 +199,17 @@
         }
       }
     },
+    "All Roles": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Roles"
+          }
+        }
+      }
+    },
     "All genres": {
       "extractionState": "manual",
       "localizations": {
@@ -254,6 +276,17 @@
         }
       }
     },
+    "Best Blu-ray": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best Blu-ray"
+          }
+        }
+      }
+    },
     "Best Blu-ray edition": {
       "extractionState": "manual",
       "localizations": {
@@ -261,6 +294,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Best Blu-ray edition"
+          }
+        }
+      }
+    },
+    "Best match": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best match"
           }
         }
       }
@@ -459,6 +503,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collection / library"
+          }
+        }
+      }
+    },
+    "Coloured rating logos": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coloured rating logos"
           }
         }
       }
@@ -756,6 +811,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter your own API Client ID and Client Secret. Set your API app’s Redirect URI to urn:ietf:wg:oauth:2.0:oob so token refresh works. Credentials and sign-in tokens are stored in the Keychain. A Client ID alone also enables public Trakt list widgets."
+          }
+        }
+      }
+    },
+    "Episode width": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Episode width"
           }
         }
       }
@@ -1563,6 +1629,17 @@
         }
       }
     },
+    "Open title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open title"
+          }
+        }
+      }
+    },
     "Optional. A TMDB Read Access Token adds TMDB scores and episode ratings. Credentials stay in the Keychain. Site links work without keys.": {
       "extractionState": "manual",
       "localizations": {
@@ -1948,6 +2025,17 @@
         }
       }
     },
+    "Remove from Continue Watching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from Continue Watching"
+          }
+        }
+      }
+    },
     "Replace My Widgets": {
       "extractionState": "manual",
       "localizations": {
@@ -1988,6 +2076,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review services"
+          }
+        }
+      }
+    },
+    "Roles": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roles"
           }
         }
       }
@@ -2190,6 +2289,17 @@
         }
       }
     },
+    "Show": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show"
+          }
+        }
+      }
+    },
     "Show Details": {
       "extractionState": "manual",
       "localizations": {
@@ -2311,6 +2421,17 @@
         }
       }
     },
+    "Sort TMDb reviews": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort TMDb reviews"
+          }
+        }
+      }
+    },
     "Sort by": {
       "extractionState": "manual",
       "localizations": {
@@ -2318,6 +2439,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sort by"
+          }
+        }
+      }
+    },
+    "Sort reviews": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort reviews"
           }
         }
       }
@@ -2465,6 +2597,17 @@
         }
       }
     },
+    "Technical details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Technical details"
+          }
+        }
+      }
+    },
     "This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library folder instead. Trakt sync sends only the items you choose to share.": {
       "extractionState": "manual",
       "localizations": {
@@ -2505,6 +2648,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Title"
+          }
+        }
+      }
+    },
+    "Titles": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titles"
           }
         }
       }
@@ -2553,6 +2707,28 @@
         }
       }
     },
+    "Trakt List": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt List"
+          }
+        }
+      }
+    },
+    "Trakt List from Link": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt List from Link"
+          }
+        }
+      }
+    },
     "Trakt app settings": {
       "extractionState": "manual",
       "localizations": {
@@ -2560,6 +2736,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trakt app settings"
+          }
+        }
+      }
+    },
+    "Trakt lists and feeds need a Trakt client ID in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt lists and feeds need a Trakt client ID in Settings."
           }
         }
       }
@@ -2846,6 +3033,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "https://example.com/widgets.json"
+          }
+        }
+      }
+    },
+    "trakt.tv/users/name/lists/list-name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trakt.tv/users/name/lists/list-name"
           }
         }
       }

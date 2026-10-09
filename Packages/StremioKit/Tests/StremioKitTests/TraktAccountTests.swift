@@ -146,7 +146,10 @@ import StremioKitTestSupport
     }
 
     @Test func playbackRowsKeepTraktsIDAndRemovingOneDeletesOnlyThatRecord() async throws {
-        let row = #"[{"id":42,"progress":40,"paused_at":"2023-11-14T22:13:20.000Z","type":"movie","movie":{"title":"Movie","year":2020,"ids":{"imdb":"tt1"},"runtime":100}}]"#
+        let row = #"""
+        [{"id":42,"progress":40,"paused_at":"2023-11-14T22:13:20.000Z","type":"movie",
+          "movie":{"title":"Movie","year":2020,"ids":{"imdb":"tt1"},"runtime":100}}]
+        """#
         let transport = StubTransport { request, call in
             if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
             return StubTransport.response(Data(row.utf8), for: request)

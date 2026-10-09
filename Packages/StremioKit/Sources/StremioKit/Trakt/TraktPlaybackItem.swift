@@ -10,7 +10,7 @@ public struct TraktPlaybackItem: Sendable, Equatable, Identifiable {
     public let episodeTitle: String?
     public let duration: TimeInterval?
     /// Trakt's id for this paused record, needed to remove it (`DELETE sync/playback/{id}`).
-    public var playbackID: Int? = nil
+    public var playbackID: Int?
 
     public var contentID: String {
         if let season, let episode { return "\(preview.id):\(season):\(episode)" }

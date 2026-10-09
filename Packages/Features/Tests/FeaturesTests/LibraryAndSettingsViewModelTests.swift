@@ -29,7 +29,8 @@ import StremioKitTestSupport
             progress("old", 40, age: 0), progress("new", 60, age: 100), progress("barely", 2, age: 50), progress("nearly", 97, age: 60),
             progress("done", 95, watched: true, age: 70),
         ]
-        #expect(LibraryViewModel.continueWatching(from: items.sorted { $0.updatedAt > $1.updatedAt }).map(\.contentID) == ["new", "old"], "barely started, nearly finished and watched items don't qualify")
+        #expect(LibraryViewModel.continueWatching(from: items.sorted { $0.updatedAt > $1.updatedAt }).map(\.contentID) == ["new", "old"],
+                "barely started, nearly finished and watched items don't qualify")
         let model = LibraryViewModel(services: services(progress: items))
         #expect(!model.hasLoaded)
         await model.load()

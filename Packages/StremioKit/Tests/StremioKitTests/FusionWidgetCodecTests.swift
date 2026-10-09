@@ -312,7 +312,7 @@ private let bigSample = #"""
           { "id": "2", "name": "Ftp", "layout": "Landscape", "backgroundImageURL": "ftp://example.com/x.jpg" } ]
         """#)
         #expect(result.widgets.count == 1 && result.widgets[0].title == "Collections")
-        let tiles = try #require(tiles(result.widgets[0]))
+        let tiles = try #require(self.tiles(result.widgets[0]))
         #expect(tiles.map(\.id) == ["824E1B1F", "2"])
         #expect(tiles[0].title == "1980s" && tiles[0].hideTitle && tiles[0].imageAspect == .wide)
         #expect(tiles[0].imageURL == URL(string: "https://example.com/1980s-wide.jpg") && tiles[0].sources.isEmpty)
@@ -326,7 +326,7 @@ private let bigSample = #"""
           { "id": "s", "title": "Square", "imageAspect": "square", "imageURL": "file:///etc/passwd", "backgroundImageURL": "https://example.com/s.png" },
           { "id": "u", "title": "Unknown", "imageAspect": "banana" } ]
         """#)
-        let tiles = try #require(tiles(result.widgets[0]))
+        let tiles = try #require(self.tiles(result.widgets[0]))
         #expect(tiles[0].imageAspect == .poster && tiles[0].imageURL == URL(string: "https://example.com/p.png"))
         #expect(tiles[1].imageAspect == .square && tiles[1].imageURL == URL(string: "https://example.com/s.png"), "a bad imageURL falls back to the background")
         #expect(tiles[2].imageAspect == .wide && tiles[2].imageURL == nil)

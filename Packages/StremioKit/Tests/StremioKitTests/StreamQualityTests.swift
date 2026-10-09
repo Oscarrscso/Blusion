@@ -48,7 +48,8 @@ private let cases: [QualityCase] = [
         #expect(StreamQuality.parse(from: ["1080p WEB-DL DDP5.1 Atmos"]).atmosFormat == .streaming)
         #expect(StreamQuality.parse(from: ["2160p BluRay REMUX TrueHD 7.1 Atmos"]).atmosFormat == .lossless)
         #expect(StreamQuality.parse(from: ["1080p BluRay DD+ Atmos"]).atmosFormat == .streaming)
-        #expect(StreamQuality.parse(from: ["2160p BluRay REMUX DTS-HD MA 5.1 Atmos"]).atmosFormat == nil, "an Atmos label without a codec that can carry it stays unclassified")
+        #expect(StreamQuality.parse(from: ["2160p BluRay REMUX DTS-HD MA 5.1 Atmos"]).atmosFormat == nil,
+                "an Atmos label without a codec that can carry it stays unclassified")
         #expect(StreamQuality.parse(from: ["1080p BluRay DTS-HD MA 5.1"]).atmosFormat == nil, "no Atmos, no kind")
     }
 

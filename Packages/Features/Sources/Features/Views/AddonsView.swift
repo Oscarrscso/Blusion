@@ -128,7 +128,10 @@ struct AddonsView: View {
                             }
                         }
                     }
-                    Toggle("Enabled", isOn: Binding(get: { addon.isEnabled }, set: { value in Haptics.selection(); Task { await model.setEnabled(value, id: addon.id) } }))
+                    Toggle("Enabled", isOn: Binding(get: { addon.isEnabled }, set: { value in
+                        Haptics.selection()
+                        Task { await model.setEnabled(value, id: addon.id) }
+                    }))
                         .labelsHidden()
                         .accessibilityLabel("\(addon.name) enabled")
                         .accessibilityIdentifier("addons.toggle.\(addon.name)")
