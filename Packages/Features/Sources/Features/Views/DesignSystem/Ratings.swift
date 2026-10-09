@@ -62,7 +62,7 @@ struct RatingsLine: View {
     }
 }
 
-/// The ratings of one title as a small floating pill over the bottom-left of a poster: light, very translucent, inset from the
+/// The ratings of one title as a small floating pill over the bottom-left of a poster: dark, very translucent, inset from the
 /// edges, sized to its contents, so the artwork stays unobstructed. Each score is led by its provider's own colours. Landscape artwork
 /// (the hero and the title page) keeps its pill in the bottom-right corner. Reads the environment's `PosterRatingsStore`; draws nothing
 /// without one, when ratings are switched off, or while no scores are known. Only this view observes the title's entry, so a rating
@@ -93,7 +93,7 @@ struct PosterRatingsOverlay: View {
     }
 }
 
-/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a light, very transparent rounded
+/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a dark, very transparent rounded
 /// rectangle with no edge. Small, so it reads as a tag on the artwork; it is only as wide as its contents.
 private struct RatingPill: View {
     let ratings: TitleRatings
@@ -122,7 +122,7 @@ private struct RatingPill: View {
         .fixedSize()
         .padding(.horizontal, 5)
         .padding(.vertical, 2)
-        .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
