@@ -43,7 +43,7 @@ struct ProgressCard: View {
 }
 
 extension View {
-    /// Lift a Continue Watching card during the hold, then open its title from that artwork.
+    /// A Continue Watching card: a tap opens its streams, and its context menu opens the title from that artwork.
     func continueWatchingHold(preview: MetaPreview, request: StreamRequest) -> some View {
         modifier(ContinueWatchingHoldModifier(preview: preview, request: request))
     }
@@ -52,39 +52,25 @@ extension View {
 private struct ContinueWatchingHoldModifier: ViewModifier {
     let preview: MetaPreview
     let request: StreamRequest
-    /// Set when a hold has already opened the title, so the Button's release does not also open the streams.
-    @State private var heldOpen = false
-    @GestureState private var isHolding = false
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.zoomScope) private var zoomScope
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         let sourceID = "continue/\(zoomScope)/\(preview.identity)"
         Button {
-            if heldOpen {
-                heldOpen = false
-                return
-            }
             Haptics.tap()
             router.open(.home)
             router.homePath.append(request)
         } label: {
             content
-                .scaleEffect(isHolding && !reduceMotion ? 1.08 : 1)
-                .brightness(isHolding ? 0.06 : 0)
-                .shadow(color: .black.opacity(isHolding ? 0.55 : 0), radius: 12, y: 6)
-                .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.65), value: isHolding)
                 .zoomSource(id: sourceID, in: zoomNamespace)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
-        // A swipe moves past maximumDistance and cancels the hold, so the row's horizontal scroll is never blocked.
-        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5, maximumDistance: 10)
-            .updating($isHolding) { pressing, holding, _ in holding = pressing }
-            .onEnded { _ in
-                heldOpen = true
+        // The hold is the system context menu: a custom long-press gesture here blocked the row's horizontal scroll.
+        .contextMenu {
+            Button("Open title", systemImage: "info.circle") {
                 Haptics.scrollSnap()
                 router.open(.home)
                 if zoomNamespace != nil {
@@ -92,13 +78,6 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                 } else {
                     router.homePath.append(preview)
                 }
-            })
-        .onChange(of: isHolding) { _, held in
-            // The release can land before or after the Button action, so clear the flag shortly after the hold ends.
-            guard !held, heldOpen else { return }
-            Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                heldOpen = false
             }
         }
     }

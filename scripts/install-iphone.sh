@@ -53,9 +53,12 @@ UDID="${DEVICE%% *}"; NAME="${DEVICE#* }"
 [[ -n "$UDID" ]] || fail "no connected iPhone or iPad: connect it, unlock it and trust this Mac"
 
 xcodegen generate --quiet || fail "xcodegen failed"
-echo "install-iphone: building for $NAME (log: $LOG)"
+# The commit shown in Settings › About; "-dirty" when the working tree has uncommitted changes.
+TAG="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+git diff --quiet HEAD -- 2>/dev/null || TAG="$TAG-dirty"
+echo "install-iphone: building $TAG for $NAME (log: $LOG)"
 xcodebuild -project Blusion.xcodeproj -scheme Blusion -configuration "$CONFIG" -destination "id=$UDID" \
-  -derivedDataPath "$WORK" -jobs 4 -allowProvisioningUpdates build >"$LOG" 2>&1 || true
+  -derivedDataPath "$WORK" -jobs 4 -allowProvisioningUpdates BLUSION_BUILD_TAG="$TAG" build >"$LOG" 2>&1 || true
 if ! grep -q '\*\* BUILD SUCCEEDED \*\*' "$LOG"; then
   grep -E 'error:' "$LOG" | sed -E "s#$ROOT/##g" | sort -u | head -40 >&2
   fail "BUILD FAILED (full log: $LOG)"

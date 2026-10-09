@@ -161,6 +161,9 @@ public final class SettingsViewModel {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = info?["CFBundleVersion"] as? String ?? "1"
-        return "\(version) (\(build))"
+        // The commit the app was built from; an unexpanded "$(...)" means a build made without the install script.
+        let tag = info?["BlusionBuildTag"] as? String ?? ""
+        let commit = tag.isEmpty || tag.hasPrefix("$(") ? "" : " · \(tag)"
+        return "\(version) (\(build))\(commit)"
     }
 }
