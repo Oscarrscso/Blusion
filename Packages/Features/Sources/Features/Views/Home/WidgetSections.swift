@@ -150,69 +150,79 @@ struct ContinueWatchingRow: View {
 
     var body: some View {
         let shown = items.filter { kind.includes($0.request) }
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            if !hideTitle {
-                HStack(spacing: Theme.Spacing.s) {
-                    Text(title)
-                        .font(Theme.Typography.shelfTitle)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .layoutPriority(1)
-                        .accessibilityAddTraits(.isHeader)
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(.gray)
-                        .scaleEffect(0.75)
-                        .opacity(state == .loading ? 1 : 0)
-                        .accessibilityLabel("Refreshing Continue")
-                        .accessibilityHidden(state != .loading)
-                    if !items.isEmpty {
-                        if case .failed(let message) = state {
-                            Button(action: retry) { Image(systemName: "arrow.clockwise") }
-                                .accessibilityLabel(message + " Retry")
-                                .help(message)
-                        } else if state == .disconnected {
-                            Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
-                                .accessibilityLabel("Sign in to Trakt")
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                if !hideTitle {
+                    HStack(spacing: Theme.Spacing.s) {
+                        Button {
+                            if let first = shown.first {
+                                withAnimation(.snappy(duration: 0.28)) { proxy.scrollTo(first.id, anchor: .leading) }
+                            }
+                        } label: {
+                            Text(title)
                         }
-                    }
-                    Spacer(minLength: 0)
-                    if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, Theme.screenPadding)
-            }
-            if !shown.isEmpty {
-                MediaRow(title, hideTitle: true) {
-                    ForEach(shown) { item in
-                        let artworkID = ContentID(item.request.id).baseID
-                        NavigationLink(value: item.request) {
-                            ProgressCard(title: item.request.title, subtitle: item.subtitle,
-                                         artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
-                                         logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
-                                         duration: item.request.expectedDuration)
+                        .buttonStyle(.plain)
+                            .font(Theme.Typography.shelfTitle)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                            .accessibilityAddTraits(.isHeader)
+                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.gray)
+                            .scaleEffect(0.75)
+                            .opacity(state == .loading ? 1 : 0)
+                            .accessibilityLabel("Refreshing Continue")
+                            .accessibilityHidden(state != .loading)
+                        if !items.isEmpty {
+                            if case .failed(let message) = state {
+                                Button(action: retry) { Image(systemName: "arrow.clockwise") }
+                                    .accessibilityLabel(message + " Retry")
+                                    .help(message)
+                            } else if state == .disconnected {
+                                Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
+                                    .accessibilityLabel("Sign in to Trakt")
+                            }
                         }
-                        .buttonStyle(PressableCardStyle())
-                        .titleTapHaptic()
-                        .accessibilityIdentifier("board.continue.\(item.id)")
+                        Spacer(minLength: 0)
                     }
-                }
-            } else if !items.isEmpty {
-                // Hold the rail's height, so switching to an empty kind does not move the page below.
-                Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: (metrics.isRegular ? 180 : 148) / CardAspect.wide.ratio, alignment: .top)
-                    .padding(.horizontal, Theme.screenPadding)
-            } else {
-                emptyState
-                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, Theme.screenPadding)
+                }
+                if !shown.isEmpty {
+                    MediaRow(title, hideTitle: true) {
+                        ForEach(shown) { item in
+                            let artworkID = ContentID(item.request.id).baseID
+                            NavigationLink(value: item.request) {
+                                ProgressCard(title: item.request.title, subtitle: item.subtitle,
+                                             artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
+                                             logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
+                                             duration: item.request.expectedDuration)
+                            }
+                            .buttonStyle(PressableCardStyle())
+                            .titleTapHaptic()
+                            .id(item.id)
+                            .accessibilityIdentifier("board.continue.\(item.id)")
+                        }
+                    }
+                } else if !items.isEmpty {
+                    // Hold the rail's height, so switching to an empty kind does not move the page below.
+                    Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
+                        .padding(.horizontal, Theme.screenPadding)
+                } else {
+                    emptyState
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, Theme.screenPadding)
+                }
             }
+            .animation(.snappy(duration: 0.28), value: kind)
+            .accessibilityIdentifier("board.continueWatching")
         }
-        .animation(.snappy(duration: 0.28), value: kind)
-        .accessibilityIdentifier("board.continueWatching")
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -246,9 +256,13 @@ struct RowPlaceholder: View {
     let header: Header
     let aspect: CardAspect
     let size: CardSize
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
 
     var body: some View {
-        let width = size.width(for: aspect)
+        let landscape = isLandscape && aspect == .poster
+        let displayedAspect: CardAspect = landscape ? .wide : aspect
+        let width = landscape ? (metrics.landscapePosterWidth * size.scale).rounded() : size.width(for: aspect, metrics: metrics)
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             switch header {
             case .title(let title):
@@ -265,15 +279,17 @@ struct RowPlaceholder: View {
                 HStack(alignment: .top, spacing: Theme.cardSpacing) {
                     ForEach(0..<6, id: \.self) { _ in
                         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                            RoundedRectangle(cornerRadius: aspect.cornerRadius, style: .continuous)
+                            RoundedRectangle(cornerRadius: displayedAspect.cornerRadius, style: .continuous)
                                 .fill(Theme.surfaceStrong)
-                                .frame(width: width, height: width / aspect.ratio)
-                                .mediaArtwork(cornerRadius: aspect.cornerRadius)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
-                                Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)
+                                .frame(width: width, height: width / displayedAspect.ratio)
+                                .mediaArtwork(cornerRadius: displayedAspect.cornerRadius)
+                            if !landscape {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
+                                    Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)
+                                }
+                                .frame(height: 34, alignment: .top)
                             }
-                            .frame(height: 34, alignment: .top)
                         }
                     }
                 }

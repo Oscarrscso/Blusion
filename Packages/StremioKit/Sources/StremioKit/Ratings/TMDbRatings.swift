@@ -6,6 +6,21 @@ public struct TMDbArtwork: Sendable, Equatable {
     public let logo: URL?
 }
 
+public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
+    public let id: String
+    public let author: String
+    public let content: String
+    public let url: URL?
+    private let author_details: AuthorDetails?
+
+    public var rating: Double? {
+        guard let rating = author_details?.rating, rating.isFinite, (0...10).contains(rating) else { return nil }
+        return rating
+    }
+
+    private struct AuthorDetails: Decodable, Sendable, Equatable { let rating: Double? }
+}
+
 /// Resolves an IMDb ID to the matching movie or show, its community score and its direct TMDB page.
 public struct TMDbRatings: Sendable {
     public static let defaultBaseURL = URL(string: "https://api.themoviedb.org/3/") ?? URL(fileURLWithPath: "/")
@@ -91,6 +106,20 @@ public struct TMDbRatings: Sendable {
                            portrait: Self.popular(textless.isEmpty ? portraits : textless)?.url(size: "w780"),
                            logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"))
     }
+
+    public func reviews(imdbID: String, type: String) async throws -> [TMDbReview] {
+        let resolved = try await ratings(imdbID: imdbID, type: type)
+        guard let id = resolved.tmdbURL?.lastPathComponent, Int(id) != nil else { return [] }
+        let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", id, "reviews"],
+                                         query: [URLQueryItem(name: "language", value: "en-US")])
+        let result = try await client.get(url, headers: headers,
+                                          limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 6)
+        let response: ReviewsResponse
+        do { response = try JSONDecoder().decode(ReviewsResponse.self, from: result.data) } catch { throw AddonError.invalidJSON }
+        return response.results.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
+    private struct ReviewsResponse: Decodable { let results: [TMDbReview] }
 
     private static func popular(_ images: [Image]) -> Image? {
         images.filter { $0.file_path.hasPrefix("/") }.max {

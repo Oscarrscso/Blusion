@@ -40,16 +40,15 @@ struct HeroSection: View {
 /// line and a "Details" button over the bottom of it.
 struct HeroCarousel: View {
     let items: [MetaPreview]
-    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.homeHeroHeight) private var heroHeight
     /// The page on screen, counted from 0, read from the scroll position.
     @State private var index = 0
 
     var body: some View {
-        // The height follows from the width the screen offers, so it is known on the first layout pass. A height the pages worked out
-        // later made the list above jump.
+        // Home derives this height from its width. Tab-bar minimization must not resize the artwork while scrolling.
         Color.clear
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(height: heroHeight)
             .overlay {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
@@ -89,11 +88,11 @@ struct HeroCarousel: View {
 
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
-    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.homeHeroHeight) private var heroHeight
     var body: some View {
         Color.clear
             .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical) { height, _ in metrics.heroHeight(forContainerHeight: height) }
+            .frame(height: heroHeight)
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)

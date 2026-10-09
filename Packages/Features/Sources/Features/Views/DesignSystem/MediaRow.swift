@@ -122,6 +122,7 @@ struct MediaGrid: View {
     let onLastAppear: (() -> Void)?
     @State private var zoomScope = UUID().uuidString
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
 
     init(items: [MetaPreview], aspect: CardAspect = .poster, showsRating: Bool = true, onLastAppear: (() -> Void)? = nil) {
         self.items = items
@@ -131,7 +132,7 @@ struct MediaGrid: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: metrics.gridColumns(for: aspect), alignment: .leading, spacing: metrics.gridRowSpacing) {
+        LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.gridRowSpacing) {
             ForEach(items, id: \.identity) { item in
                 MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
                     .stretched()

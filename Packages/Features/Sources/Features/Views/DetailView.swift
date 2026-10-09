@@ -320,6 +320,19 @@ struct DetailView: View {
 
     private var credits: some View {
         VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            if !model.reviews.isEmpty {
+                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                    SectionHeader("TMDb Reviews")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: metrics.cardSpacing) {
+                            ForEach(model.reviews) { review in
+                                ReviewCard(review: review)
+                                    .frame(width: metrics.isRegular ? 340 : 280)
+                            }
+                        }
+                    }
+                }
+            }
             if !model.detail.cast.isEmpty {
                 SectionHeader("Cast & Crew")
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -361,6 +374,34 @@ struct DetailView: View {
 }
 
 // MARK: - Pieces
+
+private struct ReviewCard: View {
+    let review: TMDbReview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            HStack {
+                Text(review.author).font(.headline).lineLimit(1)
+                Spacer(minLength: 8)
+                if let rating = review.rating {
+                    Label(rating.formatted(.number.precision(.fractionLength(0...1))), systemImage: "star.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(LocalizedStringKey(review.content))
+                .font(.subheadline)
+                .lineLimit(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let url = review.url {
+                Link("Read on TMDb", destination: url)
+                    .font(.footnote.weight(.semibold))
+            }
+        }
+        .padding(16)
+        .cardSurface()
+    }
+}
 
 /// The logo, or the name while the logo loads and whenever there is none. The logo comes through `ImagePipeline` because
 /// `ArtworkImage` only fills its frame.

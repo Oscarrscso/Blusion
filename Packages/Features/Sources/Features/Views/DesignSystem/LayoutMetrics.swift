@@ -37,28 +37,24 @@ struct LayoutMetrics: Equatable, Sendable {
     var avatarSize: CGFloat
     /// The widest a block of reading text (a synopsis) grows. Wider windows put the information block beside it.
     var readableWidth: CGFloat
-    /// Share of the container's height that the featured carousel takes.
-    var heroHeightFraction: CGFloat
     /// The tallest the featured carousel is allowed to be (a tall window should not make it a tower).
     var heroMaxHeight: CGFloat
 
     static let compact = LayoutMetrics(
         isRegular: false, pageMargin: 20, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12, gridRowSpacing: 16,
         posterWidth: 112, wideCardWidth: 260, squareWidth: 124, tileWidth: 200, episodeWidth: 250, avatarSize: 72,
-        readableWidth: .infinity, heroHeightFraction: 0.66, heroMaxHeight: 640
+        readableWidth: .infinity, heroMaxHeight: 640
     )
 
     static let regular = LayoutMetrics(
         isRegular: true, pageMargin: 32, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16, gridRowSpacing: 20,
         posterWidth: 160, wideCardWidth: 300, squareWidth: 176, tileWidth: 260, episodeWidth: 280, avatarSize: 88,
-        readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
+        readableWidth: 640, heroMaxHeight: 620
     )
 
-    /// The featured carousel's height in a container `height` points tall (the window, the screen). Clamped so a short window
-    /// still shows a shelf and a tall one does not stretch the art.
-    func heroHeight(forContainerHeight height: CGFloat) -> CGFloat {
-        min(max(height * heroHeightFraction, 380), heroMaxHeight)
-    }
+    var continueCardWidth: CGFloat { isRegular ? 180 : 148 }
+
+    var landscapePosterWidth: CGFloat { continueCardWidth * 1.2 }
 
     /// The columns of a poster grid: three on a phone, as many as fit on a wide screen.
     var posterGridColumns: [GridItem] {
@@ -81,8 +77,12 @@ struct LayoutMetrics: Equatable, Sendable {
             : Array(repeating: GridItem(.flexible(), spacing: cardSpacing, alignment: .top), count: 3)
     }
 
-    func gridColumns(for aspect: CardAspect) -> [GridItem] {
-        switch aspect {
+    func gridColumns(for aspect: CardAspect, inLandscape: Bool = false) -> [GridItem] {
+        if inLandscape && aspect == .poster {
+            return [GridItem(.adaptive(minimum: landscapePosterWidth, maximum: landscapePosterWidth * 1.25),
+                             spacing: cardSpacing, alignment: .top)]
+        }
+        return switch aspect {
         case .poster: posterGridColumns
         case .wide: wideGridColumns
         case .square: squareGridColumns
@@ -92,6 +92,7 @@ struct LayoutMetrics: Equatable, Sendable {
 
 extension EnvironmentValues {
     @Entry var isLandscape = false
+    @Entry var homeHeroHeight: CGFloat = 600
     /// Set only to force a layout; `layoutMetrics` falls back to the one the size class asks for.
     @Entry var layoutMetricsOverride: LayoutMetrics?
 

@@ -29,6 +29,7 @@ public final class DetailViewModel {
 
     private let services: AppServices
     public private(set) var tmdbArtwork: TMDbArtwork?
+    public private(set) var reviews: [TMDbReview] = []
 
     public init(preview: MetaPreview, services: AppServices) {
         self.preview = preview
@@ -40,6 +41,7 @@ public final class DetailViewModel {
         isLoading = true
         episodeRatingSeasons.removeAll()
         async let artwork: Void = loadArtwork()
+        async let reviews: Void = loadReviews()
         let result = await services.browse.detail(for: preview)
         detail = result.detail
         isFallback = result.isFallback
@@ -49,6 +51,7 @@ public final class DetailViewModel {
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
         await loadEpisodeRatings()
         await artwork
+        await reviews
     }
 
     public func refresh() async {
@@ -62,6 +65,14 @@ public final class DetailViewModel {
         let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         tmdbArtwork = artwork
+    }
+
+    private func loadReviews() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { reviews = []; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).reviews(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        reviews = loaded ?? []
     }
 
     private var seriesIMDbID: String? {

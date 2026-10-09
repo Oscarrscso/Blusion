@@ -69,6 +69,7 @@ struct MediaCard: View {
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.isLandscape) private var isLandscape
 
     init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
          width: CGFloat? = nil, subtitle: String? = nil) {
@@ -109,20 +110,31 @@ struct MediaCard: View {
     }
 
     private var resolvedWidth: CGFloat {
-        width ?? size.width(for: aspect, metrics: metrics)
+        width ?? (usesLandscapeArtwork ? (metrics.landscapePosterWidth * size.scale).rounded() : size.width(for: aspect, metrics: metrics))
     }
 
+    private var usesLandscapeArtwork: Bool { isLandscape && aspect == .poster }
+
+    private var artworkAspect: CardAspect { usesLandscapeArtwork ? .wide : aspect }
+
     private var showsCaption: Bool {
-        showsTitle ?? aspect.showsCaptionByDefault
+        !usesLandscapeArtwork && (showsTitle ?? aspect.showsCaptionByDefault)
     }
 
     private var artwork: some View {
         artworkSpace
-            .overlay { ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize) }
-            .overlay(alignment: .bottom) {
-                if showsRating && aspect != .wide { PosterRatingsOverlay(item: item) }
+            .overlay {
+                if usesLandscapeArtwork {
+                    LandscapeArtwork(title: item.name, artwork: item.background ?? MetahubArtwork.background(imdbID: item.id) ?? item.poster,
+                                     logo: item.logo ?? MetahubArtwork.logo(imdbID: item.id), maxPixelSize: pixelSize)
+                } else {
+                    ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize)
+                }
             }
-            .mediaArtwork(cornerRadius: aspect.cornerRadius)
+            .overlay(alignment: .bottom) {
+                if showsRating && aspect != .wide && !usesLandscapeArtwork { PosterRatingsOverlay(item: item) }
+            }
+            .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
             .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
     }
 
@@ -132,17 +144,17 @@ struct MediaCard: View {
     @ViewBuilder
     private var artworkSpace: some View {
         if stretches {
-            Color.clear.aspectRatio(aspect.ratio, contentMode: .fit)
+            Color.clear.aspectRatio(artworkAspect.ratio, contentMode: .fit)
         } else {
             let fixed = resolvedWidth
-            Color.clear.frame(width: fixed, height: fixed / aspect.ratio)
+            Color.clear.frame(width: fixed, height: fixed / artworkAspect.ratio)
         }
     }
 
     /// Decoded no larger than the card is drawn, so a long shelf stays light in memory.
     private var pixelSize: CGFloat {
         let fixed = resolvedWidth
-        return min((max(fixed, fixed / aspect.ratio) * displayScale).rounded(.up), 1200)
+        return min((max(fixed, fixed / artworkAspect.ratio) * displayScale).rounded(.up), 1200)
     }
 
     /// One title line and one grey line, always: cards of one kind share a height (a row takes its height from its first card, see

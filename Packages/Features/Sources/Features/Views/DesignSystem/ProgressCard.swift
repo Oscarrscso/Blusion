@@ -12,7 +12,6 @@ struct ProgressCard: View {
     let width: CGFloat?
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
-    @State private var logoImage: UIImage?
 
     init(title: String, subtitle: String? = nil, artwork: URL?, logo: URL? = nil, fraction: Double,
          duration: TimeInterval? = nil, width: CGFloat? = nil) {
@@ -23,45 +22,22 @@ struct ProgressCard: View {
         self.fraction = fraction
         self.duration = duration
         self.width = width
-        _logoImage = State(initialValue: logo.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 400) })
     }
 
     var body: some View {
         let progress = fraction.isFinite ? min(max(fraction, 0), 1) : 0
-        let fixed = width ?? (metrics.isRegular ? 180 : 148)
+        let fixed = width ?? metrics.continueCardWidth
         let overlay = PlaybackProgressOverlay(fraction: progress, duration: duration, episode: subtitle, width: fixed)
         Color.clear
             .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
-            .overlay { ArtworkImage(url: artwork, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200)) }
-            .overlay { Color.black.opacity(0.32).allowsHitTesting(false) }
-            .overlay { overlay }
             .overlay {
-                Group {
-                    if let logoImage {
-                        Image(uiImage: logoImage).resizable().scaledToFit()
-                    } else {
-                        Text(title)
-                            .font(Theme.Typography.cardTitle)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-                .frame(width: fixed * 0.65, height: fixed / CardAspect.wide.ratio * 0.32)
-                .shadow(color: .black.opacity(0.4), radius: 2)
-                .allowsHitTesting(false)
+                LandscapeArtwork(title: title, artwork: artwork, logo: logo, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200))
             }
+            .overlay { overlay }
             .mediaArtwork()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel([title, subtitle, overlay.remainingTime, "\(Int((progress * 100).rounded())) percent watched"].compactMap { $0 }
                 .filter { !$0.isEmpty }.joined(separator: ", "))
-            .task(id: logo) {
-                guard let logo else { logoImage = nil; return }
-                let image = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 400)
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.25)) { logoImage = image }
-            }
     }
 }
 

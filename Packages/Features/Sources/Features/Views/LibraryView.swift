@@ -7,6 +7,7 @@ struct LibraryView: View {
     @State private var model: LibraryViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var actions: TitleActions?
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
     let onOpenAddons: () -> Void
@@ -152,7 +153,7 @@ struct LibraryView: View {
     private var savedSection: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Saved").padding(.horizontal, metrics.pageMargin)
-            LazyVGrid(columns: metrics.posterGridColumns, spacing: metrics.gridRowSpacing) {
+            LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
                 ForEach(model.saved) { item in
                     MediaCardLink(item: item.preview).stretched()
                         .accessibilityIdentifier("library.saved.\(item.id)")
@@ -165,7 +166,7 @@ struct LibraryView: View {
     private var watchedSection: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Watched").padding(.horizontal, metrics.pageMargin)
-            LazyVGrid(columns: metrics.posterGridColumns, spacing: metrics.gridRowSpacing) {
+            LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
                 ForEach(model.watched) { item in
                     let preview = MetaPreview(id: item.seriesID ?? item.contentID, type: item.type, name: item.title, poster: item.poster)
                     MediaCardLink(item: preview).stretched()

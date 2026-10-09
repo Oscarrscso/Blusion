@@ -1827,6 +1827,17 @@
         }
       }
     },
+    "Read on TMDb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read on TMDb"
+          }
+        }
+      }
+    },
     "Redirect URI": {
       "extractionState": "manual",
       "localizations": {
@@ -2417,6 +2428,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "TMDb"
+          }
+        }
+      }
+    },
+    "TMDb Reviews": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb Reviews"
           }
         }
       }
