@@ -121,7 +121,7 @@ struct PersonView: View {
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
-            .softSnappingScroll(loosened: true)
+            .softSnappingScroll()
             .accessibilityIdentifier("person.photos")
         }
     }
@@ -149,7 +149,7 @@ struct PersonView: View {
             }
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
-            .softSnappingScroll(loosened: true)
+            .softSnappingScroll()
         }
     }
 

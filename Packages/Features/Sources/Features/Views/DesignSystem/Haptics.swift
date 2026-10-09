@@ -21,7 +21,7 @@ enum Haptics {
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.8)
     }
 
-    /// The gentler click of a relaxed shelf (see `softSnappingScroll(loosened:)`).
+    /// The gentler click of a shelf card's edge crossing (see `softSnappingScroll()`).
     static func scrollSnapSoft() {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
     }
@@ -34,11 +34,10 @@ extension View {
     }
 
     /// Let a swipe travel naturally, align to cards, and tick each time a card's leading edge passes the screen's leading edge,
-    /// so the tick falls in the gap between two cards. Each card in the shelf must call `reportsShelfEdge(id:)`.
-    /// `loosened` is for pages that read more freely (a person's page): the same alignment, but a card must travel further before a
-    /// tick, and the tick is softer.
-    func softSnappingScroll(loosened: Bool = false) -> some View {
-        modifier(SoftSnappingScrollModifier(loosened: loosened))
+    /// so the tick falls in the gap between two cards. Each card in the shelf must call `reportsShelfEdge(id:)`. Every horizontal
+    /// shelf uses this one feel: the actor shelf's.
+    func softSnappingScroll() -> some View {
+        modifier(SoftSnappingScrollModifier())
     }
 
     /// Tell the enclosing `softSnappingScroll` where this card sits, so it can tick between cards.
@@ -71,11 +70,7 @@ private struct ShelfEdgeKey: PreferenceKey {
 private struct SoftSnappingScrollModifier: ViewModifier {
     /// How far the shelf must travel from the last tick before another card crossing ticks. A small nudge across an edge and back is
     /// not a step between cards, so it stays silent.
-    private static let minimumTravel: CGFloat = 60
-    /// The relaxed shelf ticks less often and more softly.
-    private static let loosenedTravel: CGFloat = 120
-
-    let loosened: Bool
+    private static let minimumTravel: CGFloat = 120
 
     /// The card whose leading edge last reached the screen's leading edge. It changes exactly when a card crosses it.
     @State private var leadingID: AnyHashable?
@@ -92,10 +87,9 @@ private struct SoftSnappingScrollModifier: ViewModifier {
                 let leading = edges.filter { $0.minX <= 0 }.max { $0.minX < $1.minX }?.id
                 guard leading != leadingID else { return }
                 leadingID = leading
-                let travel = loosened ? Self.loosenedTravel : Self.minimumTravel
-                guard isUserScrolling, leading != nil, abs(offset - offsetAtLastTick) >= travel else { return }
+                guard isUserScrolling, leading != nil, abs(offset - offsetAtLastTick) >= Self.minimumTravel else { return }
                 offsetAtLastTick = offset
-                if loosened { Haptics.scrollSnapSoft() } else { Haptics.scrollSnap() }
+                Haptics.scrollSnapSoft()
             }
             .onScrollPhaseChange { _, phase in
                 switch phase {

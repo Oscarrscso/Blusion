@@ -60,7 +60,7 @@ struct DetailView: View {
             let artworkWidth = max(120, (size.width - metrics.pageMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 ArtworkImage(url: model.backdropURL, maxPixelSize: 4096, contentMode: .fit,
-                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 1)
+                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
                     .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
@@ -84,7 +84,7 @@ struct DetailView: View {
                 .overlay(alignment: .top) {
                     ZStack(alignment: .bottom) {
                         ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
-                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 1)
+                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
                         BottomFade(length: 0.42)
                     }
                     .frame(width: size.width, height: height + scrollPull)
@@ -348,9 +348,12 @@ struct DetailView: View {
                             ForEach(model.reviews) { review in
                                 ReviewCard(review: review)
                                     .frame(width: metrics.isRegular ? 340 : 280)
+                                    .reportsShelfEdge(id: review.id)
                             }
                         }
+                        .scrollTargetLayout()
                     }
+                    .softSnappingScroll()
                 }
             }
             if let people = model.castAndCrew, !people.isEmpty {
@@ -362,7 +365,7 @@ struct DetailView: View {
                     }
                     .scrollTargetLayout()
                 }
-                .softSnappingScroll(loosened: true)
+                .softSnappingScroll()
                 .accessibilityIdentifier("detail.castCarousel")
             } else if !model.detail.cast.isEmpty {
                 // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
@@ -380,9 +383,12 @@ struct DetailView: View {
                             .frame(width: metrics.avatarSize + 12)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(name)
+                            .reportsShelfEdge(id: name)
                         }
                     }
+                    .scrollTargetLayout()
                 }
+                .softSnappingScroll()
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 SectionHeader("Information")
@@ -415,7 +421,7 @@ struct DetailView: View {
                 .scrollTargetLayout()
             }
             .scrollClipDisabled()
-            .softSnappingScroll(loosened: true)
+            .softSnappingScroll()
             .accessibilityIdentifier("detail.related")
         }
     }

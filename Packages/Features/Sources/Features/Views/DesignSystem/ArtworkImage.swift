@@ -19,7 +19,7 @@ struct ArtworkImage: View {
     @State private var placeholderImage: UIImage?
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
-         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 3, imageAlignment: Alignment = .center) {
+         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, imageAlignment: Alignment = .center) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
