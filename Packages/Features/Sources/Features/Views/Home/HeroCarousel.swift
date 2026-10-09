@@ -31,7 +31,7 @@ struct HeroSection: View {
             }
         case .failed(let error):
             InlineErrorView(error.shortDescription, retry: onRetry)
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
     }
 }

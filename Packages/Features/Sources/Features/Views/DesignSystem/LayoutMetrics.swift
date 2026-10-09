@@ -57,6 +57,10 @@ struct LayoutMetrics: Equatable, Sendable {
 
     var continueCardWidth: CGFloat { isRegular ? 220 : 180 }
 
+    /// The horizontal inset of a title page's content: the page margin, but never less than `Theme.Spacing.l`. Home uses it too, so its
+    /// headings, selector and shelves line up with the title page.
+    var contentMargin: CGFloat { max(pageMargin, Theme.Spacing.l) }
+
     /// Other landscape rows keep their own base, so a larger Continue card does not resize them.
     var landscapePosterWidth: CGFloat { (isRegular ? 180 : 148) * 1.2 }
 

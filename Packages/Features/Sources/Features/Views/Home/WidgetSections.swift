@@ -29,6 +29,7 @@ struct WidgetRow: View {
     let row: RowConfiguration
     let onRetry: () -> Void
     @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         rowBody
@@ -57,7 +58,7 @@ struct WidgetRow: View {
             case .failed(let error):
                 RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
                     InlineErrorView(error.shortDescription, retry: onRetry)
-                        .padding(.horizontal, Theme.screenPadding)
+                        .padding(.horizontal, metrics.pageMargin)
                 }
             case .loaded:
                 RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
@@ -67,7 +68,7 @@ struct WidgetRow: View {
                         Text("Nothing here yet")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, Theme.screenPadding)
+                            .padding(.horizontal, metrics.pageMargin)
                     }
                 }
             }
@@ -105,13 +106,14 @@ struct RankBadge: View {
 /// A `.unsupported` widget: a Fusion row type this version cannot show. Kept in the layout, with its title and a plain message.
 struct UnsupportedWidgetRow: View {
     let widget: HomeWidget
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
             Text("Blusion can't show this kind of row yet.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, Theme.screenPadding)
+                .padding(.horizontal, metrics.pageMargin)
         }
         .accessibilityIdentifier("board.unsupported.\(widget.id)")
     }
@@ -189,7 +191,7 @@ struct ContinueWatchingRow: View {
                         if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
                     }
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, Theme.screenPadding)
+                    .padding(.horizontal, metrics.pageMargin)
                 }
                 if !shown.isEmpty {
                     MediaRow(title, hideTitle: true) {
@@ -213,12 +215,12 @@ struct ContinueWatchingRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
-                        .padding(.horizontal, Theme.screenPadding)
+                        .padding(.horizontal, metrics.pageMargin)
                 } else {
                     emptyState
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, Theme.screenPadding)
+                        .padding(.horizontal, metrics.pageMargin)
                 }
             }
             .animation(.snappy(duration: 0.28), value: kind)
@@ -267,12 +269,12 @@ struct RowPlaceholder: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             switch header {
             case .title(let title):
-                SectionHeader(title).padding(.horizontal, Theme.screenPadding)
+                SectionHeader(title).padding(.horizontal, metrics.pageMargin)
             case .bar:
                 Capsule()
                     .fill(Theme.surfaceStrong)
                     .frame(width: 150, height: 20)
-                    .padding(.horizontal, Theme.screenPadding)
+                    .padding(.horizontal, metrics.pageMargin)
             case .none:
                 EmptyView()
             }
@@ -297,7 +299,7 @@ struct RowPlaceholder: View {
                 .shimmering()
             }
             .scrollDisabled(true)
-            .contentMargins(.horizontal, Theme.screenPadding, for: .scrollContent)
+            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
         }
         .accessibilityElement(children: .ignore)
@@ -310,11 +312,12 @@ private struct RowFrame<Content: View>: View {
     let title: String
     let hideTitle: Bool
     @ViewBuilder let content: () -> Content
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             if !hideTitle {
-                SectionHeader(title).padding(.horizontal, Theme.screenPadding)
+                SectionHeader(title).padding(.horizontal, metrics.pageMargin)
             }
             content()
         }
@@ -325,6 +328,7 @@ private struct RowFrame<Content: View>: View {
 struct IssueMessage: View {
     let issue: WidgetSourceError
     @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -339,7 +343,7 @@ struct IssueMessage: View {
                     .accessibilityIdentifier("home.openSettings")
             }
         }
-        .padding(.horizontal, Theme.screenPadding)
+        .padding(.horizontal, metrics.pageMargin)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

@@ -39,7 +39,7 @@ struct DetailView: View {
     private static let scrollIndicatorInset: CGFloat = 260
     /// How long the title waits for the hero picture, counted from opening the page. After this it shows over the poster.
     private static let heroTimeout: Duration = .seconds(5)
-    private var contentMargin: CGFloat { max(metrics.pageMargin, Theme.Spacing.l) }
+    private var contentMargin: CGFloat { metrics.contentMargin }
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {

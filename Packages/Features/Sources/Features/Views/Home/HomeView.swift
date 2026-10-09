@@ -23,10 +23,26 @@ struct HomeView: View {
             content
                 .environment(\.heroContainerHeight, geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
                 .environment(\.isHomeScrolling, isScrolling)
+                .environment(\.layoutMetrics, homeMetrics)
         }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)
+            .toolbar {
+                if model.phase == .ready {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            router.showWidgets()
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                        }
+                        .buttonStyle(.glass)
+                        .foregroundStyle(.white)
+                        .accessibilityLabel("Customize Home")
+                        .accessibilityIdentifier("home.customize")
+                    }
+                }
+            }
             .task { await model.observeAddons() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
@@ -43,6 +59,14 @@ struct HomeView: View {
             .onChange(of: router.tab) { old, _ in
                 if old == .settings { Task { await model.load() } }
             }
+    }
+
+    /// Home's page margin is the title page's content margin, so its headings, the Continue selector and the shelves line up with it.
+    /// Shelves still scroll edge to edge; only their first and last cards are inset.
+    private var homeMetrics: LayoutMetrics {
+        var homeMetrics = metrics
+        homeMetrics.pageMargin = metrics.contentMargin
+        return homeMetrics
     }
 
     /// A spotlight without a heading extends beneath the navigation bar, which is then clear and has no title; a visible heading stays
@@ -93,7 +117,6 @@ struct HomeView: View {
                         if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
                     }
                 }
-                customizeButton
             }
             .padding(.bottom, Theme.Spacing.xxl)
         }
@@ -145,21 +168,6 @@ struct HomeView: View {
 
     private func retry(_ section: HomeViewModel.Section) {
         Task { await model.retry(sectionID: section.id) }
-    }
-
-    private var customizeButton: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button {
-                router.showWidgets()
-            } label: {
-                Label("Customize Home", systemImage: "slider.horizontal.3")
-            }
-            .buttonStyle(.glassCapsule)
-            .accessibilityIdentifier("home.customize")
-            Spacer(minLength: 0)
-        }
-        .padding(.top, Theme.Spacing.s)
     }
 }
 
