@@ -52,7 +52,7 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   OMDb API key (missing IMDb scores, per-episode IMDb scores, Rotten Tomatoes, Metacritic) and a TMDb API Read Access Token for TMDb ratings;
   select **Save Review Services**. Credentials are stored in the Keychain. The free OMDb key allows 1,000 lookups a day; if OMDb refuses the
   key or the quota runs out, Blusion stops asking for an hour.
-  Saving credentials refreshes visible posters and episodes, including cached missing scores. **Refresh Ratings** or pull to refresh
+  Saving credentials refreshes visible posters and episodes, including cached missing scores. **Refresh Ratings** or reopen the screen
   checks again while keeping existing scores visible. Title scores refresh weekly, episode seasons daily, and missing scores hourly;
   temporary failures leave cached scores available offline and can retry after a minute. OMDb errors appear under Review services.
 - **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are

@@ -16,7 +16,7 @@ Wi-Fi with no internet but a working home server, it would show the wrong banner
 - `Connectivity.isOffline(errors)` is true only when there is at least one failure and **all** of them are `.offline`. One addon that answers
   with HTTP 500 means the network is up, so the per-addon chips stay and no banner is shown.
 - Home, Discover, Search and the stream picker replace their error chips (and the misleading "No streams found") with one `OfflineBanner`.
-  Pull to refresh and "Try again" stay available.
+  "Try again" stays available.
 
 Consequences: no extra permission or entitlement, no stale state to keep in sync, and the logic is a pure function tested on Linux
 (`OfflineStateTests`). Cost: the banner appears after the first failed requests, not before; acceptable because nothing else would work either.

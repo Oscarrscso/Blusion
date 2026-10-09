@@ -80,7 +80,7 @@ public final class HomeViewModel {
         await loadRows(generation: current)
     }
 
-    /// Pull to refresh: forgets every cached page, then loads again. The rows keep what they show until the new items arrive.
+    /// Forgets every cached page, then loads again. The rows keep what they show until the new items arrive.
     public func refresh() async {
         await services.posterRatings.refresh()
         await services.widgetContent.invalidate()

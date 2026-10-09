@@ -37,7 +37,6 @@ struct HomeView: View {
                     do { try await Task.sleep(for: .seconds(interval)) } catch { return }
                 }
             }
-            .refreshable { await model.refresh() }
             .onChange(of: actions?.watchedIdentities) { Task { await model.refreshContinueWatching() } }
             .onChange(of: router.userStateRevision) { _, _ in Task { await model.refreshContinueWatching() } }
             // Coming back from Settings: addons or widgets may have changed.

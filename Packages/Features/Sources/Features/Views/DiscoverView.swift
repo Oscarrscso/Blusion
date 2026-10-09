@@ -28,7 +28,6 @@ struct DiscoverView: View {
         .screenBackground()
         .navigationTitle("Discover")
         .task { await model.loadSources() }
-        .refreshable { await ratings?.refresh(); await model.reload() }
         .accessibilityIdentifier("discover.scroll")
     }
 

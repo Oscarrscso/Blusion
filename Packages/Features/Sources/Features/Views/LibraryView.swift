@@ -63,7 +63,6 @@ struct LibraryView: View {
                 }
             }
         }
-        .refreshable { await ratings?.refresh(); await model.refresh(); await actions?.refresh() }
         .onChange(of: actions?.savedIdentities) { Task { await model.load() } }
         .onChange(of: actions?.watchedIdentities) { Task { await model.load() } }
         .accessibilityIdentifier("library.list")

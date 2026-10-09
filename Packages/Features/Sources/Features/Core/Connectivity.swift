@@ -5,7 +5,7 @@ import StremioKit
 /// There is no reachability monitor on purpose: the addon requests themselves are the evidence, so the banner can never disagree with them.
 public enum Connectivity {
     public static let offlineTitle = "You're offline"
-    public static let offlineMessage = "Blusion can't reach your addons. Check your connection and pull to refresh. Addons on your home network need Wi-Fi."
+    public static let offlineMessage = "Blusion can't reach your addons. Check your connection and try again. Addons on your home network need Wi-Fi."
 
     /// True when there is at least one failure and every failure is `.offline`.
     public static func isOffline(_ errors: [AddonError]) -> Bool {

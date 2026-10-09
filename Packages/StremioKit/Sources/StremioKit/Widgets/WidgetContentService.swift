@@ -120,7 +120,7 @@ public final class WidgetContentService: Sendable {
         }
     }
 
-    /// Forgets every cached page (pull to refresh). The snapshots stay, so last-known items remain available while the reload runs.
+    /// Forgets every cached page so the next load asks again. The snapshots stay, so last-known items remain available while the reload runs.
     public func invalidate() async {
         await cache.removeAll()
     }

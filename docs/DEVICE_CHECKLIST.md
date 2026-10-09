@@ -34,7 +34,7 @@ Run each on a real iPhone (and the iPad item on an iPad). Tick with the date and
 
 ## Release (M8)
 
-- [ ] **Offline:** with Airplane Mode on, Home, Discover, Search and a stream list show the "You're offline" banner (not a pile of error chips); turning it off and pulling to refresh recovers without a relaunch.
+- [ ] **Offline:** with Airplane Mode on, Home, Discover, Search and a stream list show the "You're offline" banner (not a pile of error chips); turning it off and tapping "Try again" recovers without a relaunch.
 - [ ] **Launch time:** on the oldest supported iPhone you own, cold launch to the Home tab feels instant (budget in `LaunchPerformanceTests`: 8 s ceiling, `XCTApplicationLaunchMetric` baseline to set once on the reference device).
 - [ ] **Leaks:** run `./scripts/leaks.sh` on a Mac, or Instruments > Leaks for a few minutes of browsing and one playback; no leak stack runs through Blusion's own code.
 - [ ] **Privacy manifest:** Xcode > Product > Archive > *Generate Privacy Report* shows exactly the declared UserDefaults reason and nothing else.

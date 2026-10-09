@@ -46,7 +46,7 @@ public final class CatalogListViewModel {
         self.services = services
     }
 
-    /// Pull to refresh must ask the sources again, even when their cached page has not expired.
+    /// Refresh must ask the sources again, even when their cached page has not expired.
     public func refresh() async {
         await services.posterRatings.refresh()
         await services.widgetContent.invalidate()

@@ -41,7 +41,6 @@ struct DetailView: View {
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
-            .refreshable { await model.refresh() }
         }
         .screenBackground()
         .ignoresSafeArea(.container, edges: isLandscape ? [] : .top)
