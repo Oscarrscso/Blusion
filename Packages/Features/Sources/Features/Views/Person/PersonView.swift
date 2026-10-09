@@ -20,17 +20,20 @@ struct PersonView: View {
                 header
                     .padding(.horizontal, metrics.pageMargin)
                 if !model.photoStrip.isEmpty {
-                    photos.padding(.top, Theme.Spacing.xxl)
+                    photos.padding(.top, Theme.Spacing.xxl).reportsSectionEdge(id: "photos")
                 }
                 if !model.knownFor.isEmpty {
-                    knownFor.padding(.top, Theme.Spacing.xxl)
+                    knownFor.padding(.top, Theme.Spacing.xxl).reportsSectionEdge(id: "knownFor")
                 }
                 credits
                     .padding(.horizontal, metrics.pageMargin)
                     .padding(.top, Theme.Spacing.xxl)
+                    .reportsSectionEdge(id: "credits")
             }
+            .scrollTargetLayout()
             .padding(.bottom, Theme.Spacing.xxl)
         }
+        .verticalScrollFeel()
         .screenBackground()
         .navigationTitle(model.destination.name)
         .navigationBarTitleDisplayMode(.inline)

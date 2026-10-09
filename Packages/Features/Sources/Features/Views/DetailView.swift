@@ -26,18 +26,22 @@ struct DetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     feature(in: geometry.size)
-                    if model.isSeries { episodesSection }
+                    if model.isSeries { episodesSection.reportsSectionEdge(id: "episodes") }
                     credits
                         .padding(.horizontal, metrics.pageMargin)
                         .padding(.top, Theme.Spacing.l)
+                        .reportsSectionEdge(id: "credits")
                     if !model.relatedTitles.isEmpty {
                         related
                             .padding(.horizontal, metrics.pageMargin)
                             .padding(.top, Theme.Spacing.xl)
+                            .reportsSectionEdge(id: "related")
                     }
                 }
+                .scrollTargetLayout()
                 .padding(.bottom, Theme.Spacing.xxl)
             }
+            .verticalScrollFeel()
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
@@ -60,7 +64,7 @@ struct DetailView: View {
             let artworkWidth = max(120, (size.width - metrics.pageMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 ArtworkImage(url: model.backdropURL, maxPixelSize: 4096, contentMode: .fit,
-                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
+                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 1)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
                     .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
@@ -84,7 +88,7 @@ struct DetailView: View {
                 .overlay(alignment: .top) {
                     ZStack(alignment: .bottom) {
                         ArtworkImage(url: model.portraitArtworkURL, maxPixelSize: 4096, contentMode: .fill,
-                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 4)
+                                     placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 1)
                         BottomFade(length: 0.42)
                     }
                     .frame(width: size.width, height: height + scrollPull)
