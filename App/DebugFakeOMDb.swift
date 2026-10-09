@@ -17,7 +17,8 @@ struct DebugFakeOMDbTransport: HTTPTransport {
             body = #"{"Response":"True","imdbRating":"N/A","Metascore":"N/A","Ratings":[]}"#
         } else {
             let score = 5.0 + Double(seed % 40) / 10
-            body = #"{"Response":"True","imdbRating":"\#(String(format: "%.1f", score))","Metascore":"\#(40 + seed % 55)","Ratings":[{"Source":"Rotten Tomatoes","Value":"\#(30 + seed % 70)%"}]}"#
+            body = #"{"Response":"True","imdbRating":"\#(String(format: "%.1f", score))","Metascore":"\#(40 + seed % 55)","#
+                + #""Ratings":[{"Source":"Rotten Tomatoes","Value":"\#(30 + seed % 70)%"}]}"#
         }
         return HTTPResult(data: Data(body.utf8), response: HTTPResponseInfo(statusCode: 200, url: request.url))
     }

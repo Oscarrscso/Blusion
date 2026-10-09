@@ -118,10 +118,15 @@ public final class SettingsViewModel {
         settings.omdbAPIKey = omdb.isEmpty ? nil : omdb
         settings.tmdbReadToken = tmdb.isEmpty ? nil : tmdb
         await services.settings.save(settings)
+        let saved = await services.settings.load()
         await services.posterRatings.setReviewServices(
-            omdb: settings.omdbAPIKey.map { OMDbRatings(client: services.client, apiKey: $0) },
-            tmdb: settings.tmdbReadToken.map { TMDbRatings(client: services.client, readAccessToken: $0) }, refreshCache: true)
-        lastMessage = "Review services saved. Ratings will refresh as you browse."
+            omdb: saved.omdbAPIKey.map { OMDbRatings(client: services.client, apiKey: $0) },
+            tmdb: saved.tmdbReadToken.map { TMDbRatings(client: services.client, readAccessToken: $0) }, refreshCache: true)
+        if saved.omdbAPIKey == settings.omdbAPIKey, saved.tmdbReadToken == settings.tmdbReadToken {
+            lastMessage = "Review services saved. Ratings will refresh as you browse."
+        } else {
+            lastMessage = "Review credentials could not be saved to secure storage. Try saving them again."
+        }
     }
 
     public func refreshRatings() async {

@@ -73,7 +73,7 @@ struct HeroCarousel: View {
 
     private var pageDots: some View {
         HStack(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.element.identity) { position, item in
+            ForEach(Array(items.enumerated()), id: \.element.identity) { position, _ in
                 let isCurrent = position == index
                 Capsule()
                     .fill(.white.opacity(isCurrent ? 0.95 : 0.35))

@@ -289,7 +289,9 @@ import StremioKitTestSupport
     }
 
     @Test func candidatesCarryHeadersSubtitlesAndHashes() async throws {
-        let stream = #"{"name":"P","url":"https://a.example.com/p.mp4","subtitles":[{"id":"s","url":"https://a.example.com/s.srt","lang":"eng"}],"behaviorHints":{"proxyHeaders":{"request":{"Referer":"https://r.example.com"}},"videoHash":"abc","videoSize":12345,"filename":"p.mp4"}}"#
+        let stream = #"{"name":"P","url":"https://a.example.com/p.mp4","#
+            + #""subtitles":[{"id":"s","url":"https://a.example.com/s.srt","lang":"eng"}],"#
+            + #""behaviorHints":{"proxyHeaders":{"request":{"Referer":"https://r.example.com"}},"videoHash":"abc","videoSize":12345,"filename":"p.mp4"}}"#
         let services = try await services(bodies: [body([stream])])
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()

@@ -65,7 +65,8 @@ import StremioKitTestSupport
 
     @Test func resumesFromSavedProgress() async throws {
         let store = InMemoryProgressStore()
-        await store.save(WatchProgress(id: request.identity, type: "movie", contentID: "tt1", title: "Movie", position: 75, duration: 120, isWatched: false, updatedAt: Date()))
+        await store.save(WatchProgress(id: request.identity, type: "movie", contentID: "tt1", title: "Movie",
+            position: 75, duration: 120, isWatched: false, updatedAt: Date()))
         let engines = Engines(["a": .plays(duration: 120)])
         let model = PlayerViewModel(plan: PlaybackPlan(request: request, candidates: [candidate("a")]), services: try await services(progress: store, engines: engines))
         await model.start()
@@ -75,7 +76,8 @@ import StremioKitTestSupport
 
     @Test func aWatchedTitleStartsFromTheBeginning() async throws {
         let store = InMemoryProgressStore()
-        await store.save(WatchProgress(id: request.identity, type: "movie", contentID: "tt1", title: "Movie", position: 100, duration: 120, isWatched: true, updatedAt: Date()))
+        await store.save(WatchProgress(id: request.identity, type: "movie", contentID: "tt1", title: "Movie",
+            position: 100, duration: 120, isWatched: true, updatedAt: Date()))
         let engines = Engines(["a": .plays(duration: 120)])
         let model = PlayerViewModel(plan: PlaybackPlan(request: request, candidates: [candidate("a")]), services: try await services(progress: store, engines: engines))
         await model.start()
@@ -124,7 +126,8 @@ import StremioKitTestSupport
         #expect(model.subtitleChoice == .external(model.subtitleOptions[0].id), "English matches the preference")
         #expect(model.subtitleOptions.map(\.language) == ["eng", "fre"])
         let engine = try #require(engines.made["a"])
-        for (position, expected) in [(0.5, nil), (1.0, "First cue"), (2.9, "First cue"), (3.0, nil), (5.0, "Second cue"), (8.2, "Third cue"), (9.6, nil)] as [(Double, String?)] {
+        for (position, expected) in [(0.5, nil), (1.0, "First cue"), (2.9, "First cue"), (3.0, nil),
+            (5.0, "Second cue"), (8.2, "Third cue"), (9.6, nil)] as [(Double, String?)] {
             engine.simulate(position: position)
             try await waitUntil { model.state.position == position }
             #expect(model.cueText == expected, "at \(position)s")
@@ -134,7 +137,9 @@ import StremioKitTestSupport
 
     @Test func noDefaultLanguageMeansSubtitlesStayOff() async throws {
         let engines = Engines(["a": .plays(duration: 60)])
-        let model = PlayerViewModel(plan: PlaybackPlan(request: request, candidates: [candidate("a", subtitles: [english])]), services: try await services(engines: engines, subtitleBody: srt))
+        let model = PlayerViewModel(
+            plan: PlaybackPlan(request: request, candidates: [candidate("a", subtitles: [english])]),
+            services: try await services(engines: engines, subtitleBody: srt))
         await model.start()
         await model.waitForSubtitles()
         #expect(model.subtitleChoice == .off && model.cueText == nil)
@@ -215,7 +220,8 @@ import StremioKitTestSupport
     @Test func controlsHideWhenIdleWhilePlayingButNotWhilePausedOrScrubbing() async throws {
         let clock = ClockBox2(Date(timeIntervalSince1970: 1000))
         let engines = Engines(["a": .plays(duration: 100)])
-        let model = PlayerViewModel(plan: PlaybackPlan(request: request, candidates: [candidate("a")]), services: try await services(engines: engines), now: { clock.now })
+        let model = PlayerViewModel(plan: PlaybackPlan(request: request, candidates: [candidate("a")]),
+            services: try await services(engines: engines), now: { clock.now })
         await model.start()
         #expect(model.controlsVisible)
         clock.now = clock.now.addingTimeInterval(2)
@@ -287,7 +293,8 @@ import StremioKitTestSupport
     @Test func nextEpisodeAutoSelectsTheStreamInTheSameBingeGroup() async throws {
         let withGroup = { (name: String, url: String, group: String) in #"{"name":"\#(name)","url":"\#(url)","behaviorHints":{"bingeGroup":"\#(group)"}}"# }
         let next = #"{"streams":[\#(withGroup("other", "https://a.example.com/e2-other.mp4", "g-720")),\#(withGroup("match", "https://a.example.com/e2-match.mp4", "g-1080"))]}"#
-        let episode = StreamRequest(type: "series", id: "tt9:1:1", title: "Show · One", season: 1, episode: 1, nextID: "tt9:1:2", nextTitle: "Show · Two", nextSeason: 1, nextEpisode: 2)
+        let episode = StreamRequest(type: "series", id: "tt9:1:1", title: "Show · One", season: 1, episode: 1,
+            nextID: "tt9:1:2", nextTitle: "Show · Two", nextSeason: 1, nextEpisode: 2)
         let engines = Engines(["a": .plays(duration: 10)])
         let services = try await services(engines: engines, streamBodies: [next])
         let model = PlayerViewModel(plan: PlaybackPlan(request: episode, candidates: [candidate("a", binge: "g-1080")]), services: services)

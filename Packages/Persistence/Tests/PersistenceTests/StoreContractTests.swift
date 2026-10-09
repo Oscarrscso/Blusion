@@ -114,7 +114,7 @@ func exerciseLibraryStoreContract(_ store: any LibraryStore) async {
         try await exerciseSecretStoreContract(FileSecretStore(fileURL: file))
 
         try await FileSecretStore(fileURL: file).set("https://example.com/TOKEN/manifest.json", for: "addon.a.manifestURL")
-        try await FileSecretStore(fileURL: file).set("key", for: "ratings.omdb")
+        try await FileSecretStore(fileURL: file).set("key", for: "ratings.tmdb")
         #expect(try await FileSecretStore(fileURL: file).get("addon.a.manifestURL") == "https://example.com/TOKEN/manifest.json")
         let mode = try #require(FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber)
         #expect(mode.intValue == 0o600)

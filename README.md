@@ -57,17 +57,18 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   temporary failures leave cached scores available offline and can retry after a minute. OMDb errors appear under Review services.
 - **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are
   fetched when you open it and shown with the IMDb mark after each episode's description.
+  A TMDb credential also fills episodes that have no addon rating, labeled TMDb to identify their source.
 - **Best Blu-ray edition:** pressing **Play** on a film automatically looks it up on
   [Best Blurays](https://www.bestblurays.com) while addons search for streams. The streams page shows the recommended release,
   video notes, 4K tier and anything upcoming, with a link to the full comparison. The lookup keeps its answer while the stream picker
   is open and does not delay playback; it makes at most four small requests to match the film's title, year and IMDb id.
 - **Watched:** a movie or a whole show can be marked from its title page (a show marks every episode that has aired; clearing asks first).
   The season menu marks one season, and a poster's long-press menu marks a whole show.
-- **Settings → Accounts → Trakt:** the supplied public Client ID is prefilled. Enter the exact Redirect URI registered for that
-  Trakt API app, then select **Connect Trakt**. PKCE sign-in needs no Client Secret. A registered `blusion://trakt/callback`
-  returns through the native browser session; other registered callbacks can be pasted after authorization.
+- **Settings → Accounts → Trakt:** select **Connect**. The app uses its built-in public Client ID and PKCE sign-in with
+  `blusion://trakt/callback`; no API configuration or Client Secret is needed.
   Connecting imports watchlist (watch later) and collection into **Library → Saved**, and history into **Library → Watched**.
-  Use **Refresh from Trakt** for later changes. Import adds missing IMDb titles without deleting local items or sending data to Trakt.
+  Use **Import collection** for later changes, or **Sync** to also send local saved titles and watched items to Trakt.
+  Import adds missing IMDb titles without deleting local items or sending data to Trakt.
   Playback positions stay on the device. Tokens and connection settings use the Keychain.
 
 ## Adding an addon

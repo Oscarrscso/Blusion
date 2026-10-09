@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persists `PlaybackSettings`: plain preferences in `UserDefaults`; the streaming server URL (it may embed credentials) and the
-/// Trakt client ID live in a `SecretStore`.
+/// Persists `PlaybackSettings`: plain preferences in `UserDefaults`; the streaming server URL (it may embed credentials), the Trakt
+/// client ID and the TMDb credential live in a `SecretStore`.
 public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
     public enum Keys {
         public static let preferredResolution = "settings.preferredResolution"
@@ -13,26 +13,28 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let continueWatchingRefreshSeconds = "settings.continueWatchingRefreshSeconds"
         public static let serverSecret = "settings.streamingServerURL"
         public static let traktClientSecret = "settings.traktClientID"
-        public static let omdbAPIKey = "settings.omdbAPIKey"
         public static let tmdbReadToken = "settings.tmdbReadToken"
+        public static let omdbAPIKey = "settings.omdbAPIKey"
     }
 
     private let defaults: UserDefaults
     private let secrets: any SecretStore
+    private let logger: AddonLogger
 
-    public init(defaults: UserDefaults = .standard, secrets: any SecretStore) {
+    public init(defaults: UserDefaults = .standard, secrets: any SecretStore, logger: AddonLogger = .silent) {
         self.defaults = defaults
         self.secrets = secrets
+        self.logger = logger
     }
 
     public func load() async -> PlaybackSettings {
         let resolution = defaults.integer(forKey: Keys.preferredResolution)
         let language = defaults.string(forKey: Keys.subtitleLanguage)
         let fallback = defaults.object(forKey: Keys.fallbackEngineEnabled) as? Bool ?? true
-        let server = try? await secrets.get(Keys.serverSecret)
-        let traktClientID = try? await secrets.get(Keys.traktClientSecret)
-        let omdbAPIKey = try? await secrets.get(Keys.omdbAPIKey)
-        let tmdbReadToken = try? await secrets.get(Keys.tmdbReadToken)
+        let server = await secret(Keys.serverSecret)
+        let traktClientID = await secret(Keys.traktClientSecret)
+        let tmdbReadToken = await secret(Keys.tmdbReadToken)
+        let omdbAPIKey = await secret(Keys.omdbAPIKey)
         let player = defaults.string(forKey: Keys.playerPreference).flatMap(PlayerPreference.init(rawValue:)) ?? PlaybackSettings().playerPreference
         let posterRatings = defaults.object(forKey: Keys.showsPosterRatings) as? Bool ?? true
         return PlaybackSettings(preferredResolution: resolution > 0 ? resolution : nil, subtitleLanguage: language?.isEmpty == false ? language : nil,
@@ -59,21 +61,46 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         defaults.set(settings.autoPlayBestStream, forKey: Keys.autoPlayBestStream)
         defaults.set(settings.continueWatchingRefreshSeconds ?? 300, forKey: Keys.continueWatchingRefreshSeconds)
         if let server = settings.streamingServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !server.isEmpty {
-            try? await secrets.set(server, for: Keys.serverSecret)
+            await store(server, for: Keys.serverSecret)
         } else {
-            try? await secrets.remove(Keys.serverSecret)
+            await remove(Keys.serverSecret)
         }
         if let traktClientID = settings.traktClientID?.trimmingCharacters(in: .whitespacesAndNewlines), !traktClientID.isEmpty {
-            try? await secrets.set(traktClientID, for: Keys.traktClientSecret)
+            await store(traktClientID, for: Keys.traktClientSecret)
         } else {
-            try? await secrets.remove(Keys.traktClientSecret)
+            await remove(Keys.traktClientSecret)
         }
-        for (key, value) in [(Keys.omdbAPIKey, settings.omdbAPIKey), (Keys.tmdbReadToken, settings.tmdbReadToken)] {
-            if let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
-                try? await secrets.set(value, for: key)
-            } else {
-                try? await secrets.remove(key)
-            }
+        if let tmdb = settings.tmdbReadToken?.trimmingCharacters(in: .whitespacesAndNewlines), !tmdb.isEmpty {
+            await store(tmdb, for: Keys.tmdbReadToken)
+        } else {
+            await remove(Keys.tmdbReadToken)
+        }
+        if let omdb = settings.omdbAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines), !omdb.isEmpty {
+            await store(omdb, for: Keys.omdbAPIKey)
+        } else {
+            await remove(Keys.omdbAPIKey)
+        }
+    }
+
+    /// A failed read is logged with its reason and reads as "not set": the settings screen then shows the field empty.
+    private func secret(_ key: String) async -> String? {
+        do {
+            return try await secrets.get(key)
+        } catch {
+            logger.log(.error, "secret \(key) could not be read: \(error)")
+            return nil
+        }
+    }
+
+    private func store(_ value: String, for key: String) async {
+        do { try await secrets.set(value, for: key) } catch {
+            logger.log(.error, "secret \(key) could not be saved: \(error)")
+        }
+    }
+
+    private func remove(_ key: String) async {
+        do { try await secrets.remove(key) } catch {
+            logger.log(.error, "secret \(key) could not be removed: \(error)")
         }
     }
 }

@@ -29,7 +29,8 @@ import StremioKitTestSupport
                     return StubTransport.response(Data(token.utf8), for: request)
                 }
                 #expect(body?["grant_type"] == "refresh_token" && body?["refresh_token"] == "refresh")
-                return StubTransport.response(Data(#"{"access_token":"renewed","refresh_token":"next-refresh","expires_in":604800,"created_at":1800000000}"#.utf8), for: request)
+                let payload = #"{"access_token":"renewed","refresh_token":"next-refresh","expires_in":604800,"created_at":1800000000}"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
             if request.url?.path == "/oauth/revoke" {
                 #expect(body?["token"] == "renewed")

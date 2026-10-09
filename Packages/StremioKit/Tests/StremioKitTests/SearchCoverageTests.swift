@@ -42,9 +42,13 @@ import StremioKitTestSupport
         let transport = StubTransport { request, _ in
             let path = request.url?.path ?? ""
             let body: String
-            if path.hasSuffix("manifest.json") { body = manifest }
-            else if path.contains("/catalog/series/top/") { body = #"{"metas":[{"id":"tt0903747","name":"Breaking Bad"}]}"# }
-            else { body = #"{"metas":[{"id":"tt1375666","name":"Inception"}]}"# }
+            if path.hasSuffix("manifest.json") {
+                body = manifest
+            } else if path.contains("/catalog/series/top/") {
+                body = #"{"metas":[{"id":"tt0903747","name":"Breaking Bad"}]}"#
+            } else {
+                body = #"{"metas":[{"id":"tt1375666","name":"Inception"}]}"#
+            }
             return StubTransport.response(Data(body.utf8), for: request)
         }
         let (registry, browse) = installing(transport)

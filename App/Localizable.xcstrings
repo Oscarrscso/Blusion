@@ -276,6 +276,28 @@
         }
       }
     },
+    "Blusion can't show this kind of row yet, so it has no settings here. It is kept so your layout stays intact.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blusion can't show this kind of row yet, so it has no settings here. It is kept so your layout stays intact."
+          }
+        }
+      }
+    },
+    "Blusion can't show this kind of row yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blusion can't show this kind of row yet."
+          }
+        }
+      }
+    },
     "Blusion doesn't include any addons. Paste a link above to add your first one.": {
       "extractionState": "manual",
       "localizations": {
@@ -441,6 +463,17 @@
         }
       }
     },
+    "Connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
     "Connect Trakt": {
       "extractionState": "manual",
       "localizations": {
@@ -448,6 +481,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect Trakt"
+          }
+        }
+      }
+    },
+    "Connect to import your Trakt watchlist, collection and watched history. Playback positions stay on this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to import your Trakt watchlist, collection and watched history. Playback positions stay on this device."
+          }
+        }
+      }
+    },
+    "Connected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
           }
         }
       }
@@ -580,6 +635,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Details"
+          }
+        }
+      }
+    },
+    "Disconnect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect"
           }
         }
       }
@@ -976,6 +1042,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Import Without Them"
+          }
+        }
+      }
+    },
+    "Import collection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import collection"
           }
         }
       }
@@ -1431,6 +1508,17 @@
         }
       }
     },
+    "Numbered (top list)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numbered (top list)"
+          }
+        }
+      }
+    },
     "Only basic details are available for this title.": {
       "extractionState": "manual",
       "localizations": {
@@ -1471,6 +1559,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open on Best Blurays"
+          }
+        }
+      }
+    },
+    "Optional. A TMDB Read Access Token adds TMDB scores and episode ratings. Credentials stay in the Keychain. Site links work without keys.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. A TMDB Read Access Token adds TMDB scores and episode ratings. Credentials stay in the Keychain. Site links work without keys."
           }
         }
       }
@@ -2267,6 +2366,28 @@
         }
       }
     },
+    "Sync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
+          }
+        }
+      }
+    },
+    "Sync sends your saved titles and watched items to Trakt, then imports Trakt’s collection. Your watchlist and collection appear in Library → Saved; watched history appears in Library → Watched. Nothing is removed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync sends your saved titles and watched items to Trakt, then imports Trakt’s collection. Your watchlist and collection appear in Library → Saved; watched history appears in Library → Watched. Nothing is removed."
+          }
+        }
+      }
+    },
     "TMDB": {
       "extractionState": "manual",
       "localizations": {
@@ -2285,6 +2406,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "TMDB API settings"
+          }
+        }
+      }
+    },
+    "TMDb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDb"
           }
         }
       }
@@ -2395,6 +2527,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trakt lists need a Trakt client ID in Settings."
+          }
+        }
+      }
+    },
+    "Trakt unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt unavailable"
           }
         }
       }

@@ -89,9 +89,13 @@ import StremioKitTestSupport
         let transport = StubTransport { request, _ in
             let path = request.url?.path ?? ""
             let body: String
-            if path.contains("/catalog/movie/a/") { body = #"{"metas":[{"id":"tt1","name":"One"},{"id":"tt2","name":"Two"}]}"# }
-            else if path.contains("/catalog/movie/b/") { body = #"{"metas":[{"id":"tt2","name":"Two"},{"id":"tt3","name":"Three"}]}"# }
-            else { body = #"{"metas":[{"id":"never"}]}"# }
+            if path.contains("/catalog/movie/a/") {
+                body = #"{"metas":[{"id":"tt1","name":"One"},{"id":"tt2","name":"Two"}]}"#
+            } else if path.contains("/catalog/movie/b/") {
+                body = #"{"metas":[{"id":"tt2","name":"Two"},{"id":"tt3","name":"Three"}]}"#
+            } else {
+                body = #"{"metas":[{"id":"never"}]}"#
+            }
             return StubTransport.response(Data(body.utf8), for: request)
         }
         let browse = try await stubbedService(manifests: [manifest], transport: transport, visibleTypes: ["movie", "series"])

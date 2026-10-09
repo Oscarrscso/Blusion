@@ -118,8 +118,7 @@ public actor TraktAccount {
         credentialsRevision += 1
         pendingPKCE = nil
         try await secrets.remove(Keys.token)
-        if value.isEmpty { try await secrets.remove(Keys.redirectURI) }
-        else { try await secrets.set(value, for: Keys.redirectURI) }
+        if value.isEmpty { try await secrets.remove(Keys.redirectURI) } else { try await secrets.set(value, for: Keys.redirectURI) }
     }
 
     /// The verifier stays in memory for one browser sign-in; only tokens are saved.
@@ -189,8 +188,7 @@ public actor TraktAccount {
         guard value != (try await secrets.get(Keys.clientSecret) ?? "") else { return }
         credentialsRevision += 1
         try await secrets.remove(Keys.token)
-        if value.isEmpty { try await secrets.remove(Keys.clientSecret) }
-        else { try await secrets.set(value, for: Keys.clientSecret) }
+        if value.isEmpty { try await secrets.remove(Keys.clientSecret) } else { try await secrets.set(value, for: Keys.clientSecret) }
     }
 
     public func isSignedIn() async -> Bool {

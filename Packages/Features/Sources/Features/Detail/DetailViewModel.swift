@@ -12,8 +12,13 @@ public final class DetailViewModel {
     public private(set) var isLoading = true
     /// True when no addon returned `meta` and Detail is built from the catalog preview alone.
     public private(set) var isFallback = false
-    public var selectedSeason: Int?
+    /// Choosing a season fills in its episode ratings from TMDb, when the addon sent none (see `loadEpisodeRatings`).
+    public var selectedSeason: Int? {
+        didSet { if selectedSeason != oldValue { Task { await loadEpisodeRatings() } } }
+    }
     public private(set) var isInLibrary = false
+    /// Seasons whose TMDb episode scores are already in `detail`, or on their way.
+    private var episodeRatingSeasons: Set<Int> = []
     /// Identities (`type/id`) of watched movies and episodes shown on this screen.
     public private(set) var watchedIdentities: Set<String> = []
     /// Share of the runtime saved for the movie and episodes shown here, by identity (0...1). Only progress that playback can
@@ -33,6 +38,7 @@ public final class DetailViewModel {
 
     public func load() async {
         isLoading = true
+        episodeRatingSeasons.removeAll()
         async let artwork: Void = loadArtwork()
         let result = await services.browse.detail(for: preview)
         detail = result.detail
@@ -41,6 +47,7 @@ public final class DetailViewModel {
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
+        await loadEpisodeRatings()
         await artwork
     }
 
@@ -55,6 +62,21 @@ public final class DetailViewModel {
         let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         tmdbArtwork = artwork
+    }
+
+    private var seriesIMDbID: String? {
+        if LetterboxdRatings.isIMDbID(detail.preview.id) { return detail.preview.id }
+        return detail.videos.lazy.compactMap { Video.seriesIMDbID(fromVideoID: $0.id) }.first
+    }
+
+    private func loadEpisodeRatings() async {
+        guard isSeries, let season = selectedSeason, !episodeRatingSeasons.contains(season),
+              detail.episodes(inSeason: season).contains(where: { $0.rating == nil }), let seriesID = seriesIMDbID else { return }
+        episodeRatingSeasons.insert(season)
+        let scores = await services.posterRatings.episodeRatings(seriesIMDbID: seriesID, season: season)
+        guard !Task.isCancelled else { return }
+        if scores.isEmpty { episodeRatingSeasons.remove(season) }
+        detail.fillEpisodeRatings(season: season, scores: scores, source: .tmdb)
     }
 
     /// Library membership, watched marks and saved progress, from the local stores.

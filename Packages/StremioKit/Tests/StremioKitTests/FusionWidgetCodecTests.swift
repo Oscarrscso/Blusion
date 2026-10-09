@@ -33,7 +33,7 @@ private let bigSample = #"""
     private func config(_ widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .row(let config), .hero(let config): return config
-        case .collection, .continueWatching: return nil
+        case .collection, .continueWatching, .unsupported: return nil
         }
     }
 
@@ -126,10 +126,11 @@ private let bigSample = #"""
               "title": "Good" }, 7 ] } } }
         ] }
         """#)
-        #expect(result.widgets.map(\.id) == ["ok-row", "ok-continue", "mixed"])
-        #expect(result.skipped == 5, "unknown type, row without a source, tile-less collection, non-object widget, one bad tile")
-        #expect(result.widgets[1].content == .continueWatching)
-        #expect(tiles(result.widgets[2])?.map(\.id) == ["good"])
+        #expect(result.widgets.map(\.id) == ["ok-row", "unknown", "ok-continue", "mixed"], "an unknown type is kept, not dropped")
+        #expect(result.skipped == 4, "row without a source, tile-less collection, non-object widget, one bad tile")
+        #expect(result.widgets[1].content == .unsupported(type: "some.future.type"))
+        #expect(result.widgets[2].content == .continueWatching)
+        #expect(tiles(result.widgets[3])?.map(\.id) == ["good"])
     }
 
     @Test func aRowWithoutAReadableSourceIsSkipped() throws {
@@ -346,7 +347,8 @@ private let bigSample = #"""
     // MARK: Refusals
 
     @Test func emptyExportsAreRefused() {
-        for text in [#"{"widgets": []}"#, #"{"widgets": [{"type": "nope"}]}"#] {
+        // A widget with an unknown type is kept as a placeholder, so only a widget without any type leaves the import empty.
+        for text in [#"{"widgets": []}"#, #"{"widgets": [{"id": "x", "title": "No type"}]}"#] {
             #expect(throws: WidgetImportError.empty) { try FusionWidgetCodec.decode(Data(text.utf8), installed: []) }
         }
     }

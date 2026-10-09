@@ -5,6 +5,7 @@ import StremioKit
 
 struct LibraryView: View {
     @State private var model: LibraryViewModel
+    @State private var showsFilters = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var actions: TitleActions?
@@ -51,6 +52,15 @@ struct LibraryView: View {
         }
         .screenBackground()
         .navigationTitle("Library")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showsFilters = true } label: {
+                    Label("Filter and Sort", systemImage: model.filter.isNarrowing ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                .accessibilityIdentifier("library.filter")
+            }
+        }
+        .sheet(isPresented: $showsFilters) { LibraryFilterSheet(model: model) }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
@@ -230,6 +240,99 @@ struct LibraryView: View {
         let remaining = "\(max(0, Int((item.duration - item.position) / 60))) min left"
         if let season = item.season, let episode = item.episode { return "S\(season), E\(episode) · \(remaining)" }
         return remaining
+    }
+}
+
+/// The filter and sort controls, in a sheet. Every change applies at once; "Clear Filters" removes them all and keeps the sort.
+struct LibraryFilterSheet: View {
+    @Bindable var model: LibraryViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Type") {
+                    ForEach(LibraryKind.allCases) { kind in
+                        Toggle(kind.title, isOn: membership(kind, in: \.kinds))
+                            .accessibilityIdentifier("library.filter.kind.\(kind.rawValue)")
+                    }
+                }
+                Section("Status") {
+                    ForEach(WatchStatus.allCases) { status in
+                        Toggle(status.title, isOn: membership(status, in: \.statuses))
+                            .accessibilityIdentifier("library.filter.status.\(status.rawValue)")
+                    }
+                }
+                Section("Release year") {
+                    if let range = model.availableYears {
+                        Picker("From", selection: $model.filter.minimumYear) {
+                            Text("Any").tag(Int?.none)
+                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                        }
+                        Picker("To", selection: $model.filter.maximumYear) {
+                            Text("Any").tag(Int?.none)
+                            ForEach(Array(range.reversed()), id: \.self) { Text(String($0)).tag(Int?.some($0)) }
+                        }
+                    } else {
+                        Text("No release years yet").foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    let genres = model.availableGenres
+                    if genres.isEmpty {
+                        Text("Genres appear here for titles saved from now on.").font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(genres, id: \.self) { genre in
+                            Toggle(genre, isOn: membership(genre, in: \.genres))
+                        }
+                    }
+                } header: {
+                    Text("Genre")
+                } footer: {
+                    Text("A title matches if it has any of the chosen genres.")
+                }
+                Section("Rating") {
+                    Picker("At least", selection: $model.filter.minimumRating) {
+                        Text("Any").tag(Double?.none)
+                        ForEach([5.0, 6.0, 7.0, 8.0, 9.0], id: \.self) { Text("★ \(LibraryFiltering.ratingText($0))+").tag(Double?.some($0)) }
+                    }
+                }
+                Section("Added") {
+                    Picker("Added", selection: $model.filter.addedWithin) {
+                        ForEach(AddedWithin.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+                Section("Sort by") {
+                    Picker("Sort by", selection: $model.filter.sort) {
+                        ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
+                    }
+                    .accessibilityIdentifier("library.sort")
+                }
+                Section {
+                    Button("Clear Filters", role: .destructive) { model.clearFilters() }
+                        .disabled(!model.filter.isNarrowing)
+                        .accessibilityIdentifier("library.filter.clear")
+                }
+            }
+            .navigationTitle("Filter and Sort")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    /// A toggle for one member of a filter set: on adds it, off removes it.
+    private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
+        Binding {
+            model.filter[keyPath: keyPath].contains(value)
+        } set: { included in
+            if included {
+                model.filter[keyPath: keyPath].insert(value)
+            } else {
+                model.filter[keyPath: keyPath].remove(value)
+            }
+        }
     }
 }
 

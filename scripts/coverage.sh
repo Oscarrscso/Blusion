@@ -16,10 +16,14 @@ rm -f "$LOG"
 PROFDATA="$(swift test --package-path "$DIR" --show-codecov-path | sed 's/\.json$/.profdata/')"
 [[ -f "$PROFDATA" ]] || PROFDATA="$(dirname "$(swift test --package-path "$DIR" --show-codecov-path)")/default.profdata"
 BIN_DIR="$(swift build --package-path "$DIR" --show-bin-path)"
-if [[ -d "$BIN_DIR/${PKG}PackageTests.xctest/Contents/MacOS" ]]; then
-  BIN="$BIN_DIR/${PKG}PackageTests.xctest/Contents/MacOS/${PKG}PackageTests"
-else
-  BIN="$BIN_DIR/${PKG}PackageTests.xctest"
+# Linux builds one aggregate <Pkg>PackageTests.xctest; newer macOS toolchains name the bundle after the test target.
+BIN="$BIN_DIR/${PKG}PackageTests.xctest"
+if [[ ! -e "$BIN" ]]; then
+  BIN="$(find "$BIN_DIR" -maxdepth 1 -name '*.xctest' | head -n 1)"
+fi
+[[ -n "$BIN" && -e "$BIN" ]] || { echo "coverage: no test binary under $BIN_DIR" >&2; exit 1; }
+if [[ -d "$BIN/Contents/MacOS" ]]; then
+  BIN="$BIN/Contents/MacOS/$(basename "$BIN" .xctest)"
 fi
 LLVM_COV=(llvm-cov); command -v llvm-cov >/dev/null 2>&1 || LLVM_COV=(xcrun llvm-cov)
 

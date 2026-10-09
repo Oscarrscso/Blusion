@@ -129,10 +129,10 @@ private struct CountingSniffer: ContainerSniffing {
     func sniffingCarriesProxyHeaders() async throws {
         let rig = try makeRig()
         let url = rig.server.stream.appendingPathComponent("media/protected.mp4")
-        var withoutHeader: MediaContainer?? = nil
+        var withoutHeader: MediaContainer??
         for await result in rig.service.sniff([.init(key: "k", url: url, headers: [:])]) { withoutHeader = .some(result.container) }
         #expect(withoutHeader == .some(nil), "the server answers 403: no verdict, not a crash")
-        var withHeader: MediaContainer?? = nil
+        var withHeader: MediaContainer??
         for await result in rig.service.sniff([.init(key: "k", url: url, headers: ["X-Mock-Token": "abc"])]) { withHeader = .some(result.container) }
         #expect(withHeader == .some(.mp4))
     }

@@ -122,6 +122,7 @@ struct WidgetsManagerView: View {
         case .row: "rectangle.stack"
         case .collection: "square.grid.2x2"
         case .continueWatching: "play.circle"
+        case .unsupported: "questionmark.square.dashed"
         }
     }
 }

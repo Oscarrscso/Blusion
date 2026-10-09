@@ -44,7 +44,8 @@ import StremioKitTestSupport
         // Install: one good catalog addon, one good stream addon, and some misbehaving ones, all with the token in their URL.
         let addons = AddonsViewModel(services: services)
         for (flags, base) in [([String](), server.catalogManifestURL(token: token)), ([], server.streamManifestURL(token: token)),
-                              (["err500"], server.catalogManifestURL(flags: ["err500"], token: token)), (["badjson"], server.streamManifestURL(flags: ["badjson"], token: token)),
+                              (["err500"], server.catalogManifestURL(flags: ["err500"], token: token)),
+                              (["badjson"], server.streamManifestURL(flags: ["badjson"], token: token)),
                               (["badmanifest"], server.catalogManifestURL(flags: ["badmanifest"], token: token))] {
             _ = flags
             addons.installText = base.absoluteString

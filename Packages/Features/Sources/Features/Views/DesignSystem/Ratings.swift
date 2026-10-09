@@ -118,8 +118,16 @@ struct RatingButtonsRow: View {
     var body: some View {
         if let store {
             let ratings = store.ratings(for: item)
-            buttons(ratings: ratings)
-                .task(id: "\(item.identity):\(store.reviewServicesRevision)") { _ = store.ratings(for: item, includeReviews: true) }
+            VStack(spacing: 8) {
+                buttons(ratings: ratings)
+                if let issue = store.reviewServiceIssue {
+                    Text(issue)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("detail.reviews.issue")
+                }
+            }
+            .task(id: "\(item.identity):\(store.reviewServicesRevision)") { _ = store.ratings(for: item, includeReviews: true) }
         } else {
             buttons(ratings: nil)
         }

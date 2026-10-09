@@ -192,18 +192,16 @@ import StremioKitTestSupport
         #expect(reverted.playerPreference == .builtIn && !reverted.autoPlayBestStream)
     }
 
-    @Test func changingPlaybackAfterAccountSetupKeepsTheNewTraktClientID() async {
-        let services = services(settings: PlaybackSettings(preferredResolution: 720, traktClientID: "old-client"))
+    @Test func changingPlaybackAfterAccountSetupKeepsTheBuiltInTraktClientID() async {
+        let services = services(settings: PlaybackSettings(preferredResolution: 720))
         let settingsModel = SettingsViewModel(services: services)
         await settingsModel.load()
         let accountModel = TraktAccountViewModel(services: services)
-        accountModel.clientIDText = "new-client"
-        accountModel.clientSecretText = "new-secret"
-        await accountModel.saveCredentials()
+        await accountModel.load()
         #expect(accountModel.errorMessage == nil)
         await settingsModel.setPlayerPreference(.infuse)
         let stored = await services.settings.load()
-        #expect(stored.traktClientID == "new-client")
+        #expect(stored.traktClientID == TraktAccount.defaultClientID)
         #expect(stored.playerPreference == .infuse && stored.preferredResolution == 720)
     }
 
@@ -229,21 +227,17 @@ import StremioKitTestSupport
         #expect(!services.posterRatings.isEnabled && !model.settings.showsPosterRatings)
     }
 
-    @Test func traktClientIDIsLoadedAndSavedTrimmed() async {
-        let services = services(settings: PlaybackSettings(traktClientID: "client-abc"))
+    @Test func tmdbReadTokenIsLoadedAndSavedTrimmed() async {
+        let services = services(settings: PlaybackSettings(tmdbReadToken: "tmdb-old"))
         let model = SettingsViewModel(services: services)
         await model.load()
-        #expect(model.traktClientIDText == "client-abc")
-        model.traktClientIDText = "  key-1 \n"
-        await model.commitTraktClientID()
-        let saved = await services.settings.load()
-        #expect(saved.traktClientID == "key-1")
-        model.traktClientIDText = "   "
-        await model.commitTraktClientID()
-        let cleared = await services.settings.load()
-        #expect(cleared.traktClientID == nil, "a blank field removes the ID")
-        await model.load()
-        #expect(model.traktClientIDText.isEmpty)
+        #expect(model.tmdbReadTokenText == "tmdb-old")
+        model.tmdbReadTokenText = "  tmdb-1 \n"
+        await model.commitReviewCredentials()
+        #expect(await services.settings.load().tmdbReadToken == "tmdb-1")
+        model.tmdbReadTokenText = "   "
+        await model.commitReviewCredentials()
+        #expect(await services.settings.load().tmdbReadToken == nil, "a blank field removes the token")
     }
 
     @Test func installedAddonCountComesFromTheRegistry() async throws {

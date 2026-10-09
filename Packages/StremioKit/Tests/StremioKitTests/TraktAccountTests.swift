@@ -83,7 +83,8 @@ import StremioKitTestSupport
                 return StubTransport.response(Data(json.utf8), for: request, headers: ["x-pagination-page-count": "2"])
             }
             if request.url?.path == "/sync/watched/movies" { return StubTransport.response(Data("[\(movieJSON)]".utf8), for: request) }
-            return StubTransport.response(Data(#"[{"show":{"title":"Show","ids":{"imdb":"tt2"}},"seasons":[{"number":2,"episodes":[{"number":3,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]"#.utf8), for: request)
+            let payload = #"[{"show":{"title":"Show","ids":{"imdb":"tt2"}},"seasons":[{"number":2,"episodes":[{"number":3,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]"#
+            return StubTransport.response(Data(payload.utf8), for: request)
         }
         let account = try await account(transport)
         try await signIn(account)
@@ -108,7 +109,8 @@ import StremioKitTestSupport
                 return StubTransport.response(Data(json.utf8), for: request, headers: ["x-pagination-page-count": "2"])
             }
             #expect(request.url?.path == "/sync/collection/shows")
-            return StubTransport.response(Data(#"[{"show":{"title":"Show","ids":{"imdb":"tt3"}},"seasons":[{"number":1,"episodes":[{"number":2,"collected_at":"2023-11-14T22:13:20Z"}]}]}]"#.utf8), for: request)
+            let payload = #"[{"show":{"title":"Show","ids":{"imdb":"tt3"}},"seasons":[{"number":1,"episodes":[{"number":2,"collected_at":"2023-11-14T22:13:20Z"}]}]}]"#
+            return StubTransport.response(Data(payload.utf8), for: request)
         }
         let account = try await account(transport)
         try await signIn(account)
@@ -125,7 +127,8 @@ import StremioKitTestSupport
             if request.url?.path == "/oauth/token" {
                 let body = try #require(try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String])
                 #expect(body["grant_type"] == "refresh_token" && body["refresh_token"] == "refresh")
-                return StubTransport.response(Data(#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":604800,"created_at":1800000000}"#.utf8), for: request)
+                let payload = #"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":604800,"created_at":1800000000}"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
             if request.url?.path == "/oauth/revoke" { return StubTransport.response(Data("{}".utf8), for: request) }
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer new-access")
@@ -164,7 +167,8 @@ import StremioKitTestSupport
             #expect(movies.count == 1)
             #expect((movies[0]["ids"] as? [String: String])?["imdb"] == "tt1")
             if request.url?.path == "/sync/history" { #expect(movies[0]["watched_at"] as? String == "2023-11-14T22:13:20Z") }
-            return StubTransport.response(Data(#"{"added":{"movies":1,"shows":0,"episodes":0},"existing":{"movies":0},"not_found":{"movies":[]}}"#.utf8), status: 201, for: request)
+            let payload = #"{"added":{"movies":1,"shows":0,"episodes":0},"existing":{"movies":0},"not_found":{"movies":[]}}"#
+            return StubTransport.response(Data(payload.utf8), status: 201, for: request)
         }
         let account = try await account(transport)
         try await signIn(account)

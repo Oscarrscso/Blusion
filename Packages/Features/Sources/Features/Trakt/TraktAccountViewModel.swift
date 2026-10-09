@@ -4,19 +4,15 @@ import PlayerKit
 import StremioKit
 
 /// Explicit, add-only syncing. Local playback positions stay on this device.
+/// The Trakt app's client ID is built in (`TraktAccount.defaultClientID`); sign-in uses PKCE, so no secret is needed.
 @MainActor
 @Observable
 public final class TraktAccountViewModel {
-    public var clientIDText = ""
-    public var clientSecretText = ""
-    public var redirectURIText = ""
-    public var authorizationCodeText = ""
-    public var syncWatchlist = true
-    public var syncCollection = true
-    public var syncHistory = true
+    /// The redirect registered for the Trakt app. Blusion receives it natively through the web authentication session.
+    public static let redirectURI = "blusion://trakt/callback"
+
     public private(set) var isSignedIn = false
     public private(set) var isWorking = false
-    public private(set) var deviceCode: TraktDeviceCode?
     public private(set) var authorizationURL: URL?
     public private(set) var message: String?
     public private(set) var errorMessage: String?
@@ -25,47 +21,37 @@ public final class TraktAccountViewModel {
 
     public init(services: AppServices) { self.services = services }
 
-    public var canSignIn: Bool {
-        !clientIDText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    /// False only when no client ID is built in. The screen then shows "Trakt unavailable".
+    public var isAvailable: Bool { !TraktAccount.defaultClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    public var canSignIn: Bool { isAvailable }
 
     public func load() async {
-        clientIDText = await services.settings.load().traktClientID ?? TraktAccount.defaultClientID
-        clientSecretText = await services.traktAccount.clientSecret()
-        let redirectURI = await services.traktAccount.redirectURI()
-        redirectURIText = redirectURI.isEmpty ? "blusion://trakt/callback" : redirectURI
+        await ensureClientID()
         isSignedIn = await services.traktAccount.isSignedIn()
     }
 
-    public func saveCredentials() async {
-        await perform {
-            var settings = await self.services.settings.load()
-            let clientID = self.clientIDText.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.redirectURIText = self.redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if settings.traktClientID != clientID {
-                await self.services.traktAccount.signOut()
-            }
-            settings.traktClientID = clientID.isEmpty ? nil : clientID
-            await self.services.settings.save(settings)
-            try await self.services.traktAccount.saveClientSecret(self.clientSecretText)
-            try await self.services.traktAccount.saveRedirectURI(self.redirectURIText)
-            self.isSignedIn = await self.services.traktAccount.isSignedIn()
-            await self.services.widgetContent.invalidate()
-            self.message = "Trakt credentials saved in the Keychain."
-        }
+    /// Stores the built-in client ID. A client ID from an earlier build differs from it, so its sign-in is cleared first.
+    private func ensureClientID() async {
+        guard isAvailable else { return }
+        let clientID = TraktAccount.defaultClientID
+        let stored = await services.settings.load()
+        guard stored.traktClientID != clientID else { return }
+        if stored.traktClientID != nil { await services.traktAccount.signOut() }
+        var settings = await services.settings.load()
+        settings.traktClientID = clientID
+        await services.settings.save(settings)
+        await services.widgetContent.invalidate()
     }
 
     public func startPKCESignIn() async {
-        await saveCredentials()
-        guard errorMessage == nil else { return }
+        guard isAvailable else { return }
+        await ensureClientID()
         #if canImport(CryptoKit)
         await perform {
             let proof = TraktWebAuthentication.proof()
-            self.authorizationCodeText = ""
             self.authorizationURL = try await self.services.traktAccount.beginPKCESignIn(
-                redirectURI: self.redirectURIText.trimmingCharacters(in: .whitespacesAndNewlines),
-                codeVerifier: proof.verifier, codeChallenge: proof.challenge)
+                redirectURI: Self.redirectURI, codeVerifier: proof.verifier, codeChallenge: proof.challenge)
             self.message = nil
         }
         #endif
@@ -76,25 +62,8 @@ public final class TraktAccountViewModel {
             try await self.services.traktAccount.finishPKCESignIn(callbackURL: callbackURL)
             self.isSignedIn = true
             self.authorizationURL = nil
-            self.authorizationCodeText = ""
         }
         if isSignedIn, errorMessage == nil { await importFromTrakt() }
-    }
-
-    public func finishPastedSignIn() async {
-        if redirectURIText == "urn:ietf:wg:oauth:2.0:oob" {
-            await perform {
-                try await self.services.traktAccount.finishPKCESignIn(code: self.authorizationCodeText)
-                self.isSignedIn = true
-                self.authorizationURL = nil
-                self.authorizationCodeText = ""
-            }
-            if isSignedIn, errorMessage == nil { await importFromTrakt() }
-        } else if let callback = URL(string: authorizationCodeText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            await finishPKCESignIn(callbackURL: callback)
-        } else {
-            errorMessage = TraktAccountError.invalidCallback.message
-        }
     }
 
     public func authenticationFailed(_ error: Error) {
@@ -102,109 +71,66 @@ public final class TraktAccountViewModel {
         errorMessage = "Couldn’t open Trakt sign-in. Try again."
     }
 
-    public func startSignIn() async {
-        await saveCredentials()
-        guard errorMessage == nil else { return }
-        await perform {
-            self.deviceCode = try await self.services.traktAccount.beginSignIn()
-            self.message = nil
-        }
-    }
-
-    /// SwiftUI owns and cancels the polling task when this screen or code disappears.
-    public func pollForSignIn() async {
-        guard let code = deviceCode else { return }
-        let expires = Date().addingTimeInterval(Double(max(code.expiresIn, 1)))
-        var interval = max(code.interval, 1)
-        do {
-            while Date() < expires {
-                try await Task.sleep(for: .seconds(interval))
-                try Task.checkCancellation()
-                guard deviceCode == code else { return }
-                switch try await services.traktAccount.checkAuthorization(code) {
-                case .pending: continue
-                case .slowDown: interval += 5
-                case .signedIn:
-                    isSignedIn = true
-                    deviceCode = nil
-                    message = "Signed in to Trakt."
-                    return
-                }
-            }
-            throw TraktAccountError.expiredCode
-        } catch {
-            guard !Task.isCancelled else { return }
-            deviceCode = nil
-            errorMessage = Self.message(for: error)
-        }
-    }
-
     public func cancelSignIn() {
-        deviceCode = nil
         authorizationURL = nil
-        authorizationCodeText = ""
         Task { await services.traktAccount.cancelPKCESignIn() }
     }
 
     public func signOut() async {
-        deviceCode = nil
         authorizationURL = nil
         await perform {
             await self.services.traktAccount.signOut()
             self.isSignedIn = false
-            self.message = "Signed out of Trakt. Your local library and history are kept."
+            self.message = "Disconnected from Trakt. Your local library and history are kept."
         }
     }
 
+    /// Adds the Trakt watchlist, collection and watched history to this device.
     public func importFromTrakt() async {
-        guard syncWatchlist || syncCollection || syncHistory else { return }
         await perform {
             var savedCount = 0
             var watchedCount = 0
-            let watchlist = self.syncWatchlist ? try await self.services.traktAccount.watchlist() : []
-            let collection = self.syncCollection ? try await self.services.traktAccount.collection() : []
-            let watched = self.syncHistory ? try await self.services.traktAccount.watched() : []
-            if self.syncWatchlist || self.syncCollection {
-                for item in watchlist + collection {
-                    let libraryItem = LibraryItem(preview: item)
-                    if !(await self.services.library.contains(libraryItem.id)) {
-                        await self.services.library.add(libraryItem)
-                        savedCount += 1
-                    }
+            let watchlist = try await self.services.traktAccount.watchlist()
+            let collection = try await self.services.traktAccount.collection()
+            let watched = try await self.services.traktAccount.watched()
+            for item in watchlist + collection {
+                let libraryItem = LibraryItem(preview: item)
+                if !(await self.services.library.contains(libraryItem.id)) {
+                    await self.services.library.add(libraryItem)
+                    savedCount += 1
                 }
             }
-            if self.syncHistory {
-                for item in watched {
-                    guard await self.services.progress.progress(for: item.identity)?.isWatched != true else { continue }
-                    let existing = await self.services.progress.progress(for: item.identity)
-                    await self.services.progress.save(WatchProgress(id: item.identity, type: item.preview.type, contentID: item.contentID,
-                        title: existing?.title ?? item.preview.name, poster: existing?.poster ?? item.preview.poster,
-                        position: existing?.position ?? 0, duration: existing?.duration ?? 0, isWatched: true,
-                        updatedAt: max(existing?.updatedAt ?? .distantPast, item.watchedAt), season: item.season, episode: item.episode))
-                    watchedCount += 1
-                }
+            for item in watched {
+                guard await self.services.progress.progress(for: item.identity)?.isWatched != true else { continue }
+                let existing = await self.services.progress.progress(for: item.identity)
+                await self.services.progress.save(WatchProgress(id: item.identity, type: item.preview.type, contentID: item.contentID,
+                    title: existing?.title ?? item.preview.name, poster: existing?.poster ?? item.preview.poster,
+                    position: existing?.position ?? 0, duration: existing?.duration ?? 0, isWatched: true,
+                    updatedAt: max(existing?.updatedAt ?? .distantPast, item.watchedAt), season: item.season, episode: item.episode))
+                watchedCount += 1
             }
             self.message = "Imported \(savedCount) saved titles and \(watchedCount) watched items from Trakt."
         }
     }
 
+    /// Adds local saved titles and watched items that Trakt does not have yet. Nothing is removed on either side.
     public func sendToTrakt() async {
-        guard syncWatchlist || syncHistory else { return }
         await perform {
-            var savedCount = 0
-            var watchedCount = 0
-            if self.syncWatchlist {
-                let remote = Set(try await self.services.traktAccount.watchlist().map { LibraryItem.identity(type: $0.type, contentID: $0.id) })
-                let local = await self.services.library.all().filter { !remote.contains($0.id) }.map(\.preview)
-                savedCount = try await self.services.traktAccount.addToWatchlist(local)
-            }
-            if self.syncHistory {
-                let remote = Set(try await self.services.traktAccount.watched().map(\.identity))
-                let local = await self.services.progress.all().filter { $0.isWatched && !remote.contains($0.id) }.compactMap(Self.traktItem)
-                watchedCount = try await self.services.traktAccount.addToHistory(local)
-            }
+            let remoteWatchlist = Set(try await self.services.traktAccount.watchlist().map { LibraryItem.identity(type: $0.type, contentID: $0.id) })
+            let localWatchlist = await self.services.library.all().filter { !remoteWatchlist.contains($0.id) }.map(\.preview)
+            let savedCount = try await self.services.traktAccount.addToWatchlist(localWatchlist)
+            let remoteHistory = Set(try await self.services.traktAccount.watched().map(\.identity))
+            let localHistory = await self.services.progress.all().filter { $0.isWatched && !remoteHistory.contains($0.id) }.compactMap(Self.traktItem)
+            let watchedCount = try await self.services.traktAccount.addToHistory(localHistory)
             self.message = "Sent \(savedCount) saved titles and \(watchedCount) watched items to Trakt."
         }
+    }
+
+    /// Sends local items to Trakt, then imports Trakt's collection and history.
+    public func sync() async {
+        await sendToTrakt()
+        guard errorMessage == nil else { return }
+        await importFromTrakt()
     }
 
     private func perform(_ operation: () async throws -> Void) async {
@@ -213,8 +139,7 @@ public final class TraktAccountViewModel {
         errorMessage = nil
         message = nil
         defer { isWorking = false }
-        do { try await operation() }
-        catch { errorMessage = Self.message(for: error) }
+        do { try await operation() } catch { errorMessage = Self.message(for: error) }
     }
 
     private static func traktItem(_ progress: WatchProgress) -> TraktWatchedItem? {

@@ -268,6 +268,6 @@ private struct RowResult: Sendable {
 private func loadingConfiguration(_ content: HomeWidget.Content) -> RowConfiguration? {
     switch content {
     case .hero(let row), .row(let row): return row
-    case .collection, .continueWatching: return nil
+    case .collection, .continueWatching, .unsupported: return nil
     }
 }

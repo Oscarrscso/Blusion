@@ -61,6 +61,7 @@ public final class PosterRatingsStore {
     /// Makes visible posters, review rows and episodes ask again after saving credentials or refreshing.
     public private(set) var reviewServicesRevision = 0
     public private(set) var omdbError: String?
+    public private(set) var reviewServiceIssue: String?
     public var isEnabled: Bool {
         didSet { if isEnabled { Task { startLookups() } } }
     }
@@ -83,10 +84,11 @@ public final class PosterRatingsStore {
     @ObservationIgnored private let cache: any RatingsCache
     @ObservationIgnored private let maxConcurrentLookups: Int
     @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored private let logger: AddonLogger
 
     public nonisolated init(isEnabled: Bool = true, letterboxd: LetterboxdRatings? = nil, cache: (any RatingsCache)? = nil,
                             maxConcurrentLookups: Int = 3, now: @escaping @Sendable () -> Date = { Date() },
-                            omdb: OMDbRatings? = nil, tmdb: TMDbRatings? = nil) {
+                            omdb: OMDbRatings? = nil, tmdb: TMDbRatings? = nil, logger: AddonLogger = .silent) {
         self._isEnabled = isEnabled
         self.letterboxd = letterboxd
         self.omdb = omdb
@@ -94,6 +96,7 @@ public final class PosterRatingsStore {
         self.cache = cache ?? InMemoryRatingsCache()
         self.maxConcurrentLookups = max(1, maxConcurrentLookups)
         self.now = now
+        self.logger = logger
     }
 
     /// Returns the same object every time. No observed property changes synchronously when called from a view body.
@@ -122,13 +125,14 @@ public final class PosterRatingsStore {
     }
 
     /// Called after the user saves or removes credentials. Old requests finish cancelling before the clients change.
-    public func setReviewServices(omdb: OMDbRatings?, tmdb: TMDbRatings?, refreshCache: Bool = false) async {
+    public func setReviewServices(omdb: OMDbRatings? = nil, tmdb: TMDbRatings?, refreshCache: Bool = false) async {
         await cancelLookups()
         self.omdb = omdb
         self.tmdb = tmdb
         ignoresCachedFreshness = refreshCache
         omdbPausedUntil = nil
         omdbError = nil
+        reviewServiceIssue = nil
         for entry in entries.values {
             if omdb == nil {
                 entry.rottenTomatoes = nil
@@ -149,6 +153,7 @@ public final class PosterRatingsStore {
         ignoresCachedFreshness = true
         omdbPausedUntil = nil
         omdbError = nil
+        reviewServiceIssue = nil
         isClearing = false
         reviewServicesRevision += 1
     }
@@ -167,6 +172,7 @@ public final class PosterRatingsStore {
         }
         omdbPausedUntil = nil
         omdbError = nil
+        reviewServiceIssue = nil
         isClearing = false
         reviewServicesRevision += 1
     }
@@ -236,12 +242,42 @@ public final class PosterRatingsStore {
                     nextLookupAt[lookup.id] = answer.fetchedAt.addingTimeInterval(cacheLifetime(answer, provider: lookup.provider))
                     apply(answer, lookup: lookup)
                     if lookup.provider == .omdb, !isOMDbPaused { omdbError = nil }
+                    if lookup.provider == .tmdb { reviewServiceIssue = nil }
                 } catch {
                     guard !Task.isCancelled else { return }
                     nextLookupAt[lookup.id] = now().addingTimeInterval(60)
                     if lookup.provider == .omdb { pauseOMDbIfRefused(error) }
+                    let mapped = AddonError.from(error)
+                    logger.log(.warning, "\(lookup.provider.rawValue) lookup failed for \(lookup.item.identity): \(mapped.shortDescription)")
+                    if lookup.provider == .tmdb { reviewServiceIssue = Self.issueText(for: mapped) }
                 }
             }
+        }
+    }
+
+    /// TMDb scores fill episodes that have no rating from their addon.
+    public func episodeRatings(seriesIMDbID: String, season: Int) async -> [Int: Double] {
+        guard let tmdb, !isClearing else { return [:] }
+        do {
+            let scores = try await tmdb.seasonEpisodeRatings(seriesIMDbID: seriesIMDbID, season: season)
+            guard !Task.isCancelled else { return [:] }
+            reviewServiceIssue = nil
+            return scores
+        } catch {
+            guard !Task.isCancelled else { return [:] }
+            let mapped = AddonError.from(error)
+            logger.log(.warning, "TMDb episode lookup for season \(season) failed: \(mapped.shortDescription)")
+            reviewServiceIssue = Self.issueText(for: mapped)
+            return [:]
+        }
+    }
+
+    static func issueText(for error: AddonError) -> String {
+        switch error {
+        case .http(status: 401), .http(status: 403): "TMDb refused the Read Access Token. Check it in Settings."
+        case .http(status: 429): "TMDb rate limit reached. Scores will return later."
+        case .offline, .network, .timeout: "TMDb could not be reached."
+        default: "TMDb lookup failed: \(error.shortDescription)."
         }
     }
 

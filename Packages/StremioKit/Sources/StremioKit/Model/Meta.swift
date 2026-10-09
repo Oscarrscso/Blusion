@@ -91,12 +91,23 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var released: String?
     public var thumbnail: URL?
     public var overview: String?
-    /// Episode rating on a 0 to 10 scale, usually IMDb's, when the addon supplies one (`imdbRating` or `rating`). Never fetched
-    /// from anywhere else.
+    /// Episode rating on a 0 to 10 scale. The addon's `imdbRating` or `rating` when it sends one; otherwise filled in from TMDb's
+    /// season data (see `ratingSource`).
     public var rating: Double?
+    /// Where `rating` came from. Nil without a rating.
+    public var ratingSource: RatingSource?
+
+    /// The site an episode score came from, so the UI can name it.
+    public enum RatingSource: String, Sendable, Codable, Equatable, Hashable {
+        /// The addon's own metadata, usually IMDb's score.
+        case addon
+        /// TMDb's vote average for the episode. Not IMDb's score.
+        case tmdb
+    }
 
     public init(id: String, title: String? = nil, season: Int? = nil, episode: Int? = nil,
-                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil, rating: Double? = nil) {
+                released: String? = nil, thumbnail: URL? = nil, overview: String? = nil, rating: Double? = nil,
+                ratingSource: RatingSource? = nil) {
         self.id = id
         self.title = title ?? id
         self.season = season
@@ -104,7 +115,9 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.released = released
         self.thumbnail = thumbnail
         self.overview = overview
-        self.rating = rating.flatMap { (0...10).contains($0) && $0 > 0 ? $0 : nil }
+        let usable = rating.flatMap { (0...10).contains($0) && $0 > 0 ? $0 : nil }
+        self.rating = usable
+        self.ratingSource = usable == nil ? nil : (ratingSource ?? .addon)
     }
 
     /// `8.4`, or nil without a usable rating.
@@ -122,6 +135,13 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     /// sends no dates can still be marked watched.
     public func hasAired(by now: Date = Date()) -> Bool {
         airDate.map { $0 <= now } ?? true
+    }
+
+    /// The series' IMDb id from an episode id such as `tt0944947:1:2`, or nil when the id does not start with one.
+    public static func seriesIMDbID(fromVideoID id: String) -> String? {
+        guard let head = id.split(separator: ":", omittingEmptySubsequences: false).first.map(String.init),
+              LetterboxdRatings.isIMDbID(head), head != id else { return nil }
+        return head
     }
 
     private enum Keys: String, CodingKey {
@@ -237,6 +257,16 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
     public func episodesCountingAsWatched(by now: Date = Date()) -> [Video] {
         let regular = seasons.filter { $0 != 0 }.flatMap { episodes(inSeason: $0) }
         return (regular + videos.filter { $0.season == nil }).filter { $0.hasAired(by: now) }
+    }
+
+    /// Gives the episodes of `season` that have no rating of their own the score for their number in `scores`. The addon's rating
+    /// always wins; a score outside 0...10 is ignored.
+    public mutating func fillEpisodeRatings(season: Int, scores: [Int: Double], source: Video.RatingSource) {
+        for index in videos.indices where videos[index].season == season && videos[index].rating == nil {
+            guard let number = videos[index].episode, let score = scores[number], (0...10).contains(score), score > 0 else { continue }
+            videos[index].rating = score
+            videos[index].ratingSource = source
+        }
     }
 
     /// The episode after `video` in watching order: season by season, specials (season 0) only after the last regular season.

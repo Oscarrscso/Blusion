@@ -11,7 +11,8 @@ import PlayerKitTestSupport
 
     private func candidate(_ name: String, route: Bool = true) -> PlaybackCandidate {
         let url = URL(string: "https://e.example.com/\(name).mp4")!
-        return PlaybackCandidate(id: name, title: name, addonName: "A", route: route ? .native(url) : .external(url), headers: name == "protected" ? ["X-Token": "abc"] : [:])
+        return PlaybackCandidate(id: name, title: name, addonName: "A", route: route ? .native(url) : .external(url),
+            headers: name == "protected" ? ["X-Token": "abc"] : [:])
     }
 
     private func plan(_ names: [String]) -> PlaybackPlan { PlaybackPlan(request: request, candidates: names.map { candidate($0) }) }
@@ -160,7 +161,8 @@ import PlayerKitTestSupport
     @Test func tracksAreVisibleThroughTheCoordinatorState() async throws {
         let (coordinator, rig) = coordinator(["a"], ["a": .plays(duration: 100)])
         await coordinator.start()
-        rig.engines["a"]?.simulate(tracks: [MediaTrack(id: "a1", title: "English", language: "eng", isDefault: true)], subtitles: [MediaTrack(id: "s1", title: "French", language: "fre")])
+        rig.engines["a"]?.simulate(tracks: [MediaTrack(id: "a1", title: "English", language: "eng", isDefault: true)],
+            subtitles: [MediaTrack(id: "s1", title: "French", language: "fre")])
         try await waitUntil { !coordinator.state.audioTracks.isEmpty }
         #expect(coordinator.state.audioTracks.first?.language == "eng")
         #expect(coordinator.state.embeddedSubtitleTracks.map(\.id) == ["s1"])

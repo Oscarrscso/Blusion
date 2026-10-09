@@ -494,13 +494,16 @@ private struct EpisodeRow: View {
                         Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
                     }
                     Text(score.text).monospacedDigit()
+                    if !score.isIMDb, video.ratingSource == .tmdb { Text("TMDb") }
                 }
             }
             .font(Theme.Typography.metaLine)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([date, score.map { "\($0.isIMDb ? "IMDb rating" : "Rating") \($0.text)" }].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityLabel([date, score.map {
+                "\($0.isIMDb ? "IMDb rating" : video.ratingSource == .tmdb ? "TMDb rating" : "Rating") \($0.text)"
+            }].compactMap { $0 }.joined(separator: ", "))
         }
     }
 }

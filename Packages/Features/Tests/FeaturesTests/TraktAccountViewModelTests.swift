@@ -11,10 +11,11 @@ import StremioKitTestSupport
     private let codeJSON = #"{"device_code":"device","user_code":"ABCD1234","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}"#
     private let tokenJSON = #"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#
 
-    private func services(transport: StubTransport, library: [LibraryItem] = [], progress: [WatchProgress] = []) async throws -> AppServices {
+    private func services(transport: StubTransport, library: [LibraryItem] = [], progress: [WatchProgress] = [],
+                          clientID: String = TraktAccount.defaultClientID) async throws -> AppServices {
         let client = makeClient(StubTransport(data: Data()))
         let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
-        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: "client"))
+        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: clientID))
         let account = TraktAccount(settings: settings, secrets: InMemorySecretStore(), transport: transport, now: { Date(timeIntervalSince1970: 1700000001) })
         try await account.saveClientSecret("secret")
         let code = try JSONDecoder().decode(TraktDeviceCode.self, from: Data(codeJSON.utf8))
@@ -23,23 +24,25 @@ import StremioKitTestSupport
                            library: InMemoryLibraryStore(library), traktAccount: account)
     }
 
-    @Test func loadingAndSavingCredentialsKeepTheExistingSettings() async throws {
-        let tokenJSON = tokenJSON
-        let transport = StubTransport(data: Data(tokenJSON.utf8))
-        let services = try await services(transport: transport)
+    @Test func loadKeepsTheExistingSettingsAndTheBuiltInClientID() async throws {
+        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)))
         var settings = await services.settings.load()
         settings.preferredResolution = 1080
         await services.settings.save(settings)
         let model = TraktAccountViewModel(services: services)
         await model.load()
-        #expect(model.isSignedIn && model.clientIDText == "client" && model.clientSecretText == "secret")
-        model.clientIDText = " new-client "
-        model.clientSecretText = " new-secret "
-        await model.saveCredentials()
-        #expect(model.errorMessage == nil && !model.isSignedIn)
+        #expect(model.isSignedIn && model.isAvailable && model.canSignIn)
         let saved = await services.settings.load()
-        #expect(saved.traktClientID == "new-client" && saved.preferredResolution == 1080)
-        #expect(await services.traktAccount.clientSecret() == "new-secret")
+        #expect(saved.traktClientID == TraktAccount.defaultClientID && saved.preferredResolution == 1080)
+    }
+
+    @Test func aClientIDFromAnEarlierBuildIsReplacedAndItsSignInCleared() async throws {
+        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)), clientID: "client")
+        let model = TraktAccountViewModel(services: services)
+        await model.load()
+        #expect(!model.isSignedIn)
+        let saved = await services.settings.load()
+        #expect(saved.traktClientID == TraktAccount.defaultClientID)
     }
 
     @Test func importAddsMissingItemsAndKeepsSavedTitlesAndPlaybackPositions() async throws {
@@ -47,20 +50,19 @@ import StremioKitTestSupport
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
-                return StubTransport.response(
-                    Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}}},{"movie":{"title":"Remote copy","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
+                let payload = #"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}}},{"movie":{"title":"Remote copy","ids":{"imdb":"tt1"}}}]"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
             if request.url?.path.hasPrefix("/sync/collection/") == true {
                 return StubTransport.response(Data("[]".utf8), for: request)
             }
             if request.url?.path == "/sync/watched/movies" {
-                return StubTransport.response(
-                    Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}},"last_watched_at":"2023-11-14T22:13:20.000Z"}]"#.utf8), for: request)
+                let payload = #"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}},"last_watched_at":"2023-11-14T22:13:20.000Z"}]"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
-            return StubTransport.response(Data(#"""
-            [{"show":{"title":"Series","ids":{"imdb":"tt3"}},
-              "seasons":[{"number":1,"episodes":[{"number":2,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]
-            """#.utf8), for: request)
+            let payload = #"[{"show":{"title":"Series","ids":{"imdb":"tt3"}},"seasons":[{"number":1,"#
+                + #""episodes":[{"number":2,"last_watched_at":"2023-11-14T22:13:20Z"}]}]}]"#
+            return StubTransport.response(Data(payload.utf8), for: request)
         }
         let saved = LibraryItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Local title"), addedAt: when)
         let partial = WatchProgress(id: "movie/tt2", type: "movie", contentID: "tt2", title: "Local movie", position: 50, duration: 100,
@@ -107,17 +109,6 @@ import StremioKitTestSupport
         #expect(await services.progress.all().count == 3)
     }
 
-    @Test func uncheckedSyncOptionsMakeNoRequests() async throws {
-        let services = try await services(transport: StubTransport(data: Data(tokenJSON.utf8)))
-        let model = TraktAccountViewModel(services: services)
-        model.syncWatchlist = false
-        model.syncCollection = false
-        model.syncHistory = false
-        await model.importFromTrakt()
-        await model.sendToTrakt()
-        #expect(model.message == nil && model.errorMessage == nil && !model.isWorking)
-    }
-
     @Test func collectionAndWatchlistMergeWithoutDuplicatesOrMarkingCollectedTitlesWatched() async throws {
         let tokenJSON = tokenJSON
         let transport = StubTransport { request, _ in
@@ -126,8 +117,8 @@ import StremioKitTestSupport
                 return StubTransport.response(Data(#"[{"movie":{"title":"Watch later","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
             if request.url?.path == "/sync/collection/movies" {
-                return StubTransport.response(
-                    Data(#"[{"movie":{"title":"Duplicate","ids":{"imdb":"tt1"}}},{"movie":{"title":"Owned movie","ids":{"imdb":"tt2"}}}]"#.utf8), for: request)
+                let payload = #"[{"movie":{"title":"Duplicate","ids":{"imdb":"tt1"}}},{"movie":{"title":"Owned movie","ids":{"imdb":"tt2"}}}]"#
+                return StubTransport.response(Data(payload.utf8), for: request)
             }
             if request.url?.path == "/sync/collection/shows" {
                 return StubTransport.response(Data(#"[{"show":{"title":"Owned show","ids":{"imdb":"tt3"}}}]"#.utf8), for: request)

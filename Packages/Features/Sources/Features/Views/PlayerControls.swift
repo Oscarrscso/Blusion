@@ -201,8 +201,11 @@ struct PlayerControls: View {
             }
         } label: {
             Group {
-                if model.state.rate == 1 { Image(systemName: "gauge.with.dots.needle.67percent") }
-                else { Text("\(model.state.rate.formatted())×").font(.subheadline.weight(.semibold)) }
+                if model.state.rate == 1 {
+                    Image(systemName: "gauge.with.dots.needle.67percent")
+                } else {
+                    Text("\(model.state.rate.formatted())×").font(.subheadline.weight(.semibold))
+                }
             }
             .frame(minWidth: 44, minHeight: 44)
             .pointerInteraction(cornerRadius: 12)

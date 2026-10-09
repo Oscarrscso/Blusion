@@ -41,9 +41,12 @@ struct WidgetRow: View {
         let presentation = row.presentation
         if case .loaded(let items) = section.state, !items.isEmpty {
             MediaRow(widget.title, hideTitle: widget.hideTitle, onSeeAll: { router.homePath.append(seeAllRequest) }) {
-                ForEach(items, id: \.identity) { item in
+                ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                     MediaCardLink(item: item, aspect: presentation.aspectRatio.cardAspect, size: presentation.cardStyle.cardSize,
                                   showsRating: presentation.showsRatings)
+                        .overlay(alignment: .topLeading) {
+                            if presentation.showsRank { RankBadge(position: index + 1) }
+                        }
                 }
             }
         } else {
@@ -79,6 +82,38 @@ struct WidgetRow: View {
     private var identifier: String {
         if case .addonCatalog(let reference) = row.source { return "board.row.\(reference.catalogID)" }
         return "board.row.\(section.widget.id)"
+    }
+}
+
+/// The position of a card in a numbered row, drawn over the card's top-left corner.
+struct RankBadge: View {
+    let position: Int
+
+    var body: some View {
+        Text("\(position)")
+            .font(.system(size: 44, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+            .padding(.leading, 6)
+            .padding(.top, 2)
+            .allowsHitTesting(false)
+            .accessibilityLabel("Number \(position)")
+            .accessibilityIdentifier("board.rank.\(position)")
+    }
+}
+
+/// A `.unsupported` widget: a Fusion row type this version cannot show. Kept in the layout, with its title and a plain message.
+struct UnsupportedWidgetRow: View {
+    let widget: HomeWidget
+
+    var body: some View {
+        RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
+            Text("Blusion can't show this kind of row yet.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Theme.screenPadding)
+        }
+        .accessibilityIdentifier("board.unsupported.\(widget.id)")
     }
 }
 

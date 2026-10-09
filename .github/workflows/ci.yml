@@ -3,14 +3,19 @@ name: CI
 # ADR-002: the Linux job proves the host layer (packages + mock addon); the macOS job runs the Xcode steps of
 # scripts/verify.sh (xcodegen, xcodebuild on a simulator, SwiftLint). Both must be green for a milestone.
 on:
+  # Pushes to main only: a push to a branch with an open PR would otherwise run CI twice (push + pull_request) and email twice.
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# One run per PR (or per ref without a PR). Superseded PR runs are cancelled; pushes to main are never cancelled.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   host-linux:
@@ -20,6 +25,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Trust the checkout inside the container
+        # The workspace is owned by the runner user, not root; git (used by verify.sh to list sources) refuses it without this.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install node, ffmpeg, curl, python
         run: |
           apt-get update
@@ -64,8 +72,10 @@ jobs:
 
   # Informational: the opt-in fallback engine (ADR-006, MPVKit). It cannot fail the build; it tells you whether the unverified
   # MPVKit pin and MPVBackend glue work. Fix Packages/FallbackPlayer first if this job is red.
+  # Manual only (workflow_dispatch). It never runs on push or PR, so it cannot add red runs or emails to those.
   macos-fallback:
     name: Opt-in fallback engine (informational)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     continue-on-error: true
     timeout-minutes: 90

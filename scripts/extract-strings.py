@@ -17,17 +17,31 @@ import sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 catalog_path = os.path.join(root, "App", "Localizable.xcstrings")
 views = os.path.join(root, "Packages", "Features", "Sources", "Features", "Views")
-pattern = re.compile(
-    r'\b(?:Text|Label|Button|Section|Toggle|Picker|TextField|LabeledContent|NavigationLink|Link|ContentUnavailableView|ProgressView'
-    r'|navigationTitle|accessibilityLabel|accessibilityHint|accessibilityValue|confirmationDialog|alert|searchable\(text: [^,]+, prompt)'
-    r'\(\s*"((?:[^"\\]|\\.)*)"')
+CALLS = (r'\b(?:Text|Label|Button|Section|Toggle|Picker|TextField|LabeledContent|NavigationLink|Link|ContentUnavailableView|ProgressView'
+         r'|navigationTitle|accessibilityLabel|accessibilityHint|accessibilityValue|confirmationDialog|alert|searchable\(text: [^,]+, prompt)'
+         r'\(\s*')
+pattern = re.compile(CALLS + r'"(?!"")((?:[^"\\]|\\.)*)"')
+# Long literals are written as multi-line strings joined with trailing backslashes (SwiftLint line_length). Swift joins them the
+# same way, so the catalog key is the joined text.
+multiline = re.compile(CALLS + r'"""[ \t]*\n(.*?)\n([ \t]*)"""', re.S)
+
+
+def joined(body, closing_indent):
+    out = []
+    for line in body.split("\n"):
+        line = line[len(closing_indent):] if line.startswith(closing_indent) else line.lstrip()
+        out.append(line[:-1] if line.endswith("\\") else line + "\n")
+    return "".join(out).rstrip("\n")
+
 
 found, interpolated = set(), set()
 for dirpath, _, names in os.walk(views):
     for name in sorted(names):
         if not name.endswith(".swift"):
             continue
-        for literal in pattern.findall(open(os.path.join(dirpath, name), encoding="utf-8").read()):
+        source = open(os.path.join(dirpath, name), encoding="utf-8").read()
+        literals = pattern.findall(source) + [joined(body, indent) for body, indent in multiline.findall(source)]
+        for literal in literals:
             (interpolated if "\\(" in literal else found).add(literal)
 
 catalog = {"sourceLanguage": "en", "strings": {}, "version": "1.0"}

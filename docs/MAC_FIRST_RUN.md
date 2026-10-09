@@ -34,9 +34,8 @@ Left/Right to skip 10 seconds, and Esc to close. Reduce Motion disables card mov
    Optional scores use an OMDb API key and TMDb API Read Access Token saved in **Settings → Review services**. With an OMDb key, open a
    series and check that its episodes show IMDb scores, and that posters without a catalog rating gain one. Mark a show watched from its
    title page and check every episode follows.
-5. Register your Trakt API app with Redirect URI `urn:ietf:wg:oauth:2.0:oob`. Open **Settings → Accounts → Trakt**,
-   save its Client ID and Client Secret, and select **Sign in to Trakt**.
-   Authorize the displayed code in the browser. Choose the watchlist/history switches, then **Import from Trakt** or **Send to Trakt**.
+5. Open **Settings → Accounts → Trakt**, select **Connect**, and authorize in the browser.
+   Use **Import collection** to import later changes, or **Sync** to send local saved and watched items before importing.
    This manual sync adds missing saved titles and watched movies/episodes with IMDb IDs; it never deletes items and keeps playback positions local.
 6. Check player selection, automatic playback, and poster ratings in Settings. With a stream addon, play, return, and check Continue Watching.
    For Infuse, also check the callback updates progress.
