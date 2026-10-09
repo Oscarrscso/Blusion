@@ -43,38 +43,60 @@ struct HeroBannerSection: View {
     }
 }
 
-/// The featured title, then the rest of the list as a snapping row of cards beneath the picture's fade.
+/// One rounded card: the featured title's backdrop on top with its name and year at the top left, and the rest of the list as a
+/// row of small landscape cards on a tray tinted by the same picture, blurred.
 struct HeroBanner: View {
     let items: [MetaPreview]
     let row: RowConfiguration
     @Environment(\.layoutMetrics) private var metrics
+    @State private var heroArtwork: TMDbArtwork?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            BannerFeature(item: items[0], showsRating: row.presentation.showsRatings)
+        VStack(alignment: .leading, spacing: 0) {
+            BannerFeature(item: items[0], showsRating: row.presentation.showsRatings, heroArtwork: $heroArtwork)
             if items.count > 1 {
                 MediaRow("", hideTitle: true) {
                     ForEach(Array(items.dropFirst()), id: \.identity) { item in
-                        MediaCardLink(item: item, aspect: .poster, size: row.presentation.cardStyle.cardSize,
-                                      showsRating: row.presentation.showsRatings)
+                        MediaCardLink(item: item, aspect: .wide, size: row.presentation.cardStyle.cardSize,
+                                      showsRating: row.presentation.showsRatings, width: cardWidth, subtitle: item.releaseInfo ?? " ")
                     }
                 }
+                .padding(.top, Theme.Spacing.m)
+                .padding(.bottom, Theme.Spacing.m)
             }
         }
+        .environment(\.colorScheme, .dark)
+        .background { tray }
+        .clipShape(RoundedRectangle(cornerRadius: HeroBanner.cornerRadius, style: .continuous))
+        .padding(.horizontal, metrics.pageMargin)
+    }
+
+    static let cornerRadius: CGFloat = 28
+
+    /// The small cards of the tray: about a third of the banner's width on a phone.
+    private var cardWidth: CGFloat {
+        (metrics.posterWidth * 1.1 * row.presentation.cardStyle.cardSize.scale).rounded()
+    }
+
+    /// The featured picture, blurred and darkened, so the tray picks up the colours above it.
+    private var tray: some View {
+        ArtworkImage(url: heroArtwork?.backdrop ?? items[0].background ?? MetahubArtwork.background(imdbID: items[0].id), maxPixelSize: 256,
+                     contentMode: .fill, placeholderURL: items[0].poster, imageAlignment: .bottom)
+            .blur(radius: 40)
+            .overlay { Color.black.opacity(0.55) }
+            .background(Theme.surface)
     }
 }
 
-/// The featured title of a banner: its backdrop edge to edge, faded into the page, with its logo, name and metadata at the bottom.
+/// The featured title of a banner: its backdrop, with its name and year at the top left and a soft fade into the tray at the bottom.
 private struct BannerFeature: View {
     let item: MetaPreview
     let showsRating: Bool
+    @Binding var heroArtwork: TMDbArtwork?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(PosterRatingsStore.self) private var ratings
-    @State private var heroArtwork: TMDbArtwork?
-    /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name.
-    @State private var artworkChecked = false
 
     var body: some View {
         let sourceID = "banner/\(item.identity)"
@@ -83,16 +105,24 @@ private struct BannerFeature: View {
             router.homePath.append(TitleDestination(preview: item, sourceID: sourceID, artwork: heroArtwork))
         }
         Color.clear
-            .aspectRatio(16.0 / 10.0, contentMode: .fit)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .frame(maxWidth: .infinity)
             .overlay {
                 ArtworkImage(url: heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id), maxPixelSize: 2048,
                              contentMode: .fill, placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
             }
             .clipped()
+            .mask {
+                LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .black.opacity(0), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+            }
             .zoomSource(id: sourceID, in: zoomNamespace)
-            .overlay { BottomFade(length: 0.6) }
-            .overlay(alignment: .bottomLeading) {
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.35), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 110)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .topLeading) {
                 caption
                     .allowsHitTesting(false)
             }
@@ -106,54 +136,47 @@ private struct BannerFeature: View {
                 let loaded = await ratings.heroArtwork(for: item)
                 guard !Task.isCancelled else { return }
                 heroArtwork = loaded
-                artworkChecked = true
             }
     }
 
-    /// The logo as soon as its URL is known, else the name once the lookup has found no logo. Blank until then.
+    /// The name in bold, the year (and the rating, when shown) in a lighter line under it.
     private var caption: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            titleBlock
-            MetaLine(metaParts)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, metrics.pageMargin)
-        .padding(.bottom, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private var titleBlock: some View {
-        if let logo = item.logo ?? heroArtwork?.logo {
-            HeroLogo(url: logo, title: item.name)
-        } else if artworkChecked {
+        VStack(alignment: .leading, spacing: 2) {
             Text(item.name)
                 .font(.title.bold())
                 .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHidden(true)
-        } else {
-            Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
+            Text([item.releaseInfo, rating].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.title3)
+                .foregroundStyle(.white.opacity(0.75))
         }
+        .foregroundStyle(.white)
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 1)
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.top, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Year, the first two genres and, when ratings are shown, the IMDb rating, dot-separated.
-    private var metaParts: [String?] {
-        let rating = showsRating ? item.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" } : nil
-        return [item.releaseInfo] + item.genres.prefix(2).map { Optional($0) } + [rating]
+    private var rating: String? {
+        showsRating ? item.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" } : nil
     }
 }
 
-/// The grey stand-in for a banner, the same shape as its featured picture, shimmering while the items load.
+/// The grey stand-in for a banner, the same shape as the loaded card, shimmering while the items load.
 struct HeroBannerPlaceholder: View {
+    @Environment(\.layoutMetrics) private var metrics
+
     var body: some View {
-        Color.clear
-            .aspectRatio(16.0 / 10.0, contentMode: .fit)
-            .frame(maxWidth: .infinity)
-            .background { Rectangle().fill(Theme.surface) }
-            .shimmering()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Loading")
+        VStack(spacing: 0) {
+            Color.clear.aspectRatio(16.0 / 9.0, contentMode: .fit)
+            Color.clear.frame(height: 130)
+        }
+        .frame(maxWidth: .infinity)
+        .background { Rectangle().fill(Theme.surface) }
+        .shimmering()
+        .clipShape(RoundedRectangle(cornerRadius: HeroBanner.cornerRadius, style: .continuous))
+        .padding(.horizontal, metrics.pageMargin)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 }
 #endif
