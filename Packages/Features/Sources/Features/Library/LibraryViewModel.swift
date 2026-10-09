@@ -60,7 +60,6 @@ public final class LibraryViewModel {
 
     /// The genres and year span of everything in the Library, for the filter's pickers.
     public var availableGenres: [String] { LibraryFiltering.genres(in: savedEntries + watchedEntries) }
-    public var availableYears: ClosedRange<Int>? { LibraryFiltering.yearRange(in: savedEntries + watchedEntries) }
 
     /// An empty library can recover from a missed Trakt import without signing in again.
     public func refresh(now: Date = Date()) async {

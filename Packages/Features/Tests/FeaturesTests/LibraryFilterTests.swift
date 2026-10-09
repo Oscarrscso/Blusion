@@ -85,10 +85,10 @@ import StremioKitTestSupport
         #expect(ids(LibraryFiltering.apply(filter, to: [old, mid, new, unknown], now: now)) == ["movie/3"], "an open upper bound")
     }
 
-    @Test func yearPickersOfferDecadesOldestFirstLabelledByRange() {
-        #expect(LibraryFiltering.decadeStarts(in: 2003...2024) == [2000, 2010, 2020])
-        #expect(LibraryFiltering.decadeStarts(in: 1985...1989) == [1980])
+    @Test func theYearPickerOffersTheDecadesFrom1940To2029() {
+        #expect(LibraryFiltering.decades == [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020])
         #expect(LibraryFiltering.decadeText(1940) == "1940–1949")
+        #expect(LibraryFiltering.decadeText(2020) == "2020–2029")
     }
 
     @Test func genresMatchAnyChosenGenre() {

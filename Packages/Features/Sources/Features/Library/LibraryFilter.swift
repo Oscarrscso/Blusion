@@ -366,17 +366,8 @@ public enum LibraryFiltering {
         Set(entries.flatMap(\.genres)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    /// The earliest and latest years any entry has; nil when none has a year.
-    public static func yearRange(in entries: [LibraryEntry]) -> ClosedRange<Int>? {
-        let years = entries.compactMap(\.year)
-        guard let low = years.min(), let high = years.max() else { return nil }
-        return low...high
-    }
-
-    /// The first year of each decade the range touches, oldest first: 2000, 2010, 2020 for a range from 2003 to 2024.
-    public static func decadeStarts(in range: ClosedRange<Int>) -> [Int] {
-        Array(stride(from: range.lowerBound / 10 * 10, through: range.upperBound / 10 * 10, by: 10))
-    }
+    /// The decades the Year picker offers, oldest first: 1940 (1940–1949) through 2020 (2020–2029).
+    public static let decades = Array(stride(from: 1940, through: 2020, by: 10))
 
     /// "1940–1949" for the decade starting at 1940.
     public static func decadeText(_ start: Int) -> String { "\(start)–\(start + 9)" }

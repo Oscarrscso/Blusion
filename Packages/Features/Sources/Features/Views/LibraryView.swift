@@ -92,18 +92,7 @@ struct LibraryView: View {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
-                        if let range = model.availableYears {
-                            Picker("From", selection: $model.filter.minimumYear) {
-                                Text("Any").tag(Int?.none)
-                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0)) }
-                            }
-                            Picker("To", selection: $model.filter.maximumYear) {
-                                Text("Any").tag(Int?.none)
-                                ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0 + 9)) }
-                            }
-                        } else {
-                            Text("No release years yet")
-                        }
+                        DecadePicker(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear)
                     } label: {
                         filterLabel("Year", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                     }
@@ -205,6 +194,30 @@ struct LibraryView: View {
     }
 }
 
+/// One decade from 1940 to 2029, or any year. Picking a decade sets both ends of the year filter to it.
+struct DecadePicker: View {
+    @Binding var minimumYear: Int?
+    @Binding var maximumYear: Int?
+
+    private var decade: Binding<Int?> {
+        Binding {
+            guard let low = minimumYear, maximumYear == low + 9 else { return nil }
+            return low
+        } set: { start in
+            minimumYear = start
+            maximumYear = start.map { $0 + 9 }
+        }
+    }
+
+    var body: some View {
+        Picker("Decade", selection: decade) {
+            Text("Any").tag(Int?.none)
+            ForEach(LibraryFiltering.decades, id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0)) }
+        }
+        .accessibilityIdentifier("library.filter.year.decade")
+    }
+}
+
 /// The minimum rating, out of 10. Each title is rated by its best available score, so the menu names no site.
 struct RatingPicker: View {
     @Binding var threshold: Double?
@@ -241,18 +254,7 @@ struct LibraryFilterSheet: View {
                     }
                 }
                 Section("Release year") {
-                    if let range = model.availableYears {
-                        Picker("From", selection: $model.filter.minimumYear) {
-                            Text("Any").tag(Int?.none)
-                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0)) }
-                        }
-                        Picker("To", selection: $model.filter.maximumYear) {
-                            Text("Any").tag(Int?.none)
-                            ForEach(LibraryFiltering.decadeStarts(in: range), id: \.self) { Text(LibraryFiltering.decadeText($0)).tag(Int?.some($0 + 9)) }
-                        }
-                    } else {
-                        Text("No release years yet").foregroundStyle(.secondary)
-                    }
+                    DecadePicker(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear)
                 }
                 Section {
                     let genres = model.availableGenres
