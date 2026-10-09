@@ -62,8 +62,13 @@ public protocol LibraryStore: Sendable {
     func all() async -> [LibraryItem]
     func contains(_ id: String) async -> Bool
     func add(_ item: LibraryItem) async
+    func add(_ items: [LibraryItem]) async
     func remove(_ id: String) async
     func clear() async
+}
+
+public extension LibraryStore {
+    func add(_ items: [LibraryItem]) async { for item in items { await add(item) } }
 }
 
 public actor InMemoryLibraryStore: LibraryStore {
@@ -76,6 +81,7 @@ public actor InMemoryLibraryStore: LibraryStore {
     public func all() async -> [LibraryItem] { items.values.sorted { $0.addedAt > $1.addedAt } }
     public func contains(_ id: String) async -> Bool { items[id] != nil }
     public func add(_ item: LibraryItem) async { items[item.id] = item }
+    public func add(_ additions: [LibraryItem]) async { for item in additions { items[item.id] = item } }
     public func remove(_ id: String) async { items[id] = nil }
     public func clear() async { items = [:] }
 }

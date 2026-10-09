@@ -45,6 +45,17 @@ import StremioKitTestSupport
         #expect(!entry.isEmpty)
     }
 
+    @Test func aSpecificFilterScoreDoesNotQueueUnrelatedProviders() async throws {
+        let transport = StubTransport(data: page)
+        let store = store(transport)
+        let entry = store.ratings(for: movie, source: .imdb)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(entry.imdb == 9 && transport.callCount == 0)
+        _ = store.ratings(for: movie, source: .letterboxd)
+        try await waitUntil { entry.letterboxd == 4.5 }
+        #expect(transport.callCount == 1)
+    }
+
     @Test func seriesInvalidIDsAndDisabledRatingsNeverRequest() async throws {
         let transport = StubTransport(data: page)
         let store = store(transport)
@@ -69,6 +80,22 @@ import StremioKitTestSupport
         let entry = store.ratings(for: movie)
         try await waitUntil { entry.letterboxd == 4 }
         #expect(transport.callCount == 0)
+    }
+
+    @Test func cachedDetailScoresDoNotWaitForBusyNetworkWorkers() async throws {
+        let cache = InMemoryRatingsCache()
+        await cache.store(CachedRating(rating: 4, fetchedAt: when), for: movie.id)
+        let transport = StubTransport { request, _ in
+            try await Task.sleep(for: .seconds(2))
+            return StubTransport.response(Data(#"<meta name="twitter:data2" content="4.5">"#.utf8), for: request)
+        }
+        let store = store(transport, cache: cache, now: { self.when })
+        for n in 0..<10 { _ = store.ratings(for: MetaPreview(id: "tt10000\(n)", type: "movie")) }
+        try await waitUntil { transport.callCount == 3 }
+        let cached = store.ratings(for: movie, includeReviews: true)
+        try await waitUntil(timeout: 0.5) { cached.letterboxd == 4 }
+        #expect(transport.callCount == 3)
+        await store.refresh()
     }
 
     @Test func sevenDayOldRatingsAreRefetched() async throws {
@@ -201,7 +228,7 @@ import StremioKitTestSupport
         #expect(transport.callCount == 1 && store.reviewServiceIssue == nil)
     }
 
-    @Test func homeHeroLoadsDistinctOriginalArtworkEvenWhenPosterRatingsAreDisabled() async throws {
+    @Test func homeHeroLoadsDistinctSizedArtworkEvenWhenPosterRatingsAreDisabled() async throws {
         let transport = StubTransport { request, _ in
             let json = request.url?.lastPathComponent == "images"
                 ? #"{"backdrops":[{"file_path":"/landscape.jpg"}],"posters":[{"file_path":"/portrait.jpg"}]}"#
@@ -210,8 +237,8 @@ import StremioKitTestSupport
         }
         let store = PosterRatingsStore(isEnabled: false, tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt))
         let artwork = try #require(await store.heroArtwork(for: movie))
-        #expect(artwork.portrait == URL(string: "https://image.tmdb.org/t/p/original/portrait.jpg"))
-        #expect(artwork.backdrop == URL(string: "https://image.tmdb.org/t/p/original/landscape.jpg"))
+        #expect(artwork.portrait == URL(string: "https://image.tmdb.org/t/p/w780/portrait.jpg"))
+        #expect(artwork.backdrop == URL(string: "https://image.tmdb.org/t/p/w1280/landscape.jpg"))
         #expect(artwork.portrait != artwork.backdrop)
         #expect(await PosterRatingsStore().heroArtwork(for: movie) == nil)
     }

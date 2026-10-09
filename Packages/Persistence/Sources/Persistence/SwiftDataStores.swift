@@ -97,21 +97,39 @@ public actor SwiftDataProgressStore: ProgressStore {
     }
 
     public func save(_ progress: WatchProgress) async {
-        if let entity = fetch(progress.id) {
-            entity.type = progress.type
-            entity.contentID = progress.contentID
-            entity.title = progress.title
-            entity.posterURLString = progress.poster?.absoluteString
-            entity.position = progress.position
-            entity.duration = progress.duration
-            entity.isWatched = progress.isWatched
-            entity.updatedAt = progress.updatedAt
-            entity.season = progress.season
-            entity.episode = progress.episode
-        } else {
-            context.insert(WatchProgressEntity(id: progress.id, type: progress.type, contentID: progress.contentID, title: progress.title,
-                                               posterURLString: progress.poster?.absoluteString, position: progress.position, duration: progress.duration,
-                                               isWatched: progress.isWatched, updatedAt: progress.updatedAt, season: progress.season, episode: progress.episode))
+        await save([progress])
+    }
+
+    public func progress(for identities: [String]) async -> [WatchProgress] {
+        guard !identities.isEmpty else { return [] }
+        let descriptor = FetchDescriptor<WatchProgressEntity>(predicate: #Predicate { identities.contains($0.id) })
+        return ((try? context.fetch(descriptor)) ?? []).map(Self.progress(from:))
+    }
+
+    public func save(_ records: [WatchProgress]) async {
+        guard !records.isEmpty else { return }
+        let identities = records.map(\.id)
+        let descriptor = FetchDescriptor<WatchProgressEntity>(predicate: #Predicate { identities.contains($0.id) })
+        var existing = Dictionary(((try? context.fetch(descriptor)) ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for progress in records {
+            if let entity = existing[progress.id] {
+                entity.type = progress.type
+                entity.contentID = progress.contentID
+                entity.title = progress.title
+                entity.posterURLString = progress.poster?.absoluteString
+                entity.position = progress.position
+                entity.duration = progress.duration
+                entity.isWatched = progress.isWatched
+                entity.updatedAt = progress.updatedAt
+                entity.season = progress.season
+                entity.episode = progress.episode
+            } else {
+                let entity = WatchProgressEntity(id: progress.id, type: progress.type, contentID: progress.contentID, title: progress.title,
+                                                   posterURLString: progress.poster?.absoluteString, position: progress.position, duration: progress.duration,
+                                                   isWatched: progress.isWatched, updatedAt: progress.updatedAt, season: progress.season, episode: progress.episode)
+                context.insert(entity)
+                existing[progress.id] = entity
+            }
         }
         try? context.save()
     }
@@ -126,6 +144,13 @@ public actor SwiftDataProgressStore: ProgressStore {
             context.delete(entity)
             try? context.save()
         }
+    }
+
+    public func remove(_ identities: [String]) async {
+        guard !identities.isEmpty else { return }
+        let descriptor = FetchDescriptor<WatchProgressEntity>(predicate: #Predicate { identities.contains($0.id) })
+        for entity in (try? context.fetch(descriptor)) ?? [] { context.delete(entity) }
+        try? context.save()
     }
 
     public func clear() async {
@@ -159,10 +184,19 @@ public actor SwiftDataLibraryStore: LibraryStore {
     public func contains(_ id: String) async -> Bool { fetch(id) != nil }
 
     public func add(_ item: LibraryItem) async {
-        guard fetch(item.id) == nil else { return }
-        context.insert(LibraryEntity(id: item.id, type: item.type, contentID: item.contentID, name: item.name,
-                                     posterURLString: item.poster?.absoluteString, releaseInfo: item.releaseInfo, addedAt: item.addedAt,
-                                     genres: item.genres, imdbRating: item.imdbRating))
+        await add([item])
+    }
+
+    public func add(_ items: [LibraryItem]) async {
+        guard !items.isEmpty else { return }
+        let identities = items.map(\.id)
+        let descriptor = FetchDescriptor<LibraryEntity>(predicate: #Predicate { identities.contains($0.id) })
+        var existing = Set(((try? context.fetch(descriptor)) ?? []).map(\.id))
+        for item in items where existing.insert(item.id).inserted {
+            context.insert(LibraryEntity(id: item.id, type: item.type, contentID: item.contentID, name: item.name,
+                                         posterURLString: item.poster?.absoluteString, releaseInfo: item.releaseInfo, addedAt: item.addedAt,
+                                         genres: item.genres, imdbRating: item.imdbRating))
+        }
         try? context.save()
     }
 

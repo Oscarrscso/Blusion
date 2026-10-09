@@ -13,7 +13,7 @@ public enum AutoStreamRanking {
     public static func assess(_ item: RankedStream, duration: TimeInterval?) -> Assessment {
         let text = [item.stream.name, item.stream.description, item.stream.behaviorHints.filename].compactMap { $0 }
             .joined(separator: " ").lowercased()
-        let remux = text.range(of: #"\bremux\b"#, options: .regularExpression) != nil
+        let remux = expressions[#"\bremux\b"#]?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
         var bitrate = number(#"([0-9]+(?:\.[0-9]+)?)\s*(?:mbps|mb/s|mbit/s)\b"#, in: text)
         if bitrate == nil, let bytes = item.quality.sizeBytes, bytes > 0, let duration, duration > 0 {
             bitrate = Double(bytes) * 8 / duration / 1_000_000
@@ -65,8 +65,20 @@ public enum AutoStreamRanking {
         } ?? leader
     }
 
+    private static let expressions: [String: NSRegularExpression] = {
+        let patterns = [
+            #"\bremux\b"#,
+            #"([0-9]+(?:\.[0-9]+)?)\s*(?:mbps|mb/s|mbit/s)\b"#,
+            #"(?:seeders?\s*[:=]?\s*|[👤👥🌱]\s*)([0-9]+)\b"#,
+            #"\b([0-9]+)\s*seeders?\b"#,
+        ]
+        return Dictionary(uniqueKeysWithValues: patterns.compactMap { pattern in
+            (try? NSRegularExpression(pattern: pattern)).map { (pattern, $0) }
+        })
+    }()
+
     private static func number(_ pattern: String, in text: String) -> Double? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = expressions[pattern],
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
               let range = Range(match.range(at: 1), in: text), let value = Double(text[range]), value.isFinite else { return nil }
         return value

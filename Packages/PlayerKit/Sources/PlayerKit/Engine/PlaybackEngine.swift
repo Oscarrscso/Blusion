@@ -57,11 +57,11 @@ public struct PlaybackState: Sendable, Equatable {
         return nil
     }
 
-    /// True once the engine has shown it can play this item (ready, playing, paused, buffering, ended).
+    /// Ready and buffering alone do not show that playback has started.
     public var hasStarted: Bool {
         switch status {
-        case .ready, .playing, .paused, .buffering, .ended: return true
-        case .idle, .loading, .failed: return false
+        case .playing, .ended: return true
+        case .idle, .loading, .ready, .paused, .buffering, .failed: return false
         }
     }
 }

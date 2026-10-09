@@ -80,6 +80,23 @@ import StremioKitTestSupport
         #expect(await rig.browse.search("  movie 7  ").collect().first?.value?.map(\.id) == ["mock:movie7"], "the query is trimmed")
     }
 
+    @Test func incrementalSearchPublishesFastCatalogBeforeItsSlowSibling() async throws {
+        let manifest = Manifest(id: "partial", name: "Partial", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
+                                catalogs: [CatalogDescriptor(type: "movie", id: "slow", extra: [ExtraDescriptor(name: "search")]),
+                                           CatalogDescriptor(type: "movie", id: "fast", extra: [ExtraDescriptor(name: "search")])])
+        let transport = StubTransport { request, _ in
+            let slow = request.url?.path.contains("/slow/") == true
+            if slow { try await Task.sleep(for: .milliseconds(200)) }
+            let id = slow ? "tt1" : "tt2"
+            return StubTransport.response(Data("{\"metas\":[{\"id\":\"\(id)\"}]}".utf8), for: request)
+        }
+        let browse = try await stubbedService(manifests: [manifest], transport: transport)
+        var iterator = await browse.search("title", incremental: true).makeAsyncIterator()
+        #expect(await iterator.next()?.value?.map(\.id) == ["tt2"])
+        #expect(await iterator.next()?.value?.map(\.id) == ["tt1", "tt2"], "final order follows catalogs, not arrival order")
+        #expect(await iterator.next() == nil)
+    }
+
     @Test func searchMergesAnAddonsCatalogsAndDeduplicates() async throws {
         let manifest = Manifest(
             id: "multi", name: "Multi", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie", "series"],

@@ -143,7 +143,9 @@ public struct StreamQuality: Sendable, Equatable {
         func take(_ codec: AudioCodec, _ pattern: String) {
             guard matches(pattern, in: remaining) else { return }
             if !found.contains(codec) { found.append(codec) }
-            remaining = remaining.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+            if let regex = expressions[pattern] {
+                remaining = regex.stringByReplacingMatches(in: remaining, range: NSRange(remaining.startIndex..., in: remaining), withTemplate: " ")
+            }
         }
         take(.dtsHD, #"\b(dts[ .\-]?hd([ .\-]?ma)?|dts[ .\-]?x)\b"#)
         take(.dts, #"\bdts\b"#)
@@ -164,13 +166,52 @@ public struct StreamQuality: Sendable, Equatable {
         return Int64(value * multiplier)
     }
 
+    /// Fixed release patterns are compiled once and shared safely across parses.
+    private static let expressions: [String: NSRegularExpression] = {
+        let patterns = [
+            #"\b(dolby[ .\-]?vision|dovi|dv)\b"#,
+            #"\bhdr(10)?\+?\b"#,
+            #"\batmos\b"#,
+            #"\b(2160p|4k|uhd)\b"#,
+            #"\b1440p\b"#,
+            #"\b(1080[pi]|fhd|full[ .\-]?hd)\b"#,
+            #"\b(720p|hd720)\b"#,
+            #"\b576p\b"#,
+            #"\b(480p|sd)\b"#,
+            #"\b360p\b"#,
+            #"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#,
+            #"\b(hdcam|camrip|cam|telesync|hdts|tsrip)\b"#,
+            #"\b(blu[ .\-]?ray|bdrip|brrip|remux)\b"#,
+            #"\bweb[ .\-]?dl\b"#,
+            #"\bweb[ .\-]?rip\b"#,
+            #"\bhdtv\b"#,
+            #"\b(dvdrip|dvd)\b"#,
+            #"\b(x265|h[ .]?265|hevc)\b"#,
+            #"\b(x264|h[ .]?264|avc)\b"#,
+            #"\bav1\b"#,
+            #"\b(dts[ .\-]?hd([ .\-]?ma)?|dts[ .\-]?x)\b"#,
+            #"\bdts\b"#,
+            #"\btrue[ .\-]?hd\b"#,
+            #"\b(e[ .\-]?ac[ .\-]?3|ddp(\d\.\d)?|dd\+)(?=\W|$)"#,
+            #"\b(ac[ .\-]?3|dd5[ .]1|dd2[ .]0|dolby[ .\-]?digital)\b"#,
+            #"\baac(\d\.\d)?\b"#,
+            #"\bflac\b"#,
+            #"\bopus\b"#,
+            #"\bmp3\b"#,
+            #"(\d+(?:[.,]\d+)?)\s?(gb|gib|mb|mib)\b"#,
+        ]
+        return Dictionary(uniqueKeysWithValues: patterns.compactMap { pattern in
+            (try? NSRegularExpression(pattern: pattern)).map { (pattern, $0) }
+        })
+    }()
+
     private static func matches(_ pattern: String, in text: String) -> Bool {
-        text.range(of: pattern, options: .regularExpression) != nil
+        expressions[pattern]?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     /// Whole match followed by capture groups, or nil.
     private static func firstMatch(_ pattern: String, in text: String) -> [String]? {
-        guard let regex = try? NSRegularExpression(pattern: pattern),
+        guard let regex = expressions[pattern],
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) else { return nil }
         return (0..<match.numberOfRanges).map { index in
             Range(match.range(at: index), in: text).map { String(text[$0]) } ?? ""

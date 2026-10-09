@@ -42,21 +42,19 @@ public final class WidgetContentService: Sendable {
         self.now = now
     }
 
-    /// Items of one source. `skip` is the number of items already loaded (paging). Results are cached per (source, limit, skip)
-    /// for `cacheTTL` seconds; 0 bypasses the cache. A loaded first page replaces the source's snapshot.
+    /// Items of one source. Addon pages share display limits; Trakt pages keep their server limit.
+    /// `cacheTTL` is in seconds; 0 bypasses saved pages. A loaded first page replaces the source's snapshot.
     public func items(for source: WidgetSource, limit: Int = 20, skip: Int = 0, cacheTTL: Int = 3600) async throws -> [MetaPreview] {
         guard limit > 0 else { return [] }
         let offset = max(skip, 0)
         let ttl = max(cacheTTL, 0)
-        if ttl > 0, let cached = await cache.items(for: source, limit: limit, skip: offset, at: now()) { return cached }
-        let items = try await fetch(source, limit: limit, skip: offset)
-        if offset == 0, let snapshots {
-            await snapshots.save(items, for: source)
+        let items = try await cache.load(source: source, limit: limit, skip: offset, ttl: TimeInterval(ttl), at: now()) { [self] in
+            let items = try await fetch(source, limit: limit, skip: offset)
+            try Task.checkCancellation()
+            if offset == 0, let snapshots { await snapshots.save(items, for: source) }
+            return items
         }
-        if ttl > 0 {
-            await cache.store(items, for: source, limit: limit, skip: offset, ttl: TimeInterval(ttl), at: now())
-        }
-        return items
+        return Array(items.prefix(limit))
     }
 
     /// The items most recently loaded for a source, however old, so Home can show them while it loads again. The in-memory cache is
@@ -127,7 +125,7 @@ public final class WidgetContentService: Sendable {
 
     /// Forgets everything the service remembers, cached pages and snapshots alike: the rows of a removed addon or a reset Home must not linger.
     public func forgetEverything() async {
-        await cache.removeAll()
+        await cache.removeAll(waitForPending: true)
         await snapshots?.clear()
     }
 
@@ -145,7 +143,7 @@ public final class WidgetContentService: Sendable {
             }
             do {
                 let items = try await client.catalog(base: match.addon.baseURL, type: match.catalog.type, id: match.catalog.id, extras: extras)
-                return Array(items.prefix(limit))
+                return items
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }
@@ -203,10 +201,49 @@ private actor WidgetItemCache {
     private static let capacity = 200
 
     private var entries: [Key: Entry] = [:]
+    private struct Pending {
+        let task: Task<[MetaPreview], Error>
+        var consumers: Set<UUID>
+    }
+    private var pending: [Key: Pending] = [:]
 
-    func items(for source: WidgetSource, limit: Int, skip: Int, at date: Date) -> [MetaPreview]? {
-        guard let entry = entries[Key(source: source, limit: limit, skip: skip)], entry.expiresAt > date else { return nil }
-        return entry.items
+    func load(source: WidgetSource, limit: Int, skip: Int, ttl: TimeInterval, at date: Date,
+              fetch: @escaping @Sendable () async throws -> [MetaPreview]) async throws -> [MetaPreview] {
+        // An addon's display limit does not change its HTTP request; Trakt's limit does.
+        let requestLimit: Int
+        if case .addonCatalog = source { requestLimit = 0 } else { requestLimit = limit }
+        let key = Key(source: source, limit: requestLimit, skip: skip)
+        if ttl > 0, let entry = entries[key], entry.expiresAt > date { return entry.items }
+        try Task.checkCancellation()
+        let consumer = UUID()
+        let task: Task<[MetaPreview], Error>
+        if var request = pending[key] {
+            request.consumers.insert(consumer)
+            pending[key] = request
+            task = request.task
+        } else {
+            task = Task { try await fetch() }
+            pending[key] = Pending(task: task, consumers: [consumer])
+        }
+        return try await withTaskCancellationHandler {
+            defer { releaseConsumer(consumer, for: key) }
+            let items = try await task.value
+            try Task.checkCancellation()
+            if pending[key]?.task == task, ttl > 0 {
+                store(items, for: source, limit: requestLimit, skip: skip, ttl: ttl, at: date)
+            }
+            return items
+        } onCancel: {
+            Task { await self.releaseConsumer(consumer, for: key) }
+        }
+    }
+
+    private func releaseConsumer(_ consumer: UUID, for key: Key) {
+        guard var request = pending[key], request.consumers.remove(consumer) != nil else { return }
+        if request.consumers.isEmpty {
+            request.task.cancel()
+            pending[key] = nil
+        } else { pending[key] = request }
     }
 
     /// The first page stored most recently for a source, whatever its limit and whether it has expired.
@@ -227,7 +264,11 @@ private actor WidgetItemCache {
         }
     }
 
-    func removeAll() {
+    func removeAll(waitForPending: Bool = false) async {
         entries = [:]
+        let tasks = pending.values.map(\.task)
+        pending.removeAll()
+        for task in tasks { task.cancel() }
+        if waitForPending { for task in tasks { _ = await task.result } }
     }
 }

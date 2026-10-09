@@ -230,6 +230,7 @@ public final class AVEngine: PlaybackEngine {
         itemTokens.forEach { NotificationCenter.default.removeObserver($0) }
         itemTokens = []
         playerItem = nil
+        headerLoader?.invalidate()
         headerLoader = nil
         audioGroup = nil
         audioOptions = [:]

@@ -40,18 +40,22 @@ public final class PlaybackCoordinator {
     private let makeEngine: @MainActor (PlaybackCandidate) -> (any PlaybackEngine)?
     private let resumeFrom: TimeInterval
     private let startupTimeout: Duration
+    private let stallTimeout: Duration
     private let progress: ProgressSession?
     private var observer: Task<Void, Never>?
+    private var stallTimer: Task<Void, Never>?
     private var startContinuation: CheckedContinuation<Bool, Never>?
     private var hasStartedCurrent = false
     private var lastPosition: TimeInterval = 0
     private var stopped = false
 
-    public init(plan: PlaybackPlan, resumeFrom: TimeInterval = 0, startupTimeout: Duration = .seconds(20), progress: ProgressSession? = nil,
+    public init(plan: PlaybackPlan, resumeFrom: TimeInterval = 0, startupTimeout: Duration = .seconds(20),
+                stallTimeout: Duration = .seconds(20), progress: ProgressSession? = nil,
                 makeEngine: @escaping @MainActor (PlaybackCandidate) -> (any PlaybackEngine)?) {
         self.plan = plan
         self.resumeFrom = resumeFrom
         self.startupTimeout = startupTimeout
+        self.stallTimeout = stallTimeout
         self.progress = progress
         self.makeEngine = makeEngine
     }
@@ -79,6 +83,7 @@ public final class PlaybackCoordinator {
     public func stop() async {
         stopped = true
         observer?.cancel()
+        stallTimer?.cancel()
         resolveStart(false)
         engine?.stop()
         await progress?.finish()
@@ -103,7 +108,13 @@ public final class PlaybackCoordinator {
 
     private func tryCandidate(at index: Int, startPosition: TimeInterval) async {
         guard !stopped else { return }
+        engineGeneration += 1
+        resolveStart(false)
+        stallTimer?.cancel()
+        stallTimer = nil
         guard index < plan.candidates.count else {
+            observer?.cancel()
+            engine?.stop()
             phase = .exhausted
             notice = plan.candidates.isEmpty ? "There is nothing to play." : "None of the streams could be played."
             return
@@ -120,7 +131,7 @@ public final class PlaybackCoordinator {
         observer?.cancel()
         self.engine?.stop()
         self.engine = engine
-        engineGeneration += 1
+        phase = .starting
         state = engine.state
         hasStartedCurrent = false
         lastPosition = startPosition
@@ -139,7 +150,7 @@ public final class PlaybackCoordinator {
         let started = await waitForStart()
         guard !stopped, generation == engineGeneration else { return }
         if started {
-            phase = .playing
+            if phase != .finished { phase = .playing }
             notice = failedAttempts.isEmpty ? nil : notice
         } else if !hasStartedCurrent {
             if state.failure == nil { recordFailure(candidate, PlaybackFailure(.timeout, "The stream took too long to start.")) }
@@ -159,7 +170,7 @@ public final class PlaybackCoordinator {
         failedAttempts.append(FailedAttempt(id: candidate.id, title: candidate.title, failure: failure))
     }
 
-    /// Resolves true when the engine reports it can play, false on failure or timeout.
+    /// Resolves true on playback, false on failure or timeout.
     private func waitForStart() async -> Bool {
         let timeout = startupTimeout
         let timer = Task { [weak self] in
@@ -181,13 +192,22 @@ public final class PlaybackCoordinator {
     }
 
     private func handle(_ next: PlaybackState) {
+        let previous = state
         state = next
         if next.hasStarted, !hasStartedCurrent {
             hasStartedCurrent = true
             resolveStart(true)
         }
-        if next.status == .playing || next.status == .paused { lastPosition = next.position }
-        if next.hasStarted { progress?.observe(position: next.position, duration: next.duration) }
+        if hasStartedCurrent, next.status == .playing || next.status == .paused || next.status == .buffering {
+            lastPosition = next.position
+        }
+        if hasStartedCurrent { progress?.observe(position: next.position, duration: next.duration) }
+        if hasStartedCurrent, next.status == .playing || next.status == .buffering {
+            if stallTimer == nil || next.position != previous.position { watchForStall() }
+        } else {
+            stallTimer?.cancel()
+            stallTimer = nil
+        }
 
         switch next.status {
         case .failed(let failure):
@@ -208,6 +228,19 @@ public final class PlaybackCoordinator {
             }
         default:
             break
+        }
+    }
+
+    private func watchForStall() {
+        stallTimer?.cancel()
+        let generation = engineGeneration
+        let timeout = stallTimeout
+        stallTimer = Task { [weak self] in
+            do { try await Task.sleep(for: timeout) } catch { return }
+            guard let self, !self.stopped, self.engineGeneration == generation,
+                  let candidate = self.current else { return }
+            self.recordFailure(candidate, PlaybackFailure(.timeout, "Playback stopped making progress."))
+            await self.moveOn(startPosition: self.lastPosition)
         }
     }
 }

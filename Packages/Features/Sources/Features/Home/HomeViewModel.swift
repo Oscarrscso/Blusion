@@ -61,10 +61,11 @@ public final class HomeViewModel {
         let current = generation
         let addons = await services.registry.addons
         let saved = await services.widgets.load()
-        let inProgress = LibraryViewModel.continueWatching(from: await services.progress.all())
+        let local = await services.progress.all()
+        let inProgress = LibraryViewModel.continueWatching(from: local)
         guard current == generation, !Task.isCancelled else { return }
         continueWatching = inProgress
-        continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: traktPlayback)
+        continueEntries = ContinueWatchingEntry.merge(local: local, remote: traktPlayback)
         isCustomised = saved != nil
         guard !addons.isEmpty else {
             sections = []

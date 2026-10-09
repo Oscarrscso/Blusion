@@ -162,8 +162,7 @@ public struct RootTabView: View {
         .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(ResumeAccessoryModifier(model: resume))
-        .task(id: router.tab) { await refreshUserState() }
-        .task(id: userStateRevision) {
+        .task(id: "\(router.tab)-\(userStateRevision)") {
             router.userStateRevision = userStateRevision
             await refreshUserState()
         }
@@ -197,8 +196,9 @@ public struct RootTabView: View {
     }
 
     private func refreshUserState() async {
-        await resume.refresh()
-        await titleActions.refresh()
+        let progress = await services.progress.all()
+        resume.update(from: progress)
+        await titleActions.refresh(progress: progress)
         let settings = await services.settings.load()
         services.posterRatings.isEnabled = settings.showsPosterRatings
         services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos

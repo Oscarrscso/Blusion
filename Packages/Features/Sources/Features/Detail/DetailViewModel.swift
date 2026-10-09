@@ -51,13 +51,7 @@ public final class DetailViewModel {
         episodeRatingSeasons.removeAll()
         // The artwork (the logo) starts first and runs beside the details. The other TMDb calls wait for it, so they do not queue ahead.
         async let artwork: Void = loadArtwork()
-        var result = await services.browse.detail(for: preview)
-        // Addons can answer nothing when a load is cancelled as the page restarts. One more try fills the page in before the page
-        // admits its details are basic.
-        if result.isFallback && !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(500))
-            result = await services.browse.detail(for: preview)
-        }
+        let result = await services.browse.detail(for: preview)
         // A load that was cancelled must not overwrite what the newer load shows.
         guard !Task.isCancelled else { return }
         detail = result.detail
@@ -161,8 +155,9 @@ public final class DetailViewModel {
         var watched = Set<String>()
         var saved: [String: WatchProgress] = [:]
         var fractions: [String: Double] = [:]
-        for identity in [movieIdentity] + detail.videos.map({ episodeIdentity($0) }) {
-            guard let record = await services.progress.progress(for: identity) else { continue }
+        let identities = [movieIdentity] + detail.videos.map { episodeIdentity($0) }
+        for record in await services.progress.progress(for: identities) {
+            let identity = record.id
             saved[identity] = record
             if record.isWatched {
                 watched.insert(identity)
@@ -234,15 +229,16 @@ public final class DetailViewModel {
     }
 
     private func setWatched(_ watched: Bool, episodes: [Video]) async {
-        for video in episodes {
-            let request = request(for: video)
-            if watched {
-                await services.progress.save(WatchProgress(id: request.identity, type: request.type, contentID: request.id, title: request.title,
-                                                           poster: request.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
-                                                           season: request.season, episode: request.episode))
-            } else {
-                await services.progress.remove(request.identity)
+        if watched {
+            let type = detail.type.isEmpty ? "series" : detail.type
+            let records = episodes.map { video in
+                WatchProgress(id: episodeIdentity(video), type: type, contentID: video.id, title: "\(detail.name) · \(video.title)",
+                              poster: detail.preview.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
+                              season: video.season, episode: video.episode)
             }
+            await services.progress.save(records)
+        } else {
+            await services.progress.remove(episodes.map { episodeIdentity($0) })
         }
         await refreshUserState()
     }

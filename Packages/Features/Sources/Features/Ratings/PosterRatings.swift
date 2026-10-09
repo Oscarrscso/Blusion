@@ -82,6 +82,8 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var queue: [Lookup] = []
     @ObservationIgnored private var queued: Set<String> = []
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var cacheTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var cachePriorities: Set<String> = []
     @ObservationIgnored private var nextLookupAt: [String: Date] = [:]
     /// An explicit refresh bypasses disk freshness once per lookup; nextLookupAt then prevents repeated requests.
     @ObservationIgnored private var ignoresCachedFreshness = false
@@ -112,7 +114,7 @@ public final class PosterRatingsStore {
     }
 
     /// Returns the same object every time. No observed property changes synchronously when called from a view body.
-    public func ratings(for item: MetaPreview, includeReviews: Bool = false) -> TitleRatings {
+    public func ratings(for item: MetaPreview, includeReviews: Bool = false, source: RatingSource? = nil) -> TitleRatings {
         let entry: TitleRatings
         if let known = entries[item.identity] {
             entry = known
@@ -125,12 +127,15 @@ public final class PosterRatingsStore {
             entries[item.identity] = entry
         }
         guard !isClearing, isEnabled || includeReviews, LetterboxdRatings.isIMDbID(item.id) else { return entry }
-        if letterboxd != nil, item.type == "movie" { enqueue(item, provider: .letterboxd, includeReviews: includeReviews) }
+        if letterboxd != nil, item.type == "movie", source == nil || source == .letterboxd {
+            enqueue(item, provider: .letterboxd, includeReviews: includeReviews)
+        }
         // Posters need critic scores too, to fill either missing preferred source. Each provider uses its own cache.
-        if omdb != nil, ["movie", "series"].contains(item.type) {
+        let needsOMDb = source == nil || source == .rottenTomatoes || source == .metacritic || (source == .imdb && item.imdbRating == nil)
+        if omdb != nil, ["movie", "series"].contains(item.type), needsOMDb {
             enqueue(item, provider: .omdb, includeReviews: includeReviews)
         }
-        if tmdb != nil, ["movie", "series"].contains(item.type) {
+        if tmdb != nil, ["movie", "series"].contains(item.type), source == nil {
             enqueue(item, provider: .tmdb, includeReviews: includeReviews)
         }
         return entry
@@ -192,27 +197,49 @@ public final class PosterRatingsStore {
     private func cancelLookups() async {
         isClearing = true
         queue.removeAll()
-        let pending = Array(tasks.values)
+        let pending = Array(tasks.values) + Array(cacheTasks.values)
         let pendingEpisodes = Array(episodeTasks.values)
         for task in pending { task.cancel() }
         for task in pendingEpisodes { task.cancel() }
         for task in pending { await task.value }
         for task in pendingEpisodes { _ = await task.value }
         queued.removeAll()
+        cacheTasks.removeAll()
+        cachePriorities.removeAll()
         episodeTasks.removeAll()
         nextLookupAt.removeAll()
     }
 
     private func enqueue(_ item: MetaPreview, provider: Provider, includeReviews: Bool) {
         let lookup = Lookup(item: item, provider: provider, includeReviews: includeReviews)
+        if includeReviews, cacheTasks[lookup.id] != nil { cachePriorities.insert(lookup.id) }
         if includeReviews, let index = queue.firstIndex(where: { $0.id == lookup.id }) {
-            queue[index].includeReviews = true
+            var priority = queue.remove(at: index)
+            priority.includeReviews = true
+            queue.insert(priority, at: 0)
             Task { startLookups() }
             return
         }
         guard nextLookupAt[lookup.id].map({ now() >= $0 }) ?? true, queued.insert(lookup.id).inserted else { return }
-        queue.append(lookup)
-        Task { startLookups() }
+        // Cache reads never wait for a network worker slot.
+        cacheTasks[lookup.id] = Task { [self] in
+            defer { cacheTasks[lookup.id] = nil; cachePriorities.remove(lookup.id) }
+            let cached = await cache.value(for: lookup.cacheKey)
+            guard !Task.isCancelled else { return }
+            if let cached {
+                apply(cached, lookup: lookup)
+                let expires = cached.fetchedAt.addingTimeInterval(cacheLifetime(cached, provider: lookup.provider))
+                if !ignoresCachedFreshness, now() < expires {
+                    nextLookupAt[lookup.id] = expires
+                    queued.remove(lookup.id)
+                    return
+                }
+            }
+            var ready = lookup
+            ready.includeReviews = includeReviews || cachePriorities.contains(lookup.id)
+            if ready.includeReviews { queue.insert(ready, at: 0) } else { queue.append(ready) }
+            startLookups()
+        }
     }
 
     private func startLookups() {
@@ -222,16 +249,6 @@ public final class PosterRatingsStore {
             tasks[lookup.id] = Task { [self] in
                 defer { tasks[lookup.id] = nil; queued.remove(lookup.id); startLookups() }
                 do {
-                    let cached = await cache.value(for: lookup.cacheKey)
-                    guard !Task.isCancelled else { return }
-                    if let cached {
-                        apply(cached, lookup: lookup)
-                        let expires = cached.fetchedAt.addingTimeInterval(cacheLifetime(cached, provider: lookup.provider))
-                        if !ignoresCachedFreshness, now() < expires {
-                            nextLookupAt[lookup.id] = expires
-                            return
-                        }
-                    }
                     let answer: CachedRating
                     switch lookup.provider {
                     case .letterboxd:
@@ -267,7 +284,7 @@ public final class PosterRatingsStore {
         }
     }
 
-    /// Full-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
+    /// Sized portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
     public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
         guard let tmdb, !isClearing else { return nil }
         return try? await tmdb.artwork(imdbID: item.id, type: item.type)

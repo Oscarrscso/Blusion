@@ -237,7 +237,7 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         let model = HomeViewModel(services: try await services([cinemeta], transport: transport))
         await model.load()
         let first = transport.callCount
-        #expect(first == 3, "the spotlight and two rows")
+        #expect(first == 2, "the spotlight shares its catalog request with the matching row")
         await model.load()
         #expect(transport.callCount == first, "a second load within the cache TTL is served from memory")
         await model.refresh()

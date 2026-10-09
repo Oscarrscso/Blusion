@@ -21,9 +21,11 @@ public final class TitleActions {
     }
 
     /// Reads the library and the watch history again. Call when a screen appears, since other screens change them too.
-    public func refresh() async {
+    public func refresh(progress: [WatchProgress]? = nil) async {
         savedIdentities = Set(await services.library.all().map(\.id))
-        let watched = await services.progress.all().filter(\.isWatched)
+        let records: [WatchProgress]
+        if let progress { records = progress } else { records = await services.progress.all() }
+        let watched = records.filter(\.isWatched)
         watchedIdentities = Set(watched.filter { $0.type == "movie" }.map(\.id))
         seriesWithWatchedEpisodes = Set(watched.compactMap(Self.showID(of:)).map { LibraryItem.identity(type: "series", contentID: $0) })
     }
@@ -49,15 +51,16 @@ public final class TitleActions {
     public func setSeriesWatched(_ watched: Bool, for item: MetaPreview) async {
         guard Self.itemType(of: item) == "series" else { return }
         let detail = await services.browse.detail(for: item).detail
-        for video in watched ? detail.episodesCountingAsWatched() : detail.videos {
-            let request = StreamRequest(episode: video, of: detail)
-            if watched {
-                await services.progress.save(WatchProgress(id: request.identity, type: request.type, contentID: request.id, title: request.title,
-                                                           poster: request.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
-                                                           season: request.season, episode: request.episode))
-            } else {
-                await services.progress.remove(request.identity)
-            }
+        let videos = watched ? detail.episodesCountingAsWatched() : detail.videos
+        let type = detail.type.isEmpty ? "series" : detail.type
+        if watched {
+            await services.progress.save(videos.map { video in
+                WatchProgress(id: "\(type)/\(video.id)", type: type, contentID: video.id, title: "\(detail.name) · \(video.title)",
+                              poster: detail.preview.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
+                              season: video.season, episode: video.episode)
+            })
+        } else {
+            await services.progress.remove(videos.map { "\(type)/\($0.id)" })
         }
         await refresh()
     }

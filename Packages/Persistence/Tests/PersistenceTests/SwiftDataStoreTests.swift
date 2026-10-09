@@ -7,6 +7,35 @@ import Testing
 @testable import Persistence
 
 @Suite struct SwiftDataStoreTests {
+    @Test func bulkProgressUpdatesPersistDeduplicateAndRemoveOnlyRequestedRecords() async throws {
+        let container = try PersistenceContainer.make(inMemory: true)
+        let store: any ProgressStore = SwiftDataProgressStore(container: container)
+        let first = WatchProgress(id: "series/tt1:1:1", type: "series", contentID: "tt1:1:1", title: "Episode",
+                                  position: 10, duration: 100, isWatched: false, updatedAt: Date())
+        var updated = first
+        updated.isWatched = true
+        let other = WatchProgress(id: "movie/tt2", type: "movie", contentID: "tt2", title: "Other", position: 20, duration: 100, isWatched: false, updatedAt: Date())
+        await store.save([first, other, updated])
+        let reopened = SwiftDataProgressStore(container: container)
+        #expect(await reopened.all().count == 2)
+        #expect(await reopened.progress(for: [first.id, "missing"]) == [updated])
+        await store.remove([first.id, "missing"])
+        #expect(await reopened.all() == [other])
+    }
+
+    @Test func bulkLibraryAdditionsPreserveExistingItemsAndDeduplicateNewOnes() async throws {
+        let container = try PersistenceContainer.make(inMemory: true)
+        let store: any LibraryStore = SwiftDataLibraryStore(container: container)
+        let original = LibraryItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Original"))
+        var changed = original
+        changed.name = "Changed"
+        let other = LibraryItem(preview: MetaPreview(id: "tt2", type: "movie", name: "Other"))
+        await store.add(original)
+        await store.add([changed, other, other])
+        let saved = await SwiftDataLibraryStore(container: container).all()
+        #expect(saved.count == 2)
+        #expect(saved.first { $0.id == original.id } == original)
+    }
     @Test func satisfiesTheAddonStoreContract() async throws {
         let container = try PersistenceContainer.make(inMemory: true)
         try await exerciseAddonStoreContract(SwiftDataAddonStore(container: container))

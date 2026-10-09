@@ -88,27 +88,29 @@ public final class TraktAccountViewModel {
     /// Adds the Trakt watchlist, collection and watched history to this device.
     public func importFromTrakt() async {
         await perform {
-            var savedCount = 0
-            var watchedCount = 0
-            let watchlist = try await self.services.traktAccount.watchlist()
-            let collection = try await self.services.traktAccount.collection()
-            let watched = try await self.services.traktAccount.watched()
-            for item in watchlist + collection {
-                let libraryItem = LibraryItem(preview: item)
-                if !(await self.services.library.contains(libraryItem.id)) {
-                    await self.services.library.add(libraryItem)
-                    savedCount += 1
-                }
-            }
+            async let watchlist = self.services.traktAccount.watchlist()
+            async let collection = self.services.traktAccount.collection()
+            async let history = self.services.traktAccount.watched()
+            let (remoteWatchlist, remoteCollection, watched) = try await (watchlist, collection, history)
+            var savedIDs = Set(await self.services.library.all().map(\.id))
+            let additions = (remoteWatchlist + remoteCollection).map { LibraryItem(preview: $0) }.filter { savedIDs.insert($0.id).inserted }
+            await self.services.library.add(additions)
+            let existingRecords = await self.services.progress.progress(for: watched.map(\.identity))
+            var existingByID = Dictionary(existingRecords.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            var updates: [WatchProgress] = []
             for item in watched {
-                guard await self.services.progress.progress(for: item.identity)?.isWatched != true else { continue }
-                let existing = await self.services.progress.progress(for: item.identity)
-                await self.services.progress.save(WatchProgress(id: item.identity, type: item.preview.type, contentID: item.contentID,
+                let existing = existingByID[item.identity]
+                guard existing?.isWatched != true else { continue }
+                let record = WatchProgress(id: item.identity, type: item.preview.type, contentID: item.contentID,
                     title: existing?.title ?? item.preview.name, poster: existing?.poster ?? item.preview.poster,
                     position: existing?.position ?? 0, duration: existing?.duration ?? 0, isWatched: true,
-                    updatedAt: max(existing?.updatedAt ?? .distantPast, item.watchedAt), season: item.season, episode: item.episode))
-                watchedCount += 1
+                    updatedAt: max(existing?.updatedAt ?? .distantPast, item.watchedAt), season: item.season, episode: item.episode)
+                updates.append(record)
+                existingByID[item.identity] = record
             }
+            await self.services.progress.save(updates)
+            let savedCount = additions.count
+            let watchedCount = updates.count
             self.message = "Imported \(savedCount) saved titles and \(watchedCount) watched items from Trakt."
         }
     }

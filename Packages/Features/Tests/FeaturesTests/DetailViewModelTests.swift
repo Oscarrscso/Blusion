@@ -265,7 +265,7 @@ import StremioKitTestSupport
     }
 
     @Test(arguments: [false, true])
-    func detailUsesSeparateOriginalHeroesInsteadOfCatalogPosters(hasArtwork: Bool) async throws {
+    func detailUsesSeparateSizedHeroesInsteadOfCatalogPosters(hasArtwork: Bool) async throws {
         let transport = StubTransport { request, _ in
             let json: String
             switch request.url?.lastPathComponent {
@@ -291,8 +291,8 @@ import StremioKitTestSupport
         let model = DetailViewModel(preview: preview, services: services)
         await model.load()
         #expect(model.tmdbArtwork != nil)
-        #expect(model.portraitArtworkURL == URL(string: "https://image.tmdb.org/t/p/original/poster.jpg"))
-        #expect(model.backdropURL == URL(string: "https://image.tmdb.org/t/p/original/backdrop.jpg"))
+        #expect(model.portraitArtworkURL == URL(string: "https://image.tmdb.org/t/p/w780/poster.jpg"))
+        #expect(model.backdropURL == URL(string: "https://image.tmdb.org/t/p/w1280/backdrop.jpg"))
         #expect(model.portraitArtworkURL != model.backdropURL)
         #expect(model.logoURL == (hasArtwork ? logo : URL(string: "https://image.tmdb.org/t/p/original/logo.png")))
         let openedFromHome = DetailViewModel(preview: preview, services: services, artwork: model.tmdbArtwork)

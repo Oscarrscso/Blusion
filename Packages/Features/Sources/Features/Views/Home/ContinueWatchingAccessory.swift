@@ -17,7 +17,11 @@ final class ContinueWatchingModel {
 
     /// Reads the saved progress again. The root tab view calls this on launch and whenever the tab changes.
     func refresh() async {
-        newest = LibraryViewModel.continueWatching(from: await services.progress.all()).first
+        update(from: await services.progress.all())
+    }
+
+    func update(from records: [WatchProgress]) {
+        newest = LibraryViewModel.continueWatching(from: records).first
     }
 
     /// Takes the title off Continue Watching. Trakt's record is looked up here, since this model keeps no copy of Trakt's list.

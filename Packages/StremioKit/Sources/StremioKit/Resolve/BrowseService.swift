@@ -58,46 +58,55 @@ public final class BrowseService: Sendable {
         return try await client.catalog(base: source.baseURL, type: source.catalog.type, id: source.catalog.id, extras: extras)
     }
 
-    /// Search every addon from `searchableAddons()`. One response per addon, in the order they answer;
-    /// an addon's catalogs are merged and de-duplicated, and it only fails if all of its catalogs fail.
-    public func search(_ query: String) async -> AsyncStream<AddonResponse<[MetaPreview]>> {
+    /// With incremental updates, each addon publishes its merged results as individual catalogs finish.
+    /// The default retains one final answer per addon for callers that collect the stream.
+    public func search(_ query: String, incremental: Bool = false) async -> AsyncStream<AddonResponse<[MetaPreview]>> {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return AsyncStream { $0.finish() } }
-        let visible = visibleTypes
         let addons = await searchableInstalled()
         let client = self.client
-        return FanOut.run(over: addons) { addon in
-            let catalogs = BrowseService.searchCatalogs(of: addon.manifest, visible: visible)
-            let outcomes = await withTaskGroup(of: (Int, Result<[MetaPreview], AddonError>).self) { group in
-                for (index, catalog) in catalogs.enumerated() {
-                    group.addTask {
-                        do {
-                            let items = try await client.catalog(base: addon.baseURL, type: catalog.type, id: catalog.id, extras: [ExtraParam("search", term)])
-                            return (index, .success(items))
-                        } catch {
-                            return (index, .failure(AddonError.from(error)))
+        let visible = visibleTypes
+        return AsyncStream { continuation in
+            let task = Task {
+                await withTaskGroup(of: Void.self) { addonsGroup in
+                    for addon in addons {
+                        addonsGroup.addTask {
+                            let catalogs = Self.searchCatalogs(of: addon.manifest, visible: visible)
+                            await withTaskGroup(of: (Int, Result<[MetaPreview], AddonError>).self) { group in
+                                for (index, catalog) in catalogs.enumerated() {
+                                    group.addTask {
+                                        do {
+                                            let items = try await client.catalog(base: addon.baseURL, type: catalog.type, id: catalog.id,
+                                                                                 extras: [ExtraParam("search", term)])
+                                            return (index, .success(items))
+                                        } catch { return (index, .failure(AddonError.from(error))) }
+                                    }
+                                }
+                                var pages: [Int: [MetaPreview]] = [:]
+                                var firstError: AddonError?
+                                var remaining = catalogs.count
+                                for await (index, outcome) in group {
+                                    guard !Task.isCancelled else { return }
+                                    remaining -= 1
+                                    switch outcome {
+                                    case .success(let items): pages[index] = items
+                                    case .failure(let error): firstError = firstError ?? error
+                                    }
+                                    if !pages.isEmpty, incremental || remaining == 0 {
+                                        var seen = Set<String>()
+                                        let merged = pages.keys.sorted().flatMap { pages[$0] ?? [] }.filter { seen.insert($0.identity).inserted }
+                                        continuation.yield(AddonResponse(addon: addon.summary, result: .success(merged)))
+                                    } else if remaining == 0, let firstError {
+                                        continuation.yield(AddonResponse(addon: addon.summary, result: .failure(firstError)))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                var collected: [(Int, Result<[MetaPreview], AddonError>)] = []
-                for await outcome in group { collected.append(outcome) }
-                return collected.sorted { $0.0 < $1.0 }
+                continuation.finish()
             }
-            var seen = Set<String>()
-            var merged: [MetaPreview] = []
-            var firstError: AddonError?
-            var anySuccess = false
-            for (_, outcome) in outcomes {
-                switch outcome {
-                case .success(let items):
-                    anySuccess = true
-                    for item in items where seen.insert("\(item.type)/\(item.id)").inserted { merged.append(item) }
-                case .failure(let error):
-                    firstError = firstError ?? error
-                }
-            }
-            if !anySuccess, let firstError { throw firstError }
-            return merged
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 

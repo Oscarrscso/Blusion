@@ -65,8 +65,18 @@ import StremioKitTestSupport
         let services = try await services(bodies: [body([direct("blob", "https://a.example.com/blob", "1080p")])], sniffer: ["blob": .matroska])
         let model = StreamPickerViewModel(request: request, services: services)
         await model.load()
-        #expect(model.listing.items.first?.container == .matroska)
+        try await waitUntil { model.listing.items.first?.container == .matroska }
         #expect(model.listing.items.first?.route == .unsupported(.matroska))
+    }
+
+    @Test func automaticSelectionHasAnOverallDeadlineAndKeepsFastResults() async throws {
+        let services = try await services(bodies: [body([direct("slow", "https://a.example.com/1.mp4")]), body([direct("fast", "https://b.example.com/1.mp4")])],
+                                          delays: [.seconds(2), .zero])
+        let model = StreamPickerViewModel(request: request, services: services)
+        defer { model.cancelLoading() }
+        await model.loadForAutomaticSelection(timeout: .milliseconds(100))
+        #expect(model.isLoading, "the slow addon is still pending")
+        #expect(model.listing.best?.title == "fast")
     }
 
     @Test func aFailingAddonBecomesAFailureEntry() async throws {

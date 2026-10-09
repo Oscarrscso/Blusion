@@ -12,7 +12,13 @@ actor ImagePipeline {
     /// `NSCache` is thread-safe, which is what lets `cachedImage` answer without hopping onto the actor.
     private nonisolated(unsafe) let decoded = NSCache<NSString, UIImage>()
     /// Downloads and decodes still running, keyed like the cache, so two views asking for one poster share one request.
-    private var inFlight: [String: Task<UIImage, Error>] = [:]
+    private struct Pending {
+        let task: Task<UIImage, Error>
+        var consumers: Set<UUID>
+    }
+    private var inFlight: [String: Pending] = [:]
+    private var activeDownloads = 0
+    private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -41,24 +47,61 @@ actor ImagePipeline {
             throw ImagePipelineError.unsupportedURL
         }
         let size = min(max(maxPixelSize.rounded(), 1), 4096)
+        try Task.checkCancellation()
         let key = Self.key(url, maxPixelSize: maxPixelSize)
         if let cached = decoded.object(forKey: key as NSString) { return cached }
-        if let pending = inFlight[key] { return try await pending.value }
-
-        let session = session
-        let task = Task<UIImage, Error> {
-            try await Self.fetch(url, maxPixelSize: size, session: session)
+        let consumer = UUID()
+        let task: Task<UIImage, Error>
+        if var pending = inFlight[key] {
+            pending.consumers.insert(consumer)
+            inFlight[key] = pending
+            task = pending.task
+        } else {
+            task = Task {
+                try await acquireDownloadSlot()
+                defer { releaseDownloadSlot() }
+                try Task.checkCancellation()
+                return try await Self.fetch(url, maxPixelSize: size, session: session)
+            }
+            inFlight[key] = Pending(task: task, consumers: [consumer])
         }
-        inFlight[key] = task
-        do {
+        return try await withTaskCancellationHandler {
+            defer { releaseConsumer(consumer, for: key) }
             let image = try await task.value
+            try Task.checkCancellation()
             decoded.setObject(image, forKey: key as NSString, cost: Self.cost(of: image))
-            if inFlight[key] == task { inFlight[key] = nil }
             return image
-        } catch {
-            if inFlight[key] == task { inFlight[key] = nil }
-            throw error
+        } onCancel: {
+            Task { await self.releaseConsumer(consumer, for: key) }
         }
+    }
+
+    private func releaseConsumer(_ consumer: UUID, for key: String) {
+        guard var pending = inFlight[key], pending.consumers.remove(consumer) != nil else { return }
+        if pending.consumers.isEmpty {
+            pending.task.cancel()
+            inFlight[key] = nil
+        } else { inFlight[key] = pending }
+    }
+
+    private func acquireDownloadSlot() async throws {
+        try Task.checkCancellation()
+        if activeDownloads < 6 { activeDownloads += 1; return }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in waiting.append((id, continuation)) }
+        } onCancel: {
+            Task { await self.cancelWaitingDownload(id) }
+        }
+    }
+
+    private func cancelWaitingDownload(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(throwing: CancellationError())
+    }
+
+    private func releaseDownloadSlot() {
+        if waiting.isEmpty { activeDownloads -= 1 } else { waiting.removeFirst().1.resume() }
     }
 
     /// Runs off the actor, so a slow download or decode never blocks requests for other images.

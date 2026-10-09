@@ -24,15 +24,23 @@ enum AVAssetFactory {
 /// ATS applies to these URLSession loads: plain-http streams to non-local hosts fail by design (ADR-005).
 final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSessionDataDelegate, @unchecked Sendable {
     let queue = DispatchQueue(label: "app.blusion.resource-loader")
+    private enum ResponseAction { case allow, cancel, finish, unsupportedRange }
 
-    private struct Job {
+    private final class Job {
         let loadingRequest: AVAssetResourceLoadingRequest
         let realURL: URL
         let requestedOffset: Int64
-        var skip: Int64 = 0
+        var remaining: Int?
         var buffer = Data()
         var info: HTTPURLResponse?
         var isPlaylist = false
+
+        init(loadingRequest: AVAssetResourceLoadingRequest, realURL: URL, requestedOffset: Int64, remaining: Int?) {
+            self.loadingRequest = loadingRequest
+            self.realURL = realURL
+            self.requestedOffset = requestedOffset
+            self.remaining = remaining
+        }
     }
 
     private let headers: [String: String]
@@ -52,6 +60,17 @@ final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSe
         session.invalidateAndCancel()
     }
 
+    /// URLSession retains its delegate, so the owner must explicitly break the cycle.
+    func invalidate() {
+        session.invalidateAndCancel()
+        let pending = lock.withLock {
+            let pending = Array(jobs.values)
+            jobs.removeAll()
+            return pending
+        }
+        for job in pending { job.loadingRequest.finishLoading(with: URLError(.cancelled)) }
+    }
+
     // MARK: AVAssetResourceLoaderDelegate
 
     func resourceLoader(_ resourceLoader: AVAssetResourceLoader, shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
@@ -60,14 +79,17 @@ final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSe
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
 
         var offset: Int64 = 0
+        var remaining: Int?
         if let data = loadingRequest.dataRequest {
-            offset = data.requestedOffset
-            request.setValue(ByteRange.header(offset: offset, length: data.requestedLength, toEnd: data.requestsAllDataToEndOfResource), forHTTPHeaderField: "Range")
+            offset = max(data.requestedOffset, data.currentOffset)
+            remaining = data.requestsAllDataToEndOfResource ? nil : max(0, data.requestedLength - Int(offset - data.requestedOffset))
+            let range = ByteRange.header(offset: offset, length: remaining ?? data.requestedLength, toEnd: data.requestsAllDataToEndOfResource)
+            request.setValue(range, forHTTPHeaderField: "Range")
         } else if loadingRequest.contentInformationRequest != nil {
             request.setValue("bytes=0-1", forHTTPHeaderField: "Range")   // just enough to learn type and total length
         }
         let task = session.dataTask(with: request)
-        lock.withLock { jobs[task.taskIdentifier] = Job(loadingRequest: loadingRequest, realURL: real, requestedOffset: offset) }
+        lock.withLock { jobs[task.taskIdentifier] = Job(loadingRequest: loadingRequest, realURL: real, requestedOffset: offset, remaining: remaining) }
         task.resume()
         return true
     }
@@ -87,18 +109,24 @@ final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSe
             completionHandler(.cancel)
             return
         }
-        lock.withLock {
-            guard var job = jobs[dataTask.taskIdentifier] else { return }
+        let disposition: ResponseAction = lock.withLock {
+            guard let job = jobs[dataTask.taskIdentifier] else { return .cancel }
             job.info = http
             let mime = http.mimeType?.lowercased() ?? ""
             job.isPlaylist = mime.contains("mpegurl") || job.realURL.pathExtension.lowercased() == "m3u8"
-            // A server that ignores Range answers 200 with the whole body: skip to the offset ourselves.
-            if http.statusCode == 200, job.requestedOffset > 0, !job.isPlaylist { job.skip = job.requestedOffset }
-            jobs[dataTask.taskIdentifier] = job
+            // A deep seek must not redownload the movie from byte zero when a server ignores Range.
+            if http.statusCode == 200, job.requestedOffset > 0, !job.isPlaylist { return .unsupportedRange }
             if !job.isPlaylist { Self.fillContentInformation(job.loadingRequest.contentInformationRequest, from: http, url: job.realURL, bodyLength: nil) }
+            return !job.isPlaylist && job.loadingRequest.dataRequest == nil ? .finish : .allow
         }
-        if http.statusCode >= 400 {
+        if disposition == .unsupportedRange {
             finish(taskID: dataTask.taskIdentifier, error: URLError(.badServerResponse))
+            completionHandler(.cancel)
+        } else if http.statusCode >= 400 {
+            finish(taskID: dataTask.taskIdentifier, error: URLError(.badServerResponse))
+            completionHandler(.cancel)
+        } else if disposition != .allow {
+            finish(taskID: dataTask.taskIdentifier, error: nil)
             completionHandler(.cancel)
         } else {
             completionHandler(.allow)
@@ -106,21 +134,22 @@ final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSe
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        lock.withLock {
-            guard var job = jobs[dataTask.taskIdentifier] else { return }
+        let complete = lock.withLock {
+            guard let job = jobs[dataTask.taskIdentifier] else { return false }
             if job.isPlaylist {
+                guard job.buffer.count + data.count <= 1024 * 1024 else { return true }
                 job.buffer.append(data)        // playlists are rewritten as a whole
-                jobs[dataTask.taskIdentifier] = job
-                return
+                return false
             }
-            var chunk = data
-            if job.skip > 0 {
-                let dropped = min(Int64(chunk.count), job.skip)
-                chunk = chunk.dropFirst(Int(dropped))
-                job.skip -= dropped
-                jobs[dataTask.taskIdentifier] = job
-            }
+            let chunk = job.remaining.map { data.prefix($0) } ?? data
             if !chunk.isEmpty { job.loadingRequest.dataRequest?.respond(with: chunk) }
+            if let remaining = job.remaining { job.remaining = remaining - chunk.count }
+            return job.remaining == 0
+        }
+        if complete {
+            let oversizedPlaylist = lock.withLock { jobs[dataTask.taskIdentifier]?.isPlaylist == true }
+            finish(taskID: dataTask.taskIdentifier, error: oversizedPlaylist ? URLError(.dataLengthExceedsMaximum) : nil)
+            dataTask.cancel()
         }
     }
 
@@ -143,8 +172,9 @@ final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSe
                 Self.fillContentInformation(job.loadingRequest.contentInformationRequest, from: info, url: job.realURL, bodyLength: Int64(rewritten.count))
             }
             if let data = job.loadingRequest.dataRequest {
-                let start = min(Int(data.requestedOffset), rewritten.count)
-                data.respond(with: rewritten.dropFirst(start))
+                let start = min(Int(job.requestedOffset), rewritten.count)
+                let bytes = rewritten.dropFirst(start)
+                data.respond(with: data.requestsAllDataToEndOfResource ? bytes : bytes.prefix(job.remaining ?? data.requestedLength))
             }
         }
         job.loadingRequest.finishLoading()

@@ -68,6 +68,34 @@ import PlayerKitTestSupport
         #expect(coordinator.failedAttempts.map(\.failure.kind) == [.timeout])
     }
 
+    @Test func bufferingAloneDoesNotCancelTheStartupDeadline() async throws {
+        let (coordinator, rig) = coordinator(["a", "b"], ["a": .hangs, "b": .plays(duration: 50)], timeout: .milliseconds(100))
+        let starting = Task { await coordinator.start() }
+        try await waitUntil { rig.engines["a"] != nil }
+        rig.engines["a"]?.simulateBuffering()
+        await starting.value
+        #expect(coordinator.current?.id == "b" && coordinator.phase == .playing)
+        #expect(coordinator.failedAttempts.map(\.failure.kind) == [.timeout])
+        await coordinator.stop()
+    }
+
+    @Test func sustainedBufferingFailsOverButPausingDoesNot() async throws {
+        let rig = Rig(["a": .plays(duration: 100), "b": .plays(duration: 100)])
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"]), stallTimeout: .milliseconds(100), makeEngine: { rig.make($0) })
+        await coordinator.start()
+        coordinator.pause()
+        try await waitUntil { coordinator.state.status == .paused }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(coordinator.current?.id == "a" && coordinator.failedAttempts.isEmpty)
+        coordinator.play()
+        rig.engines["a"]?.simulate(position: 37)
+        rig.engines["a"]?.simulateBuffering()
+        try await waitUntil { coordinator.current?.id == "b" && coordinator.phase == .playing }
+        #expect(rig.engines["b"]?.loadedItems.first?.startPosition == 37)
+        #expect(coordinator.failedAttempts.map(\.id) == ["a"])
+        await coordinator.stop()
+    }
+
     @Test func candidatesWithoutAnEngineAreSkipped() async {
         let (coordinator, _) = coordinator(["a", "b"], ["b": .plays(duration: 10)])   // no script entry for "a" => makeEngine returns nil
         await coordinator.start()

@@ -57,11 +57,24 @@ public struct ProgressPolicy: Sendable, Equatable {
 
 public protocol ProgressStore: Sendable {
     func progress(for identity: String) async -> WatchProgress?
+    func progress(for identities: [String]) async -> [WatchProgress]
     func save(_ progress: WatchProgress) async
+    func save(_ records: [WatchProgress]) async
     /// Most recently updated first.
     func all() async -> [WatchProgress]
     func remove(_ identity: String) async
+    func remove(_ identities: [String]) async
     func clear() async
+}
+
+public extension ProgressStore {
+    func progress(for identities: [String]) async -> [WatchProgress] {
+        var records: [WatchProgress] = []
+        for identity in identities { if let record = await progress(for: identity) { records.append(record) } }
+        return records
+    }
+    func save(_ records: [WatchProgress]) async { for record in records { await save(record) } }
+    func remove(_ identities: [String]) async { for identity in identities { await remove(identity) } }
 }
 
 public actor InMemoryProgressStore: ProgressStore {
@@ -72,9 +85,12 @@ public actor InMemoryProgressStore: ProgressStore {
     }
 
     public func progress(for identity: String) async -> WatchProgress? { items[identity] }
+    public func progress(for identities: [String]) async -> [WatchProgress] { identities.compactMap { items[$0] } }
     public func save(_ progress: WatchProgress) async { items[progress.id] = progress }
+    public func save(_ records: [WatchProgress]) async { for record in records { items[record.id] = record } }
     public func all() async -> [WatchProgress] { items.values.sorted { $0.updatedAt > $1.updatedAt } }
     public func remove(_ identity: String) async { items[identity] = nil }
+    public func remove(_ identities: [String]) async { for identity in identities { items[identity] = nil } }
     public func clear() async { items = [:] }
 }
 

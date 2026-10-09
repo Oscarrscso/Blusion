@@ -33,6 +33,7 @@ public struct StreamListing: Sendable, Equatable {
         let addonIndex: Int
         let indexInAddon: Int
         let stream: AddonStream
+        let quality: StreamQuality
         let key: String
     }
 
@@ -87,6 +88,7 @@ public struct StreamListing: Sendable, Equatable {
             entries.removeAll { $0.addon.id == response.addon.id }
             for (index, stream) in streams.enumerated() {
                 entries.append(Entry(addon: response.addon, addonIndex: addonIndex, indexInAddon: index, stream: stream,
+                                     quality: StreamQuality.parse(stream),
                                      key: StreamIdentity.key(for: stream)))
             }
         }
@@ -95,11 +97,13 @@ public struct StreamListing: Sendable, Equatable {
 
     public mutating func setContainer(_ container: MediaContainer?, forKey key: String) {
         sniffed.insert(key)
-        if let container { containers[key] = container }
+        guard let container, containers[key] != container else { return }
+        containers[key] = container
         rebuild()
     }
 
     public mutating func update(config: PolicyConfiguration? = nil, preferences: RankingPreferences? = nil) {
+        guard config.map({ $0 != self.config }) == true || preferences.map({ $0 != self.preferences }) == true else { return }
         if let config { self.config = config }
         if let preferences { self.preferences = preferences }
         rebuild()
@@ -125,7 +129,7 @@ public struct StreamListing: Sendable, Equatable {
         var hiddenCounts: [HiddenReason: Int] = [:]
 
         for entry in entries {
-            let quality = StreamQuality.parse(entry.stream)
+            let quality = entry.quality
             let container = containers[entry.key]
             let route = PlaybackPolicy.route(for: entry.stream, container: container, quality: quality, config: config)
             if case .hidden(let reason) = route {

@@ -24,7 +24,11 @@ public final class StreamPickerViewModel {
     }
 
     public let request: StreamRequest
-    public private(set) var listing: StreamListing
+    public private(set) var listing: StreamListing {
+        didSet {
+            if listing.items != oldValue.items || listing.isLoading != oldValue.isLoading { refreshDerivedListing() }
+        }
+    }
     /// True when no installed addon can answer this request at all (as opposed to "still loading" or "nothing found").
     public private(set) var nobodyCanAnswer = false
     public private(set) var settings = PlaybackSettings()
@@ -35,6 +39,9 @@ public final class StreamPickerViewModel {
 
     private let services: AppServices
     private var sniffTasks: [Task<Void, Never>] = []
+    private var loadingTask: Task<Void, Never>?
+    private var loadGeneration = 0
+    private var bestAssessment: AutoStreamRanking.Assessment?
     /// The player apps on this device, as the view reported them. Kept here so a load after it still routes with them.
     private var installedPlayers: Set<ExternalPlayer> = []
 
@@ -54,21 +61,26 @@ public final class StreamPickerViewModel {
     public var showsNothingFound: Bool { hasLoaded && !listing.isLoading && listing.isEmpty && !nobodyCanAnswer && !isOffline }
 
     /// Each addon's streams that Blusion or another app can play, in the user's addon order.
-    public var addonSections: [AddonSection] {
-        listing.groups.compactMap { group in
+    public private(set) var addonSections: [AddonSection] = []
+
+    /// Links to addon web pages, displayed separately from playable streams.
+    public private(set) var links: [RankedStream] = []
+
+    private func refreshDerivedListing() {
+        addonSections = listing.groups.compactMap { group in
             let streams = group.streams.filter { !Self.isLink($0) }
             return streams.isEmpty ? nil : AddonSection(addon: group.addon, streams: streams)
         }
-    }
-
-    /// Links to web pages (the addon's own summaries, for instance). They open outside Blusion, so they sit in a group of their own.
-    public var links: [RankedStream] {
-        listing.items.filter(Self.isLink)
+        links = listing.items.filter(Self.isLink)
+        bestAssessment = listing.isLoading ? nil : AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration)
     }
 
     public func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         settings = await services.settings.load()
         let (asked, responses) = await services.streams.fetch(request)
+        guard !Task.isCancelled, generation == loadGeneration else { return }
         var config = settings.policy(fallbackEngineLinked: services.fallbackEngineLinked)
         config.installedPlayers = installedPlayers
         listing = StreamListing(asking: asked, config: config, preferences: settings.rankingPreferences)
@@ -79,14 +91,40 @@ public final class StreamPickerViewModel {
         await withTaskCancellationHandler {
             var requested = Set<String>()
             for await response in responses {
+                guard !Task.isCancelled, generation == loadGeneration else { return }
                 listing.apply(response)
                 let targets = listing.sniffTargets.filter { requested.insert($0.key).inserted }
                 if !targets.isEmpty { startSniffing(targets) }
             }
-            for task in sniffTasks { await task.value }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.cancelSniffing() }
+            Task { @MainActor [weak self] in
+                guard self?.loadGeneration == generation else { return }
+                self?.cancelSniffing()
+            }
         }
+    }
+
+    /// Automatic playback has a total selection deadline; slower answers still improve the open picker.
+    public func loadForAutomaticSelection(timeout: Duration = .seconds(5)) async {
+        if !hasLoaded, loadingTask == nil {
+            loadingTask = Task { [weak self] in
+                guard let self else { return }
+                await self.load()
+            }
+        }
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while isLoading, ContinuousClock.now < deadline, !Task.isCancelled {
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
+        }
+        if Task.isCancelled { cancelLoading() }
+    }
+
+    public func cancelLoading() {
+        loadGeneration += 1
+        if listing.isLoading { hasLoaded = false }
+        loadingTask?.cancel()
+        loadingTask = nil
+        cancelSniffing()
     }
 
     // MARK: best Blu-ray edition
@@ -143,8 +181,12 @@ public final class StreamPickerViewModel {
 
     private func startSniffing(_ targets: [StreamListing.SniffTarget]) {
         let results = services.streams.sniff(targets)
+        let generation = loadGeneration
         sniffTasks.append(Task { [weak self] in
-            for await result in results { self?.listing.setContainer(result.container, forKey: result.key) }
+            for await result in results {
+                guard !Task.isCancelled, let self, self.loadGeneration == generation else { return }
+                if let container = result.container { self.listing.setContainer(container, forKey: result.key) }
+            }
         })
     }
 
@@ -186,7 +228,7 @@ public final class StreamPickerViewModel {
             do { try await Task.sleep(for: .milliseconds(100)) } catch { return nil }
         }
         guard !Task.isCancelled else { return nil }
-        guard let pick = AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration) else {
+        guard let pick = bestAssessment else {
             autoPickMessage = "No streams compatible with Infuse were found."
             return nil
         }
@@ -200,7 +242,7 @@ public final class StreamPickerViewModel {
     /// mark does not jump from one release to another as they arrive.
     public var recommendedStream: RankedStream? {
         guard !isLoading else { return nil }
-        return AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration)?.item
+        return bestAssessment?.item
     }
 
     /// The streams Infuse can take as they are: what Auto Pick ranks.
@@ -263,7 +305,7 @@ public final class StreamPickerViewModel {
     }
 
     public func retry() async {
-        sniffTasks.forEach { $0.cancel() }
+        cancelLoading()
         sniffTasks = []
         hasLoaded = false
         await load()

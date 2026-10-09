@@ -26,6 +26,7 @@ public final class LibraryViewModel {
     private var lastTraktPull = Date.distantPast
     /// Where the scores from the rating sites other than IMDb come from. Nil until the view attaches it.
     @ObservationIgnored private var ratings: PosterRatingsStore?
+    @ObservationIgnored private var filterTask: Task<Void, Never>?
 
     public init(services: AppServices) {
         self.services = services
@@ -129,7 +130,14 @@ public final class LibraryViewModel {
             (LibraryFiltering.apply(filter, to: savedEntries, now: now, score: score),
              LibraryFiltering.apply(filter, to: watchedEntries, now: now, score: score))
         } onChange: { [weak self] in
-            Task { @MainActor in self?.applyFilter() }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.filterTask?.cancel()
+                self.filterTask = Task { [weak self] in
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                    self?.applyFilter()
+                }
+            }
         }
         self.visibleSaved = visibleSaved
         self.visibleWatched = visibleWatched
@@ -141,6 +149,9 @@ public final class LibraryViewModel {
     /// threshold no score is needed, so nothing is looked up.
     private func scoreLookup(for filter: LibraryFilter) -> LibraryFiltering.ScoreLookup {
         guard filter.minimumRating != nil, let store = ratings else { return LibraryFiltering.catalogueScores }
-        return { entry, source in store.ratings(for: entry.preview).score(for: source) }
+        return { entry, source in
+            if source == .imdb, let rating = entry.preview.imdbRating { return rating }
+            return store.ratings(for: entry.preview, source: source).score(for: source)
+        }
     }
 }

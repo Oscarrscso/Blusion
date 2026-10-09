@@ -68,12 +68,12 @@ struct StreamPickerView: View {
             // Asked once, here: routing hands streams to these players only, and the menus offer only these.
             model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
             if !model.hasLoaded {
-                await model.load()
                 let settings = await services.settings.load()
+                if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
                 if settings.autoPlayBestStream, !hasSelectedManually, let best = model.listing.best { select(best) }
             }
         }
-        .onDisappear { autoPickTask?.cancel() }
+        .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { isOpeningPlayer = false }
         }
@@ -319,13 +319,14 @@ struct StreamPickerView: View {
     /// `recommended` is the stream Auto Pick would start; it alone carries the Best match mark.
     private func groups(recommended: RankedStream?) -> some View {
         ForEach(visibleSections) { section in
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                if model.addonSections.count > 1 { sectionTitle(section) }
+            Section {
                 ForEach(section.streams) { item in
                     streamButton(item, isRecommended: item.id == recommended?.id)
+                        .padding(.horizontal, streamMargin)
                 }
+            } header: {
+                if model.addonSections.count > 1 { sectionTitle(section).padding(.horizontal, streamMargin) }
             }
-            .padding(.horizontal, streamMargin)
         }
     }
 

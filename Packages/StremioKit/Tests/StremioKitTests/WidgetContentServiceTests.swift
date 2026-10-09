@@ -85,6 +85,36 @@ private func catalogResponse(for request: URLRequest) -> HTTPResult {
         #expect(page.count == 20 && page.first?.id == "t0")
     }
 
+    @Test func heroAndRowShareOnePendingCatalogPageAcrossDisplayLimits() async throws {
+        let transport = StubTransport { request, _ in
+            try await Task.sleep(for: .milliseconds(50))
+            return catalogResponse(for: request)
+        }
+        let (service, _) = try await makeService(transport: transport)
+        async let hero = service.items(for: catalogSource("top"), limit: 8)
+        async let row = service.items(for: catalogSource("top"), limit: 20)
+        let (heroItems, rowItems) = try await (hero, row)
+        #expect(heroItems.count == 8 && rowItems.count == 20)
+        #expect(transport.callCount == 1)
+        #expect(try await service.items(for: catalogSource("top"), limit: 40).count == 40)
+        #expect(transport.callCount == 1, "the full page is cached, not the hero's truncated prefix")
+    }
+
+    @Test func cancellingOneWidgetKeepsTheSharedRequestForTheOtherWidget() async throws {
+        let transport = StubTransport { request, _ in
+            try await Task.sleep(for: .milliseconds(150))
+            return catalogResponse(for: request)
+        }
+        let (service, _) = try await makeService(transport: transport)
+        let hero = Task { try await service.items(for: catalogSource("top"), limit: 8) }
+        let row = Task { try await service.items(for: catalogSource("top"), limit: 20) }
+        try await Task.sleep(for: .milliseconds(30))
+        hero.cancel()
+        #expect(try await row.value.count == 20)
+        if case .success = await hero.result { Issue.record("a cancelled caller must not publish a result") }
+        #expect(transport.callCount == 1)
+    }
+
     @Test func aCatalogThatCannotPageReturnsNothingBeyondItsFirstPageWithoutARequest() async throws {
         let transport = StubTransport { request, _ in catalogResponse(for: request) }
         let (service, _) = try await makeService(transport: transport)
@@ -130,14 +160,14 @@ private func catalogResponse(for request: URLRequest) -> HTTPResult {
         #expect(transport.callCount == 2)
     }
 
-    @Test func pagesAreCachedSeparatelyByLimitAndSkip() async throws {
+    @Test func addonPagesShareDisplayLimitsButKeepSkipSeparate() async throws {
         let transport = StubTransport { request, _ in catalogResponse(for: request) }
         let (service, _) = try await makeService(transport: transport)
         _ = try await service.items(for: catalogSource("top"), limit: 5)
         _ = try await service.items(for: catalogSource("top"), limit: 10)
         _ = try await service.items(for: catalogSource("top"), limit: 5, skip: 5)
         _ = try await service.items(for: catalogSource("top"), limit: 5)
-        #expect(transport.callCount == 3)
+        #expect(transport.callCount == 2)
     }
 
     @Test func invalidateForgetsEveryCachedPage() async throws {
@@ -208,7 +238,7 @@ private func catalogResponse(for request: URLRequest) -> HTTPResult {
         clock.advance(by: 10)
         _ = try await service.items(for: catalogSource("top"), limit: 10, cacheTTL: 3600)
         let known = await service.lastKnownItems(for: catalogSource("top"), limit: 20)
-        #expect(known?.count == 10, "the page loaded last is the one remembered")
+        #expect(known?.count == 20, "the full fetched page supplies any requested display prefix")
     }
 
     @Test func pagingDoesNotOverwriteTheSnapshotAndFailuresDoNotEither() async throws {

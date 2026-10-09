@@ -126,7 +126,7 @@ struct HeroPlaceholder: View {
 /// One hero page of the spotlight, using a separate image for each orientation.
 private struct HeroPage: View {
     /// The zoom source of this page's artwork: the title's screen zooms out of it.
-    static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
+    nonisolated static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
 
     let item: MetaPreview
     let isScrolling: Bool

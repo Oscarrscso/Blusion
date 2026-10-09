@@ -7,6 +7,17 @@ import PlayerKitTestSupport
 /// PLAN M8 leak pass (host half) for the playback stack: coordinator, engines, progress session.
 @MainActor
 @Suite struct LeakTests {
+    #if canImport(AVFoundation)
+    @Test func anInvalidatedHeaderLoaderReleasesItsSessionAndDelegate() async throws {
+        weak var reference: HeaderResourceLoader?
+        autoreleasepool {
+            let loader = HeaderResourceLoader(headers: ["User-Agent": "test"])
+            reference = loader
+            loader.invalidate()
+        }
+        try await waitUntil { reference == nil }
+    }
+    #endif
     private let request = StreamRequest(type: "movie", id: "tt1", title: "Movie")
 
     private func candidate(_ name: String) -> PlaybackCandidate {

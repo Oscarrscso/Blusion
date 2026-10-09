@@ -178,7 +178,7 @@ public final class SearchViewModel {
             return
         }
         let order = await services.registry.addons.map(\.id)
-        let stream = await services.browse.search(term)
+        let stream = await services.browse.search(term, incremental: true)
         for await response in stream {
             guard !Task.isCancelled else { return }
             switch response.result {
@@ -201,6 +201,10 @@ public final class SearchViewModel {
 
     /// Keeps sections in the user's addon order, whatever order the addons answer in.
     private func insert(_ section: Section, order: [UUID]) {
+        if let index = sections.firstIndex(where: { $0.id == section.id }) {
+            sections[index] = section
+            return
+        }
         func rank(_ id: UUID) -> Int { order.firstIndex(of: id) ?? Int.max }
         let index = sections.firstIndex { rank($0.addon.id) > rank(section.addon.id) } ?? sections.endIndex
         sections.insert(section, at: index)
