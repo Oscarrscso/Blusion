@@ -119,7 +119,7 @@ import StremioKitTestSupport
         _ = try await services.registry.install(from: server.catalogManifestURL().absoluteString)
         let model = DiscoverViewModel(services: services)
         await model.loadSources()
-        #expect(model.types == ["movie", "series", "anime"], "Anime is always offered, even with no anime addon")
+        #expect(model.types == ["movie", "series"])
         #expect(model.selectedType == "movie")
         #expect(model.visibleSources.map(\.catalog.id) == ["mock-movies", "mock-top"])
         await model.select(type: "series")
@@ -128,10 +128,10 @@ import StremioKitTestSupport
         #expect(model.visibleSources.map(\.catalog.id) == ["mock-series"])
         #expect(model.items.map(\.id) == ["mock:series1"])
         await model.select(type: "anime")
-        #expect(model.selectedType == "anime" && model.items.isEmpty, "no addon offers anime, so the segment shows an empty list")
+        #expect(model.selectedType == "series", "an unknown type changes nothing")
     }
 
-    @Test func typesAlwaysOfferMoviesSeriesAndAnimeInThatOrder() async throws {
+    @Test func typesOfferOnlyMoviesSeriesAndAnimeInThatOrder() async throws {
         let manifest = Manifest(id: "order", name: "Order", version: "1", resources: [ResourceDescriptor(name: "catalog")],
                                 types: ["tv", "zeta", "alpha", "anime", "movie"],
                                 catalogs: [CatalogDescriptor(type: "tv", id: "t"), CatalogDescriptor(type: "zeta", id: "z"),
@@ -140,11 +140,8 @@ import StremioKitTestSupport
         let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: StubTransport(data: Data(#"{"metas":[]}"#.utf8)))
         let model = DiscoverViewModel(services: AppServices(registry: registry, client: client))
         await model.loadSources()
-        #expect(model.types == ["movie", "series", "anime"], "tv, zeta and alpha have no segment; series and anime always do")
+        #expect(model.types == ["movie", "anime"], "tv, zeta and alpha have no segment")
         #expect(model.selectedType == "movie")
-        await model.select(type: "series")
-        #expect(model.selectedType == "series" && model.items.isEmpty && model.state == .loaded, "no addon offers series here, so the list is empty")
-        #expect(model.selectedSource == nil)
     }
 
     @Test func loadSourcesKeepsASelectionThatStillExistsAndFallsBackOtherwise() async throws {

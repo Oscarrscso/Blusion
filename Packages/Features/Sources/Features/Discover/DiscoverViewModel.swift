@@ -36,8 +36,10 @@ public final class DiscoverViewModel {
     public var genres: [String] { selectedSource?.catalog.genreOptions ?? [] }
     public var hasSources: Bool { !sources.isEmpty }
 
-    /// The types the Discover type control always offers, in order. Other addon types have no segment. A type no addon provides shows nothing.
-    public var types: [String] { ["movie", "series", "anime"] }
+    /// The types the Discover type control offers, in order: Movies, Series, Anime. Only those the sources provide. Other addon types have no segment.
+    public var types: [String] {
+        ["movie", "series", "anime"].filter { type in sources.contains { $0.type == type } }
+    }
 
     /// The sources of the selected type; every source when no type is selected.
     public var visibleSources: [CatalogSource] {
@@ -60,17 +62,9 @@ public final class DiscoverViewModel {
         await select(source: first)
     }
 
-    /// Switches to a content type: selects that type's first source and reloads. A type no addon provides shows an empty list.
+    /// Switches to a content type: selects that type's first source and reloads. Unknown types change nothing.
     public func select(type: String) async {
-        guard let first = sources.first(where: { $0.type == type }) else {
-            generation += 1
-            selectedSource = nil
-            selectedType = type
-            selectedGenre = nil
-            items = []
-            state = .loaded
-            return
-        }
+        guard let first = sources.first(where: { $0.type == type }) else { return }
         await select(source: first)
     }
 
