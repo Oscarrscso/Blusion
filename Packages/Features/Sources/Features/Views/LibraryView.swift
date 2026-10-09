@@ -10,7 +10,6 @@ struct LibraryView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var actions: TitleActions?
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
-    @ScaledMetric(relativeTo: .subheadline) private var filterButtonWidth = 110.0
     let onOpenAddons: () -> Void
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
@@ -61,6 +60,7 @@ struct LibraryView: View {
             }
         }
         .sheet(isPresented: $showsFilters) { LibraryFilterSheet(model: model) }
+        .task { model.attachRatings(ratings) }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
@@ -121,10 +121,7 @@ struct LibraryView: View {
                     }
                     .accessibilityIdentifier("library.filter.status")
                     Menu {
-                        Picker("At least", selection: $model.filter.minimumRating) {
-                            Text("Any").tag(Double?.none)
-                            ForEach([5.0, 6.0, 7.0, 8.0, 9.0], id: \.self) { Text("★ \(LibraryFiltering.ratingText($0))+").tag(Double?.some($0)) }
-                        }
+                        RatingPicker(threshold: $model.filter.minimumRating)
                     } label: {
                         filterLabel("Rating", systemImage: "star.fill", tint: .yellow, isActive: model.filter.minimumRating != nil)
                     }
@@ -146,22 +143,12 @@ struct LibraryView: View {
             .padding(.horizontal, metrics.pageMargin)
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(.selection, trigger: model.filter)
         .accessibilityIdentifier("library.filters")
     }
 
     private func filterLabel(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false) -> some View {
-        HStack(spacing: 5) {
-            if let systemImage { Image(systemName: systemImage).font(.caption) }
-            Text(title).lineLimit(1).minimumScaleFactor(0.8)
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-        }
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(tint)
-        .padding(.horizontal, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .glassEffect(.regular.tint(tint.opacity(isActive ? 0.25 : 0.08)).interactive(), in: .capsule)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
+        FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive)
     }
 
     private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
@@ -176,19 +163,15 @@ struct LibraryView: View {
         }
     }
 
-    /// The active filters, one chip each (tap to clear it), and a chip that clears them all.
+    /// The active filters, one chip each (tap to clear it), and a chip that clears them all. The stack already adds 8pt above this view
+    /// and `shelfSpacing` below it, so the padding makes those gaps 12pt above and 24pt below. The view is removed with the last chip,
+    /// so clearing every filter leaves no gap behind.
     private var filterChips: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: filterButtonWidth + 40), spacing: Theme.Spacing.s)],
-                  alignment: .leading, spacing: Theme.Spacing.s) {
-            ForEach(model.filter.chips) { chip in
-                GlassChip(chip.label, systemImage: "xmark") { model.removeFilter(chip) }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("library.chip.\(chip.id)")
-            }
-            GlassChip("Clear all", systemImage: "xmark.circle") { model.clearFilters() }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("library.chip.clear")
-        }
+        ActiveFilterChips(chips: model.filter.chips.map { chip in
+            ActiveFilterChip(id: chip.id, label: chip.label) { model.removeFilter(chip) }
+        }, identifier: "library", clearAll: { model.clearFilters() })
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, Theme.Spacing.xl - metrics.shelfSpacing)
     }
 
     private var continueSection: some View {
@@ -198,6 +181,7 @@ struct LibraryView: View {
                     ProgressCard(title: item.title, subtitle: progressSubtitle(item), artwork: item.poster, fraction: item.fraction)
                 }
                 .buttonStyle(PressableCardStyle())
+                .titleTapHaptic()
                 .accessibilityIdentifier("library.continue.\(item.id)")
                 .contextMenu {
                     Button("Mark as Watched") { Task { await model.markWatched(item); await actions?.refresh() } }
@@ -240,6 +224,21 @@ struct LibraryView: View {
         let remaining = "\(max(0, Int((item.duration - item.position) / 60))) min left"
         if let season = item.season, let episode = item.episode { return "S\(season), E\(episode) · \(remaining)" }
         return remaining
+    }
+}
+
+/// The minimum rating, out of 10. Each title is rated by its best available score, so the menu names no site.
+struct RatingPicker: View {
+    @Binding var threshold: Double?
+
+    var body: some View {
+        Picker("At least", selection: $threshold) {
+            Text("Any").tag(Double?.none)
+            ForEach([5.0, 6, 7, 8, 9, 10], id: \.self) { value in
+                Text("\(LibraryFiltering.ratingText(value))+").tag(Double?.some(value))
+            }
+        }
+        .accessibilityIdentifier("library.filter.rating.threshold")
     }
 }
 
@@ -291,11 +290,12 @@ struct LibraryFilterSheet: View {
                 } footer: {
                     Text("A title matches if it has any of the chosen genres.")
                 }
-                Section("Rating") {
-                    Picker("At least", selection: $model.filter.minimumRating) {
-                        Text("Any").tag(Double?.none)
-                        ForEach([5.0, 6.0, 7.0, 8.0, 9.0], id: \.self) { Text("★ \(LibraryFiltering.ratingText($0))+").tag(Double?.some($0)) }
-                    }
+                Section {
+                    RatingPicker(threshold: $model.filter.minimumRating)
+                } header: {
+                    Text("Rating")
+                } footer: {
+                    Text("Ratings are out of 10, using the best score available for each title.")
                 }
                 Section("Added") {
                     Picker("Added", selection: $model.filter.addedWithin) {
@@ -314,6 +314,7 @@ struct LibraryFilterSheet: View {
                         .accessibilityIdentifier("library.filter.clear")
                 }
             }
+            .sensoryFeedback(.selection, trigger: model.filter)
             .navigationTitle("Filter and Sort")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

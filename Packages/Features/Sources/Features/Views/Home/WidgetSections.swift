@@ -145,14 +145,19 @@ struct ContinueWatchingRow: View {
     var title = "Continue"
     var hideTitle = false
     @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
+    @State private var kind = ContinueKind.all
 
     var body: some View {
+        let shown = items.filter { kind.includes($0.request) }
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if !hideTitle {
                 HStack(spacing: Theme.Spacing.s) {
                     Text(title)
                         .font(Theme.Typography.shelfTitle)
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                         .accessibilityAddTraits(.isHeader)
                     ProgressView()
                         .controlSize(.small)
@@ -172,20 +177,29 @@ struct ContinueWatchingRow: View {
                         }
                     }
                     Spacer(minLength: 0)
+                    if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, Theme.screenPadding)
             }
-            if !items.isEmpty {
+            if !shown.isEmpty {
                 MediaRow(title, hideTitle: true) {
-                    ForEach(items) { item in
+                    ForEach(shown) { item in
                         NavigationLink(value: item.request) {
                             ProgressCard(title: item.request.title, subtitle: item.subtitle, artwork: item.request.poster, fraction: item.fraction)
                         }
                         .buttonStyle(PressableCardStyle())
+                        .titleTapHaptic()
                         .accessibilityIdentifier("board.continue.\(item.id)")
                     }
                 }
+            } else if !items.isEmpty {
+                // Hold the rail's height, so switching to an empty kind does not move the page below.
+                Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: (metrics.isRegular ? 180 : 148) / CardAspect.wide.ratio + 44, alignment: .top)
+                    .padding(.horizontal, Theme.screenPadding)
             } else {
                 emptyState
                     .font(.subheadline)
@@ -193,6 +207,7 @@ struct ContinueWatchingRow: View {
                     .padding(.horizontal, Theme.screenPadding)
             }
         }
+        .animation(.snappy(duration: 0.28), value: kind)
         .accessibilityIdentifier("board.continueWatching")
     }
 
