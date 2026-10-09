@@ -62,7 +62,7 @@ struct RatingsLine: View {
     }
 }
 
-/// The ratings of one title as a small floating pill over the bottom-left of a poster: dark, translucent and blurred, inset from the
+/// The ratings of one title as a small floating pill over the bottom-left of a poster: light, very translucent, inset from the
 /// edges, sized to its contents, so the artwork stays unobstructed. Each score is led by its provider's own colours. Landscape artwork
 /// (the hero and the title page) keeps its pill in the bottom-right corner. Reads the environment's `PosterRatingsStore`; draws nothing
 /// without one, when ratings are switched off, or while no scores are known. Only this view observes the title's entry, so a rating
@@ -93,25 +93,24 @@ struct PosterRatingsOverlay: View {
     }
 }
 
-/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a dark blurred rounded rectangle with a
-/// hairline edge. It is only as wide as its contents.
+/// The floating rating pill: each site's coloured mark, then its score in medium-weight white, on a light, very transparent rounded
+/// rectangle with no edge. Small, so it reads as a tag on the artwork; it is only as wide as its contents.
 private struct RatingPill: View {
     let ratings: TitleRatings
     let sites: [ReviewSite]
-    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.s) {
+        HStack(spacing: 6) {
             ForEach(sites) { site in
                 if let score = ratings.shortText(for: site) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         if site == .letterboxd {
-                            LetterboxdMark(dot: 6, keepsColour: true)
+                            LetterboxdMark(dot: 5, keepsColour: true)
                         } else {
-                            ReviewSiteIcon(site: site, size: 11, keepsColour: true)
+                            ReviewSiteIcon(site: site, size: 8, keepsColour: true)
                         }
                         Text(score)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                     }
@@ -121,17 +120,9 @@ private struct RatingPill: View {
         }
         .lineLimit(1)
         .fixedSize()
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-            ZStack {
-                shape.fill(.ultraThinMaterial)
-                shape.fill(.black.opacity(0.38))
-            }
-        }
-        .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(.white.opacity(0.14), lineWidth: 1 / displayScale) }
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
