@@ -48,14 +48,21 @@ enum DebugHangSampler {
     private static func sample(thread: thread_act_t, into frames: UnsafeMutablePointer<UInt>, capacity: Int) -> Int {
         guard thread_suspend(thread) == KERN_SUCCESS else { return 0 }
         defer { thread_resume(thread) }
+        #if arch(arm64)
         var state = arm_thread_state64_t()
-        var count = mach_msg_type_number_t(MemoryLayout<arm_thread_state64_t>.size / MemoryLayout<UInt32>.size)
+        let flavor = ARM_THREAD_STATE64
+        #else
+        var state = x86_thread_state64_t()
+        let flavor = x86_THREAD_STATE64
+        #endif
+        var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: state) / MemoryLayout<UInt32>.size)
         let result = withUnsafeMutablePointer(to: &state) {
             $0.withMemoryRebound(to: natural_t.self, capacity: Int(count)) {
-                thread_get_state(thread, thread_state_flavor_t(ARM_THREAD_STATE64), $0, &count)
+                thread_get_state(thread, thread_state_flavor_t(flavor), $0, &count)
             }
         }
         guard result == KERN_SUCCESS else { return 0 }
+        #if arch(arm64)
         let mask: UInt = 0x7F_FFFF_FFFF   // return addresses of system code carry pointer-authentication bits above bit 39
         var depth = 0
         frames[depth] = UInt(state.__pc) & mask
@@ -63,6 +70,12 @@ enum DebugHangSampler {
         frames[depth] = UInt(state.__lr) & mask
         depth += 1
         var frame = UInt(state.__fp)
+        #else
+        let mask = UInt.max
+        frames[0] = UInt(state.__rip)
+        var depth = 1
+        var frame = UInt(state.__rbp)
+        #endif
         var pair: (UInt, UInt) = (0, 0)
         while depth < capacity, frame != 0, frame % 8 == 0 {
             var read: vm_size_t = 0

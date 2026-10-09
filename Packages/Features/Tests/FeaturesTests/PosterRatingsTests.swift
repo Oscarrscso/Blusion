@@ -228,7 +228,7 @@ import StremioKitTestSupport
         #expect(transport.callCount == 1 && store.reviewServiceIssue == nil)
     }
 
-    @Test func homeHeroLoadsDistinctSizedArtworkEvenWhenPosterRatingsAreDisabled() async throws {
+    @Test func homeHeroLoadsDistinctOriginalArtworkEvenWhenPosterRatingsAreDisabled() async throws {
         let transport = StubTransport { request, _ in
             let json = request.url?.lastPathComponent == "images"
                 ? #"{"backdrops":[{"file_path":"/landscape.jpg"}],"posters":[{"file_path":"/portrait.jpg"}]}"#
@@ -237,8 +237,8 @@ import StremioKitTestSupport
         }
         let store = PosterRatingsStore(isEnabled: false, tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: jwt))
         let artwork = try #require(await store.heroArtwork(for: movie))
-        #expect(artwork.portrait == URL(string: "https://image.tmdb.org/t/p/w780/portrait.jpg"))
-        #expect(artwork.backdrop == URL(string: "https://image.tmdb.org/t/p/w1280/landscape.jpg"))
+        #expect(artwork.portrait == URL(string: "https://image.tmdb.org/t/p/original/portrait.jpg"))
+        #expect(artwork.backdrop == URL(string: "https://image.tmdb.org/t/p/original/landscape.jpg"))
         #expect(artwork.portrait != artwork.backdrop)
         #expect(await PosterRatingsStore().heroArtwork(for: movie) == nil)
     }

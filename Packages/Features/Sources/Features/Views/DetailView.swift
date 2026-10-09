@@ -512,7 +512,7 @@ struct DetailView: View {
                                            : (metrics.isRegular ? 340 : 280))
                                     .id(review.id)
                                     .reportsShelfEdge(id: review.id)
-                                    .onGeometryChange(for: Bool.self) { geometry in
+                                    .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
                                         expandedReviewID == review.id &&
                                         abs(geometry.size.width - (width - contentMargin * 2)) < 0.5
                                     } action: { isFullWidth in

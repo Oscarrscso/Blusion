@@ -284,7 +284,7 @@ public final class PosterRatingsStore {
         }
     }
 
-    /// Sized portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
+    /// Original-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
     public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
         guard let tmdb, !isClearing else { return nil }
         return try? await tmdb.artwork(imdbID: item.id, type: item.type)
