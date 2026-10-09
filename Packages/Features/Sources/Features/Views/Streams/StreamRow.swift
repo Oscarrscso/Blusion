@@ -85,30 +85,20 @@ struct StreamRow: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The audio as the codec says it is. Lossless Atmos (TrueHD) is a badge; lossy Atmos (Dolby Digital Plus) is quiet text. Without
-    /// Atmos, the first audio codec the release names.
+    /// The audio as tags, as the codec says it is. Lossless Atmos (TrueHD) and streaming Atmos (DD+) each get their own tag, and the codec
+    /// they already name is left out of it. Otherwise the first audio codec the release names, and "Atmos" when only the marker is there.
     @ViewBuilder private var audio: some View {
-        switch item.quality.atmosFormat {
-        case .lossless:
-            QualityBadge("Atmos · TrueHD", symbol: "waveform")
-        case .streaming:
-            Text("Atmos · DD+")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        case nil:
-            if let text = plainAudio {
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        HStack(spacing: Theme.Spacing.xs) {
+            switch item.quality.atmosFormat {
+            case .lossless:
+                QualityBadge("Atmos · TrueHD", symbol: "waveform")
+            case .streaming:
+                QualityBadge("Atmos · DD+", symbol: "speaker.wave.3")
+            case nil:
+                if item.quality.hasAtmos { QualityBadge("Atmos", symbol: "speaker.wave.3") }
+                if let codec = item.quality.audioCodecs.first { QualityBadge(codec.label, symbol: "speaker.wave.2") }
             }
         }
-    }
-
-    private var plainAudio: String? {
-        if let audio = item.quality.audioCodecs.first { return audio.label }
-        return item.quality.hasAtmos ? "Atmos" : nil
     }
 
     private var routeNote: (text: String, symbol: String, isWarning: Bool)? {
@@ -198,8 +188,8 @@ private extension AudioCodec {
     var label: String {
         switch self {
         case .aac: "AAC"
-        case .ac3: "Dolby Digital"
-        case .eac3: "Dolby Digital+"
+        case .ac3: "DD"
+        case .eac3: "DD+"
         case .dts: "DTS"
         case .dtsHD: "DTS-HD"
         case .trueHD: "TrueHD"
