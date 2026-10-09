@@ -55,12 +55,9 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.zoomScope) private var zoomScope
-    @Environment(\.layoutMetrics) private var metrics
 
     func body(content: Content) -> some View {
         let sourceID = "continue/\(zoomScope)/\(preview.identity)"
-        let cardWidth = metrics.continueCardWidth
-        let cardHeight = cardWidth / CardAspect.wide.ratio
         Button {
             Haptics.tap()
             router.open(.home)
@@ -72,7 +69,9 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
         }
         .buttonStyle(PressableCardStyle())
         // The hold is the system context menu: a custom long-press gesture here blocked the row's horizontal scroll.
-        // The preview is the card itself, so the menu matches its width and sits directly under the thumbnail.
+        // No custom preview: the system snapshots the card itself (its artwork, bounds and clipping), and this shape gives the
+        // menu the card's corner radius.
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .contextMenu {
             Button("Open title", systemImage: "info.circle") {
                 Haptics.scrollSnap()
@@ -83,8 +82,6 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                     router.homePath.append(preview)
                 }
             }
-        } preview: {
-            content.frame(width: cardWidth, height: cardHeight)
         }
     }
 }
