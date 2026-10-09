@@ -192,6 +192,8 @@ public struct RootTabView: View {
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .focusedSceneValue(router)
         .preferredColorScheme(.dark)
+        // Screens run edge to edge, including the sides of a landscape iPhone. Only the navigation bar and tab bar keep their safe area.
+        .ignoresSafeArea(.container, edges: .horizontal)
     }
 
     private func refreshUserState() async {

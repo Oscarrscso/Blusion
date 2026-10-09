@@ -24,8 +24,8 @@ enum Theme {
         static let surface: CGFloat = 20
     }
 
-    /// Horizontal inset of screen content on a phone. Adaptive screens read `LayoutMetrics.pageMargin` instead.
-    static let screenPadding: CGFloat = 20
+    /// Horizontal inset of screen content on a phone. Zero: content runs edge to edge. Adaptive screens read `LayoutMetrics.pageMargin`.
+    static let screenPadding: CGFloat = 0
     /// Vertical gap between rows on a phone browse screen. Adaptive screens read `LayoutMetrics.shelfSpacing`.
     static let rowSpacing: CGFloat = 28
     /// Gap between cards in a row or a grid on a phone. Adaptive screens read `LayoutMetrics.cardSpacing`.
