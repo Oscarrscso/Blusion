@@ -190,6 +190,8 @@ struct RatingButtonsRow: View {
                 row(sites, ratings: ratings)
                 ScrollView(.horizontal) { row(sites, ratings: ratings) }
                     .scrollIndicators(.hidden)
+                    .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+                    .scrollClipDisabled()
             }
         }
         .frame(maxWidth: .infinity, alignment: alignment)

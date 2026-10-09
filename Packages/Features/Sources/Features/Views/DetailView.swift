@@ -17,6 +17,9 @@ struct DetailView: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
 
+    /// How far the page's scroll indicator is kept from the top and bottom of the screen.
+    private static let scrollIndicatorInset: CGFloat = 120
+
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork))
     }
@@ -38,6 +41,8 @@ struct DetailView: View {
                 }
                 .padding(.bottom, Theme.Spacing.xxl)
             }
+            // The track of the page's own scroll indicator is inset, so the bar is a short line rather than the whole screen height.
+            .contentMargins(.vertical, Self.scrollIndicatorInset, for: .scrollIndicators)
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
@@ -94,14 +99,14 @@ struct DetailView: View {
                 .overlay(alignment: .bottom) {
                     titleArt(alignment: .center)
                         .padding(.horizontal, metrics.pageMargin)
-                        .padding(.bottom, Theme.Spacing.l)
+                        .padding(.bottom, Theme.Spacing.s)
                 }
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 controls
                 synopsis
             }
             .padding(.horizontal, metrics.pageMargin)
-            .padding(.top, Theme.Spacing.s)
+            .padding(.top, Theme.Spacing.xs)
         }
     }
 
@@ -116,10 +121,10 @@ struct DetailView: View {
 
     private var controls: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.m) {
+            actionRow
             RatingButtonsRow(item: model.detail.preview, alignment: isLandscape ? .leading : .center)
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(isLandscape ? .leading : .center)
-            actionRow
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -493,7 +498,7 @@ private struct TitleArt: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: compact ? 220 : 280, maxHeight: compact ? 56 : 80, alignment: alignment)
+                    .frame(maxWidth: compact ? 220 : CGFloat.infinity, maxHeight: compact ? 56 : 96, alignment: alignment)
                     .transition(.opacity)
             } else {
                 Text(name)

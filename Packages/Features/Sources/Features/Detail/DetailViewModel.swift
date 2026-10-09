@@ -35,6 +35,8 @@ public final class DetailViewModel {
     public private(set) var titleCredits: TMDbTitleCredits?
     /// Titles TMDb recommends for this one, for the shelf at the bottom of the page. Empty until TMDb answers.
     public private(set) var relatedTitles: [TMDbRelatedTitle] = []
+    /// The US age rating ("R", "TV-MA") for the meta line. Nil until TMDb answers, or when it has none.
+    public private(set) var certification: String?
 
     public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
         self.preview = preview
@@ -70,9 +72,11 @@ public final class DetailViewModel {
         async let reviews: Void = loadReviews()
         async let credits: Void = loadTitleCredits()
         async let related: Void = loadRelatedTitles()
+        async let rating: Void = loadCertification()
         await reviews
         await credits
         await related
+        await rating
     }
 
     public func refresh() async {
@@ -96,6 +100,14 @@ public final class DetailViewModel {
         let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).titleCredits(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         titleCredits = loaded
+    }
+
+    private func loadCertification() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { certification = nil; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).certification(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        certification = loaded
     }
 
     private func loadRelatedTitles() async {
@@ -310,12 +322,13 @@ public final class DetailViewModel {
     /// The title's logo (a transparent image), when the addon or the catalog has one.
     public var logoURL: URL? { detail.preview.logo ?? tmdbArtwork?.logo }
 
-    /// Year and runtime for a `MetaLine`: "2008", "152 min". Parts the addon left out are skipped. The rating is not here: the page
-    /// shows it as a button under the title.
+    /// Year, certification and runtime for a `MetaLine`: "2008", "PG-13", "152 min". Parts the addon left out are skipped. The rating
+    /// is not here: the page shows it as a button under the title.
     public var metaParts: [String] {
         let meta = detail.preview
         var parts: [String] = []
         if let year = Self.nonEmpty(meta.releaseInfo) { parts.append(year) }
+        if let certification = Self.nonEmpty(certification) { parts.append(certification) }
         if let runtime = Self.nonEmpty(meta.runtime) { parts.append(runtime) }
         return parts
     }

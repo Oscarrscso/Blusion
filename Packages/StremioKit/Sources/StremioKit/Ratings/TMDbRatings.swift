@@ -155,6 +155,41 @@ public struct TMDbRatings: Sendable {
 
     private struct ReviewsResponse: Decodable { let results: [TMDbReview] }
 
+    /// The US age rating: a film's certificate ("R") from its release dates, or a show's content rating ("TV-MA"). Nil when TMDb
+    /// has none for the US.
+    public func certification(imdbID: String, type: String) async throws -> String? {
+        guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return nil }
+        let isMovie = type == "movie"
+        let (url, headers) = try request(path: [isMovie ? "movie" : "tv", String(number), isMovie ? "release_dates" : "content_ratings"])
+        let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 6)
+        return try Self.parseCertification(result.data, isMovie: isMovie)
+    }
+
+    /// The `release_dates` answer for a movie or the `content_ratings` answer for a show, read for the US only.
+    static func parseCertification(_ data: Data, isMovie: Bool) throws -> String? {
+        let response: CertificationResponse
+        do { response = try JSONDecoder().decode(CertificationResponse.self, from: data) } catch { throw AddonError.invalidJSON }
+        guard let region = response.results?.first(where: { $0.iso_3166_1 == "US" }) else { return nil }
+        let value: String?
+        if isMovie {
+            value = region.release_dates?.compactMap(\.certification).first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        } else {
+            value = region.rating
+        }
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private struct CertificationResponse: Decodable {
+        let results: [Region]?
+        struct Region: Decodable {
+            let iso_3166_1: String
+            let rating: String?
+            let release_dates: [Release]?
+        }
+        struct Release: Decodable { let certification: String? }
+    }
+
     private static func popular(_ images: [Image]) -> Image? {
         images.filter { $0.file_path.hasPrefix("/") }.max {
             if $0.vote_count != $1.vote_count { return ($0.vote_count ?? 0) < ($1.vote_count ?? 0) }
