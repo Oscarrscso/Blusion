@@ -92,15 +92,8 @@ public struct RootTabView: View {
         _titleActions = State(initialValue: TitleActions(services: services))
     }
 
-    /// Outline symbol for an unselected tab; the filled variant only while that tab is selected.
-    private func tabLabel(_ title: String, _ symbol: String, _ tab: LaunchRoute.Tab, selected: LaunchRoute.Tab) -> some View {
-        Label(title, systemImage: selected == tab ? "\(symbol).fill" : symbol)
-    }
-
     public var body: some View {
         @Bindable var router = router
-        // Read here, so the tab labels rebuild when the selection changes.
-        let selected = router.tab
         TabView(selection: Binding(get: { router.tab }, set: { tab in
             if tab == .search {
                 router.searchPath = NavigationPath()
@@ -112,7 +105,7 @@ public struct RootTabView: View {
             }
             router.tab = tab
         })) {
-            Tab(value: LaunchRoute.Tab.home) {
+            Tab("Home", systemImage: router.tab == .home ? "play.house.fill" : "play.house", value: LaunchRoute.Tab.home) {
                 NavigationStack(path: $router.homePath) {
                     HomeView(services: services)
                         .appDestinations(services: services)
@@ -124,31 +117,25 @@ public struct RootTabView: View {
                     guard !Task.isCancelled else { return }
                     router.presentLaunchRoute()
                 }
-            } label: {
-                tabLabel("Home", "play.house", .home, selected: selected)
             }
-            Tab(value: LaunchRoute.Tab.discover) {
+            Tab("Discover", systemImage: "square.grid.2x2.fill", value: LaunchRoute.Tab.discover) {
                 NavigationStack {
                     DiscoverView(services: services) { router.showAddons() }
                         .appDestinations(services: services)
                 }
                 .zoomTransitions()
-            } label: {
-                tabLabel("Discover", "square.grid.2x2", .discover, selected: selected)
             }
             TabSection("Library") {
-                Tab(value: LaunchRoute.Tab.library) {
+                Tab("Library", systemImage: "books.vertical.fill", value: LaunchRoute.Tab.library) {
                     NavigationStack {
                         LibraryView(services: services) { router.open(.discover) }
                             .appDestinations(services: services)
                     }
                     .zoomTransitions()
-                } label: {
-                    tabLabel("Library", "books.vertical", .library, selected: selected)
                 }
             }
             // Settings is a tab like the rest, so there is no sheet to dismiss and no Done button.
-            Tab(value: LaunchRoute.Tab.settings) {
+            Tab("Settings", systemImage: "gearshape.fill", value: LaunchRoute.Tab.settings) {
                 NavigationStack(path: $router.settingsPath) {
                     SettingsView(services: services)
                         .navigationDestination(for: SettingsDestination.self) { destination in
@@ -160,8 +147,6 @@ public struct RootTabView: View {
                             }
                         }
                 }
-            } label: {
-                tabLabel("Settings", "gearshape", .settings, selected: selected)
             }
             Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
