@@ -87,7 +87,14 @@ struct WidgetsManagerView: View {
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model) }
         .sheet(item: $adding) { kind in
             NavigationStack {
-                WidgetSourcePicker(model: model, genresOnly: kind == .collection) { choice, genre in
+                WidgetSourcePicker(model: model, genresOnly: kind == .collection, chooseTrakt: { source in
+                    switch kind {
+                    case .row: Task { await model.add(WidgetsManagerViewModel.makeTraktRow(source)) }
+                    case .spotlight: Task { await model.add(WidgetsManagerViewModel.makeTraktSpotlight(source)) }
+                    case .collection: break
+                    }
+                    adding = nil
+                }) { choice, genre in
                     let widget: HomeWidget
                     switch kind {
                     case .row: widget = WidgetsManagerViewModel.makeRow(title: choice.title, choice: choice, genre: genre)

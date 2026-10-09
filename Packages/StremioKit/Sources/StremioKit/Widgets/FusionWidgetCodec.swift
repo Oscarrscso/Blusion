@@ -158,6 +158,7 @@ public enum FusionWidgetCodec {
             switch kind {
             case "addonCatalog": return addonCatalog(payload)
             case "traktList": return traktList(payload) ?? .unsupported(kind: kind)
+            case "blusion.traktFeed": return traktFeed(payload) ?? .unsupported(kind: kind)
             default: return .unsupported(kind: kind)
             }
         }
@@ -182,6 +183,12 @@ public enum FusionWidgetCodec {
             guard let username = Read.text(payload["username"]), let slug = Read.text(payload["listSlug"]) else { return nil }
             return .traktList(TraktListReference(username: username, listSlug: slug, listName: Read.text(payload["listName"]) ?? slug,
                                                  traktID: Read.integer(payload["traktId"])))
+        }
+
+        /// A Trakt feed by its `feed` name. Blusion writes these; an unknown name is unsupported rather than guessed.
+        func traktFeed(_ payload: [String: Any]) -> WidgetSource? {
+            guard let name = Read.text(payload["feed"]), let feed = TraktFeed(rawValue: name) else { return nil }
+            return .traktFeed(feed)
         }
 
         /// The manifest id and display host of an imported `addonId`; the widget keeps nothing else. A link to an addon that is not
@@ -354,6 +361,8 @@ public enum FusionWidgetCodec {
                 payload["traktId"] = NSNull()
             }
             return ["kind": "traktList", "payload": payload]
+        case .traktFeed(let feed):
+            return ["kind": "blusion.traktFeed", "payload": ["feed": feed.rawValue]]
         case .unsupported(let kind):
             return ["kind": kind, "payload": [String: Any]()]
         }

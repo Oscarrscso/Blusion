@@ -22,6 +22,21 @@ public final class WidgetsManagerViewModel {
 
     public enum ImportMode: Sendable, Hashable { case append, replace }
 
+    /// Why a Trakt list link could not be added. `message` is one plain sentence for the user.
+    public enum TraktLinkError: Error, Equatable, Sendable {
+        case notAListLink
+        case needsClientID
+        case failed(String)
+
+        public var message: String {
+            switch self {
+            case .notAListLink: return "That isn't a Trakt list link. Paste an address like trakt.tv/users/name/lists/list-name."
+            case .needsClientID: return "Add a Trakt client ID in Settings first."
+            case .failed(let reason): return "Trakt couldn't read this list (\(reason))."
+            }
+        }
+    }
+
     /// An import that refers to addons which are not installed, waiting for the user's decision.
     public struct PendingImport: Equatable, Sendable {
         public let widgetCount: Int
@@ -106,6 +121,21 @@ public final class WidgetsManagerViewModel {
         clearMessage()
         await services.widgets.save(nil)
         await services.widgetContent.invalidate()
+    }
+
+    /// The public Trakt list a pasted link names, read from Trakt so the row gets its real name. Needs the client ID in Settings.
+    public func traktList(fromLink text: String) async throws -> TraktListReference {
+        guard let parts = TraktClient.listReference(fromLink: text) else { throw TraktLinkError.notAListLink }
+        let settings = await services.settings.load()
+        guard let clientID = settings.traktClientID?.trimmingCharacters(in: .whitespacesAndNewlines), !clientID.isEmpty else {
+            throw TraktLinkError.needsClientID
+        }
+        do {
+            let info = try await TraktClient(client: services.client).listInfo(username: parts.username, listSlug: parts.listSlug, clientID: clientID)
+            return TraktListReference(username: parts.username, listSlug: parts.listSlug, listName: info.name, traktID: info.traktID)
+        } catch {
+            throw TraktLinkError.failed(AddonError.from(error).shortDescription.lowercased())
+        }
     }
 
     // MARK: Import and export
@@ -231,6 +261,8 @@ public final class WidgetsManagerViewModel {
             return parts.joined(separator: " · ")
         case .traktList(let list):
             return "Trakt list · \(list.listName) by \(list.username)"
+        case .traktFeed(let feed):
+            return "Trakt · \(feed.title)"
         case .unsupported(let kind):
             return "Not supported (\(kind))"
         }
@@ -254,6 +286,25 @@ public final class WidgetsManagerViewModel {
                                limit: Int = 20) -> HomeWidget {
         let row = RowConfiguration(source: .addonCatalog(catalogReference(choice, genre: genre)), presentation: presentation, limit: limit)
         return HomeWidget(title: title, content: .row(row))
+    }
+
+    /// A row of a Trakt list or feed, titled as the list or feed is named.
+    public static func makeTraktRow(_ source: WidgetSource) -> HomeWidget {
+        HomeWidget(title: traktTitle(source), content: .row(RowConfiguration(source: source)))
+    }
+
+    /// The large paging spotlight of a Trakt list or feed.
+    public static func makeTraktSpotlight(_ source: WidgetSource) -> HomeWidget {
+        HomeWidget(title: traktTitle(source), hideTitle: true, content: .hero(RowConfiguration(source: source, limit: 8)))
+    }
+
+    /// The name a Trakt list or feed is shown under, or "Trakt" for any other source.
+    public static func traktTitle(_ source: WidgetSource) -> String {
+        switch source {
+        case .traktList(let list): return list.listName
+        case .traktFeed(let feed): return feed.title
+        case .addonCatalog, .unsupported: return "Trakt"
+        }
     }
 
     /// The large paging spotlight of one catalog, as the automatic layout makes it.

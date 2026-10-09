@@ -73,19 +73,12 @@ struct WidgetEditorView: View {
         }
         .sheet(isPresented: $showsSource) {
             NavigationStack {
-                WidgetSourcePicker(model: model) { choice, genre in
+                WidgetSourcePicker(model: model, chooseTrakt: { source in
+                    useSource(source, title: WidgetsManagerViewModel.traktTitle(source))
+                }) { choice, genre in
                     var reference = choice.reference
                     reference.genre = genre
-                    let source = WidgetSource.addonCatalog(reference)
-                    switch widget.content {
-                    case .row(var row): row.source = source; widget.content = .row(row)
-                    case .hero(var row): row.source = source; widget.content = .hero(row)
-                    case .collection(var tiles):
-                        tiles.append(CollectionItem(title: genre ?? choice.title, sources: [source]))
-                        widget.content = .collection(tiles)
-                    case .continueWatching, .unsupported: break
-                    }
-                    showsSource = false
+                    useSource(.addonCatalog(reference), title: genre ?? choice.title)
                 }
             }
         }
@@ -99,6 +92,19 @@ struct WidgetEditorView: View {
                 }
             }
         }
+    }
+
+    /// Puts a source into the widget being edited: a row or spotlight takes it, a collection adds it as a tile named `title`.
+    private func useSource(_ source: WidgetSource, title: String) {
+        switch widget.content {
+        case .row(var row): row.source = source; widget.content = .row(row)
+        case .hero(var row): row.source = source; widget.content = .hero(row)
+        case .collection(var tiles):
+            tiles.append(CollectionItem(title: title, sources: [source]))
+            widget.content = .collection(tiles)
+        case .continueWatching, .unsupported: break
+        }
+        showsSource = false
     }
 
     private var row: Binding<RowConfiguration> {
@@ -117,8 +123,8 @@ struct WidgetEditorView: View {
         Section("Source") {
             Button(model.describe(row.wrappedValue.source)) { showsSource = true }
                 .accessibilityIdentifier("widgetEditor.source")
-            if case .traktList = row.wrappedValue.source {
-                Text("Trakt lists need a Trakt client ID in Settings.").font(.footnote).foregroundStyle(.secondary)
+            if row.wrappedValue.source.usesTrakt {
+                Text("Trakt lists and feeds need a Trakt client ID in Settings.").font(.footnote).foregroundStyle(.secondary)
             }
         }
         if case .row = widget.content {

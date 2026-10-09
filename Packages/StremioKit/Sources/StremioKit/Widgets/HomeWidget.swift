@@ -116,6 +116,8 @@ public enum WidgetSource: Sendable, Codable, Equatable, Hashable {
     case addonCatalog(AddonCatalogReference)
     /// A public Trakt list, read with the Trakt client ID the user set in Settings.
     case traktList(TraktListReference)
+    /// A Trakt feed (trending or popular movies or shows). Public, so only the client ID is needed. Blusion-only in Fusion files.
+    case traktFeed(TraktFeed)
     /// A kind this version cannot load (for example `anilistCatalog`). Kept so an imported widget survives; the UI says so.
     case unsupported(kind: String)
 }
@@ -168,5 +170,15 @@ public struct TraktListReference: Sendable, Codable, Equatable, Hashable {
         self.listSlug = listSlug
         self.listName = listName
         self.traktID = traktID
+    }
+}
+
+extension WidgetSource {
+    /// True for a Trakt list or feed, which needs the Trakt client ID.
+    public var usesTrakt: Bool {
+        switch self {
+        case .traktList, .traktFeed: return true
+        case .addonCatalog, .unsupported: return false
+        }
     }
 }

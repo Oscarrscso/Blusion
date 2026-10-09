@@ -110,7 +110,7 @@ public final class WidgetContentService: Sendable {
         case .addonCatalog(let reference):
             let addons = await registry.addons
             return reference.resolve(in: addons) == nil ? .addonMissing(host: reference.host) : nil
-        case .traktList:
+        case .traktList, .traktFeed:
             let clientID = await traktClientID()
             return clientID == nil ? .needsTraktClientID : nil
         case .unsupported(let kind):
@@ -151,6 +151,14 @@ public final class WidgetContentService: Sendable {
             guard let clientID = await traktClientID() else { throw WidgetSourceError.needsTraktClientID }
             do {
                 let items = try await trakt.listItems(list, clientID: clientID, page: skip / limit + 1, limit: limit)
+                return Array(items.prefix(limit))
+            } catch {
+                throw WidgetSourceError.addon(AddonError.from(error))
+            }
+        case .traktFeed(let feed):
+            guard let clientID = await traktClientID() else { throw WidgetSourceError.needsTraktClientID }
+            do {
+                let items = try await trakt.feedItems(feed, clientID: clientID, page: skip / limit + 1, limit: limit)
                 return Array(items.prefix(limit))
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
