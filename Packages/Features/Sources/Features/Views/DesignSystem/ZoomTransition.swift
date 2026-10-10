@@ -59,9 +59,13 @@ extension View {
     }
 }
 
-/// A zoomed screen closes on a back swipe the way it does from the back button: at once, without following the finger. The system's
-/// own swipe drags the screen and lets it settle after the finger lifts. Until that settle ends, about a second, the screen is still
-/// the one on top: its back button stays, the screen underneath takes no touches, and a new touch catches the closing screen again.
+/// A zoomed screen closes on a back swipe the way it does from the back button: at once, without following the finger.
+///
+/// UIKit gives a zoomed screen a dismiss interaction of its own (edge swipe, swipe on the content, pinch), on the screen's view. It
+/// drags the screen and lets it settle after the finger lifts. Until that settle ends, about a second, the screen is still the one
+/// on top: its back button stays, the screen underneath takes no touches, and a new touch catches the closing screen again. Its
+/// recognizers also make every other pan wait for them, so nothing can be put in front of them. That interaction is switched off
+/// here, and one plain swipe pops the screen instead.
 private struct SwipeBackCloses: ViewModifier {
     @Environment(\.dismiss) private var dismiss
 
@@ -88,27 +92,37 @@ private struct SwipeBackCatcher: UIViewRepresentable {
     }
 }
 
-/// Sits unseen in a pushed screen to find that screen's view controller, which SwiftUI does not hand out.
+/// Sits unseen in a pushed screen to find that screen's own view, which SwiftUI does not hand out.
 private final class SwipeBackProbe: UIView {
     let swipe = SwipeBack()
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        swipe.attach(to: window == nil ? nil : pushedController)
+        swipe.attach(to: window == nil ? nil : pageView)
+        guard window != nil, swipe.isDetached else { return }
+        // The screen may not be in its navigation controller yet on the first pass.
+        Task { @MainActor [weak self] in
+            guard let self, self.window != nil, self.swipe.isDetached else { return }
+            self.swipe.attach(to: self.pageView)
+        }
     }
 
-    /// The view controller the navigation controller pushed for the screen this view is in.
-    private var pushedController: UIViewController? {
-        var responder: UIResponder? = self
-        while let current = responder, !(current is UIViewController) { responder = current.next }
-        var controller = responder as? UIViewController
-        while let parent = controller?.parent, !(parent is UINavigationController) { controller = parent }
-        return controller?.parent is UINavigationController ? controller : nil
+    /// The view of the view controller the navigation controller pushed for the screen this view is in. UIKit puts the zoom's
+    /// dismiss interaction on that view, which also tells it apart.
+    private var pageView: UIView? {
+        var view = superview
+        while let current = view {
+            if let controller = current.next as? UIViewController, controller.parent is UINavigationController { return current }
+            if current.interactions.contains(where: { SwipeBack.isDismissal($0) }) { return current }
+            view = current.superview
+        }
+        swipeLog("probe: page view NOT found")
+        return nil
     }
 }
 
-/// One pan recognizer on a pushed screen's view. A swipe towards the trailing edge pops the screen, and the system's own back
-/// gestures wait for this one, so they never start their drag for that touch.
+/// One pan recognizer on a pushed screen's view, with UIKit's own ways out of that screen switched off. A swipe towards the
+/// trailing edge pops the screen.
 @MainActor
 private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
     var onSwipe: () -> Void = {}
@@ -118,75 +132,77 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         pan.delegate = self
         return pan
     }()
-    private weak var page: UIViewController?
+    private weak var page: UIView?
     private weak var touched: UIView?
     private var startsAtEdge = false
-    /// The system's back gestures, switched off from the swipe until the screen has gone.
-    private var suspended: [UIGestureRecognizer] = []
+    /// The navigation controller's back gestures, off while this screen is the one showing.
+    private var silenced: [UIGestureRecognizer] = []
 
     /// A swipe that starts this close to the leading edge closes the screen even over a shelf that has been scrolled.
     private static let edgeWidth: CGFloat = 24
 
-    func attach(to page: UIViewController?) {
+    var isDetached: Bool { page == nil }
+
+    func attach(to page: UIView?) {
         pan.view?.removeGestureRecognizer(pan)
-        resume()
+        silenced.forEach { $0.isEnabled = true }
+        silenced = []
         self.page = page
-        page?.view.addGestureRecognizer(pan)
+        page?.addGestureRecognizer(pan)
+        silenceSystemGestures()
+        logAttachment()
+    }
+
+    private var controller: UIViewController? { page?.next as? UIViewController }
+
+    private var isRightToLeft: Bool { page?.effectiveUserInterfaceLayoutDirection == .rightToLeft }
+
+    /// The zoom's dismiss interaction and its parts are private classes, known here by name.
+    nonisolated static func isDismissal(_ object: Any) -> Bool {
+        let name = NSStringFromClass(type(of: object as AnyObject))
+        return name.contains("Dismiss") && name.contains("Interaction")
+    }
+
+    /// Switches off UIKit's ways out of the screen: the zoom's dismiss interaction with its recognizers, on the screen's view, and
+    /// the navigation controller's edge and content swipes. UIKit can switch them back on, so every touch does this again.
+    private func silenceSystemGestures() {
+        guard let page else { return }
+        for interaction in page.interactions where Self.isDismissal(interaction) {
+            guard let interaction = interaction as? NSObject, interaction.responds(to: NSSelectorFromString("setIsEnabled:")) else { continue }
+            interaction.setValue(false, forKey: "isEnabled")
+        }
+        for recognizer in page.gestureRecognizers ?? [] where recognizer !== pan && recognizer.isEnabled {
+            if let delegate = recognizer.delegate, Self.isDismissal(delegate) { recognizer.isEnabled = false }
+        }
+        let stack = controller?.navigationController
+        for recognizer in [stack?.interactivePopGestureRecognizer, stack?.interactiveContentPopGestureRecognizer] {
+            guard let recognizer, recognizer.isEnabled else { continue }
+            recognizer.isEnabled = false
+            silenced.append(recognizer)
+        }
     }
 
     @objc private func swiped() {
-        guard pan.state == .began, let page, page.transitionCoordinator == nil else { return }
-        // Off at once: a touch that lands while the screen zooms away reaches the screen underneath instead of catching this one.
-        page.view.isUserInteractionEnabled = false
-        suspended = systemBackGestures(of: page).filter { $0.isEnabled }
-        suspended.forEach { $0.isEnabled = false }
+        guard pan.state == .began, let page, controller?.transitionCoordinator == nil else { return }
+        swipeLog("POP")
+        // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
+        page.isUserInteractionEnabled = false
         onSwipe()
-        // The screen leaving its window undoes this (`attach`). Should the pop not happen, the screen works again.
-        Task { [weak self] in
+        // Should the pop not happen, the screen works again.
+        Task { [weak page] in
             try? await Task.sleep(for: .seconds(1.5))
-            self?.recover()
+            if let page, page.window != nil { page.isUserInteractionEnabled = true }
         }
     }
 
-    private func recover() {
-        if let page, page.view.window != nil { page.view.isUserInteractionEnabled = true }
-        resume()
-    }
-
-    private func resume() {
-        suspended.forEach { $0.isEnabled = true }
-        suspended = []
-    }
-
-    /// The system's own ways out of the screen: the navigation controller's edge and content swipes and the zoom's drag. They are
-    /// private classes, so they are known by where they sit (on the screen's view or above it, up to the navigation controller's)
-    /// and by not being SwiftUI's or a scroll view's.
-    private func isSystemBackGesture(_ other: UIGestureRecognizer, of page: UIViewController) -> Bool {
-        guard other !== pan, let owner = other.view, !(owner is UIScrollView), page.view.isDescendant(of: owner),
-              let stack = page.navigationController?.view, owner.isDescendant(of: stack) else { return false }
-        let name = NSStringFromClass(type(of: other))
-        guard !name.contains("SwiftUI") else { return false }
-        return other is UIPanGestureRecognizer || ["Zoom", "Transform", "Dismiss", "Pop"].contains { name.contains($0) }
-    }
-
-    private func systemBackGestures(of page: UIViewController) -> [UIGestureRecognizer] {
-        var found: [UIGestureRecognizer] = []
-        var view: UIView? = page.view
-        while let current = view {
-            found += (current.gestureRecognizers ?? []).filter { isSystemBackGesture($0, of: page) }
-            if current === page.navigationController?.view { break }
-            view = current.superview
-        }
-        return found
-    }
-
-    /// A sideways shelf that has been scrolled keeps the swipe: it scrolls back first, as it does under the system's gesture.
+    /// A sideways shelf that has been scrolled keeps the swipe: it scrolls back to its start first.
     private var isOverScrolledShelf: Bool {
         var view = touched
-        while let current = view, current !== pan.view {
-            if let shelf = current as? UIScrollView, shelf.isScrollEnabled, shelf.contentSize.width > shelf.bounds.width + 1,
-               shelf.contentOffset.x > 1 - shelf.adjustedContentInset.left {
-                return true
+        while let current = view, current !== page {
+            if let shelf = current as? UIScrollView, shelf.isScrollEnabled, shelf.contentSize.width > shelf.bounds.width + 1 {
+                let start = -shelf.adjustedContentInset.left
+                let end = shelf.contentSize.width - shelf.bounds.width + shelf.adjustedContentInset.right
+                if isRightToLeft ? shelf.contentOffset.x < end - 1 : shelf.contentOffset.x > start + 1 { return true }
             }
             view = current.superview
         }
@@ -194,32 +210,83 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard let view = gestureRecognizer.view else { return false }
+        guard let page else { return false }
+        silenceSystemGestures()
         touched = touch.view
-        startsAtEdge = touch.location(in: view).x < Self.edgeWidth
+        let x = touch.location(in: page).x
+        startsAtEdge = isRightToLeft ? x > page.bounds.width - Self.edgeWidth : x < Self.edgeWidth
         return true
     }
 
     /// Only a swipe that is more sideways than vertical, towards the trailing edge, on the top screen and with no transition running.
-    /// Anything else fails here, and the system's gestures and the page's scrolling carry on as they would without this recognizer.
+    /// Anything else fails here, and the page's scrolling carries on as it would without this recognizer.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let page, let view = pan.view, view.effectiveUserInterfaceLayoutDirection == .leftToRight,
-              page.navigationController?.topViewController === page, page.transitionCoordinator == nil else { return false }
-        let movement = pan.translation(in: view)
-        guard movement.x > abs(movement.y) else { return false }
-        return startsAtEdge || !isOverScrolledShelf
+        guard let page else { return false }
+        let movement = pan.translation(in: page)
+        let forward = isRightToLeft ? -movement.x : movement.x
+        let stack = controller?.navigationController
+        let isOnTop = stack == nil || stack?.topViewController === controller
+        let begins = isOnTop && controller?.transitionCoordinator == nil && forward > abs(movement.y)
+            && (startsAtEdge || !isOverScrolledShelf)
+        swipeLog("shouldBegin=\(begins) top=\(isOnTop) transition=\(controller?.transitionCoordinator != nil) move=\(movement) "
+                 + "edge=\(startsAtEdge) shelf=\(isOverScrolledShelf)")
+        return begins
     }
 
-    /// Scrolling is left alone: the page and its shelves track the same touch, so they start no later than before.
+    /// Scrolling and SwiftUI's own gestures are left alone: they track the same touch, so they start no later than before.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         otherGestureRecognizer.view is UIScrollView || NSStringFromClass(type(of: otherGestureRecognizer)).contains("SwiftUI")
     }
 
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                           shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let page else { return false }
-        return isSystemBackGesture(otherGestureRecognizer, of: page)
+    // TEMPORARY DIAGNOSTICS, removed once the swipe is confirmed on a phone: what is on the screen's view, and whether a system
+    // gesture still starts.
+    private var watched: [UIGestureRecognizer] = []
+
+    private func logAttachment() {
+        watched.forEach { $0.removeTarget(self, action: #selector(observed(_:))) }
+        watched = []
+        guard let page else { swipeLog("detach"); return }
+        let stack = controller?.navigationController
+        swipeLog("attach page=\(type(of: page)) controller=\(controller.map { String(describing: type(of: $0)) } ?? "nil") "
+                 + "nav=\(stack.map { String(describing: type(of: $0)) } ?? "nil") top=\(stack?.topViewController === controller)")
+        for interaction in page.interactions {
+            let enabled = (interaction as? NSObject).flatMap { $0.responds(to: NSSelectorFromString("isEnabled")) ? $0.value(forKey: "isEnabled") : nil }
+            swipeLog("  interaction \(NSStringFromClass(type(of: interaction as AnyObject))) isEnabled=\(String(describing: enabled))")
+        }
+        let system = (page.gestureRecognizers ?? []) + (stack?.view.gestureRecognizers ?? [])
+        for recognizer in system where recognizer !== pan {
+            let name = NSStringFromClass(type(of: recognizer))
+            swipeLog("  \(recognizer.view === page ? "page" : "nav") \(name) enabled=\(recognizer.isEnabled) "
+                     + "delegate=\(recognizer.delegate.map { NSStringFromClass(type(of: $0 as AnyObject)) } ?? "nil")")
+            guard !name.contains("SwiftUI") else { continue }
+            recognizer.addTarget(self, action: #selector(observed(_:)))
+            watched.append(recognizer)
+        }
     }
+
+    @objc private func observed(_ recognizer: UIGestureRecognizer) {
+        guard recognizer.state != .changed else { return }
+        swipeLog("SYSTEM \(NSStringFromClass(type(of: recognizer))) state=\(recognizer.state.rawValue) "
+                 + "transition=\(controller?.transitionCoordinator != nil)")
+    }
+}
+
+/// TEMPORARY DIAGNOSTICS: to the console and to Caches/swipeback.log, in Debug builds only.
+@MainActor
+private func swipeLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    let line = String(format: "%.3f ", CACurrentMediaTime()) + message()
+    NSLog("[swipeback] %@", line)
+    guard let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("swipeback.log"),
+          let data = (line + "\n").data(using: .utf8) else { return }
+    if let handle = try? FileHandle(forWritingTo: url) {
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
+        try? handle.close()
+    } else {
+        try? data.write(to: url)
+    }
+    #endif
 }
 #endif
