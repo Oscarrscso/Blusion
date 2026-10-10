@@ -1,85 +1,77 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The one main action of a screen ("Play", "Resume", "Install"): a Liquid Glass capsule with a white label, the same glass as
-/// the navigation bar's buttons and the round actions beside it. `.controlSize` picks the height: 50 pt regular, 56 large (the
-/// hero's button on a Mac), 40 small and 32 mini.
-struct PrimaryActionButtonStyle: ButtonStyle {
+/// The one main action of a screen ("Play", "Resume", "Install"): the system's Liquid Glass button as a capsule, the button the
+/// navigation bar draws. `.controlSize` picks its size; with none set it is the large one, level with the round actions beside it.
+struct PrimaryActionButtonStyle: PrimitiveButtonStyle {
     /// False sizes the button to its label (empty states, inline calls to action) instead of the full width.
     var fillsWidth = true
 
     func makeBody(configuration: Configuration) -> some View {
-        PrimaryActionLabel(configuration: configuration, fillsWidth: fillsWidth)
+        PrimaryActionButton(configuration: configuration, fillsWidth: fillsWidth)
     }
 }
 
-/// A view of its own because a `ButtonStyle` cannot read the environment itself.
-private struct PrimaryActionLabel: View {
-    let configuration: ButtonStyleConfiguration
+/// A view of its own because a button style cannot read the environment itself.
+private struct PrimaryActionButton: View {
+    let configuration: PrimitiveButtonStyleConfiguration
     let fillsWidth: Bool
-    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.controlSize) private var controlSize
 
     var body: some View {
-        // The interactive glass answers a press itself, so there is no scale or dim of our own on top of it.
-        configuration.label
-            .font(font)
-            .foregroundStyle(.white)
-            .padding(.horizontal, controlSize == .mini || controlSize == .small ? Theme.Spacing.l : Theme.Spacing.xl)
-            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: height)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .contentShape(Capsule())
-            .opacity(isEnabled ? 1 : 0.4)
-            .pointerInteraction(cornerRadius: 999)
-            .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in pressed ? .impact(weight: .light) : nil }
-    }
-
-    private var height: CGFloat {
-        switch controlSize {
-        case .mini: 32
-        case .small: 40
-        case .large, .extraLarge: 56
-        default: 50
+        Button(role: configuration.role) {
+            Haptics.tap()
+            configuration.trigger()
+        } label: {
+            configuration.label
+                .fontWeight(.semibold)
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
         }
-    }
-
-    private var font: Font {
-        switch controlSize {
-        case .mini, .small: .subheadline.weight(.semibold)
-        default: Theme.Typography.button
-        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        // A main action is one size up from the controls around it.
+        .controlSize(controlSize == .regular ? .large : controlSize)
     }
 }
 
-/// A secondary action as a compact Liquid Glass capsule ("Trailer", "Customize", "Try again"): label-sized, semibold subheadline.
+/// A secondary action ("Customize", "Open on Best Blurays"): the system's Liquid Glass button as a label-sized capsule.
 /// Do not stack it on other glass and do not use it for the screen's main action.
-struct GlassCapsuleButtonStyle: ButtonStyle {
+struct GlassCapsuleButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, Theme.Spacing.l)
-            .padding(.vertical, Theme.Spacing.s + 1)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .contentShape(Capsule())
-            .pointerInteraction(cornerRadius: 999)
-            .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in pressed ? .impact(weight: .light) : nil }
+        Button(role: configuration.role) {
+            Haptics.tap()
+            configuration.trigger()
+        } label: {
+            configuration.label
+                .font(.subheadline.weight(.semibold))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
     }
 }
 
-extension ButtonStyle where Self == PrimaryActionButtonStyle {
+extension PrimitiveButtonStyle where Self == PrimaryActionButtonStyle {
     /// Full-width glass capsule: the screen's main action.
     static var primaryAction: PrimaryActionButtonStyle { PrimaryActionButtonStyle() }
     /// The same button, only as wide as its label.
     static var primaryActionCompact: PrimaryActionButtonStyle { PrimaryActionButtonStyle(fillsWidth: false) }
 }
 
-extension ButtonStyle where Self == GlassCapsuleButtonStyle {
+extension PrimitiveButtonStyle where Self == GlassCapsuleButtonStyle {
     /// A compact glass capsule for secondary actions.
     static var glassCapsule: GlassCapsuleButtonStyle { GlassCapsuleButtonStyle() }
 }
 
-/// The TV app's secondary action on a title page: a round Liquid Glass button with its symbol and no caption. `title` ("Add",
+extension View {
+    /// Makes an icon button the system's round Liquid Glass button, the one the navigation bar draws.
+    func glassCircleButton(_ size: ControlSize = .large) -> some View {
+        buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(size)
+    }
+}
+
+/// A secondary action on a title page: the system's round Liquid Glass button with its symbol and no caption. `title` ("Add",
 /// "Watched", "Trailer") is its VoiceOver label. With `isOn` it shows `onSystemImage` (default: the same symbol, filled) and
 /// `onTitle` ("Added"); the symbol swaps with the system replace effect.
 ///
@@ -106,23 +98,16 @@ struct CircleActionButton: View {
         Button(action: action) {
             Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
                 .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(.white)
+                .fontWeight(.semibold)
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: Self.diameter, height: Self.diameter)
-                .glassEffect(.regular.interactive(), in: .circle)
-                .pointerInteraction(cornerRadius: Self.diameter / 2)
-                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        // The large size, like the main action beside it on the title page, so the two read as one row.
+        .glassCircleButton()
         // The caption is gone, so the name is spoken here instead.
         .accessibilityLabel(isOn ? (onTitle ?? title) : title)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: isOn)
     }
-
-    /// The height of the primary action beside it on the title page, so the two read as one row.
-    static let diameter: CGFloat = 50
 }
 
 /// A row of `CircleActionButton`s the way a title page lays them out: one glass container, even gaps, leading aligned.

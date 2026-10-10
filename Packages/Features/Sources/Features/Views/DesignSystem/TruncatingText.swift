@@ -39,4 +39,19 @@ struct TruncatingText: View {
         if truncated != isTruncated { isTruncated = truncated }
     }
 }
+/// The round glass button under a text that folds: a chevron that opens it and, turned over, folds it again.
+struct FoldButton: View {
+    let isExpanded: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.down")
+                .fontWeight(.semibold)
+                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+        }
+        .glassCircleButton(.small)
+        .accessibilityLabel(isExpanded ? "Less" : "More")
+    }
+}
 #endif

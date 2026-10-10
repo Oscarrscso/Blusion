@@ -85,9 +85,9 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     HStack {
                         SectionHeader("Recent Searches")
-                        Button("Clear") { model.clearRecents() }
-                            .buttonStyle(.glass)
-                            .controlSize(.small)
+                        Button("Clear", systemImage: "xmark") { model.clearRecents() }
+                            .labelStyle(.iconOnly)
+                            .glassCircleButton(.small)
                             .accessibilityIdentifier("search.clearRecents")
                     }
                     ForEach(model.recentQueries, id: \.self) { query in

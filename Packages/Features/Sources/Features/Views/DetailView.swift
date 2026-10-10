@@ -349,11 +349,7 @@ struct DetailView: View {
                     .onTapGesture(count: 2) {
                         if folds { toggleDescription() }
                     }
-                if folds {
-                    Button(isDescriptionExpanded ? "Less" : "More", action: toggleDescription)
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                }
+                if folds { FoldButton(isExpanded: isDescriptionExpanded, action: toggleDescription) }
             }
         }
     }
@@ -456,8 +452,7 @@ struct DetailView: View {
                 .font(.body.weight(.semibold))
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
+        .glassCircleButton(.regular)
         .titleTapHaptic()
         .accessibilityLabel("Episode width")
         .accessibilityValue(isWide ? "Full width" : "Fixed width")
@@ -528,9 +523,7 @@ struct DetailView: View {
                             Image(systemName: "chevron.down")
                                 .font(.caption.weight(.semibold))
                         }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.small)
+                        .glassCircleButton(.small)
                         .padding(.leading, Theme.Spacing.s)
                         .accessibilityLabel("Sort TMDb reviews")
                         .accessibilityValue(reviewSort.rawValue)
@@ -706,9 +699,7 @@ private struct ReviewCard: View {
             .onTapGesture(count: 2) {
                 if folds { onToggle() }
             }
-            Button(isExpanded ? "Show less" : "Show more", action: onToggle)
-                .buttonStyle(.glass)
-                .controlSize(.small)
+            FoldButton(isExpanded: isExpanded, action: onToggle)
                 .opacity(folds ? 1 : 0)
                 .allowsHitTesting(folds)
                 .accessibilityHidden(!folds)

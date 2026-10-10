@@ -1,14 +1,14 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// A filter chip as iOS 26 draws it: a Liquid Glass capsule, and the selected one a solid white capsule with dark text (the
-/// same inversion as the TV app's category filters). Semibold in both states, so selecting never shifts the neighbours.
+/// A filter chip: the system's Liquid Glass button as a capsule, and the selected one its prominent form in white with dark text
+/// (the same inversion as the TV app's category filters). Semibold in both states, so selecting never shifts the neighbours.
 struct GlassChip: View {
     let title: String
     let systemImage: String?
     let isSelected: Bool
     let fillsWidth: Bool
-    /// A 36pt chip with 12pt side padding, for a row of removable filters that sits above a list.
+    /// The small size, for a row of removable filters that sits above a list.
     let isCompact: Bool
     let action: () -> Void
 
@@ -23,25 +23,29 @@ struct GlassChip: View {
     }
 
     var body: some View {
+        Group {
+            if isSelected {
+                button.buttonStyle(.glassProminent).tint(.white)
+            } else {
+                button.buttonStyle(.glass)
+            }
+        }
+        .buttonBorderShape(.capsule)
+        .controlSize(isCompact ? .small : fillsWidth ? .large : .regular)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("chip.\(title)")
+        .sensoryFeedback(.selection, trigger: isSelected)
+    }
+
+    private var button: some View {
         Button(action: action) {
             label
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(fillsWidth ? 1 : nil)
                 .minimumScaleFactor(0.8)
                 .foregroundStyle(isSelected ? Color.black : Color.primary)
-                .padding(.horizontal, fillsWidth ? Theme.Spacing.s : isCompact ? Theme.Spacing.m : Theme.Spacing.l)
-                .padding(.vertical, isCompact ? 0 : Theme.Spacing.s + 1)
-                .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: fillsWidth ? 44 : nil)
-                .frame(height: isCompact ? 36 : nil)
-                .background { if isSelected { Capsule().fill(.white) } }
-                .glassEffect(isSelected ? .identity : .regular.interactive(), in: .capsule)
-                .contentShape(Capsule())
-                .pointerInteraction(cornerRadius: 999, highlightColor: isSelected ? .black : .white)
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("chip.\(title)")
-        .sensoryFeedback(.selection, trigger: isSelected)
     }
 
     @ViewBuilder

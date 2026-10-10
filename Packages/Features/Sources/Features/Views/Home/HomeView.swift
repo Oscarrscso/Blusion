@@ -125,20 +125,16 @@ struct HomeView: View {
         .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 
-    /// One glass squircle that opens the widgets page, where widgets are added and edited.
+    /// One round glass button that opens the widgets page, where widgets are added and edited: the navigation bar's button, in the
+    /// page so that it scrolls away with it.
     private var customizeButton: some View {
-        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
-        return Button {
+        Button {
             router.showWidgets()
         } label: {
             Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 48, height: 48)
-                .glassEffect(.regular.interactive(), in: shape)
-                .contentShape(shape)
+                .fontWeight(.semibold)
         }
-        .buttonStyle(.plain)
+        .glassCircleButton()
         .padding(.trailing, homeMetrics.pageMargin)
         .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
         .accessibilityLabel("Widgets")

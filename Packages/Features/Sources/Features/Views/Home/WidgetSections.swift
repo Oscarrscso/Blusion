@@ -180,16 +180,12 @@ struct ContinueWatchingRow: View {
                         if !items.isEmpty {
                             if case .failed(let message) = state {
                                 Button(action: retry) { Image(systemName: "arrow.clockwise") }
-                                    .buttonStyle(.glass)
-                                    .buttonBorderShape(.circle)
-                                    .controlSize(.small)
+                                    .glassCircleButton(.small)
                                     .accessibilityLabel(message + " Retry")
                                     .help(message)
                             } else if state == .disconnected {
                                 Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
-                                    .buttonStyle(.glass)
-                                    .buttonBorderShape(.circle)
-                                    .controlSize(.small)
+                                    .glassCircleButton(.small)
                                     .accessibilityLabel("Sign in to Trakt")
                             }
                         }

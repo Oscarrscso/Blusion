@@ -95,11 +95,7 @@ struct PersonView: View {
                 .onTapGesture(count: 2) {
                     if folds { toggle() }
                 }
-            if folds {
-                Button(isBiographyExpanded ? "Less" : "More", action: toggle)
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
-            }
+            if folds { FoldButton(isExpanded: isBiographyExpanded, action: toggle) }
         }
         .frame(maxWidth: metrics.readableWidth, alignment: .leading)
         .frame(maxWidth: .infinity)
