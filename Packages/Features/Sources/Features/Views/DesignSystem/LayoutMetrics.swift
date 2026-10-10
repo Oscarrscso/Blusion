@@ -7,8 +7,8 @@ import SwiftUI
 ///     @Environment(\.layoutMetrics) private var metrics
 ///     ... .padding(.horizontal, metrics.pageMargin)
 ///
-/// The compact set is the iPhone layout of the TV app (about 3.2 posters across, 260 pt Up Next cards); the regular set is the
-/// Mac window and the iPad (posters about 160 pt, as many across as fit). The environment picks one from the horizontal size
+/// The compact set is the iPhone layout (just under three posters across, 260 pt Up Next cards); the regular set is the
+/// Mac window and the iPad (posters about 180 pt, as many across as fit). The environment picks one from the horizontal size
 /// class; `.environment(\.layoutMetrics, .regular)` forces a set (the gallery and previews do).
 struct LayoutMetrics: Equatable, Sendable {
     /// True for the wide layout (Mac window, iPad): sidebar navigation, left-aligned hero, readable-width text columns.
@@ -45,17 +45,17 @@ struct LayoutMetrics: Equatable, Sendable {
 
     static let compact = LayoutMetrics(
         isRegular: false, pageMargin: Theme.Spacing.l, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12, gridRowSpacing: 16,
-        posterWidth: 112, wideCardWidth: 260, squareWidth: 124, tileWidth: 200, episodeWidth: 250, avatarSize: 72,
+        posterWidth: 128, wideCardWidth: 260, squareWidth: 124, tileWidth: 200, episodeWidth: 250, avatarSize: 72,
         readableWidth: .infinity, heroHeightFraction: 0.66, heroMaxHeight: 640
     )
 
     static let regular = LayoutMetrics(
         isRegular: true, pageMargin: Theme.Spacing.l, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16, gridRowSpacing: 20,
-        posterWidth: 160, wideCardWidth: 300, squareWidth: 176, tileWidth: 260, episodeWidth: 280, avatarSize: 88,
+        posterWidth: 180, wideCardWidth: 300, squareWidth: 176, tileWidth: 260, episodeWidth: 280, avatarSize: 88,
         readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
     )
 
-    var continueCardWidth: CGFloat { isRegular ? 220 : 180 }
+    var continueCardWidth: CGFloat { isRegular ? 256 : 210 }
 
     /// The horizontal inset of a title page's content: the page margin, but never less than `Theme.Spacing.l`. Home uses it too, so its
     /// headings, selector and shelves line up with the title page.

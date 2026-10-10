@@ -73,9 +73,9 @@ struct HeroBanner: View {
 
     static let cornerRadius: CGFloat = 28
 
-    /// The small cards of the tray: about a third of the banner's width on a phone.
+    /// The small cards of the tray: about a third of the banner's width on a phone, a little under a shelf poster's width.
     private var cardWidth: CGFloat {
-        (metrics.posterWidth * 1.1 * row.presentation.cardStyle.cardSize.scale).rounded()
+        (metrics.posterWidth * 0.96 * row.presentation.cardStyle.cardSize.scale).rounded()
     }
 
     /// The featured picture, blurred and darkened, so the tray picks up the colours above it.

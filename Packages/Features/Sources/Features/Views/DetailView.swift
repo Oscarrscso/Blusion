@@ -18,6 +18,7 @@ struct DetailView: View {
 
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
+    @State private var isDescriptionTruncated = false
     @State private var isConfirmingUnmarkShow = false
     @State private var reviewSort = ReviewSort.highestRated
     @State private var expandedReviewID: String?
@@ -30,6 +31,10 @@ struct DetailView: View {
     /// Where the hero picture's download stands. It changes on every finish, so the spinner over the hero updates even after the
     /// timeout has already revealed the title.
     @State private var heroPicture = HeroPictureStatus.pending
+    /// The height of the season's longest overview at the full card width. See `overviewRuler`.
+    @State private var tallestOverview: CGFloat = 0
+    /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
+    @State private var sideInset: CGFloat = 0
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -39,7 +44,21 @@ struct DetailView: View {
     private static let scrollIndicatorInset: CGFloat = 260
     /// How long the title waits for the hero picture, counted from opening the page. After this it shows over the poster.
     private static let heroTimeout: Duration = .seconds(5)
-    private var contentMargin: CGFloat { metrics.contentMargin }
+    /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
+    private static let backButtonColumn: CGFloat = 72
+
+    /// In landscape the back button floats over the page's top leading corner with nothing behind it, and the page starts beside it
+    /// rather than under it: the content keeps clear of the button's column, on both sides so it stays centred, and nothing scrolls
+    /// beneath the button. In portrait the artwork runs under the bar, so the page margin is enough.
+    private var contentMargin: CGFloat {
+        isLandscape ? max(sideInset, windowSideInset) + Self.backButtonColumn : metrics.contentMargin
+    }
+
+    /// The window's own side insets. The root lets screens run under them, so the page's geometry may not report them.
+    private var windowSideInset: CGFloat {
+        let insets = UIApplication.shared.connectedScenes.lazy.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets
+        return max(insets?.left ?? 0, insets?.right ?? 0)
+    }
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
@@ -66,6 +85,10 @@ struct DetailView: View {
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
+        }
+        .onGeometryChange(for: [CGFloat].self) { [$0.size.width, $0.safeAreaInsets.leading, $0.safeAreaInsets.trailing] } action: { values in
+            // Kept in state so a rotation lays the page out again with the new inset.
+            sideInset = max(values[1], values[2], windowSideInset)
         }
         .screenBackground()
         .ignoresSafeArea(.container, edges: isLandscape ? [] : .top)
@@ -314,25 +337,22 @@ struct DetailView: View {
     @ViewBuilder
     private var synopsis: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
-            // A rough test: four lines of body text hold about 150 characters at phone width, so anything longer may be cut off.
-            let isLong = description.count > 120
+            // Folded when it runs past three lines; one that fits has nothing to fold and no button.
+            let folds = isDescriptionExpanded || isDescriptionTruncated
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                Text(description)
+                TruncatingText(text: Text(description), lineLimit: 3, isExpanded: isDescriptionExpanded, isTruncated: $isDescriptionTruncated)
                     .font(.body)
                     .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(isDescriptionExpanded ? nil : 3)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    // A double tap folds or opens the synopsis too, as it does a review. Short ones have nothing to fold.
+                    // A double tap folds or opens the synopsis too, as it does a review.
                     .onTapGesture(count: 2) {
-                        if isLong { toggleDescription() }
+                        if folds { toggleDescription() }
                     }
-                if isLong {
-                    Button(action: toggleDescription) {
-                        Text(isDescriptionExpanded ? "Less" : "More")
-                            .font(.body.weight(.semibold))
-                    }
-                    .buttonStyle(.plain)
+                if folds {
+                    Button(isDescriptionExpanded ? "Less" : "More", action: toggleDescription)
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
                 }
             }
         }
@@ -346,7 +366,9 @@ struct DetailView: View {
 
     /// The season chips and the episodes of the selected season, each a row with its still, progress and watched mark.
     private func episodesSection(pageWidth: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+        let isWide = model.matchesEpisodeWidthToText
+        let width = episodeWidth(pageWidth: pageWidth)
+        return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             HStack(spacing: Theme.Spacing.m) {
                 seasonMenu
                 Spacer(minLength: 0)
@@ -359,7 +381,8 @@ struct DetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.episodes) { episode in
-                        episodeRow(episode, width: episodeWidth(pageWidth: pageWidth)).id(episode.id).reportsShelfEdge(id: episode.id)
+                        episodeRow(episode, width: width, overviewHeight: isWide ? tallestOverview : nil)
+                            .id(episode.id).reportsShelfEdge(id: episode.id)
                     }
                 }
                 .scrollTargetLayout()
@@ -369,11 +392,28 @@ struct DetailView: View {
             .scrollClipDisabled()
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
+        .background { if isWide { overviewRuler(width: width) } }
         .padding(.top, sectionSpacing)
         // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
         .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading)") {
             await model.loadEpisodeScores(season: model.selectedSeason)
         }
+    }
+
+    /// Every overview of the season at the full card width, unseen. Full-width cards show the whole overview, and a lazy row takes
+    /// its height from its first card, so the tallest overview sets one height for all of them.
+    private func overviewRuler(width: CGFloat) -> some View {
+        ZStack(alignment: .top) {
+            ForEach(model.episodes) { episode in
+                Text(episode.overview ?? "")
+                    .font(.footnote)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(width: width)
+        .hidden()
+        .accessibilityHidden(true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tallestOverview = $0 }
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
@@ -401,7 +441,7 @@ struct DetailView: View {
                 Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
         .accessibilityIdentifier("detail.seasonPicker")
     }
 
@@ -414,12 +454,10 @@ struct DetailView: View {
         } label: {
             Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
                 .font(.body.weight(.semibold))
-                .foregroundStyle(.secondary)
                 .contentTransition(.symbolEffect(.replace))
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
         .titleTapHaptic()
         .accessibilityLabel("Episode width")
         .accessibilityValue(isWide ? "Full width" : "Fixed width")
@@ -432,10 +470,10 @@ struct DetailView: View {
         model.matchesEpisodeWidthToText ? pageWidth - contentMargin * 2 : metrics.episodeWidth
     }
 
-    private func episodeRow(_ video: Video, width: CGFloat) -> some View {
+    private func episodeRow(_ video: Video, width: CGFloat, overviewHeight: CGFloat?) -> some View {
         NavigationLink(value: model.request(for: video)) {
             EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                       artwork: model.backdropURL, score: model.score(for: video), width: width)
+                       artwork: model.backdropURL, score: model.score(for: video), width: width, overviewHeight: overviewHeight)
         }
         .buttonStyle(PressableCardStyle())
         .titleTapHaptic()
@@ -489,10 +527,11 @@ struct DetailView: View {
                         } label: {
                             Image(systemName: "chevron.down")
                                 .font(.caption.weight(.semibold))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.small)
+                        .padding(.leading, Theme.Spacing.s)
                         .accessibilityLabel("Sort TMDb reviews")
                         .accessibilityValue(reviewSort.rawValue)
                         .accessibilityIdentifier("detail.reviews.sort")
@@ -626,10 +665,15 @@ struct DetailView: View {
 
 // MARK: - Pieces
 
+/// One TMDb review. Folded, every card is the same height: the text keeps six lines whether or not it fills them, and the button
+/// keeps its place whether or not it shows. It shows only when the review runs past those lines.
 private struct ReviewCard: View {
     let review: TMDbReview
     let isExpanded: Bool
     let onToggle: () -> Void
+    @State private var isTruncated = false
+
+    private var folds: Bool { isExpanded || isTruncated }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -653,20 +697,22 @@ private struct ReviewCard: View {
                         .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
                 }
-                Text(LocalizedStringKey(review.content))
+                TruncatingText(text: Text(LocalizedStringKey(review.content)), lineLimit: 6, reservesSpace: true,
+                               isExpanded: isExpanded, isTruncated: $isTruncated)
                     .font(.subheadline)
-                    .lineLimit(isExpanded ? nil : 6)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .contentShape(Rectangle())
-            .onTapGesture(count: 2, perform: onToggle)
-            Button(action: onToggle) {
-                Text(isExpanded ? "Show less" : "Show more")
-                    .font(.footnote.weight(.semibold))
+            .onTapGesture(count: 2) {
+                if folds { onToggle() }
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("detail.review.\(review.id).toggle")
+            Button(isExpanded ? "Show less" : "Show more", action: onToggle)
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .opacity(folds ? 1 : 0)
+                .allowsHitTesting(folds)
+                .accessibilityHidden(!folds)
+                .accessibilityIdentifier("detail.review.\(review.id).toggle")
         }
         .padding(16)
         .cardSurface()
@@ -755,7 +801,7 @@ private struct LogoLayout: Layout {
 }
 
 /// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the
-/// overview in a few lines.
+/// overview: three lines in a fixed-width card, all of it in a full-width one.
 private struct EpisodeRow: View {
     let video: Video
     let fraction: Double?
@@ -763,6 +809,8 @@ private struct EpisodeRow: View {
     let artwork: URL?
     let score: DetailViewModel.EpisodeScore?
     let width: CGFloat
+    /// Set for a full-width card: the whole overview shows, in a box this tall (the season's longest), so the cards share a height.
+    var overviewHeight: CGFloat?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -774,7 +822,13 @@ private struct EpisodeRow: View {
                 Text(video.title)
                     .font(.headline)
                     .lineLimit(2)
-                if let overview = video.overview, !overview.isEmpty {
+                if let overviewHeight {
+                    Text(video.overview ?? "")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minHeight: overviewHeight, alignment: .top)
+                } else if let overview = video.overview, !overview.isEmpty {
                     Text(overview)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

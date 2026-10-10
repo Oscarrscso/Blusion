@@ -46,6 +46,8 @@ struct SearchView: View {
             }
             .padding(.vertical, Theme.Spacing.l)
         }
+        // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results.
+        .scrollDismissesKeyboard(.immediately)
         .screenBackground()
         .navigationTitle("Search")
         .searchable(text: $model.query, isPresented: $isSearchPresented,
@@ -84,6 +86,8 @@ struct SearchView: View {
                     HStack {
                         SectionHeader("Recent Searches")
                         Button("Clear") { model.clearRecents() }
+                            .buttonStyle(.glass)
+                            .controlSize(.small)
                             .accessibilityIdentifier("search.clearRecents")
                     }
                     ForEach(model.recentQueries, id: \.self) { query in

@@ -8,6 +8,7 @@ import UIKit
 struct PersonView: View {
     @State private var model: PersonViewModel
     @State private var isBiographyExpanded = false
+    @State private var isBiographyTruncated = false
     @Environment(\.layoutMetrics) private var metrics
 
     init(destination: PersonDestination, services: AppServices) {
@@ -81,20 +82,23 @@ struct PersonView: View {
 
     @ViewBuilder
     private func biographyText(_ biography: String) -> some View {
+        // Folded when it runs past four lines; one that fits has nothing to fold and no button.
+        let folds = isBiographyExpanded || isBiographyTruncated
+        let toggle = { withAnimation(.easeInOut(duration: 0.25)) { isBiographyExpanded.toggle() } }
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text(biography)
+            TruncatingText(text: Text(biography), lineLimit: 4, isExpanded: isBiographyExpanded, isTruncated: $isBiographyTruncated)
                 .font(.body)
                 .foregroundStyle(.white.opacity(0.85))
-                .lineLimit(isBiographyExpanded ? nil : 4)
-                .fixedSize(horizontal: false, vertical: true)
-            // Four lines of body text hold about 150 characters at phone width, so anything longer may be cut off.
-            if biography.count > 150 {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.25)) { isBiographyExpanded.toggle() }
-                } label: {
-                    Text(isBiographyExpanded ? "Less" : "More").font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                // A double tap folds or opens it too, as on a title page.
+                .onTapGesture(count: 2) {
+                    if folds { toggle() }
                 }
-                .buttonStyle(.plain)
+            if folds {
+                Button(isBiographyExpanded ? "Less" : "More", action: toggle)
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
             }
         }
         .frame(maxWidth: metrics.readableWidth, alignment: .leading)

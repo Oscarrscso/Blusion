@@ -1,9 +1,9 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// The one main action of a screen ("Play", "Resume", "Install"): a white capsule with dark text, the way the TV app draws its
-/// Play button. Everything else on the screen uses a glass style or a plain button. `.controlSize` picks the height:
-/// 50 pt regular, 56 large (the hero's button on a Mac), 40 small and 32 mini.
+/// The one main action of a screen ("Play", "Resume", "Install"): a Liquid Glass capsule with a white label, the same glass as
+/// the navigation bar's buttons and the round actions beside it. `.controlSize` picks the height: 50 pt regular, 56 large (the
+/// hero's button on a Mac), 40 small and 32 mini.
 struct PrimaryActionButtonStyle: ButtonStyle {
     /// False sizes the button to its label (empty states, inline calls to action) instead of the full width.
     var fillsWidth = true
@@ -19,20 +19,18 @@ private struct PrimaryActionLabel: View {
     let fillsWidth: Bool
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.controlSize) private var controlSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        // The interactive glass answers a press itself, so there is no scale or dim of our own on top of it.
         configuration.label
             .font(font)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white)
             .padding(.horizontal, controlSize == .mini || controlSize == .small ? Theme.Spacing.l : Theme.Spacing.xl)
             .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: height)
-            .background(.white.opacity(isEnabled ? 1 : 0.35), in: Capsule())
+            .glassEffect(.regular.interactive(), in: .capsule)
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.8), value: configuration.isPressed)
-            .pointerInteraction(cornerRadius: 999, highlightColor: .black)
+            .opacity(isEnabled ? 1 : 0.4)
+            .pointerInteraction(cornerRadius: 999)
             .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in pressed ? .impact(weight: .light) : nil }
     }
 
@@ -70,7 +68,7 @@ struct GlassCapsuleButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == PrimaryActionButtonStyle {
-    /// Full-width white capsule: the screen's main action.
+    /// Full-width glass capsule: the screen's main action.
     static var primaryAction: PrimaryActionButtonStyle { PrimaryActionButtonStyle() }
     /// The same button, only as wide as its label.
     static var primaryActionCompact: PrimaryActionButtonStyle { PrimaryActionButtonStyle(fillsWidth: false) }
