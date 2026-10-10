@@ -116,7 +116,6 @@ private final class SwipeBackProbe: UIView {
             if current.interactions.contains(where: { SwipeBack.isDismissal($0) }) { return current }
             view = current.superview
         }
-        swipeLog("probe: page view NOT found")
         return nil
     }
 }
@@ -150,7 +149,6 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         self.page = page
         page?.addGestureRecognizer(pan)
         silenceSystemGestures()
-        logAttachment()
     }
 
     private var controller: UIViewController? { page?.next as? UIViewController }
@@ -184,7 +182,6 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
 
     @objc private func swiped() {
         guard pan.state == .began, let page, controller?.transitionCoordinator == nil else { return }
-        swipeLog("POP")
         // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
         page.isUserInteractionEnabled = false
         onSwipe()
@@ -226,11 +223,8 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         let forward = isRightToLeft ? -movement.x : movement.x
         let stack = controller?.navigationController
         let isOnTop = stack == nil || stack?.topViewController === controller
-        let begins = isOnTop && controller?.transitionCoordinator == nil && forward > abs(movement.y)
-            && (startsAtEdge || !isOverScrolledShelf)
-        swipeLog("shouldBegin=\(begins) top=\(isOnTop) transition=\(controller?.transitionCoordinator != nil) move=\(movement) "
-                 + "edge=\(startsAtEdge) shelf=\(isOverScrolledShelf)")
-        return begins
+        guard isOnTop, controller?.transitionCoordinator == nil, forward > abs(movement.y) else { return false }
+        return startsAtEdge || !isOverScrolledShelf
     }
 
     /// Scrolling and SwiftUI's own gestures are left alone: they track the same touch, so they start no later than before.
@@ -238,55 +232,5 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
                            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         otherGestureRecognizer.view is UIScrollView || NSStringFromClass(type(of: otherGestureRecognizer)).contains("SwiftUI")
     }
-
-    // TEMPORARY DIAGNOSTICS, removed once the swipe is confirmed on a phone: what is on the screen's view, and whether a system
-    // gesture still starts.
-    private var watched: [UIGestureRecognizer] = []
-
-    private func logAttachment() {
-        watched.forEach { $0.removeTarget(self, action: #selector(observed(_:))) }
-        watched = []
-        guard let page else { swipeLog("detach"); return }
-        let stack = controller?.navigationController
-        swipeLog("attach page=\(type(of: page)) controller=\(controller.map { String(describing: type(of: $0)) } ?? "nil") "
-                 + "nav=\(stack.map { String(describing: type(of: $0)) } ?? "nil") top=\(stack?.topViewController === controller)")
-        for interaction in page.interactions {
-            let enabled = (interaction as? NSObject).flatMap { $0.responds(to: NSSelectorFromString("isEnabled")) ? $0.value(forKey: "isEnabled") : nil }
-            swipeLog("  interaction \(NSStringFromClass(type(of: interaction as AnyObject))) isEnabled=\(String(describing: enabled))")
-        }
-        let system = (page.gestureRecognizers ?? []) + (stack?.view.gestureRecognizers ?? [])
-        for recognizer in system where recognizer !== pan {
-            let name = NSStringFromClass(type(of: recognizer))
-            swipeLog("  \(recognizer.view === page ? "page" : "nav") \(name) enabled=\(recognizer.isEnabled) "
-                     + "delegate=\(recognizer.delegate.map { NSStringFromClass(type(of: $0 as AnyObject)) } ?? "nil")")
-            guard !name.contains("SwiftUI") else { continue }
-            recognizer.addTarget(self, action: #selector(observed(_:)))
-            watched.append(recognizer)
-        }
-    }
-
-    @objc private func observed(_ recognizer: UIGestureRecognizer) {
-        guard recognizer.state != .changed else { return }
-        swipeLog("SYSTEM \(NSStringFromClass(type(of: recognizer))) state=\(recognizer.state.rawValue) "
-                 + "transition=\(controller?.transitionCoordinator != nil)")
-    }
-}
-
-/// TEMPORARY DIAGNOSTICS: to the console and to Caches/swipeback.log, in Debug builds only.
-@MainActor
-private func swipeLog(_ message: @autoclosure () -> String) {
-    #if DEBUG
-    let line = String(format: "%.3f ", CACurrentMediaTime()) + message()
-    NSLog("[swipeback] %@", line)
-    guard let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("swipeback.log"),
-          let data = (line + "\n").data(using: .utf8) else { return }
-    if let handle = try? FileHandle(forWritingTo: url) {
-        _ = try? handle.seekToEnd()
-        try? handle.write(contentsOf: data)
-        try? handle.close()
-    } else {
-        try? data.write(to: url)
-    }
-    #endif
 }
 #endif
