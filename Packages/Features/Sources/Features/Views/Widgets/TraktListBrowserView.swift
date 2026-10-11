@@ -73,7 +73,7 @@ struct TraktListBrowserView: View {
         .accessibilityIdentifier("traktBrowser")
     }
 
-    /// The browser's page margin is the content margin, as on Home, so the chip row scrolls on the same 16pt inset as the controls above it.
+    /// The browser's page margin is the content margin, as on Home, so the chips fit the width inside the same 16pt margins as the controls above them.
     private var browserMetrics: LayoutMetrics {
         var browserMetrics = metrics
         browserMetrics.pageMargin = metrics.contentMargin
@@ -82,8 +82,8 @@ struct TraktListBrowserView: View {
 
     // MARK: Sections
 
-    /// Three rows, each its own full-width stack: title with Sort, the Lists/Users selector, and the scope chips. Nothing shares a row with
-    /// the scrolling chips, so they cannot be covered.
+    /// Three rows, each its own full-width stack: title with Sort, the Lists/Users selector, and the scope chips, which fit the width
+    /// inside the same 16pt margins as the rows above. Nothing shares a row with the chips, so they cannot be covered.
     private var controls: some View {
         @Bindable var browser = browser
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -134,9 +134,10 @@ struct TraktListBrowserView: View {
 
     private var scopeChips: some View {
         @Bindable var browser = browser
-        return ChipRow {
-            ForEach(TraktBrowserViewModel.ListScope.allCases) { scope in
-                GlassChip(scope.rawValue, isSelected: browser.scope == scope) { browser.scope = scope }
+        let scopes = TraktBrowserViewModel.ListScope.allCases.filter { $0 != .mine }
+        return ChipRow(fittingColumns: scopes.count) {
+            ForEach(scopes) { scope in
+                GlassChip(scope.rawValue, isSelected: browser.scope == scope, fillsWidth: true) { browser.scope = scope }
             }
         }
         .accessibilityIdentifier("traktBrowser.scope")

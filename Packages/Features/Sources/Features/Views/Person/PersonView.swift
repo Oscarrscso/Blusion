@@ -23,6 +23,9 @@ struct PersonView: View {
                 if !model.photoStrip.isEmpty {
                     photos.padding(.top, Theme.Spacing.xxl)
                 }
+                synopsis
+                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.top, model.photoStrip.isEmpty ? Theme.Spacing.m : Theme.Spacing.xl)
                 if !model.knownFor.isEmpty {
                     knownFor.padding(.top, Theme.Spacing.xxl)
                 }
@@ -45,18 +48,23 @@ struct PersonView: View {
 
     /// The portrait while it loads is the one the card already showed, so the page never opens on an empty frame.
     private var header: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            VStack(spacing: Theme.Spacing.xs) {
-                Text(name)
-                    .font(Theme.Typography.heroTitle)
-                    .multilineTextAlignment(.center)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("person.name")
-                if let line = summaryLine {
-                    Text(line).font(Theme.Typography.metaLine).foregroundStyle(.secondary)
-                }
+        VStack(spacing: Theme.Spacing.xs) {
+            Text(name)
+                .font(Theme.Typography.heroTitle)
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("person.name")
+            if let line = summaryLine {
+                Text(line).font(Theme.Typography.metaLine).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, Theme.Spacing.l)
+    }
+
+    /// The biography and any note on why the page is short, below the photos.
+    private var synopsis: some View {
+        VStack(spacing: Theme.Spacing.m) {
             if let biography = model.person?.biography {
                 biographyText(biography)
             }
@@ -69,7 +77,6 @@ struct PersonView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, Theme.Spacing.l)
     }
 
     /// "Directing · 42 credits". Parts that are not known yet are left out.
