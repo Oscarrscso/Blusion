@@ -283,10 +283,8 @@ private struct HeroPage: View {
             }
         } else {
             VStack(spacing: 0) {
-                ZStack(alignment: .bottom) {
-                    portraitTitle
-                }
-                .frame(height: artworkHeight)
+                portraitTitle
+                    .frame(height: artworkHeight, alignment: .bottom)
                 // The metadata line starts at the picture's bottom edge, as it does on the title page.
                 MetaLine(metaParts)
                     .multilineTextAlignment(.center)
@@ -296,14 +294,14 @@ private struct HeroPage: View {
             .foregroundStyle(.white)
             // The picture is zoomed, so it is taller than the hero and runs behind the metadata line. The page clips what passes its bottom.
             .background(alignment: .top) {
-                ZStack(alignment: .bottom) {
-                    artwork
-                        .allowsHitTesting(false)
-                    // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
-                    BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
-                        .padding(.bottom, -TitleHero.fadeOverscan)
-                }
-                .frame(height: TitleHero.pictureHeight(artworkHeight))
+                artwork
+                    .frame(height: TitleHero.pictureHeight(artworkHeight))
+                    .overlay(alignment: .bottom) {
+                        // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
+                        BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                            .padding(.bottom, -TitleHero.fadeOverscan)
+                    }
+                    .allowsHitTesting(false)
             }
         }
     }
