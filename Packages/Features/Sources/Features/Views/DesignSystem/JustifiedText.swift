@@ -25,6 +25,14 @@ struct JustifiedText: UIViewRepresentable {
     var minimumLineCharacters = JustifiedLineBreaker.defaultMinimumCharacters
     /// The most characters a line may hold. None by default, so lines fill the width they are given; a narrower measure limits the frame.
     var maximumLineCharacters = JustifiedLineBreaker.defaultMaximumCharacters
+    /// Draws the web links in the text (see `TextLinks`) in the link colour and underlined: markdown links and bare http or https URLs.
+    var showsLinks = false
+    /// With `showsLinks`, a tap on a link is reported to `onTap` with that link, and VoiceOver offers the links as actions. Off, a tap
+    /// reports no link.
+    var linksAreTappable = false
+    /// Called with the link a tap lands on, or nil for a tap elsewhere on the text. Unset, the text takes no taps, so the views around it
+    /// get them as before.
+    var onTap: ((URL?) -> Void)?
 
     func makeUIView(context: Context) -> JustifiedLabel {
         let label = JustifiedLabel(frame: .zero)
@@ -50,10 +58,12 @@ struct JustifiedText: UIViewRepresentable {
     }
 
     private func configure(_ label: JustifiedLabel) {
-        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown)
+        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown, showsLinks: showsLinks)
         label.lineLimit = lineLimit
         label.minimumLineCharacters = minimumLineCharacters
         label.maximumLineCharacters = maximumLineCharacters
+        label.linksAreTappable = linksAreTappable
+        label.onTap = onTap
     }
 
     /// Sets the answer after the layout pass, and only when it changed, so the state never changes during a layout.
@@ -72,6 +82,7 @@ final class JustifiedLabel: UIView {
         let textStyle: UIFont.TextStyle
         let color: UIColor
         let isMarkdown: Bool
+        let showsLinks: Bool
         let category: UIContentSizeCategory
         let style: UIUserInterfaceStyle
     }
@@ -86,12 +97,19 @@ final class JustifiedLabel: UIView {
         let endAttributes: [NSAttributedString.Key: Any]
     }
 
-    /// The measured text: its paragraphs of words and the metrics of the base font.
+    /// A word as the last drawing placed it, so a tap inside its frame can find the link it holds.
+    private struct PlacedWord {
+        let frame: CGRect
+        let word: Word
+    }
+
+    /// The measured text: its paragraphs of words, the metrics of the base font, and the links in it.
     private struct Content {
         let paragraphs: [[Word]]
         let font: UIFont
         let spaceWidth: CGFloat
         let plain: String
+        let links: [TextLink]
     }
 
     /// One line of a layout: the words it takes from the layout's words, and whether it is its paragraph's last line (which is not justified).
@@ -128,6 +146,23 @@ final class JustifiedLabel: UIView {
     private var layouts: [(key: LayoutKey, layout: Layout)] = []
     /// The width of the last measurement. Drawing uses that layout when the view's width is within a pixel of it (see `JustifiedSizing`).
     private var measuredWidth: CGFloat?
+    /// The words of the last drawing that hold a tappable link are placed by it; empty unless links are tappable.
+    private var placedWords: [PlacedWord] = []
+    /// Taps the text when `onTap` is set. Off until then, so a text without it takes no touches.
+    private let tapRecognizer = UITapGestureRecognizer()
+
+    /// Whether a tap on a link reports it, and the links are offered to VoiceOver. See `JustifiedText.linksAreTappable`.
+    var linksAreTappable = false {
+        didSet {
+            guard linksAreTappable != oldValue else { return }
+            updateLinkActions()
+            setNeedsDisplay()
+        }
+    }
+    /// Called on each tap with the link under it, or nil. See `JustifiedText.onTap`.
+    var onTap: ((URL?) -> Void)? {
+        didSet { tapRecognizer.isEnabled = onTap != nil }
+    }
 
     /// The lines shown; zero shows them all.
     var lineLimit = 0 {
@@ -150,6 +185,9 @@ final class JustifiedLabel: UIView {
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self]) { (label: JustifiedLabel, _) in
             label.rebuildForTraits()
         }
+        tapRecognizer.addTarget(self, action: #selector(tapped(_:)))
+        tapRecognizer.isEnabled = false
+        addGestureRecognizer(tapRecognizer)
     }
 
     required init?(coder: NSCoder) {
@@ -157,16 +195,44 @@ final class JustifiedLabel: UIView {
     }
 
     /// Sets the text and its look, when either differs from what is shown.
-    func show(text: String, textStyle: UIFont.TextStyle, color: UIColor, isMarkdown: Bool) {
-        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown,
+    func show(text: String, textStyle: UIFont.TextStyle, color: UIColor, isMarkdown: Bool, showsLinks: Bool) {
+        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown, showsLinks: showsLinks,
                         category: traitCollection.preferredContentSizeCategory, style: traitCollection.userInterfaceStyle)
         guard next != look else { return }
         look = next
         content = build(next)
         layouts = []
         accessibilityLabel = content?.plain
+        updateLinkActions()
         setNeedsDisplay()
         invalidateIntrinsicContentSize()
+    }
+
+    @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
+        onTap?(linksAreTappable ? link(at: recognizer.location(in: self)) : nil)
+    }
+
+    /// The link drawn under `point` by the last drawing, if there is one.
+    private func link(at point: CGPoint) -> URL? {
+        guard let placed = placedWords.first(where: { $0.frame.contains(point) }) else { return nil }
+        let index = CTLineGetStringIndexForPosition(placed.word.line, CGPoint(x: point.x - placed.frame.minX, y: 0))
+        guard index >= 0, index < placed.word.text.length else { return nil }
+        return placed.word.text.attribute(.link, at: index, effectiveRange: nil) as? URL
+    }
+
+    /// Offers the links to VoiceOver as actions when they are tappable. A folded text offers none, so its links read as plain text.
+    private func updateLinkActions() {
+        guard linksAreTappable, let content, !content.links.isEmpty else {
+            accessibilityCustomActions = nil
+            return
+        }
+        let plain = content.plain as NSString
+        accessibilityCustomActions = content.links.map { link in
+            UIAccessibilityCustomAction(name: plain.substring(with: link.range), actionHandler: { [weak self] _ in
+                self?.onTap?(link.url)
+                return true
+            })
+        }
     }
 
     /// What the text takes at `width`: its lines in all, the widest of them, and the height of one line.
@@ -180,7 +246,7 @@ final class JustifiedLabel: UIView {
     private func rebuildForTraits() {
         guard let look else { return }
         self.look = nil
-        show(text: look.text, textStyle: look.textStyle, color: look.color, isMarkdown: look.isMarkdown)
+        show(text: look.text, textStyle: look.textStyle, color: look.color, isMarkdown: look.isMarkdown, showsLinks: look.showsLinks)
     }
 
     // MARK: Building the words
@@ -218,7 +284,16 @@ final class JustifiedLabel: UIView {
         paragraphs.append(words)
         while paragraphs.count > 1, paragraphs.last?.isEmpty == true { paragraphs.removeLast() }
         if paragraphs.count == 1, paragraphs[0].isEmpty { paragraphs = [] }
-        return Content(paragraphs: paragraphs, font: font, spaceWidth: spaceWidth, plain: text.string)
+        return Content(paragraphs: paragraphs, font: font, spaceWidth: spaceWidth, plain: text.string, links: links(in: text))
+    }
+
+    /// The links drawn in `text`, found by their link attribute.
+    private func links(in text: NSAttributedString) -> [TextLink] {
+        var links: [TextLink] = []
+        text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            if let url = value as? URL { links.append(TextLink(range: range, url: url)) }
+        }
+        return links
     }
 
     /// The word made of `piece`, drawn as `line`.
@@ -231,29 +306,55 @@ final class JustifiedLabel: UIView {
         [.font: font, .foregroundColor: color, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor]
     }
 
-    /// The text in the base font and colour. Markdown keeps its bold and italic as traits of that font; links and code are plain text.
+    /// The text in the base font and colour. Markdown keeps its bold and italic as traits of that font. With `showsLinks`, the links are
+    /// given their link look; code is plain text.
     private func attributed(_ look: Look, font: UIFont, color: UIColor) -> NSAttributedString {
         let base = attributes(font: font, color: color)
-        guard look.isMarkdown,
-              let parsed = try? AttributedString(markdown: look.text,
-                                                 options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-        else { return NSAttributedString(string: look.text, attributes: base) }
         let result = NSMutableAttributedString()
-        for run in parsed.runs {
-            var traits: UIFontDescriptor.SymbolicTraits = []
-            if let intent = run.inlinePresentationIntent {
-                if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
-                if intent.contains(.emphasized) { traits.insert(.traitItalic) }
+        var markdownLinks: [TextLink] = []
+        if look.isMarkdown, let parsed = try? AttributedString(markdown: look.text,
+                                                               options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            for run in parsed.runs {
+                var traits: UIFontDescriptor.SymbolicTraits = []
+                if let intent = run.inlinePresentationIntent {
+                    if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
+                    if intent.contains(.emphasized) { traits.insert(.traitItalic) }
+                }
+                var runFont = font
+                if !traits.isEmpty, let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
+                    runFont = UIFont(descriptor: descriptor, size: font.pointSize)
+                }
+                var runAttributes = base
+                runAttributes[.font] = runFont
+                let piece = String(parsed[run.range].characters)
+                if let url = run.link {
+                    markdownLinks.append(TextLink(range: NSRange(location: result.length, length: piece.utf16.count), url: url))
+                }
+                result.append(NSAttributedString(string: piece, attributes: runAttributes))
             }
-            var runFont = font
-            if !traits.isEmpty, let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
-                runFont = UIFont(descriptor: descriptor, size: font.pointSize)
+        } else {
+            result.append(NSAttributedString(string: look.text, attributes: base))
+        }
+        // Bare URLs are found in the text as shown. A markdown link keeps its own target, and TextLinks drops any other scheme.
+        if look.showsLinks {
+            for link in TextLinks.all(in: result.string, markdown: markdownLinks) {
+                result.addAttributes(linkAttributes(url: link.url), range: link.range)
             }
-            var runAttributes = base
-            runAttributes[.font] = runFont
-            result.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: runAttributes))
         }
         return result
+    }
+
+    /// The look of a link: the system link colour, underlined, with the URL as its value. Core Text reads its own keys for the colour and the
+    /// underline, so both sets are given.
+    private func linkAttributes(url: URL) -> [NSAttributedString.Key: Any] {
+        let tint = UIColor.link.resolvedColor(with: traitCollection)
+        return [
+            .link: url,
+            .foregroundColor: tint,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): tint.cgColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            NSAttributedString.Key(kCTUnderlineStyleAttributeName as String): NSUnderlineStyle.single.rawValue,
+        ]
     }
 
     // MARK: Layout
@@ -348,6 +449,7 @@ final class JustifiedLabel: UIView {
         let isCut = lineLimit > 0 && total > lineLimit
         let scale = max(contentScaleFactor, 1)
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        placedWords = []
         for index in 0..<shown {
             let line = layout.lines[index]
             let words = Array(layout.words[line.words])
@@ -392,6 +494,11 @@ final class JustifiedLabel: UIView {
         for (offset, word) in kept.enumerated() {
             context.textPosition = CGPoint(x: (x * scale).rounded() / scale, y: baseline)
             CTLineDraw(word.line, context)
+            if linksAreTappable {
+                // The line box of the word: its top is the line's top, which the baseline sits `ascender` below.
+                let wordFrame = CGRect(x: x, y: baseline - content.font.ascender, width: word.width, height: content.font.lineHeight)
+                placedWords.append(PlacedWord(frame: wordFrame, word: word))
+            }
             if offset == kept.count - 1, let mark {
                 context.textPosition = CGPoint(x: ((x + word.width) * scale).rounded() / scale, y: baseline)
                 CTLineDraw(mark.line, context)

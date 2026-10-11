@@ -495,13 +495,19 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(model.portraitArtworkURL == background && model.backdropURL == background)
     }
 
-    @Test func metaPartsAreYearAndRuntime() {
-        let model = DetailViewModel(preview: MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008",
-                                                         imdbRating: 9.0, runtime: "152 min"),
-                                    services: offlineServices())
-        #expect(model.metaParts == ["2008", "152 min"], "the rating is a button under the title, not part of the line")
-        let bare = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X", releaseInfo: " ", imdbRating: 0),
-                                   services: offlineServices())
-        #expect(bare.metaParts.isEmpty, "blank years add no parts")
+    @Test func heroMetaPartsAreTheSameForBothHeroes() {
+        let preview = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008", imdbRating: 9.0,
+                                  genres: ["Action", "Crime", "Drama"], runtime: "152 min")
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: "PG-13")
+                == ["2008", "Action", "Crime", "PG-13", "152 min", "★ 9.0"], "year, two genres, certification, runtime, rating")
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil)
+                == ["2008", "Action", "Crime", nil, "152 min", "★ 9.0"], "the spotlight has no certification")
+    }
+
+    @Test func heroMetaPartsKeepMissingPartsAsNil() {
+        let bare = MetaPreview(id: "tt1", type: "movie", name: "X")
+        #expect(DetailViewModel.heroMetaParts(for: bare, certification: nil) == [nil, nil, nil, nil], "nothing known adds no text")
+        let rated = MetaPreview(id: "tt2", type: "movie", name: "Y", imdbRating: 7)
+        #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 7.0", "a whole rating keeps one decimal")
     }
 }

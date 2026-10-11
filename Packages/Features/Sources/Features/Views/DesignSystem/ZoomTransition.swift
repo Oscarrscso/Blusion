@@ -13,6 +13,8 @@ struct TitleDestination: Hashable {
     /// Opens with no animation, for a source whose picture and logo the title page repeats in the same place (Home's spotlight): only
     /// the content below changes. `sourceID` is unused then.
     var opensInstantly = false
+    /// The picture and logo the spotlight page showed when it opened this title, so the title page starts with them (see `HeroHandoff`).
+    var handoff: HeroHandoff?
 }
 
 extension EnvironmentValues {

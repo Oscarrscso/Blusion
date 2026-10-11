@@ -222,13 +222,14 @@ public final class PersonViewModel {
             .map { CreditYearSection(year: $0, credits: grouped[$0] ?? []) }
     }
 
-    /// Titles to show as Known For: the popular ones with artwork and enough votes to mean something. When too few qualify, every
-    /// title with a backdrop is considered.
+    /// Titles to show as Known For: the well-rated ones with artwork, ranked by how many people have rated them. Vote count is the
+    /// lasting measure of how well known a title is. TMDb's `popularity` is a trending score that a recent show can top for weeks
+    /// while a classic sits lower, so it only breaks ties. When too few titles qualify, every title with a backdrop is considered.
     public var knownFor: [TMDbPersonCredit] {
         let withBackdrop = credits.filter { $0.backdrop != nil }
         let wellRated = withBackdrop.filter { $0.voteCount >= 20 && ($0.voteAverage ?? 0) >= 6.5 }
         let pool = wellRated.count >= 3 ? wellRated : withBackdrop
-        return Array(pool.sorted { $0.popularity > $1.popularity }.prefix(12))
+        return Array(pool.sorted(by: Self.isMoreKnown).prefix(12))
     }
 
     /// True for a title whose release date is later than today. Such a title has no rating yet.
@@ -241,6 +242,13 @@ public final class PersonViewModel {
     static func isNewer(_ lhs: TMDbPersonCredit, _ rhs: TMDbPersonCredit) -> Bool {
         if lhs.year != rhs.year { return (lhs.year ?? Int.min) > (rhs.year ?? Int.min) }
         if lhs.releaseDate != rhs.releaseDate { return (lhs.releaseDate ?? "") > (rhs.releaseDate ?? "") }
+        return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+    }
+
+    /// Most voted first, then most popular, then title. Vote count is the lasting measure; popularity only breaks ties.
+    static func isMoreKnown(_ lhs: TMDbPersonCredit, _ rhs: TMDbPersonCredit) -> Bool {
+        if lhs.voteCount != rhs.voteCount { return lhs.voteCount > rhs.voteCount }
+        if lhs.popularity != rhs.popularity { return lhs.popularity > rhs.popularity }
         return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
     }
 

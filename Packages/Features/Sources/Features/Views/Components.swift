@@ -130,7 +130,7 @@ struct AppDestinations: ViewModifier {
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services).swipeBackPops() }
             .navigationDestination(for: TitleDestination.self) { destination in
                 let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
-                                        artworkChecked: destination.artworkChecked)
+                                        artworkChecked: destination.artworkChecked, handoff: destination.handoff)
                 if destination.opensInstantly {
                     detail.instantDestination()
                 } else {
@@ -141,7 +141,6 @@ struct AppDestinations: ViewModifier {
             .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services) }
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services).swipeBackPops() }
             .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services).swipeBackPops() }
-            .navigationDestination(for: TrailerListDestination.self) { TrailersView(destination: $0).swipeBackPops() }
     }
 }
 

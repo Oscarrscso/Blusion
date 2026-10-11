@@ -24,8 +24,8 @@ struct DetailView: View {
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = TitleHero.logoMaxHeight
-    /// Loads the hero picture and logo together, and reveals them together.
-    @State private var hero = HeroLoader()
+    /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
+    @State private var hero: HeroLoader
     /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
     @State private var sideInset: CGFloat = 0
     /// The least space kept clear above the logo: the larger of the window's top inset (the status bar or notch) and the page's own. The page
@@ -92,8 +92,9 @@ struct DetailView: View {
     /// The whole gap is `sectionSpacing` plus `Theme.Spacing.s`.
     private let halfRatingsGap = (Theme.Spacing.xl + Theme.Spacing.l + Theme.Spacing.s) / 2
 
-    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false) {
+    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false, handoff: HeroHandoff? = nil) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked))
+        _hero = State(initialValue: HeroLoader(seeding: handoff))
     }
 
     var body: some View {
@@ -263,11 +264,21 @@ struct DetailView: View {
             .accessibilityIdentifier("detail.title")
     }
 
+    /// The metadata line, the same text as the spotlight's. It sits under the actions, left-aligned.
+    private var metaParts: [String?] {
+        DetailViewModel.heroMetaParts(for: model.detail.preview, certification: model.certification)
+    }
+
     private var controls: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
-            MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
-                .multilineTextAlignment(isLandscape ? .leading : .center)
+            // Hidden, and it keeps the space the line used to take above Play, so the actions stay where they were.
+            MetaLine(metaParts)
+                .hidden()
+                .accessibilityHidden(true)
             actionRow
+            MetaLine(metaParts)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -580,10 +591,6 @@ struct DetailView: View {
 
     private func credits(in width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
-            // Trailers lead the credits: above TMDb Reviews and Cast & Crew, below the ratings, synopsis and episodes.
-            if !model.trailers.isEmpty {
-                trailersSection
-            }
             if !model.reviews.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     HStack(spacing: 0) {
@@ -636,6 +643,10 @@ struct DetailView: View {
                     }
                 }
             }
+            // Trailers sit below TMDb Reviews and above Cast & Crew.
+            if !model.trailers.isEmpty {
+                trailersSection
+            }
             if let people = model.castAndCrew, !people.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
@@ -681,11 +692,10 @@ struct DetailView: View {
         }
     }
 
-    /// The title's trailers in one shelf. A direct file plays in Blusion; a YouTube trailer opens in the YouTube app. "Trailers" opens every one.
+    /// The title's trailers in one shelf. A direct file plays in Blusion; a YouTube trailer opens in the YouTube app.
     private var trailersSection: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            SectionHeaderLink("Trailers", value: TrailerListDestination(title: model.detail.name, trailers: model.trailers,
-                                                                        artwork: model.backdropURL))
+            SectionHeader("Trailers")
                 .padding(.horizontal, contentMargin)
             ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
                 ForEach(model.trailers) { trailer in
@@ -736,7 +746,8 @@ struct DetailView: View {
 // MARK: - Pieces
 
 /// One TMDb review. Folded, every card is the same height: the text keeps six lines whether or not it fills them. A tap opens or
-/// folds it, and only a review that runs past those lines folds.
+/// folds it, and only a review that runs past those lines folds. Links in the text are drawn as links in both states, and a tap on one
+/// opens it only once the card is expanded; folded, the tap expands the card as any other tap on the text does.
 private struct ReviewCard: View {
     let review: TMDbReview
     let isExpanded: Bool
@@ -745,12 +756,13 @@ private struct ReviewCard: View {
     let expandedWidth: CGFloat
     let onToggle: () -> Void
     @State private var isTruncated = false
+    @Environment(\.openURL) private var openURL
 
     private var folds: Bool { isExpanded || isTruncated }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     // Short cards cut a long name to one line; an expanded card has the width, so the name wraps in full.
                     Text(review.author).font(.headline).lineLimit(isExpanded ? nil : 1)
@@ -772,30 +784,44 @@ private struct ReviewCard: View {
                         .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
                 }
+                // The gap under the header belongs to the header, so a tap there folds or opens the card as before.
+                .padding(.bottom, Theme.Spacing.m)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if folds { onToggle() }
+                }
                 // Two texts, each at its final width: the old one fades out as laid out and the new one fades in already laid out.
+                // The text takes its own taps (see `tapText`), so the card's tap does not reach it.
                 ZStack(alignment: .topLeading) {
                     if isExpanded {
-                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 0)
+                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 0,
+                                      showsLinks: true, linksAreTappable: true, onTap: tapText)
                             .frame(width: max(0, expandedWidth - Self.padding * 2), alignment: .leading)
                             .transition(.opacity)
                     } else {
                         JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 6,
-                                      reservesSpace: true, isTruncated: $isTruncated)
+                                      reservesSpace: true, isTruncated: $isTruncated, showsLinks: true, onTap: tapText)
                             .frame(width: max(0, foldedWidth - Self.padding * 2), alignment: .leading)
                             .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if folds { onToggle() }
-            }
         }
         .padding(Self.padding)
         .cardSurface()
         // Fixed-width text never draws outside the card while it grows or shrinks.
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
+    }
+
+    /// A tap on a link opens it and leaves the card as it is. Any other tap on the text folds or opens the card, as a tap on the header does.
+    /// Folded, a link is not tappable, so every tap on the text reaches here with no link.
+    private func tapText(_ link: URL?) {
+        if let link {
+            openURL(link)
+        } else if folds {
+            onToggle()
+        }
     }
 
     private static let padding: CGFloat = 16

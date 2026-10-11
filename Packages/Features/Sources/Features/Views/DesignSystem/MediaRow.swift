@@ -29,26 +29,7 @@ struct SectionHeader: View {
     }
 }
 
-/// A `SectionHeader` that opens a pushed screen: the same header, with its chevron, as a link to `value` on the stack it sits in.
-struct SectionHeaderLink<Value: Hashable>: View {
-    let title: String
-    let subtitle: String?
-    let value: Value
-
-    init(_ title: String, subtitle: String? = nil, value: Value) {
-        self.title = title
-        self.subtitle = subtitle
-        self.value = value
-    }
-
-    var body: some View {
-        NavigationLink(value: value) { SectionHeaderLabel(title: title, subtitle: subtitle, withChevron: true) }
-            .buttonStyle(ShelfHeaderButtonStyle())
-            .seeAllAccessibility(title)
-    }
-}
-
-/// The drawing of a shelf header: the title, then an optional grey subtitle. Shared by `SectionHeader` and `SectionHeaderLink`.
+/// The drawing of a shelf header: the title, then an optional grey subtitle. `SectionHeader` draws through it with or without its chevron.
 private struct SectionHeaderLabel: View {
     let title: String
     let subtitle: String?

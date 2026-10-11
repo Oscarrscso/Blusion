@@ -55,8 +55,12 @@ struct HeroCarousel: View {
     @Environment(AppRouter.self) private var router
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
-    /// Set while a return from a title moves the spotlight back to its first page, so that move makes no haptic.
-    @State private var isResettingPage = false
+
+    /// The size the spotlight settles from when Home comes back from a title opened from it: a little larger, then at rest. Scale only, so
+    /// the picture and logo are never hidden or faded.
+    private struct ReturnSettle {
+        var scale = 1.0
+    }
 
     /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
     /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
@@ -89,25 +93,23 @@ struct HeroCarousel: View {
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
+                    // Plays once each time Home returns from a title (the revision changes), never on first appearance. It sits before the
+                    // clip, so the slight growth stays inside the page.
+                    .keyframeAnimator(initialValue: ReturnSettle(), trigger: router.spotlightRevision) { view, settle in
+                        view.scaleEffect(settle.scale)
+                    } keyframes: { _ in
+                        KeyframeTrack(\.scale) {
+                            LinearKeyframe(1.025, duration: 0)
+                            SpringKeyframe(1, duration: 0.4, spring: .smooth)
+                        }
+                    }
                     .frame(width: geometry.size.width, height: height)
                     .clipped()
                     .offset(y: -pull)
                     .onChange(of: pageID) { oldID, newID in
-                        if isResettingPage {
-                            isResettingPage = false
-                            return
-                        }
                         guard let oldID, let newID, oldID != newID,
                               items.contains(where: { $0.identity == oldID }) else { return }
                         Haptics.scrollSnap()
-                    }
-                    .onChange(of: router.spotlightRevision) { _, _ in
-                        // Back from a title opened from here: the spotlight starts again on its first page, at once and without a haptic.
-                        guard let first = items.first?.identity, pageID != first else { return }
-                        isResettingPage = true
-                        var transaction = Transaction(animation: nil)
-                        transaction.disablesAnimations = true
-                        withTransaction(transaction) { pageID = first }
                     }
                     .onAppear {
                         pageID = pageID ?? items.first?.identity
@@ -228,12 +230,25 @@ private struct HeroPage: View {
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
+    /// The picture and logo this page shows now, for the title page it opens. A picture or logo still loading is left out.
+    private var handoff: HeroHandoff {
+        var picture: HeroHandoff.Resolved?
+        if case .ready(let image) = pictureSlot, let url = heroURL {
+            picture = HeroHandoff.Resolved(url: url, maxPixelSize: heroPixelSize, image: image)
+        }
+        var logo: HeroHandoff.Resolved?
+        if case .ready(let image) = logoSlot, let url = logoURL {
+            logo = HeroHandoff.Resolved(url: url, maxPixelSize: HeroLoader.logoPixelSize, image: image)
+        }
+        return HeroHandoff(picture: picture, logo: logo)
+    }
+
     var body: some View {
         // The title page repeats the picture and logo in the same place, so it replaces Home with no animation.
-        let destination = TitleDestination(preview: item, sourceID: "hero", artwork: heroArtwork, artworkChecked: artworkChecked,
-                                           opensInstantly: true)
         let openTitle = {
             Haptics.tap()
+            let destination = TitleDestination(preview: item, sourceID: "hero", artwork: heroArtwork, artworkChecked: artworkChecked,
+                                               opensInstantly: true, handoff: handoff)
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) { router.homePath.append(destination) }
@@ -299,10 +314,12 @@ private struct HeroPage: View {
             VStack(spacing: 0) {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
-                // The metadata line starts at the picture's bottom edge, as it does on the title page.
-                MetaLine(metaParts)
-                    .multilineTextAlignment(.center)
+                // The metadata line starts at the picture's bottom edge, as it does on the title page, left-aligned at the page's margin.
+                MetaLine(DetailViewModel.heroMetaParts(for: item, certification: nil))
+                    .multilineTextAlignment(.leading)
                     .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, metrics.contentMargin)
                     .frame(height: TitleHero.captionBelow, alignment: .top)
             }
             .foregroundStyle(.white)
@@ -349,7 +366,7 @@ private struct HeroPage: View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
-            MetaLine(metaParts)
+            MetaLine(DetailViewModel.heroMetaParts(for: item, certification: nil))
                 .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }
@@ -380,12 +397,6 @@ private struct HeroPage: View {
             }
         }
         .opacity(isRevealed ? 1 : 0)
-    }
-
-    /// Year, the first two genres and the rating, dot-separated. Parts that are missing are left out by `MetaLine`.
-    private var metaParts: [String?] {
-        let rating = item.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
-        return [item.releaseInfo] + item.genres.prefix(2).map { Optional($0) } + [rating]
     }
 }
 

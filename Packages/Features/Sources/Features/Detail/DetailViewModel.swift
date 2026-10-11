@@ -425,15 +425,12 @@ public final class DetailViewModel {
     /// Whether the portrait picture already carries the title, so the separate logo is not shown in portrait.
     public var portraitHidesLogo: Bool { tmdbArtwork?.portraitHidesLogo ?? false }
 
-    /// Year, certification and runtime for a `MetaLine`: "2008", "PG-13", "152 min". Parts the addon left out are skipped. The rating
-    /// is not here: the page shows it as a button under the title.
-    public var metaParts: [String] {
-        let meta = detail.preview
-        var parts: [String] = []
-        if let year = Self.nonEmpty(meta.releaseInfo) { parts.append(year) }
-        if let certification = Self.nonEmpty(certification) { parts.append(certification) }
-        if let runtime = Self.nonEmpty(meta.runtime) { parts.append(runtime) }
-        return parts
+    /// The metadata line both heroes show, for `MetaLine`: year, the first two genres, certification, runtime and the IMDb rating, in that
+    /// order ("2008", "Drama", "Crime", "PG-13", "152 min", "★ 9.0"). The spotlight has no certification, so it passes nil. Missing parts
+    /// stay nil and `MetaLine` leaves them out.
+    nonisolated public static func heroMetaParts(for preview: MetaPreview, certification: String?) -> [String?] {
+        let rating = preview.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
+        return [preview.releaseInfo] + preview.genres.prefix(2).map { Optional($0) } + [certification, preview.runtime, rating]
     }
 
     /// The title's trailers, merged and ordered (see `TrailerCatalog`): the iTunes preview first when there is one, then the addon's direct
@@ -468,10 +465,5 @@ public final class DetailViewModel {
 
     private func lastUpdate(_ video: Video) -> Date {
         savedProgress[episodeIdentity(video)]?.updatedAt ?? .distantPast
-    }
-
-    private static func nonEmpty(_ text: String?) -> String? {
-        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
-        return trimmed
     }
 }

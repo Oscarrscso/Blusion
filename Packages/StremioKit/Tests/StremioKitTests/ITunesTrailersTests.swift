@@ -80,12 +80,106 @@ import StremioKitTestSupport
     }
 
     @Test func aTitleWithNoPreviewIsAlsoKept() async throws {
-        let transport = StubTransport(data: results(""))
-        let itunes = ITunesTrailers(client: makeClient(transport, retries: 0), cache: ITunesTrailerCache())
+        let transport = StubTransport { request, _ in
+            StubTransport.response(Data((isChart(request) ? #"{"feed":{}}"# : #"{"resultCount":0,"results":[]}"#).utf8), for: request)
+        }
+        let itunes = ITunesTrailers(client: makeClient(transport, retries: 0), cache: ITunesTrailerCache(), chartCache: ITunesChartCache())
         #expect(try await itunes.preview(title: "Nothing Here", year: nil, type: "movie") == nil)
         #expect(try await itunes.preview(title: "Nothing Here", year: nil, type: "movie") == nil)
-        #expect(transport.callCount == 1)
+        #expect(searches(transport) == 1, "the search is kept, nil included")
+        #expect(chartRequests(transport) == 1, "the chart is downloaded once")
     }
+
+    @Test func whenTheSearchFindsNothingTheCurrentChartIsUsedAndDownloadedOncePerType() async throws {
+        let chart = Data(chartFixture.utf8)
+        let transport = StubTransport { request, _ in
+            StubTransport.response(isChart(request) ? chart : results(""), for: request)
+        }
+        let itunes = ITunesTrailers(client: makeClient(transport, retries: 0), cache: ITunesTrailerCache(), chartCache: ITunesChartCache())
+        let toyStory = try await itunes.preview(title: "Toy Story 5", year: 2026, type: "movie")
+        #expect(toyStory?.directURL == URL(string: "https://video-ssl.itunes.apple.com/toy5.m4v"))
+        let oppenheimer = try await itunes.preview(title: "Oppenheimer", year: 2023, type: "movie")
+        #expect(oppenheimer?.directURL == URL(string: "https://video-ssl.itunes.apple.com/oppenheimer.m4v"))
+        #expect(searches(transport) == 2, "each title is searched first")
+        #expect(chartRequests(transport) == 1, "the chart is downloaded once for both titles")
+    }
+
+    @Test func aSearchThatFindsAPreviewDoesNotReadTheChart() async throws {
+        let transport = StubTransport(data: results(#"{"trackName":"Stub Ledger Film","previewUrl":"https://a.example.com/l.m4v"}"#))
+        let itunes = ITunesTrailers(client: makeClient(transport, retries: 0), cache: ITunesTrailerCache(), chartCache: ITunesChartCache())
+        #expect(try await itunes.preview(title: "Stub Ledger Film", year: nil, type: "movie") != nil)
+        #expect(chartRequests(transport) == 0)
+    }
+
+    @Test func theChartsAreTheStoresTopFeedsForTheCountry() throws {
+        #expect(ITunesTrailers.chartURL(type: "movie")?.absoluteString == "https://itunes.apple.com/ie/rss/topmovies/limit=200/json")
+        #expect(ITunesTrailers.chartURL(type: "series")?.absoluteString == "https://itunes.apple.com/ie/rss/toptvseasons/limit=200/json")
+        #expect(ITunesTrailers.chartURL(type: "channel") == nil)
+    }
+
+    @Test func aChartEntryMatchesByNameAndReleaseYearAndTakesAnArrayOfLinks() throws {
+        let toyStory = try ITunesTrailers.parseChart(Data(chartFixture.utf8), title: "Toy Story 5", year: 2026, type: "movie")
+        #expect(toyStory?.directURL == URL(string: "https://video-ssl.itunes.apple.com/toy5.m4v"), "the enclosure is taken from the link list")
+        let oppenheimer = try ITunesTrailers.parseChart(Data(chartFixture.utf8), title: "oppenheimer", year: 2024, type: "movie")
+        #expect(oppenheimer?.directURL == URL(string: "https://video-ssl.itunes.apple.com/oppenheimer.m4v"), "a year within one of the release")
+    }
+
+    @Test func aChartWithASingleEntryAsAnObjectIsRead() throws {
+        let single = Data(#"""
+        {"feed":{"entry":{"im:name":{"label":"Toy Story 5"},"im:releaseDate":{"label":"2026-06-19T00:00:00-07:00"},
+         "link":{"attributes":{"rel":"enclosure","type":"video/x-m4v","href":"https://video-ssl.itunes.apple.com/toy5.m4v"}}}}}
+        """#.utf8)
+        let trailer = try ITunesTrailers.parseChart(single, title: "Toy Story 5", year: 2026, type: "movie")
+        #expect(trailer?.directURL == URL(string: "https://video-ssl.itunes.apple.com/toy5.m4v"))
+    }
+
+    @Test func aChartEntryWithoutAMatchingNameOrYearOrAnHTTPSFileGivesNothing() throws {
+        let data = Data(chartFixture.utf8)
+        #expect(try ITunesTrailers.parseChart(data, title: "Missing Title", year: nil, type: "movie") == nil, "no entry has the name")
+        #expect(try ITunesTrailers.parseChart(data, title: "Oppenheimer", year: 2010, type: "movie") == nil, "the release year is 2023")
+        #expect(try ITunesTrailers.parseChart(data, title: "Dune", year: nil, type: "movie") == nil, "an http file is rejected")
+        #expect(try ITunesTrailers.parseChart(data, title: "Heat", year: nil, type: "movie") == nil, "an entry with only a web page link is skipped")
+        #expect(try ITunesTrailers.parseChart(data, title: "Toy Story 5", year: 2026, type: "channel") == nil)
+    }
+
+    @Test func aSeriesChartTakesTheLowestSeasonOfTheShow() throws {
+        let data = Data(#"""
+        {"feed":{"entry":[
+         {"im:name":{"label":"Show - Season 2"},"im:releaseDate":{"label":"2024-01-01T00:00:00-07:00"},
+          "link":{"attributes":{"rel":"enclosure","href":"https://video-ssl.itunes.apple.com/s2.m4v"}}},
+         {"im:name":{"label":"Show, Season 1"},"im:releaseDate":{"label":"2023-01-01T00:00:00-07:00"},
+          "link":{"attributes":{"rel":"enclosure","href":"https://video-ssl.itunes.apple.com/s1.m4v"}}}]}}
+        """#.utf8)
+        let trailer = try ITunesTrailers.parseChart(data, title: "Show", year: nil, type: "series")
+        #expect(trailer?.directURL == URL(string: "https://video-ssl.itunes.apple.com/s1.m4v"))
+    }
+
+    @Test func aBadChartIsInvalid() {
+        #expect(throws: AddonError.self) { try ITunesTrailers.parseChart(Data("nope".utf8), title: "Toy Story 5", year: nil, type: "movie") }
+        #expect(throws: AddonError.self) { try ITunesTrailers.parseChart(Data(#"{"resultCount":0}"#.utf8), title: "X", year: nil, type: "movie") }
+    }
+
+    /// The store's current-films chart: three entries. "Toy Story 5" has a link list, "Oppenheimer" a single link object, "Dune" an http file,
+    /// "Heat" only a web page.
+    private let chartFixture = #"""
+    {"feed":{"author":{"name":{"label":"iTunes Store"}},"entry":[
+     {"im:name":{"label":"Toy Story 5"},"im:releaseDate":{"label":"2026-06-19T00:00:00-07:00","attributes":{"label":"2026-06-19T00:00:00-07:00"}},
+      "link":[{"attributes":{"rel":"alternate","type":"text/html","href":"https://itunes.apple.com/ie/movie/toy-story-5/id1"}},
+              {"attributes":{"rel":"enclosure","type":"video/x-m4v","href":"https://video-ssl.itunes.apple.com/toy5.m4v"}}]},
+     {"im:name":{"label":"Oppenheimer"},"im:releaseDate":{"label":"2023-07-21T00:00:00-07:00"},
+      "link":{"attributes":{"rel":"enclosure","type":"video/x-m4v","href":"https://video-ssl.itunes.apple.com/oppenheimer.m4v"}}},
+     {"im:name":{"label":"Dune"},"im:releaseDate":{"label":"2024-03-01T00:00:00-07:00"},
+      "link":{"attributes":{"rel":"enclosure","type":"video/x-m4v","href":"http://video-ssl.itunes.apple.com/dune.m4v"}}},
+     {"im:name":{"label":"Heat"},"im:releaseDate":{"label":"1995-12-15T00:00:00-07:00"},
+      "link":{"attributes":{"rel":"alternate","type":"text/html","href":"https://itunes.apple.com/ie/movie/heat/id2"}}}
+    ]}}
+    """#
+
+    private func isChart(_ request: URLRequest) -> Bool { request.url?.path.hasPrefix("/ie/rss/") == true }
+
+    private func searches(_ transport: StubTransport) -> Int { transport.requests.filter { $0.url?.path == "/search" }.count }
+
+    private func chartRequests(_ transport: StubTransport) -> Int { transport.requests.filter(isChart).count }
 
     @Test func aTitleWithNoLettersIsNotSearched() async throws {
         let transport = StubTransport(data: results(""))

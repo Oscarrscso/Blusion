@@ -78,12 +78,43 @@ import StremioKitTestSupport
             credit(1, "Popular and rated", date: "2010-01-01", votes: 500, average: 8, popularity: 50),
             credit(2, "Popular, low votes", date: "2011-01-01", votes: 3, average: 9, popularity: 90),
             credit(3, "Rated, no backdrop", date: "2012-01-01", votes: 500, average: 8.5, popularity: 80, backdrop: false),
-            credit(4, "Rated, lower", date: "2013-01-01", votes: 200, average: 7, popularity: 20),
+            credit(4, "Rated, lower", date: "2013-01-01", votes: 200, average: 7, popularity: 400),
             credit(5, "Rated, third", date: "2014-01-01", votes: 60, average: 6.5, popularity: 10),
         ])
-        #expect(model.knownFor.map(\.title) == ["Popular and rated", "Rated, lower", "Rated, third"])
+        #expect(model.knownFor.map(\.title) == ["Popular and rated", "Rated, lower", "Rated, third"], "ranked by votes, not by the trending popularity")
         let sparse = makeModel([credit(1, "Only", date: "2010-01-01", votes: 2, average: 4, popularity: 1)])
         #expect(sparse.knownFor.map(\.title) == ["Only"], "with too few well-rated titles, any title with a backdrop may show")
+    }
+
+    @Test func knownForRanksALastingClassicAboveATrendingHit() {
+        let model = makeModel([
+            credit(1, "Classic", date: "1994-01-01", votes: 900, average: 8.5, popularity: 5),
+            credit(2, "Trending this week", date: "2026-08-01", votes: 120, average: 7, popularity: 400),
+            credit(3, "Solid", date: "2005-01-01", votes: 300, average: 7, popularity: 30),
+            credit(4, "Rated, no backdrop", date: "2012-01-01", votes: 5000, average: 9, popularity: 900, backdrop: false),
+            credit(5, "Too few votes", date: "2013-01-01", votes: 19, average: 9, popularity: 800),
+            credit(6, "Rated too low", date: "2014-01-01", votes: 200, average: 6.4, popularity: 700),
+        ])
+        #expect(model.knownFor.map(\.title) == ["Classic", "Solid", "Trending this week"],
+                "the high-popularity title with fewer votes ranks below the lower-popularity one with more")
+    }
+
+    @Test func knownForBreaksVoteTiesByPopularityThenTitle() {
+        let model = makeModel([
+            credit(1, "Zulu", date: "2001-01-01", votes: 300, average: 7, popularity: 10),
+            credit(2, "Beta", date: "2002-01-01", votes: 300, average: 7, popularity: 10),
+            credit(3, "Alpha", date: "2003-01-01", votes: 300, average: 7, popularity: 10),
+            credit(4, "Less popular", date: "2004-01-01", votes: 300, average: 7, popularity: 2),
+            credit(5, "Most popular", date: "2005-01-01", votes: 300, average: 7, popularity: 40),
+        ])
+        #expect(model.knownFor.map(\.title) == ["Most popular", "Alpha", "Beta", "Zulu", "Less popular"],
+                "equal votes fall to popularity, and equal popularity to the title")
+    }
+
+    @Test func knownForShowsAtMostTwelveTitles() {
+        let model = makeModel((1...15).map { credit($0, "Title \($0)", date: "2000-01-01", votes: 100 + $0) })
+        #expect(model.knownFor.count == 12)
+        #expect(model.knownFor.first?.title == "Title 15" && model.knownFor.last?.title == "Title 4")
     }
 
     @Test func knownForCardsTakeTheTMDbArtworkThatAnswersAndKeepThePlainBackdropOtherwise() async {

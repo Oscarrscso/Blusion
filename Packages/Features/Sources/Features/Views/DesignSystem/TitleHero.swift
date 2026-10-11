@@ -89,6 +89,31 @@ enum HeroSlot {
     var isPending: Bool { if case .pending = self { return true } else { return false } }
 }
 
+/// The picture and logo a Home spotlight page is showing, carried to the title page it opens so that page's first frame already has them. The
+/// handoff holds the decoded images itself, so the shared caches evicting them cannot send the title page back to loading. Each image is used
+/// only for the URL and size it was decoded at; anything else the title page asks for loads as usual.
+final class HeroHandoff: Hashable {
+    /// One decoded image: the URL it came from, the longest edge it was decoded to, and the image.
+    struct Resolved {
+        let url: URL
+        let maxPixelSize: CGFloat
+        let image: UIImage
+    }
+
+    let picture: Resolved?
+    let logo: Resolved?
+
+    init(picture: Resolved?, logo: Resolved?) {
+        self.picture = picture
+        self.logo = logo
+    }
+
+    /// A handoff is one hand-over, so two are equal only when they are the same one.
+    static func == (lhs: HeroHandoff, rhs: HeroHandoff) -> Bool { lhs === rhs }
+
+    func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
 /// Loads the hero picture and the logo together and answers from the image cache, so a decoded one is there in the first frame.
 /// It also holds what it has shown, so the shared cache evicting a large picture never sends a shown hero back to loading, and every
 /// logo lives in a process-wide store, so a title's logo is there in the first frame for the rest of the session.
@@ -105,6 +130,16 @@ final class HeroLoader {
     private var revision = 0
     /// The pictures this loader has resolved, held strongly so they outlive the shared cache's eviction. Not observed: `revision` is.
     @ObservationIgnored private var held: [String: UIImage] = [:]
+    /// The logo this loader has resolved, held apart from `held` so `release(keeping:)` never drops it, and so the shared logo store's limit
+    /// cannot take it from a page that is still showing it.
+    @ObservationIgnored private var heldLogo: (key: String, image: UIImage)?
+
+    /// A loader that already holds what a Home spotlight page showed, so the title page opened from it has that picture and logo in its first
+    /// frame. Each is found only for the URL and size it was decoded at (see `HeroHandoff`).
+    init(seeding handoff: HeroHandoff? = nil) {
+        if let picture = handoff?.picture { held[Self.key(picture.url, picture.maxPixelSize)] = picture.image }
+        if let logo = handoff?.logo { heldLogo = (Self.key(logo.url, logo.maxPixelSize), logo.image) }
+    }
 
     nonisolated private static func key(_ url: URL, _ size: CGFloat) -> String { "\(Int(size))|\(url.absoluteString)" }
 
@@ -118,12 +153,15 @@ final class HeroLoader {
         return trimmed === cgImage ? image : UIImage(cgImage: trimmed, scale: image.scale, orientation: image.imageOrientation)
     }
 
-    private static func storeLogo(_ image: UIImage, for url: URL) {
+    /// Trims and stores a logo, returning the stored image.
+    @discardableResult
+    private static func storeLogo(_ image: UIImage, for url: URL) -> UIImage {
         let key = key(url, logoPixelSize)
         let image = trimmedLogo(image)
         if logos.updateValue(image, forKey: key) != nil { logoOrder.removeAll { $0 == key } }
         logoOrder.append(key)
         while logoOrder.count > logoLimit { logos[logoOrder.removeFirst()] = nil }
+        return image
     }
 
     /// Loads a logo into the process-wide store without any loader, so it is ready before its page is built. Ignores failures.
@@ -135,10 +173,11 @@ final class HeroLoader {
         storeLogo(image, for: url)
     }
 
-    /// Remembers an image that has been resolved: logos in the shared store, pictures in this loader. A logo that is stored already is kept.
+    /// Remembers an image that has been resolved: a logo in the shared store and in this loader, a picture in this loader. A logo that is
+    /// stored already is kept.
     private func remember(_ image: UIImage, url: URL, size: CGFloat) {
         if size == Self.logoPixelSize {
-            if Self.storedLogo(url) == nil { Self.storeLogo(image, for: url) }
+            heldLogo = (Self.key(url, size), Self.storedLogo(url) ?? Self.storeLogo(image, for: url))
         } else {
             held[Self.key(url, size)] = image
         }
@@ -156,13 +195,20 @@ final class HeroLoader {
     func slot(url: URL?, maxPixelSize: CGFloat, lookupFinished: Bool) -> HeroSlot {
         _ = revision
         guard let url else { return lookupFinished ? .none : .pending }
-        if maxPixelSize == Self.logoPixelSize, let logo = Self.storedLogo(url) { return .ready(logo) }
-        if let image = held[Self.key(url, maxPixelSize)] { return .ready(image) }
+        let key = Self.key(url, maxPixelSize)
+        if let image = held[key] { return .ready(image) }
+        if maxPixelSize == Self.logoPixelSize {
+            if let logo = heldLogo, logo.key == key { return .ready(logo.image) }
+            if let logo = Self.storedLogo(url) {
+                remember(logo, url: url, size: maxPixelSize)
+                return .ready(logo)
+            }
+        }
         if let image = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
             remember(image, url: url, size: maxPixelSize)
             return .ready(image)
         }
-        return failed.contains(Self.key(url, maxPixelSize)) ? .none : .pending
+        return failed.contains(key) ? .none : .pending
     }
 
     /// The one reveal condition: neither is still pending. A missing or failed one does not hold the other back.
@@ -177,7 +223,7 @@ final class HeroLoader {
         }
         var pending: [(URL, CGFloat)] = []
         for (url, size) in wanted {
-            if size == Self.logoPixelSize, Self.storedLogo(url) != nil { continue }
+            if size == Self.logoPixelSize, Self.storedLogo(url) != nil || heldLogo?.key == Self.key(url, size) { continue }
             if held[Self.key(url, size)] != nil { continue }
             if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: size) { remember(cached, url: url, size: size); continue }
             pending.append((url, size))

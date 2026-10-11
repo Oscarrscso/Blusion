@@ -2,7 +2,7 @@
 import SwiftUI
 import StremioKit
 
-/// A trailer on a shelf or in the trailer list: a Continue Watching card with the trailer's frame, and under it the play mark, the title and
+/// A trailer on the title page's shelf: a Continue Watching card with the trailer's frame, and under it the play mark, the title and
 /// the duration when it is known. A YouTube trailer shows its YouTube thumbnail. A direct file has none, so it shows `fallbackArtwork`, the
 /// title's own backdrop. The caller presents the trailer when the card is tapped.
 struct TrailerCard: View {

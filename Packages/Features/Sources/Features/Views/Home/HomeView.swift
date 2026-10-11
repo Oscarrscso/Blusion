@@ -9,7 +9,7 @@ struct HomeView: View {
     @State private var isScrolling = false
     /// How far Home has been pulled down past its top; the spotlight stretches by this much (see `HeroCarousel`).
     @State private var heroPull: CGFloat = 0
-    /// The height of the navigation bar and status bar above Home; a spotlight extends beneath them, so the customise button clears them.
+    /// The status bar's height, the top safe area Home's content starts beneath. The navigation bar sits below it, not included.
     @State private var topInset: CGFloat = 0
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -160,9 +160,9 @@ struct HomeView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, homeMetrics.pageMargin)
-        // With the spotlight first, the bar is clear above it and `topInset` runs from the top of the screen to the bar's bottom, so the
-        // button is lifted by the bar's height and sits where the title page's back button does. Otherwise the bar is above the content.
-        .padding(.top, heroIsFirst ? max(0, topInset - Theme.barButtonDiameter) : Theme.Spacing.s)
+        // With the spotlight first, the content starts at the top of the screen, so `topInset` (the status bar's height, which the navigation
+        // bar starts beneath) puts the button's top where the title page's back button's top sits. Otherwise the bar is above the content.
+        .padding(.top, heroIsFirst ? topInset : Theme.Spacing.s)
         .accessibilityLabel("Widgets")
         .help("Widgets")
         .accessibilityIdentifier("home.customize")
