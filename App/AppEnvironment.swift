@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import PlayerKit
 import SwiftData
@@ -67,11 +68,24 @@ final class AppEnvironment {
             settingsDefaults = UserDefaults(suiteName: suite) ?? .standard
             settingsDefaults.removePersistentDomain(forName: suite)
         } else {
-            let device = KeychainSecretStore.forThisDevice()
+            let device = KeychainSecretStore.forThisDevice(onSynchronizedChange: {
+                Task { @MainActor in SecretsSyncObserver.shared.secretsDidChangeLocally() }
+            })
             secrets = device.store
             secretsInKeychain = device.usesKeychain
             if !secretsInKeychain { logger.log(.error, "Keychain unavailable to this build; secrets are kept in a private file") }
             settingsDefaults = .standard
+            // A digest of the synchronized secrets, so a change is noticed without the secrets leaving the Keychain. Memory only.
+            let secretStore = device.store
+            let synchronizedSecretsFingerprint: @Sendable () async -> String = {
+                var lines = ""
+                for key in KeychainSecretStore.synchronizedKeys.sorted() {
+                    let value = (try? await secretStore.get(key)) ?? ""
+                    lines += "\(key)=\(value)\n"
+                }
+                return SHA256.hash(data: Data(lines.utf8)).map { String(format: "%02x", $0) }.joined()
+            }
+            SecretsSyncObserver.shared.start(secretsFingerprint: synchronizedSecretsFingerprint)
             if let container = try? PersistenceContainer.make() {
                 // One container, three stores: addons, watch progress and the library share the same file and migration plan.
                 store = SwiftDataAddonStore(container: container)

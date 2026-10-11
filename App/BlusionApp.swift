@@ -36,6 +36,14 @@ struct RootView: View {
     @State private var addonLink: String?
     @State private var userStateRevision = 0
 
+    /// The OMDb and TMDb review services from the saved keys. Run at launch, and again when settings or secrets change on another device.
+    private func reloadReviewServices() async {
+        let settings = await environment.services.settings.load()
+        await environment.services.posterRatings.setReviewServices(
+            omdb: settings.omdbAPIKey.map { OMDbRatings(client: environment.services.client, apiKey: $0) },
+            tmdb: settings.tmdbReadToken.map { TMDbRatings(client: environment.services.client, readAccessToken: $0) })
+    }
+
     var body: some View {
         Group {
             if isReady {
@@ -69,9 +77,7 @@ struct RootView: View {
             let settings = await environment.services.settings.load()
             environment.services.posterRatings.isEnabled = settings.showsPosterRatings
             environment.services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
-            await environment.services.posterRatings.setReviewServices(
-                omdb: settings.omdbAPIKey.map { OMDbRatings(client: environment.services.client, apiKey: $0) },
-                tmdb: settings.tmdbReadToken.map { TMDbRatings(client: environment.services.client, readAccessToken: $0) })
+            await reloadReviewServices()
             await environment.seedDefaultAddons()
             #if DEBUG
             await DebugDemoData.installExtraAddons(environment.services)
@@ -92,6 +98,14 @@ struct RootView: View {
             DebugHangSampler.start()
             await DebugHandoffProbe.startIfRequested(environment.services)
             #endif
+        }
+        // Settings or secrets changed on the user's other device (iCloud): reread them here.
+        .onReceive(NotificationCenter.default.publisher(for: .cloudSecretsDidChange)) { _ in
+            userStateRevision += 1
+            Task {
+                await reloadReviewServices()
+                environment.services.posterRatings.settingsDidChangeElsewhere()
+            }
         }
         // The player app calls back here with where the viewer stopped (blusion://x-callback-url/handoff/...).
         .onOpenURL { url in

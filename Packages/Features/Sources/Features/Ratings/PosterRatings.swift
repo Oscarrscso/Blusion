@@ -113,6 +113,11 @@ public final class PosterRatingsStore {
         self.logger = logger
     }
 
+    /// Settings changed on another device: visible posters and review rows ask again with the current settings.
+    public func settingsDidChangeElsewhere() {
+        reviewServicesRevision += 1
+    }
+
     /// Returns the same object every time. No observed property changes synchronously when called from a view body.
     public func ratings(for item: MetaPreview, includeReviews: Bool = false, source: RatingSource? = nil) -> TitleRatings {
         let entry: TitleRatings
