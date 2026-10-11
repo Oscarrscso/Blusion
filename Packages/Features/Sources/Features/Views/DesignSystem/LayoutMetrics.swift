@@ -106,6 +106,8 @@ extension EnvironmentValues {
     @Entry var isLandscape = false
     /// Home supplies the full viewport height, including insets, so scrolling bars cannot resize the hero.
     @Entry var heroContainerHeight: CGFloat = 800
+    /// Home supplies its width too, so the portrait spotlight is the same height as the title page's picture.
+    @Entry var heroContainerWidth: CGFloat = 390
     @Entry var isHomeScrolling = false
     /// Set only to force a layout; `layoutMetrics` falls back to the one the size class asks for.
     @Entry var layoutMetricsOverride: LayoutMetrics?

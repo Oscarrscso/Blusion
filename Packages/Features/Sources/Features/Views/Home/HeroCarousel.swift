@@ -48,6 +48,7 @@ struct HeroCarousel: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.heroContainerHeight) private var containerHeight
+    @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isHomeScrolling) private var isHomeScrolling
     @Environment(\.heroPull) private var heroPull
     /// Keep the same title aligned when the window resizes or the device rotates.
@@ -55,9 +56,10 @@ struct HeroCarousel: View {
 
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
+        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + TitleHero.captionBelow
         Color.clear
             .frame(maxWidth: .infinity)
-            .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
+            .frame(height: isLandscape ? min(containerHeight, preferred) : portrait)
             .overlay {
                 GeometryReader { geometry in
                     // In portrait the spotlight stretches downward when pulled past the top; its top stays at the top of the screen.
@@ -65,7 +67,7 @@ struct HeroCarousel: View {
                     let height = geometry.size.height + pull
                     TabView(selection: $pageID) {
                         ForEach(items, id: \.identity) { item in
-                            HeroPage(item: item, isScrolling: isHomeScrolling)
+                            HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow)
                                 .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
@@ -111,11 +113,13 @@ struct HeroPlaceholder: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.heroContainerHeight) private var containerHeight
+    @Environment(\.heroContainerWidth) private var containerWidth
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
+        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + TitleHero.captionBelow
         Color.clear
             .frame(maxWidth: .infinity)
-            .frame(height: isLandscape ? min(containerHeight, preferred) : preferred)
+            .frame(height: isLandscape ? min(containerHeight, preferred) : portrait)
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)
@@ -130,6 +134,8 @@ private struct HeroPage: View {
 
     let item: MetaPreview
     let isScrolling: Bool
+    /// The picture's height in portrait: the page less the caption band under it, so a pull stretches the picture too.
+    let artworkHeight: CGFloat
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
@@ -146,15 +152,7 @@ private struct HeroPage: View {
             Haptics.tap()
             router.homePath.append(destination)
         }
-        ZStack(alignment: .bottom) {
-            artwork
-                .allowsHitTesting(false)
-            // Keep the fade outside the zoom source so a cancelled press cannot hide it. The same fade the title page's hero uses,
-            // and the only shading on the picture.
-            BottomFade(length: 0.42)
-            caption
-                .allowsHitTesting(false)
-        }
+        pageContent
         .overlay(alignment: .top) {
             // A tap can open the title, but never claims a drag or disables views during one.
             Color.clear
@@ -186,12 +184,68 @@ private struct HeroPage: View {
         }
     }
 
+    /// Landscape keeps the caption over the picture. Portrait stops the picture above a band that holds the metadata, and the title sits
+    /// low on the picture as it does on the title page.
+    @ViewBuilder
+    private var pageContent: some View {
+        if isLandscape {
+            ZStack(alignment: .bottom) {
+                artwork
+                    .allowsHitTesting(false)
+                // Keep the fade outside the zoom source so a cancelled press cannot hide it. The same fade the title page's hero uses,
+                // and the only shading on the picture.
+                BottomFade(length: 0.42)
+                caption
+                    .allowsHitTesting(false)
+            }
+        } else {
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottom) {
+                    artwork
+                        .allowsHitTesting(false)
+                    BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                    portraitTitle
+                }
+                .frame(height: artworkHeight)
+                MetaLine(metaParts)
+                    .multilineTextAlignment(.center)
+                    .allowsHitTesting(false)
+                    .padding(.top, Theme.Spacing.s)
+                    .frame(height: TitleHero.captionBelow, alignment: .top)
+            }
+            .foregroundStyle(.white)
+        }
+    }
+
+    /// The portrait title, low on the picture above the bottom gap. Its top is measured for the tap zone above it.
+    private var portraitTitle: some View {
+        titleBlock
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.frame(in: .named(HeroPage.sourceID(for: item))).minY
+            } action: { titleTop = $0 }
+            .allowsHitTesting(false)
+            .padding(.horizontal, metrics.contentMargin)
+            .padding(.bottom, TitleHero.logoBottomGap)
+    }
+
+    /// The portrait picture the title page shows: the TMDb one, else the background it falls back to once the lookup has answered.
+    private var portraitURL: URL? {
+        heroArtwork?.portrait ?? (artworkChecked ? (item.background ?? MetahubArtwork.background(imdbID: item.id)) : nil)
+    }
+
     private var artwork: some View {
         Color.clear
             .overlay {
-                ArtworkImage(url: isLandscape ? heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id) : heroArtwork?.portrait,
-                             maxPixelSize: 4096, contentMode: isLandscape ? .fit : .fill,
-                             placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
+                if isLandscape {
+                    ArtworkImage(url: heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id),
+                                 maxPixelSize: 4096, contentMode: .fit,
+                                 placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
+                } else {
+                    ArtworkImage(url: portraitURL,
+                                 maxPixelSize: TitleHero.portraitPixelSize, contentMode: .fill,
+                                 placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id),
+                                 placeholderBlur: TitleHero.placeholderBlur, imageAlignment: TitleHero.imageAlignment)
+                }
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
@@ -219,16 +273,19 @@ private struct HeroPage: View {
     @ViewBuilder
     private var titleBlock: some View {
         if let logo = item.logo ?? heroArtwork?.logo {
-            HeroLogo(url: logo, title: item.name)
+            HeroLogo(url: logo, title: item.name, isPortrait: !isLandscape)
         } else if artworkChecked {
             Text(item.name)
                 .font(.largeTitle.bold())
-                .lineLimit(2)
+                .lineLimit(isLandscape ? 2 : 3)
+                .minimumScaleFactor(isLandscape ? 1 : 0.7)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
-        } else {
+        } else if isLandscape {
             Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
+        } else {
+            Color.clear.frame(maxWidth: .infinity).frame(height: TitleHero.logoMaxHeight)
         }
     }
 
@@ -240,37 +297,63 @@ private struct HeroPage: View {
 }
 
 /// A title's logo, fitted into a box of fixed size so the text under it never moves when it arrives. Shows the name when the logo
-/// cannot be loaded.
+/// cannot be loaded. On Home's portrait spotlight the box is the full width and the title page's logo height, so the two match.
 struct HeroLogo: View {
     static let box = CGSize(width: 260, height: 84)
 
     let url: URL
     let title: String
+    var isPortrait = false
     @State private var image: UIImage?
     @State private var failed = false
 
-    init(url: URL, title: String) {
+    init(url: URL, title: String, isPortrait: Bool = false) {
         self.url = url
         self.title = title
+        self.isPortrait = isPortrait
         _image = State(initialValue: ImagePipeline.shared.cachedImage(for: url, maxPixelSize: 800))
     }
 
     var body: some View {
-        Color.clear
-            .frame(width: Self.box.width, height: Self.box.height)
-            .overlay(alignment: .bottom) {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .transition(.opacity)
-                } else if failed {
-                    Text(title)
-                        .font(.largeTitle.bold())
-                        .lineLimit(2)
-                }
-            }
+        logoBox
             .task(id: url) { await load() }
+    }
+
+    @ViewBuilder
+    private var logoBox: some View {
+        if isPortrait {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: TitleHero.logoMaxHeight)
+                .overlay(alignment: .bottom) { picture }
+        } else {
+            Color.clear
+                .frame(width: Self.box.width, height: Self.box.height)
+                .overlay(alignment: .bottom) { picture }
+        }
+    }
+
+    @ViewBuilder
+    private var picture: some View {
+        if let image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .transition(.opacity)
+        } else if failed {
+            if isPortrait {
+                Text(title)
+                    .font(.largeTitle.bold())
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(title)
+                    .font(.largeTitle.bold())
+                    .lineLimit(2)
+            }
+        }
     }
 
     private func load() async {

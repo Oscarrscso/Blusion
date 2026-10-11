@@ -24,6 +24,7 @@ struct HomeView: View {
         GeometryReader { geometry in
             content
                 .environment(\.heroContainerHeight, geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
+                .environment(\.heroContainerWidth, geometry.size.width)
                 .environment(\.isHomeScrolling, isScrolling)
                 .environment(\.layoutMetrics, homeMetrics)
         }
