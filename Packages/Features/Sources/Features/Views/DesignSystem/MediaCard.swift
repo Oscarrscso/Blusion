@@ -268,6 +268,7 @@ struct MediaCardLink: View {
         .buttonStyle(PressableCardStyle())
         .pointerFeedback()
         .titleTapHaptic()
+        .prewarmsHeroArtwork(item)
         .help(item.name)
         .contextMenu {
             if let actions {
@@ -301,6 +302,33 @@ struct MediaCardLink: View {
         var copy = self
         copy.stretches = true
         return copy
+    }
+}
+
+extension View {
+    /// Looks up a card's title in TMDb once the card has been on screen for a moment, so its page opens with the picture and logo already known.
+    /// Only the lookup runs (no picture), and a card that scrolls away before the moment is up asks nothing. Does nothing without TMDb.
+    func prewarmsHeroArtwork(_ item: MetaPreview) -> some View {
+        modifier(PrewarmHeroArtworkModifier(item: item))
+    }
+}
+
+private struct PrewarmHeroArtworkModifier: ViewModifier {
+    let item: MetaPreview
+    /// Optional, as the rating badges read it: a screen without the store simply does not prewarm.
+    @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
+
+    func body(content: Content) -> some View {
+        let item = self.item
+        let ratings = self.ratings
+        return content.task(id: item.identity, priority: .low) {
+            // Without TMDb there is nothing to look up, so the card starts no wait at all.
+            guard let ratings, ratings.canLookUpHeroArtwork else { return }
+            // `.task` is cancelled when the card scrolls away, which ends the wait before any lookup starts.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await ratings.prewarmHeroArtwork(for: item)
+        }
     }
 }
 

@@ -61,9 +61,8 @@ struct HeroCarousel: View {
     /// range.
     static func loadWindow(isLandscape: Bool) -> Int { isLandscape ? 2 : 4 }
 
-    /// The poster every page shows until its picture is ready, and the size `ArtworkImage` asks the pipeline for when it shows one.
+    /// The poster a page stands in with until its picture is ready, as the addon sent it. `HeroPicture` shows a larger copy of it.
     fileprivate static func placeholderURL(for item: MetaPreview) -> URL? { item.poster ?? MetahubArtwork.poster(imdbID: item.id) }
-    private static let placeholderPixelSize: CGFloat = 600
 
     private var currentIndex: Int {
         items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
@@ -109,15 +108,16 @@ struct HeroCarousel: View {
             .task(id: items.map(\.identity)) { await preload() }
     }
 
-    /// Loads every item's poster, then every item's logo, nearest the current page first, so no page shows a grey box or a missing logo
-    /// when a swipe reaches it. Failures are ignored; a page that needs one asks again.
+    /// Loads every item's stand-in, then every item's logo, nearest the current page first, so no page shows a grey box or a missing logo
+    /// when a swipe reaches it. The stand-in is the one `HeroPicture` shows, at the size it asks for. Failures are ignored; a page that
+    /// needs one asks again.
     private func preload() async {
         let nearestFirst = items.enumerated().sorted { abs($0.offset - currentIndex) < abs($1.offset - currentIndex) }.map(\.element)
         await withTaskGroup(of: Void.self) { group in
             for item in nearestFirst {
-                guard let url = Self.placeholderURL(for: item) else { continue }
+                guard let poster = Self.placeholderURL(for: item), let url = PosterQuality.placeholder(poster) else { continue }
                 group.addTask(priority: .high) {
-                    _ = try? await ImagePipeline.shared.image(for: url, maxPixelSize: Self.placeholderPixelSize, priority: .high)
+                    _ = try? await ImagePipeline.shared.image(for: url, maxPixelSize: TitleHero.placeholderPixelSize, priority: .high)
                 }
             }
         }
@@ -199,7 +199,7 @@ private struct HeroPage: View {
     private var isInWindow: Bool { distance <= HeroCarousel.loadWindow(isLandscape: isLandscape) }
     /// The nearest two pages jump the queue; the next one waits behind them.
     private var loadPriority: TaskPriority { distance <= 1 ? .high : .medium }
-    /// What stands in for the picture and logo until both are ready.
+    /// The poster that stands in for the picture until both the picture and the logo are ready.
     private var placeholderURL: URL? { HeroCarousel.placeholderURL(for: item) }
 
     private var heroURL: URL? {
@@ -258,8 +258,7 @@ private struct HeroPage: View {
             guard isInWindow else { hero.release(keeping: []); return }
             // After a rotation the other orientation's picture goes too.
             hero.release(keeping: heroURL.map { [($0, heroPixelSize)] } ?? [])
-            await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
-                            lookupFinished: artworkChecked)
+            await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
         }
     }
 
@@ -288,22 +287,28 @@ private struct HeroPage: View {
                     portraitTitle
                 }
                 .frame(height: artworkHeight)
+                // The metadata line starts at the picture's bottom edge, as it does on the title page.
                 MetaLine(metaParts)
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
-                    .padding(.top, Theme.Spacing.s)
                     .frame(height: TitleHero.captionBelow, alignment: .top)
             }
             .foregroundStyle(.white)
         }
     }
 
-    /// The portrait title, low on the picture above the bottom gap.
+    /// The portrait title, low on the picture, with the same gap above the metadata line as on the title page.
     private var portraitTitle: some View {
-        titleBlock
+        HeroTitleArt(name: item.name, slot: logoSlot, alignment: .center, compact: false)
+            .frame(maxWidth: .infinity, alignment: .center)
+            // Hidden until the hero reveals, and its space is kept while the logo is pending.
+            .opacity(isRevealed ? 1 : 0)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(item.name)
+            .accessibilityAddTraits(.isHeader)
             .allowsHitTesting(false)
             .padding(.horizontal, metrics.contentMargin)
-            .padding(.bottom, TitleHero.logoBottomGap)
+            .padding(.bottom, TitleHero.logoTextGap)
     }
 
     private var artwork: some View {
@@ -313,7 +318,7 @@ private struct HeroPage: View {
             }
     }
 
-    /// The title, its logo and the metadata line.
+    /// The landscape title, its logo and the metadata line.
     private var caption: some View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
@@ -329,28 +334,23 @@ private struct HeroPage: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// The logo once it is loaded, the name when there is no logo, and blank while the logo is pending. Hidden until the hero reveals.
+    /// The landscape logo in its fixed box, the name when there is no logo, and blank while the logo is pending. Hidden until the hero reveals.
     private var titleBlock: some View {
         Group {
             switch logoSlot {
             case .ready(let image):
                 // Fades with the container, on the same curve as the picture.
-                HeroLogo(image: image, isPortrait: !isLandscape)
+                HeroLogo(image: image)
                     .transition(.identity)
             case .none:
                 Text(item.name)
                     .font(.largeTitle.bold())
-                    .lineLimit(isLandscape ? 2 : 3)
-                    .minimumScaleFactor(isLandscape ? 1 : 0.7)
+                    .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
             case .pending:
-                if isLandscape {
-                    Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
-                } else {
-                    Color.clear.frame(maxWidth: .infinity).frame(height: TitleHero.logoMaxHeight)
-                }
+                Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
             }
         }
         .opacity(isRevealed ? 1 : 0)
@@ -363,36 +363,4 @@ private struct HeroPage: View {
     }
 }
 
-/// A title's logo, fitted into a box of fixed size so the text under it never moves when it arrives. On Home's portrait spotlight the
-/// box is the full width and the title page's logo height, so the two match.
-struct HeroLogo: View {
-    static let box = CGSize(width: 260, height: 84)
-
-    let image: UIImage
-    var isPortrait = false
-
-    var body: some View {
-        logoBox
-    }
-
-    @ViewBuilder
-    private var logoBox: some View {
-        if isPortrait {
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: TitleHero.logoMaxHeight)
-                .overlay(alignment: .bottom) { picture }
-        } else {
-            Color.clear
-                .frame(width: Self.box.width, height: Self.box.height)
-                .overlay(alignment: .bottom) { picture }
-        }
-    }
-
-    private var picture: some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFit()
-    }
-}
 #endif

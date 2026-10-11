@@ -84,6 +84,8 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                 onRemove()
             }
         }
+        // The menu's "Open title" opens this title's page, so its artwork is looked up while the card is on screen.
+        .prewarmsHeroArtwork(preview)
     }
 }
 

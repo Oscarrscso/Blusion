@@ -442,6 +442,67 @@ import StremioKitTestSupport
         try await waitUntil { entry.letterboxd == 4.5 }
         #expect(transport.callCount == 1)
     }
+
+    /// TMDb's answers for the hero tests: the id lookup finds the movie, and the images are one poster. `delay` slows the id lookup.
+    private func tmdbHeroTransport(delay: Duration = .zero, state: RatingsTestState? = nil) -> StubTransport {
+        StubTransport { request, _ in
+            guard request.url?.path.contains("/find/") == true else {
+                return StubTransport.response(Data(#"{"posters":[{"file_path":"/p.jpg"}]}"#.utf8), for: request)
+            }
+            state?.started()
+            defer { state?.finished() }
+            try await Task.sleep(for: delay)
+            return StubTransport.response(Data(#"{"movie_results":[{"id":155}],"tv_results":[]}"#.utf8), for: request)
+        }
+    }
+
+    private func heroStore(_ transport: StubTransport) -> PosterRatingsStore {
+        PosterRatingsStore(isEnabled: false, tmdb: TMDbRatings(client: makeClient(transport, retries: 0), readAccessToken: jwt,
+                                                               titleIDs: TMDbTitleIDCache()))
+    }
+
+    @Test func twoAsksForOneTitleAtOnceShareOneLookup() async throws {
+        let transport = tmdbHeroTransport(delay: .milliseconds(30))
+        let store = heroStore(transport)
+        async let first = store.heroArtwork(for: movie)
+        async let second = store.heroArtwork(for: movie)
+        let answers = await (first, second)
+        #expect(answers.0 != nil && answers.0 == answers.1)
+        #expect(transport.requests.filter { $0.url?.path.contains("/find/") == true }.count == 1, "one lookup, not one per caller")
+    }
+
+    @Test func aPrewarmAsksTMDbOnceForTheArtworkAndNeverForAPicture() async throws {
+        let transport = tmdbHeroTransport()
+        let store = heroStore(transport)
+        await store.prewarmHeroArtwork(for: movie)
+        #expect(store.cachedHeroArtwork(for: movie)?.portrait == URL(string: "https://image.tmdb.org/t/p/original/p.jpg"))
+        #expect(transport.requests.allSatisfy { $0.url?.host == "api.themoviedb.org" }, "JSON only: no picture is downloaded")
+        let asked = transport.callCount
+        await store.prewarmHeroArtwork(for: movie)
+        #expect(transport.callCount == asked, "a title whose artwork is known is not asked for again")
+    }
+
+    @Test func aPrewarmDoesNothingWithoutTMDb() async {
+        let store = PosterRatingsStore()
+        await store.prewarmHeroArtwork(for: movie)
+        #expect(store.cachedHeroArtwork(for: movie) == nil)
+    }
+
+    @Test func prewarmsRunFourAtATimeAndOneWaitingForATurnDropsWhenItsCardScrollsAway() async throws {
+        let state = RatingsTestState(now: when)
+        let transport = tmdbHeroTransport(delay: .milliseconds(60), state: state)
+        let store = heroStore(transport)
+        let items = (0..<5).map { MetaPreview(id: "tt\(1_000_000 + $0)", type: "movie", name: "T") }
+        var tasks: [Task<Void, Never>] = []
+        for item in items { tasks.append(Task { await store.prewarmHeroArtwork(for: item) }) }
+        try await waitUntil { state.maximum == 4 }
+        // The fifth card scrolls away while it waits for one of the four running lookups.
+        tasks[4].cancel()
+        for task in tasks { await task.value }
+        #expect(state.maximum == 4, "four lookups at once, no more")
+        #expect(!transport.requests.contains { $0.url?.path.contains("tt1000004") == true }, "the card that scrolled away never asked")
+        #expect(transport.requests.filter { $0.url?.path.contains("/find/") == true }.count == 4)
+    }
 }
 
 private final class RatingsTestState: @unchecked Sendable {

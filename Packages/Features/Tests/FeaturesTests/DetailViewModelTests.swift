@@ -270,8 +270,9 @@ import StremioKitTestSupport
         let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
         let ratings = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "test-key"),
                                          tmdb: TMDbRatings(client: client, readAccessToken: "test-token"))
+        // The title's artwork is not under test here, so its lookup is skipped (`artworkChecked`).
         let model = DetailViewModel(preview: MetaPreview(id: seriesID, type: "series"),
-                                    services: AppServices(registry: registry, client: client, posterRatings: ratings))
+                                    services: AppServices(registry: registry, client: client, posterRatings: ratings), artworkChecked: true)
         await model.load()
         let episode = try #require(model.episodes.first)
         await model.episodeAppeared(episode)
@@ -306,8 +307,9 @@ import StremioKitTestSupport
         for _ in 0..<requestsToday { usage.record() }
         let ratings = PosterRatingsStore(omdb: omdbKey ? OMDbRatings(client: client, apiKey: "k", usage: usage) : nil,
                                          tmdb: TMDbRatings(client: client, readAccessToken: "t"))
+        // The title's artwork is not under test here, so its lookup is skipped (`artworkChecked`) and TMDb is asked about episodes only.
         let model = DetailViewModel(preview: MetaPreview(id: "tt0944947", type: "series"),
-                                    services: AppServices(registry: registry, client: client, posterRatings: ratings))
+                                    services: AppServices(registry: registry, client: client, posterRatings: ratings), artworkChecked: true)
         await model.load()
         return (model, transport)
     }
@@ -397,8 +399,11 @@ import StremioKitTestSupport
             return StubTransport.response(Data(json.utf8), for: request)
         }
         let client = makeClient(transport)
+        // The store holds the TMDb client, as it does in the app, and the title page reads its artwork through the store.
+        let ratings = PosterRatingsStore(tmdb: TMDbRatings(client: client, readAccessToken: "test-key", titleIDs: TMDbTitleIDCache()))
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
-                                   client: client, settings: InMemorySettingsStore(PlaybackSettings(tmdbReadToken: "test-key")))
+                                   client: client, settings: InMemorySettingsStore(PlaybackSettings(tmdbReadToken: "test-key")),
+                                   posterRatings: ratings)
         let poster = URL(string: "https://example.com/poster.jpg")
         let backdrop = URL(string: "https://example.com/backdrop.jpg")
         let logo = URL(string: "https://example.com/logo.png")
@@ -415,6 +420,29 @@ import StremioKitTestSupport
         #expect(!openedFromHome.isLoadingArtwork)
         #expect(openedFromHome.portraitArtworkURL == model.portraitArtworkURL)
         #expect(openedFromHome.backdropURL == model.backdropURL)
+    }
+
+    @Test func aTitleOpenedAgainThisSessionTakesItsArtworkWithoutAskingTMDbAgain() async throws {
+        let transport = StubTransport { request, _ in
+            let json = request.url?.lastPathComponent == "images"
+                ? #"{"backdrops":[{"file_path":"/backdrop.jpg"}],"posters":[{"file_path":"/poster.jpg"}]}"#
+                : #"{"movie_results":[{"id":155}]}"#
+            return StubTransport.response(Data(json.utf8), for: request)
+        }
+        let client = makeClient(transport)
+        let ratings = PosterRatingsStore(tmdb: TMDbRatings(client: client, readAccessToken: "test-key", titleIDs: TMDbTitleIDCache()))
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, posterRatings: ratings)
+        let preview = MetaPreview(id: "tt0468569", type: "movie", name: "Film")
+        let first = DetailViewModel(preview: preview, services: services)
+        await first.load()
+        let artworkRequests = { transport.requests.filter { $0.url?.lastPathComponent == "images" }.count }
+        #expect(artworkRequests() == 1)
+        let second = DetailViewModel(preview: preview, services: services)
+        #expect(!second.isLoadingArtwork, "known at once, before the page loads")
+        #expect(second.portraitArtworkURL == first.portraitArtworkURL)
+        await second.load()
+        #expect(artworkRequests() == 1, "the session keeps the answer")
     }
 
     @Test func heroLoadingWaitsForArtworkAndFallsBackWithoutUsingTheCatalogPoster() async {

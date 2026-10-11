@@ -52,36 +52,43 @@ extension View {
     }
 }
 
-/// The one horizontal card shelf: a lazy row of cards that snaps to the page margin, bleeds past the screen's edge, and ticks as cards
-/// cross the leading edge. Every card shelf is built with this, so they all scroll and tick alike. Each card must call
-/// `reportsShelfEdge(id:)` and have a stable `id`. A lazy stack sizes itself from the cards it has built, and a card that changes height
-/// (an opened review) or is taller than the first would spill over the section below. So every card reports its height and the shelf is
-/// given the tallest of them. By default that height only grows (a lazy stack builds only the cards near the screen, so the tallest one
-/// may not exist yet); with `shrinks` it follows the tallest card on screen down as well. When `resetKey` changes (a different season,
-/// a different card width) the height starts again from the cards then built.
+/// The one horizontal card shelf: a row of cards that snaps to the page margin, bleeds past the screen's edge, and ticks as cards cross the
+/// leading edge. Every card shelf is built with this, so they all scroll and tick alike. Each card must call `reportsShelfEdge(id:)` and have
+/// a stable `id`.
+///
+/// By default the row is lazy, which builds only the cards near the screen. A lazy stack cannot size itself from the cards it has not built,
+/// and a card that changes height (an opened review) or is taller than the first would spill over the section below. So every card reports
+/// its height and the shelf takes the tallest of those built so far. That height only grows, since the tallest card may not be built yet. When
+/// `resetKey` changes (a different season, a different card width) the height starts again from the cards then built.
+///
+/// `lazy: false` is for a short shelf whose cards all exist already. A plain row is exactly as tall as its tallest card, so the shelf changes
+/// height with that card's own animation, and no height is measured.
 struct ShelfScroll<Content: View>: View {
     let margin: CGFloat
     let spacing: CGFloat
-    let shrinks: Bool
+    let lazy: Bool
     let resetKey: String
     let content: Content
     @State private var height: CGFloat?
     @State private var measuredKey: String?
 
-    init(margin: CGFloat, spacing: CGFloat, shrinks: Bool = false, resetKey: String = "", @ViewBuilder content: () -> Content) {
+    init(margin: CGFloat, spacing: CGFloat, lazy: Bool = true, resetKey: String = "", @ViewBuilder content: () -> Content) {
         self.margin = margin
         self.spacing = spacing
-        self.shrinks = shrinks
+        self.lazy = lazy
         self.resetKey = resetKey
         self.content = content()
     }
 
     var body: some View {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: spacing) {
-                content
+            if lazy {
+                LazyHStack(alignment: .top, spacing: spacing) { content }
+                    .scrollTargetLayout()
+            } else {
+                HStack(alignment: .top, spacing: spacing) { content }
+                    .scrollTargetLayout()
             }
-            .scrollTargetLayout()
         }
         .shelfIndicators()
         .contentMargins(.horizontal, margin, for: .scrollContent)
@@ -89,10 +96,12 @@ struct ShelfScroll<Content: View>: View {
         .scrollClipDisabled()
         .frame(height: height)
         .onPreferenceChange(ShelfEdgeKey.self) { edges in
+            // A plain row sizes itself, so there is nothing to measure.
+            guard lazy else { return }
             let tallest = edges.map(\.height).max() ?? 0
             guard tallest > 0 else { return }
             let previous = measuredKey == resetKey ? height : nil
-            let next = shrinks ? tallest : max(previous ?? 0, tallest)
+            let next = max(previous ?? 0, tallest)
             if measuredKey != resetKey { measuredKey = resetKey }
             if abs(next - (height ?? -1)) > 0.5 { height = next }
         }

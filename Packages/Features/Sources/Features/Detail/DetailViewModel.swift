@@ -46,8 +46,10 @@ public final class DetailViewModel {
         self.preview = preview
         self.detail = .fallback(from: preview)
         self.services = services
-        self.tmdbArtwork = artwork
-        self.isLoadingArtwork = artwork == nil && !artworkChecked
+        // An artwork handed over by Home, or one looked up earlier this session, is used at once: the page then has nothing to wait for.
+        let known = artwork ?? services.posterRatings.cachedHeroArtwork(for: preview)
+        self.tmdbArtwork = known
+        self.isLoadingArtwork = known == nil && !artworkChecked
     }
 
     public func load(afterHero hero: (@MainActor @Sendable () async -> Void)? = nil) async {
@@ -98,9 +100,8 @@ public final class DetailViewModel {
         // An artwork handed over by Home, or a lookup that has answered, is never fetched again.
         guard tmdbArtwork == nil, isLoadingArtwork else { return }
         defer { isLoadingArtwork = false }
-        let settings = await services.settings.load()
-        guard let token = settings.tmdbReadToken, !token.isEmpty else { return }
-        let artwork = try? await TMDbRatings(client: services.client, readAccessToken: token).artwork(imdbID: preview.id, type: preview.type)
+        // The store holds the TMDb client and keeps each answer for the session, so a title opened again asks TMDb nothing.
+        let artwork = await services.posterRatings.heroArtwork(for: preview)
         guard !Task.isCancelled else { return }
         tmdbArtwork = artwork
     }

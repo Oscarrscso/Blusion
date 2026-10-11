@@ -19,10 +19,8 @@ struct DetailView: View {
     @State private var isDescriptionTruncated = false
     @State private var isConfirmingUnmarkShow = false
     @State private var reviewSort = ReviewSort.highestRated
+    /// The review whose card is open: full width, with its whole text. Opening and closing animate the text and the width together.
     @State private var expandedReviewID: String?
-    /// The review whose card is at full width. It follows `expandedReviewID`, except while a card closes: the text folds first, then
-    /// the card narrows.
-    @State private var wideReviewID: String?
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = TitleHero.logoMaxHeight
@@ -30,11 +28,15 @@ struct DetailView: View {
     @State private var hero = HeroLoader()
     /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
     @State private var sideInset: CGFloat = 0
-    /// The window's top safe-area inset (the status bar or notch). The page runs under it, so its own geometry reports zero.
+    /// The least space kept clear above the logo: the larger of the window's top inset (the status bar or notch) and the page's own. The page
+    /// runs under the status bar, so its own geometry may report less than the window does, and the window's may miss what the page sits under.
     @State private var topInset: CGFloat = 0
-    /// The bottom safe-area inset the layout reports (home indicator, tab bar, bottom accessory), and the bottom inset the page's scroll
-    /// view actually applies to its content, less the extra margin added below.
-    @State private var safeBottom: CGFloat = 0
+    /// The largest bottom safe-area inset reported while the page has been this width (home indicator, tab bar, bottom accessory). The tab
+    /// bar shrinks when it minimises during a scroll, so the end of the page clears the larger size, not the current one.
+    @State private var bottomPeak: CGFloat = 0
+    /// The width the page was last laid out at. A change (a rotation, a resized window) starts `bottomPeak` again.
+    @State private var layoutWidth: CGFloat = 0
+    /// The bottom inset the page's scroll view actually applies to its content, including the extra margin added below.
     @State private var scrollBottom: CGFloat = 0
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
@@ -75,17 +77,15 @@ struct DetailView: View {
 
     /// What the scroll view lacks of the bottom safe area. The page is a scroll view inside a geometry reader, so it may not apply the
     /// tab bar and accessory inset to its content itself. The inset it applies, less the extra margin added here, is what the system
-    /// gives; only the rest of the reported safe area is added, so it is never counted twice.
+    /// gives; only the rest of the peak safe area is added, so it is never counted twice.
     @State private var bottomExtra: CGFloat = 0
 
     private func refreshBottomExtra() {
-        let next = max(0, safeBottom - max(0, scrollBottom - bottomExtra))
+        let fromSystem = max(0, scrollBottom - bottomExtra)
+        let next = max(0, bottomPeak - fromSystem)
         if abs(next - bottomExtra) > 0.5 { bottomExtra = next }
     }
 
-    /// The gap between the bottom of the logo and the controls under it, in both orientations. The artwork above the logo is reserved
-    /// so the controls start at the picture's bottom edge, however small the gap.
-    private static let logoControlsGap = Theme.Spacing.s
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
     /// Half of the gap between the ratings row and the section after it: the faint line sits in the middle, this far from each side.
     /// The whole gap is `sectionSpacing` plus `Theme.Spacing.s`.
@@ -131,12 +131,17 @@ struct DetailView: View {
             }
         }
         .onGeometryChange(for: [CGFloat].self) {
-            [$0.size.width, $0.safeAreaInsets.leading, $0.safeAreaInsets.trailing, $0.size.height, $0.safeAreaInsets.bottom]
+            [$0.size.width, $0.safeAreaInsets.leading, $0.safeAreaInsets.trailing, $0.size.height, $0.safeAreaInsets.bottom,
+             $0.safeAreaInsets.top]
         } action: { values in
             // Kept in state so a rotation lays the page out again with the new insets.
             sideInset = max(values[1], values[2], windowSideInset)
-            topInset = windowTopInset
-            safeBottom = values[4]
+            topInset = max(windowTopInset, values[5])
+            if abs(values[0] - layoutWidth) > 0.5 {
+                layoutWidth = values[0]
+                bottomPeak = 0
+            }
+            bottomPeak = max(bottomPeak, values[4])
             refreshBottomExtra()
         }
         .screenBackground()
@@ -173,9 +178,9 @@ struct DetailView: View {
     /// The picture and the logo are revealed together, once neither is still pending.
     private var isHeroRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
+    /// The title page's own picture and logo are urgent: they skip the queue behind Home's posters, since the user is waiting on them.
     private func loadHero() async {
-        await hero.load(picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
-                        lookupFinished: !model.isLoadingArtwork)
+        await hero.load(urgent: true, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
     }
 
     @ViewBuilder
@@ -191,7 +196,7 @@ struct DetailView: View {
                         PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
-                VStack(alignment: .leading, spacing: Self.logoControlsGap) {
+                VStack(alignment: .leading, spacing: TitleHero.logoTextGap) {
                     titleArt(alignment: .leading)
                     controls
                 }
@@ -213,13 +218,13 @@ struct DetailView: View {
                 // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
                 Color.clear
                     // Never less than the top safe area, so a tall logo or title pushes the page down rather than up into the status bar.
-                    .frame(height: max(topInset, height - renderedLogoHeight - Self.logoControlsGap))
+                    .frame(height: max(topInset, height - renderedLogoHeight - TitleHero.logoTextGap))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
                     // The block below the logo sits close to it. The stack's own spacing is part of that gap.
                     controls
-                        .padding(.top, Self.logoControlsGap - Theme.Spacing.m)
+                        .padding(.top, TitleHero.logoTextGap - Theme.Spacing.m)
                     // The same gap as between the ratings and the line under them. The stack's own spacing is part of it.
                     synopsis
                         .padding(.top, halfRatingsGap - Theme.Spacing.m)
@@ -242,7 +247,7 @@ struct DetailView: View {
     }
 
     private func titleArt(alignment: Alignment) -> some View {
-        TitleArt(name: model.detail.name, slot: logoSlot, alignment: alignment, compact: isLandscape)
+        HeroTitleArt(name: model.detail.name, slot: logoSlot, alignment: alignment, compact: isLandscape)
             .frame(maxWidth: .infinity, alignment: alignment)
             // Hidden rather than removed, so the layout does not move when the title appears.
             .opacity(isHeroRevealed ? 1 : 0)
@@ -430,21 +435,11 @@ struct DetailView: View {
         }
     }
 
-    /// Opening a review widens its card and unfolds its text together. Closing one folds the text first and narrows the card after,
-    /// so the two never move at once.
+    /// Opening a review widens its card and unfolds its text together. Closing one folds the text and narrows the card in the same motion,
+    /// as it opened: one animation for the state, the card's width and the text.
     private func toggleReview(_ id: String) {
-        guard expandedReviewID == id else {
-            withAnimation(.snappy(duration: 0.35)) {
-                expandedReviewID = id
-                wideReviewID = id
-            }
-            return
-        }
-        withAnimation(.snappy(duration: 0.25)) {
-            expandedReviewID = nil
-        } completion: {
-            guard expandedReviewID == nil else { return }
-            withAnimation(.snappy(duration: 0.3)) { wideReviewID = nil }
+        withAnimation(.snappy(duration: 0.35)) {
+            expandedReviewID = expandedReviewID == id ? nil : id
         }
     }
 
@@ -603,7 +598,9 @@ struct DetailView: View {
                     }
                     .padding(.horizontal, contentMargin)
                     ScrollViewReader { proxy in
-                        ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing, shrinks: true) {
+                        // A plain row, not a lazy one: a few dozen reviews are all built, so the shelf is exactly as tall as its tallest card
+                        // and grows and shrinks with an opened card's own animation.
+                        ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing, lazy: false) {
                                 ForEach(sortedReviews) { review in
                                     let foldedWidth: CGFloat = metrics.isRegular ? 340 : 280
                                     let expandedWidth = max(0, width - contentMargin * 2)
@@ -611,7 +608,7 @@ struct DetailView: View {
                                                foldedWidth: foldedWidth, expandedWidth: expandedWidth) {
                                         toggleReview(review.id)
                                     }
-                                    .frame(width: wideReviewID == review.id ? expandedWidth : foldedWidth)
+                                    .frame(width: expandedReviewID == review.id ? expandedWidth : foldedWidth)
                                     .id(review.id)
                                     .reportsShelfEdge(id: review.id)
                                     .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
@@ -736,6 +733,8 @@ private struct ReviewCard: View {
                         }
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
+                        // The stars keep their width; the name takes what is left, and wraps or cuts before the stars are squeezed.
+                        .fixedSize()
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
@@ -767,72 +766,6 @@ private struct ReviewCard: View {
     }
 
     private static let padding: CGFloat = 16
-}
-
-/// The logo, or the name when there is no logo or it failed to load. The logo comes from the shared hero loader and is revealed with the
-/// picture. While it is pending the name is not drawn, and its full height is kept, so the text below does not move when it arrives.
-private struct TitleArt: View {
-    let name: String
-    let slot: HeroSlot
-    let alignment: Alignment
-    let compact: Bool
-
-    /// The tallest a logo can be on this page.
-    private var logoHeight: CGFloat { compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight }
-    /// Whether the slot has no logo: no URL once the lookup has finished, or a failed load.
-    private var isNone: Bool {
-        if case .none = slot { return true }
-        return false
-    }
-    /// A title keeps the logo's space until the logo is ready or known to be absent.
-    private var reservesLogoHeight: Bool { !isNone }
-
-    var body: some View {
-        Group {
-            if case .ready(let image) = slot {
-                LogoLayout(imageSize: image.size, maxWidth: compact ? TitleHero.landscapeLogoMaxWidth : .infinity, maxHeight: logoHeight) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                }
-                // Revealed by the page's opacity alone, on the same curve as the picture.
-                .transition(.identity)
-            } else {
-                Text(name)
-                    .font(compact ? .title2.bold() : .largeTitle.bold())
-                    .multilineTextAlignment(alignment == .center ? .center : .leading)
-                    .foregroundStyle(.white)
-                    .lineLimit(compact ? 2 : 3)
-                    .minimumScaleFactor(0.7)
-                    .fixedSize(horizontal: false, vertical: true)
-                    // A logo ends at its last visible pixel; the name's frame ends a descender lower, so that space is taken back and the
-                    // text under either sits the same distance from what can be seen.
-                    .padding(.bottom, -abs(UIFont.preferredFont(forTextStyle: compact ? .title2 : .largeTitle).descender))
-                    .opacity(isNone ? 1 : 0)
-                    .transition(.identity)
-            }
-        }
-        // Bottom-aligned, so a logo shorter than the reserved space sits where it did before, just above the controls.
-        .frame(minHeight: reservesLogoHeight ? logoHeight : nil, alignment: Alignment(horizontal: alignment.horizontal, vertical: .bottom))
-    }
-}
-
-/// Reports the fitted image bounds instead of a taller frame containing empty space.
-private struct LogoLayout: Layout {
-    let imageSize: CGSize
-    let maxWidth: CGFloat
-    let maxHeight: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
-        let width = min(proposal.width ?? imageSize.width, maxWidth)
-        let scale = min(width / imageSize.width, maxHeight / imageSize.height)
-        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
-    }
 }
 
 /// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the

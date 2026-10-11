@@ -15,10 +15,14 @@ actor ImagePipeline {
     private struct Pending {
         let task: Task<UIImage, Error>
         var consumers: Set<UUID>
+        /// The download's place in the slot queue. An urgent caller that joins it moves it past the limit.
+        let slot: UUID
     }
     private var inFlight: [String: Pending] = [:]
     private var activeDownloads = 0
     private var waiting: [(id: UUID, priority: TaskPriority, continuation: CheckedContinuation<Void, Error>)] = []
+    /// Downloads that take a slot without waiting. An urgent caller asked for them, either before they reached the queue or while they waited.
+    private var urgentSlots: Set<UUID> = []
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -47,7 +51,10 @@ actor ImagePipeline {
 
     /// The image at `url`, decoded no larger than `maxPixelSize` on its long edge. Memory-cached; concurrent requests for
     /// the same URL and size share one download. Only http and https URLs are loaded.
-    func image(for url: URL, maxPixelSize: CGFloat, priority: TaskPriority = .medium) async throws -> UIImage {
+    ///
+    /// An `urgent` request does not wait for one of the download slots: it starts at once, past the limit, so a page the user has just
+    /// opened is not held up by posters. A download already waiting for a slot is moved ahead when an urgent caller joins it.
+    func image(for url: URL, maxPixelSize: CGFloat, priority: TaskPriority = .medium, urgent: Bool = false) async throws -> UIImage {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
             throw ImagePipelineError.unsupportedURL
         }
@@ -61,14 +68,17 @@ actor ImagePipeline {
             pending.consumers.insert(consumer)
             inFlight[key] = pending
             task = pending.task
+            if urgent { skipSlotLimit(for: pending.slot) }
         } else {
+            let slot = UUID()
+            if urgent { urgentSlots.insert(slot) }
             task = Task(priority: priority) {
-                try await acquireDownloadSlot(priority: priority)
+                try await acquireDownloadSlot(id: slot, priority: priority)
                 defer { releaseDownloadSlot() }
                 try Task.checkCancellation()
                 return try await Self.fetch(url, maxPixelSize: size, session: session)
             }
-            inFlight[key] = Pending(task: task, consumers: [consumer])
+            inFlight[key] = Pending(task: task, consumers: [consumer], slot: slot)
         }
         return try await withTaskCancellationHandler {
             defer { releaseConsumer(consumer, for: key) }
@@ -86,14 +96,14 @@ actor ImagePipeline {
         if pending.consumers.isEmpty {
             pending.task.cancel()
             inFlight[key] = nil
+            urgentSlots.remove(pending.slot)
         } else { inFlight[key] = pending }
     }
 
-    private func acquireDownloadSlot(priority: TaskPriority) async throws {
+    private func acquireDownloadSlot(id: UUID, priority: TaskPriority) async throws {
         try Task.checkCancellation()
         // Keep one of the six slots available for title logos, even when posters fill the queue.
-        if activeDownloads < (priority >= .high ? 6 : 5) { activeDownloads += 1; return }
-        let id = UUID()
+        if urgentSlots.remove(id) != nil || activeDownloads < (priority >= .high ? 6 : 5) { activeDownloads += 1; return }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let index = waiting.firstIndex { $0.priority < priority } ?? waiting.endIndex
@@ -101,6 +111,17 @@ actor ImagePipeline {
             }
         } onCancel: {
             Task { await self.cancelWaitingDownload(id) }
+        }
+    }
+
+    /// An urgent caller joined the download in `slot`. A download waiting for a slot takes one now, past the limit; one not yet in the
+    /// queue is marked so it takes one as soon as it asks.
+    private func skipSlotLimit(for slot: UUID) {
+        if let index = waiting.firstIndex(where: { $0.id == slot }) {
+            activeDownloads += 1
+            waiting.remove(at: index).continuation.resume()
+        } else {
+            urgentSlots.insert(slot)
         }
     }
 

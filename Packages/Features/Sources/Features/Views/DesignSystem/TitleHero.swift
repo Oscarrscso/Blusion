@@ -9,15 +9,19 @@ enum TitleHero {
     static let fadeStrength = 1.0
     /// How far the bottom fade runs past the picture's bottom edge, so no row of picture pixels shows under it while the page moves.
     static let fadeOverscan: CGFloat = 2
-    /// The tallest logo, bottom-aligned above the bottom gap.
+    /// The tallest logo, bottom-aligned above the gap to the text.
     static let logoMaxHeight: CGFloat = 150
-    /// The gap between the bottom of the logo and the bottom of the picture.
-    static let logoBottomGap = Theme.Spacing.xl
+    /// The gap between the bottom of the logo and the text under it (the metadata line), on the title page and on Home's spotlight alike.
+    /// The text starts at the picture's bottom edge, so the logo stops this far above that edge.
+    static let logoTextGap = Theme.Spacing.s
     /// The longest edge the picture is decoded to. Smaller than full screen, so the neighbouring pages keep it in the image cache.
     static let portraitPixelSize: CGFloat = 2048
+    /// The longest edge the stand-in poster is decoded to. `ArtworkImage` decodes its own stand-in at this size too, and Home preloads the
+    /// poster at it, so the stand-in is ready at once.
+    static let placeholderPixelSize: CGFloat = 600
     static let imageAlignment = Alignment.top
-    /// The poster stands in unblurred, so it matches the picture that replaces it.
-    static let placeholderBlur: CGFloat = 0
+    /// The blur on the stand-in poster while the picture loads, kept opaque at the edges (see `HeroPicture`).
+    static let placeholderBlur: CGFloat = 2
     /// The band under the picture on Home that holds the metadata line. The title page has no band; its picture is the same height.
     static let captionBelow: CGFloat = 72
 
@@ -108,9 +112,13 @@ final class HeroLoader {
         storeLogo(image, for: url)
     }
 
-    /// Remembers an image that has been resolved: logos in the shared store, pictures in this loader.
+    /// Remembers an image that has been resolved: logos in the shared store, pictures in this loader. A logo that is stored already is kept.
     private func remember(_ image: UIImage, url: URL, size: CGFloat) {
-        if size == Self.logoPixelSize { Self.storeLogo(image, for: url) } else { held[Self.key(url, size)] = image }
+        if size == Self.logoPixelSize {
+            if Self.storedLogo(url) == nil { Self.storeLogo(image, for: url) }
+        } else {
+            held[Self.key(url, size)] = image
+        }
     }
 
     /// Drops the pictures this loader holds except those in `kept`, so a page that has left the load window stops pinning memory.
@@ -137,10 +145,10 @@ final class HeroLoader {
     /// The one reveal condition: neither is still pending. A missing or failed one does not hold the other back.
     static func isRevealed(_ picture: HeroSlot, _ logo: HeroSlot) -> Bool { !picture.isPending && !logo.isPending }
 
-    /// Starts the picture and the logo together at `priority` (high by default) and returns when both have finished. Does nothing until both URLs are
-    /// known, or known to be absent (`lookupFinished`), so neither starts alone. The reveal is one state change in one transaction.
-    func load(priority: TaskPriority = .high, picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat, lookupFinished: Bool) async {
-        guard (picture != nil || lookupFinished), (logo != nil || lookupFinished) else { return }
+    /// Starts the picture and the logo as soon as each one's URL is known, and returns when both have finished. Neither waits for the other, so a
+    /// logo the addon supplies starts while the picture's lookup is still running. The reveal still needs both (`isRevealed`), so a logo that
+    /// arrives first is not shown early. `urgent` lets the picture and logo skip the pipeline's queue (see `ImagePipeline.image`).
+    func load(priority: TaskPriority = .high, urgent: Bool = false, picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat) async {
         let wanted = [(picture, pictureSize), (logo, logoSize)].compactMap { url, size in
             url.map { ($0, size) }
         }
@@ -154,9 +162,10 @@ final class HeroLoader {
         guard !pending.isEmpty else { return }
         let results = await withTaskGroup(of: (URL, CGFloat, UIImage?, Bool).self, returning: [(URL, CGFloat, UIImage?, Bool)].self) { group in
             for (url, size) in pending {
+                let isLogo = size == Self.logoPixelSize
                 group.addTask {
                     do {
-                        let image = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority)
+                        let image = try await Self.download(url, size: size, isLogo: isLogo, priority: priority, urgent: urgent)
                         return (url, size, image, false)
                     } catch { return (url, size, nil, !Task.isCancelled) }
                 }
@@ -165,7 +174,7 @@ final class HeroLoader {
             for await result in group { all.append(result) }
             return all
         }
-        guard !Task.isCancelled else { return }
+        // Kept even when this load was cancelled: a logo that finished is stored, and the revision moves so the page shows it.
         var failures: [String] = []
         for (url, size, image, didFail) in results {
             if let image { remember(image, url: url, size: size) } else if didFail { failures.append(Self.key(url, size)) }
@@ -175,15 +184,29 @@ final class HeroLoader {
             revision += 1
         }
     }
+
+    /// Downloads one picture or logo. A picture belongs to the load that asked for it, so cancelling the load stops it. A logo runs in a task of
+    /// its own: a load that is cancelled (a page's task restarts when its picture's URL arrives) leaves it going, and the next load for the logo
+    /// joins the same download in the pipeline rather than starting another.
+    nonisolated private static func download(_ url: URL, size: CGFloat, isLogo: Bool, priority: TaskPriority, urgent: Bool) async throws -> UIImage {
+        guard isLogo else {
+            return try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority, urgent: urgent)
+        }
+        return try await Task(priority: priority) {
+            try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority, urgent: urgent)
+        }.value
+    }
 }
 
-/// The hero picture alone: no placeholder, no spinner, no fade of its own. Shown only while `isRevealed`, with the logo.
+/// The hero picture, drawn over the poster it stands in with until the picture is revealed. The stand-in is a larger copy of the poster (see
+/// `PosterQuality.placeholder`), slightly blurred and with a spinner over it, and the poster as it came shows first underneath. The picture
+/// itself is shown only while `isRevealed`, with the logo.
 struct HeroPicture: View {
     let slot: HeroSlot
     let isRevealed: Bool
     let contentMode: ContentMode
     var alignment: Alignment = TitleHero.imageAlignment
-    /// Shown until the picture is revealed (the title page's poster). Nil on Home, where the carousel must not show one.
+    /// The addon's poster as it came, which stands in until the picture is revealed. Nil draws no stand-in.
     var placeholderURL: URL?
 
     private var hasPicture: Bool {
@@ -196,7 +219,16 @@ struct HeroPicture: View {
             if !isRevealed, let placeholderURL {
                 // Stays fully opaque while the picture fades in over it (the reveal lasts 0.25 s), then goes unseen. With no picture to
                 // reveal it goes as it did, with a fade.
-                ArtworkImage(url: placeholderURL, maxPixelSize: 600, contentMode: contentMode, placeholderBlur: 0, imageAlignment: alignment)
+                ArtworkImage(url: PosterQuality.placeholder(placeholderURL), maxPixelSize: TitleHero.placeholderPixelSize,
+                             contentMode: contentMode, placeholderURL: placeholderURL, placeholderBlur: 0, imageAlignment: alignment)
+                    // One blur over whichever poster is showing, the small one or the larger one that replaces it.
+                    .blur(radius: TitleHero.placeholderBlur, opaque: true)
+                    .overlay {
+                        ProgressView()
+                            .controlSize(.large)
+                            .tint(.white)
+                            .accessibilityHidden(true)
+                    }
                     .transition(hasPicture ? .asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.01).delay(0.3)))
                                            : .opacity)
             }
@@ -213,6 +245,91 @@ struct HeroPicture: View {
         }
         .clipped()
         .accessibilityHidden(true)
+    }
+}
+
+/// The title on a portrait hero: the logo, or the name when there is no logo or it failed to load. The title page and Home's spotlight both
+/// show it this way, so the logo sits the same distance above the text under it on both. The logo comes from the shared hero loader and is
+/// revealed with the picture. While it is pending the name is not drawn, and its full height is kept, so the text below does not move when it
+/// arrives.
+struct HeroTitleArt: View {
+    let name: String
+    let slot: HeroSlot
+    let alignment: Alignment
+    let compact: Bool
+
+    /// The tallest a logo can be on this page.
+    private var logoHeight: CGFloat { compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight }
+    /// Whether the slot has no logo: no URL once the lookup has finished, or a failed load.
+    private var isNone: Bool {
+        if case .none = slot { return true }
+        return false
+    }
+    /// A title keeps the logo's space until the logo is ready or known to be absent.
+    private var reservesLogoHeight: Bool { !isNone }
+
+    var body: some View {
+        Group {
+            if case .ready(let image) = slot {
+                LogoLayout(imageSize: image.size, maxWidth: compact ? TitleHero.landscapeLogoMaxWidth : .infinity, maxHeight: logoHeight) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                }
+                // Revealed by the page's opacity alone, on the same curve as the picture.
+                .transition(.identity)
+            } else {
+                Text(name)
+                    .font(compact ? .title2.bold() : .largeTitle.bold())
+                    .multilineTextAlignment(alignment == .center ? .center : .leading)
+                    .foregroundStyle(.white)
+                    .lineLimit(compact ? 2 : 3)
+                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: false, vertical: true)
+                    // A logo ends at its last visible pixel; the name's frame ends a descender lower, so that space is taken back and the
+                    // text under either sits the same distance from what can be seen.
+                    .padding(.bottom, -abs(UIFont.preferredFont(forTextStyle: compact ? .title2 : .largeTitle).descender))
+                    .opacity(isNone ? 1 : 0)
+                    .transition(.identity)
+            }
+        }
+        // Bottom-aligned, so a logo shorter than the reserved space sits where it did before, just above the text under it.
+        .frame(minHeight: reservesLogoHeight ? logoHeight : nil, alignment: Alignment(horizontal: alignment.horizontal, vertical: .bottom))
+    }
+}
+
+/// Reports the fitted image bounds instead of a taller frame containing empty space.
+struct LogoLayout: Layout {
+    let imageSize: CGSize
+    let maxWidth: CGFloat
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let width = min(proposal.width ?? imageSize.width, maxWidth)
+        let scale = min(width / imageSize.width, maxHeight / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
+/// A title's logo for Home's landscape caption, fitted into a box of fixed size so the text under it never moves when it arrives.
+struct HeroLogo: View {
+    static let box = CGSize(width: 260, height: 84)
+
+    let image: UIImage
+
+    var body: some View {
+        Color.clear
+            .frame(width: Self.box.width, height: Self.box.height)
+            .overlay(alignment: .bottom) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+            }
     }
 }
 #endif

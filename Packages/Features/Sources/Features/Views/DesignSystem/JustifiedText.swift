@@ -5,7 +5,8 @@ import UIKit
 
 /// Text set justified, which SwiftUI's `Text` cannot do. It is laid out and drawn by `JustifiedLabel` in the body font of `textStyle`
 /// (it follows Dynamic Type). Lines break where `JustifiedLineBreaker` puts them so the word gaps come out alike, and every line but the
-/// last of a paragraph is justified by widening only the gaps between words. A word is never split or cut.
+/// last of a paragraph is justified by widening only the gaps between words. A word wider than a line is wrapped onto as many lines as it
+/// needs (see `JustifiedLabel.makeLayout`); only a single character wider than the line is cut.
 ///
 /// `lineLimit` shows that many lines of the same layout, the last one ending in an ellipsis after a whole word; zero shows every line.
 /// With `isTruncated` it says whether the cut text leaves some out. Pass `lineLimit` zero (expanded) and it leaves the answer as it was.
@@ -20,8 +21,9 @@ struct JustifiedText: UIViewRepresentable {
     /// With a line limit, the cut text always takes that many lines, so cards holding texts of different lengths share a height.
     var reservesSpace = false
     var isTruncated: Binding<Bool>?
-    /// The fewest and most characters a line should hold; see `JustifiedLineBreaker`.
+    /// The fewest characters a line should hold; see `JustifiedLineBreaker`.
     var minimumLineCharacters = JustifiedLineBreaker.defaultMinimumCharacters
+    /// The most characters a line may hold. None by default, so lines fill the width they are given; a narrower measure limits the frame.
     var maximumLineCharacters = JustifiedLineBreaker.defaultMaximumCharacters
 
     func makeUIView(context: Context) -> JustifiedLabel {
@@ -75,7 +77,9 @@ final class JustifiedLabel: UIView {
     }
 
     /// A word, ready to draw. Its attributes may change inside it (a bold part), and it keeps those of its last character for an ellipsis.
+    /// It keeps its text as well, so a word wider than a line can be wrapped into pieces when the layout is made.
     private struct Word {
+        let text: NSAttributedString
         let line: CTLine
         let width: CGFloat
         let characters: Int
@@ -90,17 +94,19 @@ final class JustifiedLabel: UIView {
         let plain: String
     }
 
-    /// One line of a layout: the words it takes from its paragraph, and whether it is that paragraph's last line (which is not justified).
+    /// One line of a layout: the words it takes from the layout's words, and whether it is its paragraph's last line (which is not justified).
     private struct Line {
-        let paragraph: Int
         let words: Range<Int>
         let isParagraphEnd: Bool
     }
 
+    /// A text laid out at one width: its words, with the pieces of any wrapped word in place of it, and the lines that take them in order.
     private final class Layout {
+        let words: [Word]
         let lines: [Line]
         let widestLine: CGFloat
-        init(lines: [Line], widestLine: CGFloat) {
+        init(words: [Word], lines: [Line], widestLine: CGFloat) {
+            self.words = words
             self.lines = lines
             self.widestLine = widestLine
         }
@@ -193,12 +199,8 @@ final class JustifiedLabel: UIView {
         func endWord(at end: Int) {
             guard let start = wordStart else { return }
             wordStart = nil
-            let range = NSRange(location: start, length: end - start)
-            let piece = text.attributedSubstring(from: range)
-            let line = CTLineCreateWithAttributedString(piece)
-            words.append(Word(line: line, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)),
-                              characters: piece.string.count,
-                              endAttributes: piece.attributes(at: piece.length - 1, effectiveRange: nil)))
+            let piece = text.attributedSubstring(from: NSRange(location: start, length: end - start))
+            words.append(makeWord(piece, line: CTLineCreateWithAttributedString(piece)))
         }
         for index in 0..<string.length {
             switch string.character(at: index) {
@@ -217,6 +219,12 @@ final class JustifiedLabel: UIView {
         while paragraphs.count > 1, paragraphs.last?.isEmpty == true { paragraphs.removeLast() }
         if paragraphs.count == 1, paragraphs[0].isEmpty { paragraphs = [] }
         return Content(paragraphs: paragraphs, font: font, spaceWidth: spaceWidth, plain: text.string)
+    }
+
+    /// The word made of `piece`, drawn as `line`.
+    private func makeWord(_ piece: NSAttributedString, line: CTLine) -> Word {
+        Word(text: piece, line: line, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)), characters: piece.string.count,
+             endAttributes: piece.attributes(at: piece.length - 1, effectiveRange: nil))
     }
 
     private func attributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
@@ -266,23 +274,58 @@ final class JustifiedLabel: UIView {
     }
 
     private func makeLayout(width: CGFloat, key: LayoutKey) -> Layout {
-        guard let content else { return Layout(lines: [], widestLine: 0) }
+        guard let content else { return Layout(words: [], lines: [], widestLine: 0) }
+        var words: [Word] = []
         var lines: [Line] = []
         var widest: CGFloat = 0
-        for (index, words) in content.paragraphs.enumerated() {
-            if words.isEmpty {
-                lines.append(Line(paragraph: index, words: 0..<0, isParagraphEnd: true))
+        for paragraph in content.paragraphs {
+            let first = words.count
+            if paragraph.isEmpty {
+                lines.append(Line(words: first..<first, isParagraphEnd: true))
                 continue
             }
-            let ranges = JustifiedLineBreaker.breaks(wordWidths: words.map(\.width), wordCharacters: words.map(\.characters),
+            var pieces: [Word] = []
+            var joinedToPrevious: [Bool] = []
+            for word in paragraph {
+                let parts = wrapped(word, width: width)
+                pieces += parts
+                joinedToPrevious += parts.indices.map { $0 > 0 }
+            }
+            let ranges = JustifiedLineBreaker.breaks(wordWidths: pieces.map(\.width), wordCharacters: pieces.map(\.characters),
                                                      spaceWidth: content.spaceWidth, lineWidth: width,
-                                                     minimumCharacters: key.minimum, maximumCharacters: key.maximum)
+                                                     minimumCharacters: key.minimum, maximumCharacters: key.maximum,
+                                                     joinedToPrevious: joinedToPrevious)
+            words += pieces
             for (offset, range) in ranges.enumerated() {
-                lines.append(Line(paragraph: index, words: range, isParagraphEnd: offset == ranges.count - 1))
-                widest = max(widest, naturalWidth(words[range], content.spaceWidth))
+                lines.append(Line(words: (first + range.lowerBound)..<(first + range.upperBound), isParagraphEnd: offset == ranges.count - 1))
+                widest = max(widest, naturalWidth(pieces[range], content.spaceWidth))
             }
         }
-        return Layout(lines: lines, widestLine: min(widest, width))
+        return Layout(words: words, lines: lines, widestLine: min(widest, width))
+    }
+
+    /// The word itself when it fits a line of `width`; otherwise its pieces, each as long as fits, so a long URL takes as many lines as it
+    /// needs. A piece ends after a wrap character near its end when there is one (see `JustifiedLineBreaker.wrapLength`), and the breaker
+    /// keeps each piece off the line of the piece before it.
+    private func wrapped(_ word: Word, width: CGFloat) -> [Word] {
+        guard word.width > width else { return [word] }
+        let text = word.text
+        let string = text.string as NSString
+        let units = Array(text.string.utf16)
+        let typesetter = CTTypesetterCreateWithAttributedString(text)
+        var pieces: [Word] = []
+        var start = 0
+        while start < units.count {
+            var fitting = CTTypesetterSuggestClusterBreak(typesetter, start, Double(width))
+            if fitting < 1 { fitting = string.rangeOfComposedCharacterSequence(at: start).length }
+            let length = JustifiedLineBreaker.wrapLength(units: units, start: start, fitting: fitting) {
+                string.rangeOfComposedCharacterSequence(at: $0).location == $0
+            }
+            let piece = text.attributedSubstring(from: NSRange(location: start, length: length))
+            pieces.append(makeWord(piece, line: CTTypesetterCreateLine(typesetter, CFRange(location: start, length: length))))
+            start += length
+        }
+        return pieces
     }
 
     private func compressedWidth(_ words: ArraySlice<Word>, _ space: CGFloat) -> CGFloat {
@@ -307,19 +350,19 @@ final class JustifiedLabel: UIView {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         for index in 0..<shown {
             let line = layout.lines[index]
-            let words = Array(content.paragraphs[line.paragraph][line.words])
+            let words = Array(layout.words[line.words])
             guard !words.isEmpty else { continue }
             let baseline = ((CGFloat(index) * content.font.lineHeight + content.font.ascender) * scale).rounded() / scale
             let cut = isCut && index == shown - 1
             drawLine(words, in: context, content: content, width: width, baseline: baseline, scale: scale,
-                     justified: cut || !line.isParagraphEnd, ellipsis: cut)
+                     justified: !line.isParagraphEnd, ellipsis: cut)
         }
     }
 
     /// Draws one line. Justified, the gaps between words share the slack equally, up to a cap (see `JustifiedSpacing`); otherwise the words
     /// keep single spaces from the leading edge. A line too long at single spaces shrinks its gaps. A word wider than the line is cut
-    /// short with an ellipsis to fit, never scaled and never drawn past the line. With `ellipsis`, trailing words are dropped until the
-    /// mark fits.
+    /// short with an ellipsis to fit, never scaled and never drawn past the line. The layout wraps longer words, so only a single character
+    /// wider than the line is cut this way. With `ellipsis`, trailing words are dropped until the mark fits.
     private func drawLine(_ words: [Word], in context: CGContext, content: Content, width: CGFloat, baseline: CGFloat, scale: CGFloat,
                           justified: Bool, ellipsis: Bool) {
         var kept = words
@@ -336,7 +379,7 @@ final class JustifiedLabel: UIView {
         defer { context.restoreGState() }
         context.clip(to: CGRect(x: 0, y: -10_000, width: width, height: 20_000_000))
         if kept.count == 1, let only = kept.first, sum > width {
-            // One word wider than the line: cut at the tail to an ellipsis, on a line of its own.
+            // One character wider than the line, which the layout cannot wrap: cut at the tail to an ellipsis, on a line of its own.
             let token = mark?.line ?? CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: only.endAttributes))
             let line = CTLineCreateTruncatedLine(only.line, Double(width), .end, token) ?? only.line
             context.textPosition = CGPoint(x: 0, y: baseline)

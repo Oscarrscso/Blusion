@@ -93,6 +93,13 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
     /// Hero artwork answers by title, kept for the session and dropped with the other review data by `forgetAll`.
     @ObservationIgnored private var heroArtworkByID: [String: TMDbArtwork] = [:]
+    /// Hero artwork lookups under way, by title, so a title asked for twice at once (a prewarm and the page, say) shares one request.
+    @ObservationIgnored private var heroArtworkTasks: [String: Task<TMDbArtwork?, Never>] = [:]
+    /// The most prewarm lookups that run at once. A fast scroll past many cards asks TMDb for a few titles at a time, not all of them.
+    private static let maxPrewarmLookups = 4
+    /// Prewarm lookups running, and the ones waiting for a turn with the callers that can drop them when their cards scroll away.
+    @ObservationIgnored private var prewarmRunning = 0
+    @ObservationIgnored private var prewarmWaiting: [(id: UUID, continuation: CheckedContinuation<Bool, Never>)] = []
     /// Set when OMDb refused the key or the daily quota ran out: nothing asks it again until then, so a bad key does not
     /// spend one failing request per poster.
     @ObservationIgnored private var omdbPausedUntil: Date?
@@ -229,6 +236,7 @@ public final class PosterRatingsStore {
         await cancelLookups()
         await cache.clear()
         heroArtworkByID.removeAll()
+        heroArtworkTasks.removeAll()
         for entry in entries.values {
             entry.imdb = entry.datasetIMDb ?? entry.catalogIMDb
             entry.letterboxd = nil
@@ -332,13 +340,58 @@ public final class PosterRatingsStore {
     }
 
     /// Original-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
-    /// Successful answers are kept for the session, so a title coming back into the spotlight is ready at once.
+    /// Successful answers are kept for the session, so a title coming back into the spotlight is ready at once. A title asked for again
+    /// while its lookup runs waits for that lookup rather than making another request.
     public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
         if let known = heroArtworkByID[item.id] { return known }
         guard let tmdb, !isClearing else { return nil }
-        guard let artwork = try? await tmdb.artwork(imdbID: item.id, type: item.type) else { return nil }
-        heroArtworkByID[item.id] = artwork
+        if let running = heroArtworkTasks[item.id] { return await running.value }
+        let task = Task<TMDbArtwork?, Never> { try? await tmdb.artwork(imdbID: item.id, type: item.type) }
+        heroArtworkTasks[item.id] = task
+        let artwork = await task.value
+        // Forgotten while it ran (the data was cleared): the answer is handed back but not kept.
+        guard heroArtworkTasks[item.id] == task else { return artwork }
+        heroArtworkTasks[item.id] = nil
+        if let artwork { heroArtworkByID[item.id] = artwork }
         return artwork
+    }
+
+    /// Whether hero artwork can be asked for at all: a TMDb client is configured. Without one, prewarming is skipped entirely.
+    public var canLookUpHeroArtwork: Bool { tmdb != nil && !isClearing }
+
+    /// Looks up a title's hero artwork before its page opens, for a card that has been on screen for a moment. Only the TMDb answer is asked
+    /// for, never a picture. At most `maxPrewarmLookups` run at once, so a fast scroll does not burst TMDb, and a lookup still waiting for its
+    /// turn is dropped when its card scrolls away. Does nothing without a TMDb client, or when the title's artwork is already known.
+    public func prewarmHeroArtwork(for item: MetaPreview) async {
+        guard tmdb != nil, !isClearing, heroArtworkByID[item.id] == nil else { return }
+        let waiter = UUID()
+        let granted = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                if prewarmRunning < Self.maxPrewarmLookups {
+                    prewarmRunning += 1
+                    continuation.resume(returning: true)
+                } else {
+                    prewarmWaiting.append((waiter, continuation))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancelPrewarmWait(waiter) }
+        }
+        guard granted else { return }
+        defer { releasePrewarmSlot() }
+        guard !Task.isCancelled else { return }
+        _ = await heroArtwork(for: item)
+    }
+
+    /// Passes the slot to the next prewarm waiting for one, or frees it when none is waiting.
+    private func releasePrewarmSlot() {
+        if prewarmWaiting.isEmpty { prewarmRunning -= 1 } else { prewarmWaiting.removeFirst().continuation.resume(returning: true) }
+    }
+
+    /// Drops a prewarm that is still waiting for its turn. It is resumed without a slot.
+    private func cancelPrewarmWait(_ waiter: UUID) {
+        guard let index = prewarmWaiting.firstIndex(where: { $0.id == waiter }) else { return }
+        prewarmWaiting.remove(at: index).continuation.resume(returning: false)
     }
 
     /// TMDb scores fill episodes that have no rating from their addon.

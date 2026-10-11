@@ -3,14 +3,16 @@ import Foundation
 
 /// Chooses where the lines of one paragraph break so that, once each line is justified, the gaps between words come out alike and none is
 /// extreme. It is a minimum-raggedness dynamic programme over the whole paragraph (a total fit), not a greedy fill: a line is allowed to be
-/// a little short if that keeps the next one from being very loose. Words are never split.
+/// a little short if that keeps the next one from being very loose. The breaker never splits a word; a word wider than the line is wrapped
+/// into pieces by the layout first (see `wrapLength`).
 enum JustifiedLineBreaker {
     /// The fewest characters a line should hold, spaces between its words included. Tunable. Shorter lines are allowed when nothing else
     /// fits, for instance before a very long word, but they cost more.
     static let defaultMinimumCharacters = 18
-    /// The most characters a line may hold, spaces between its words included. Tunable. It keeps lines readable on wide containers.
-    /// A single word longer than this still takes a line of its own.
-    static let defaultMaximumCharacters = 90
+    /// The most characters a line may hold, spaces between its words included. No limit by default, so lines fill the width they are
+    /// given; a caller that wants a narrower measure limits the width of the view instead. A single word longer than this still takes a
+    /// line of its own.
+    static let defaultMaximumCharacters = Int.max
 
     /// What a short line costs on top of its looseness, so the breaker avoids it unless the alternative is worse.
     private static let shortLinePenalty = 4.0
@@ -23,16 +25,22 @@ enum JustifiedLineBreaker {
     /// The narrowest a gap between two words may be, as a share of the natural space. A line takes another word before it stretches, as long
     /// as its gaps stay at least this wide. The breaker and the drawing use the same figure, so a line fits the same way in both.
     static let minimumGapFactor: CGFloat = 0.75
-    /// The widest a gap may be, as a share of the natural space, on a line that is justified. A line that would need more is drawn
-    /// with natural gaps from the leading edge instead of stretched.
+    /// The widest a gap may be, as a share of the natural space, on a line that is justified. A line that would need more is ragged: it is
+    /// drawn with natural gaps from the leading edge instead of stretched.
     static let maximumGapFactor: CGFloat = 1.9
     /// What a gap stretched past the natural space costs, per unit of stretch cubed (the stretch in natural spaces). Steeper than the
     /// slack, so the breaker prefers lines of alike gaps.
     private static let stretchWeight = 1.0
     /// What a gap compressed under the natural space costs, per unit of compression squared.
     private static let compressWeight = 2.0
-    /// What a line costs on top when its gaps would pass `maximumGapFactor`, so it is drawn unstretched.
-    private static let overStretchPenalty = 3.0
+    /// What a ragged line costs before its slack. A justified line costs about one at most, so every ragged line costs more than any
+    /// justified one.
+    private static let raggedPenalty = 3.0
+    /// What a ragged line costs per unit of slack squared. Its slack is the share of the width it leaves empty, clamped to 0...1, so a
+    /// fuller ragged line is cheaper, and from the same start a ragged line with more words always is.
+    private static let raggedWeight = 10.0
+    /// The characters a word wider than a line may wrap after, when one lies near the end of a piece. They end the parts of a URL or path.
+    private static let wrapAfter: Set<UInt16> = Set("/-.?&=_%".utf16)
     /// Costs closer than this are equal, and the tie-break decides.
     private static let epsilon = 1e-9
 
@@ -44,11 +52,14 @@ enum JustifiedLineBreaker {
     ///   - lineWidth: the width a line may take.
     ///   - minimumCharacters: the fewest characters a line should hold; a soft limit.
     ///   - maximumCharacters: the most characters a line may hold, unless it is one word.
+    ///   - joinedToPrevious: for each word, whether it is a piece of a wrapped word that continues the word before it. Such a word never
+    ///     shares a line with that word, so the pieces of one word are never set with a gap between them. Empty when no word is a piece.
     static func breaks(wordWidths: [CGFloat], wordCharacters: [Int], spaceWidth: CGFloat, lineWidth: CGFloat,
-                       minimumCharacters: Int, maximumCharacters: Int) -> [Range<Int>] {
+                       minimumCharacters: Int, maximumCharacters: Int, joinedToPrevious: [Bool] = []) -> [Range<Int>] {
         let count = min(wordWidths.count, wordCharacters.count)
         guard count > 0 else { return [] }
         let width = max(lineWidth, 1)
+        func isJoined(_ index: Int) -> Bool { index < joinedToPrevious.count && joinedToPrevious[index] }
 
         // Cost and line count of the best layout of words `i..<count`; `next[i]` is where its first line ends.
         var cost = [Double](repeating: 0, count: count + 1)
@@ -63,6 +74,7 @@ enum JustifiedLineBreaker {
             var bestEnd = start + 1
             var end = start
             while end < count {
+                if end > start, isJoined(end) { break }
                 wordsWidth += wordWidths[end]
                 characters += wordCharacters[end] + (end > start ? 1 : 0)
                 end += 1
@@ -77,19 +89,22 @@ enum JustifiedLineBreaker {
                     lineCost = isSingle && !(natural > width) && wordCharacters[start] < widowCharacters && count > 1 && start > 0
                         ? widowPenalty : 0
                 } else {
-                    let slack = abs(Double((width - natural) / width))
-                    lineCost = slack * slack
-                    if !isSingle, spaceWidth > 0 {
-                        let ratio = (width - wordsWidth) / (gaps * spaceWidth)
+                    // A line of two or more words whose gaps stay within the cap is justified; any other line is ragged.
+                    var ratio = CGFloat.infinity
+                    if !isSingle, spaceWidth > 0 { ratio = (width - wordsWidth) / (gaps * spaceWidth) }
+                    if ratio <= maximumGapFactor {
+                        let slack = abs(Double((width - natural) / width))
                         let stretch = Double(max(0, ratio - 1))
                         let compress = Double(max(0, 1 - ratio))
-                        lineCost += stretchWeight * stretch * stretch * stretch + compressWeight * compress * compress
-                        if ratio > maximumGapFactor { lineCost += overStretchPenalty }
+                        lineCost = slack * slack + stretchWeight * stretch * stretch * stretch + compressWeight * compress * compress
+                    } else {
+                        let slack = Double(min(1, max(0, (width - natural) / width)))
+                        lineCost = raggedPenalty + raggedWeight * slack * slack
                     }
                     if characters < minimumCharacters {
                         lineCost += shortLinePenalty + Double(minimumCharacters - characters) / Double(max(minimumCharacters, 1))
                     }
-                    if isSingle, wordFitsWithNext(start, wordWidths, wordCharacters, spaceWidth, width, maximumCharacters) {
+                    if isSingle, !isJoined(start + 1), wordFitsWithNext(start, wordWidths, wordCharacters, spaceWidth, width, maximumCharacters) {
                         lineCost += loneWordPenalty
                     }
                 }
@@ -120,6 +135,22 @@ enum JustifiedLineBreaker {
                                          _ maximum: Int) -> Bool {
         guard index + 1 < widths.count else { return false }
         return widths[index] + space * minimumGapFactor + widths[index + 1] <= width && characters[index] + 1 + characters[index + 1] <= maximum
+    }
+
+    /// The length, in UTF-16 units, of the piece of a word wider than a line that starts at `start`. `fitting` is the most units that fit, and
+    /// ends on a character boundary. The piece ends just after one of the wrap characters instead, when that lies in its last third and
+    /// `isBoundary` says the position is a character boundary. The piece is never empty, and `start` is before the end of `units`.
+    static func wrapLength(units: [UInt16], start: Int, fitting: Int, isBoundary: (Int) -> Bool) -> Int {
+        let rest = units.count - start
+        let fits = max(1, fitting)
+        guard fits < rest else { return rest }
+        let shortest = max(1, (2 * fits + 2) / 3)
+        var length = fits
+        while length >= shortest {
+            if wrapAfter.contains(units[start + length - 1]), isBoundary(start + length) { return length }
+            length -= 1
+        }
+        return fits
     }
 }
 

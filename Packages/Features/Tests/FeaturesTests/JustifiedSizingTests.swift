@@ -13,7 +13,8 @@ import Testing
         Self.paragraphs.reduce(0) { total, paragraph in
             let words = paragraph.split(separator: " ")
             return total + JustifiedLineBreaker.breaks(wordWidths: words.map { CGFloat($0.count) * 7 }, wordCharacters: words.map(\.count),
-                                                       spaceWidth: 7, lineWidth: width, minimumCharacters: 18, maximumCharacters: 90).count
+                                                       spaceWidth: 7, lineWidth: width, minimumCharacters: JustifiedLineBreaker.defaultMinimumCharacters,
+                                                       maximumCharacters: JustifiedLineBreaker.defaultMaximumCharacters).count
         }
     }
 
