@@ -199,7 +199,7 @@ struct TraktListBrowserView: View {
                         browser.browse(user: user)
                     } label: { TraktUserRow(user: user) }
                         .buttonStyle(.plain)
-                        .onAppear { if user.id == browser.users.last?.id { Task { await browser.loadMore() } } }
+                        .onAppear { if user.id == LazyLoadLookahead.triggerElement(in: browser.users)?.id { Task { await browser.loadMore() } } }
                         .accessibilityIdentifier("traktBrowser.user.\(user.username)")
                 }
             } else {
@@ -209,7 +209,7 @@ struct TraktListBrowserView: View {
                         select(list)
                     } label: { TraktListRow(list: list, isSelected: list.id == selectedID) }
                         .buttonStyle(.plain)
-                        .onAppear { if list.id == browser.lists.last?.id { Task { await browser.loadMore() } } }
+                        .onAppear { if list.id == LazyLoadLookahead.triggerElement(in: browser.lists)?.id { Task { await browser.loadMore() } } }
                         .accessibilityIdentifier("traktBrowser.list.\(list.slug)")
                 }
             }

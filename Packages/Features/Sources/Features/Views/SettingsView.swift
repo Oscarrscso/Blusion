@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var model: SettingsViewModel
     @State private var infuseInstalled = true
     @State private var pendingScope: DataResetService.Scope?
+    #if !targetEnvironment(macCatalyst)
+    @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
+    #endif
     private let services: AppServices
     let fallbackEngineLinked: Bool
 
@@ -32,6 +35,9 @@ struct SettingsView: View {
             }
             playbackSection
             appearanceSection
+            #if !targetEnvironment(macCatalyst)
+            loadingSection
+            #endif
             reviewServicesSection
             traktSection
             serverSection
@@ -113,6 +119,36 @@ struct SettingsView: View {
             .accessibilityIdentifier("settings.colouredRatingLogos")
         }
     }
+
+    #if !targetEnvironment(macCatalyst)
+    private var loadingSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack {
+                    Text("Load ahead")
+                    Spacer()
+                    Text(LazyLoadLookahead.levels[min(max(lookaheadLevel, 1), LazyLoadLookahead.levels.count) - 1].label)
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: Binding(get: { Double(lookaheadLevel) }, set: { value in
+                    let level = Int(value.rounded())
+                    if level != lookaheadLevel { Haptics.selection(); lookaheadLevel = level }
+                }), in: 1...Double(LazyLoadLookahead.levels.count), step: 1) {
+                    Text("Load ahead")
+                } minimumValueLabel: {
+                    Text(LazyLoadLookahead.levels[0].label).font(.caption)
+                } maximumValueLabel: {
+                    Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label).font(.caption)
+                }
+                .accessibilityIdentifier("settings.lazyLoadLookahead")
+            }
+        } header: {
+            Text("Loading")
+        } footer: {
+            Text("How far ahead the next titles load while you scroll a long list. Further loads sooner, and uses more data.")
+        }
+    }
+    #endif
 
     private var traktSection: some View {
         Section("Accounts") {

@@ -117,7 +117,7 @@ struct MediaRow<Content: View>: View {
 }
 
 /// A grid of titles that fills the width: three posters across a phone, as many as fit in a Mac window. `onLastAppear` fires
-/// when the last title scrolls in, so a caller can load the next page.
+/// when the title `LazyLoadLookahead` names scrolls in (the last one by default on the Mac), so a caller can load the next page.
 struct MediaGrid: View {
     let items: [MetaPreview]
     let aspect: CardAspect
@@ -135,13 +135,14 @@ struct MediaGrid: View {
     }
 
     var body: some View {
+        let triggerID = LazyLoadLookahead.triggerElement(in: items)?.identity
         LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.gridRowSpacing) {
             ForEach(items, id: \.identity) { item in
                 MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
                     .stretched()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onAppear {
-                        if item.identity == items.last?.identity { onLastAppear?() }
+                        if item.identity == triggerID { onLastAppear?() }
                     }
             }
         }
