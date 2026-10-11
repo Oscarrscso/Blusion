@@ -3,7 +3,7 @@ import Features
 import Foundation
 import StremioKit
 
-/// `BLUSION_FAKE_OMDB=1` answers OMDb lookups from here, after a short random delay, so the poster-rating flow can be driven on a
+/// `BLUSION_FAKE_OMDB=1` answers OMDb lookups (episode scores) from here, after a short random delay, so the rating flow can be driven on a
 /// device without a key or a network (the scroll stress test in `Tests/BlusionUITests` uses it). Roughly one title in three has no
 /// IMDb score, as real catalogs do. Debug builds only, and only when asked for.
 struct DebugFakeOMDbTransport: HTTPTransport {

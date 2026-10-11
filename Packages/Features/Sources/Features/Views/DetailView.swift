@@ -405,11 +405,6 @@ struct DetailView: View {
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
         .padding(.top, sectionSpacing)
-        // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
-        .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
-            guard model.hasSettledHero else { return }
-            await model.loadEpisodeScores(season: model.selectedSeason)
-        }
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
@@ -487,6 +482,11 @@ struct DetailView: View {
             }
         }
         .accessibilityIdentifier("detail.episode.\(video.id)")
+        // IMDb's per-episode score comes from OMDb, asked for as the card comes on screen (and again if the key changes).
+        .task(id: "\(video.id):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
+            guard model.hasSettledHero else { return }
+            await model.episodeAppeared(video)
+        }
     }
 
     // MARK: - Credits

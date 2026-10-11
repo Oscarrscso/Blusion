@@ -222,7 +222,7 @@ import StremioKitTestSupport
     }
 
     @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
+        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"8.9"}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
         let ratings = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "test-key"))
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
@@ -231,10 +231,30 @@ import StremioKitTestSupport
         let first = Video(id: "tt0944947:1:1", season: 1, episode: 1, rating: 6)
         let second = Video(id: "tt0944947:1:2", season: 1, episode: 2, rating: 7.5)
         #expect(model.score(for: first) == .init(value: 6, isIMDb: false))
-        await model.loadEpisodeScores(season: 1)
+        await model.loadEpisodeScore(for: first)
         #expect(model.score(for: first) == .init(value: 8.9, isIMDb: true))
-        #expect(model.score(for: second) == .init(value: 7.5, isIMDb: false))
+        #expect(model.score(for: second) == .init(value: 7.5, isIMDb: false), "an episode nobody scrolled to is not asked for")
+        #expect(transport.callCount == 1)
         #expect(model.score(for: Video(id: "x")) == nil)
+        await model.loadEpisodeScore(for: first)
+        #expect(transport.callCount == 1, "an episode is asked for once")
+    }
+
+    @Test func aCardIsOnlyAskedAboutWhenItAppears() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"8.9"}"#.utf8))
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client, posterRatings: PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "k")))
+        let model = DetailViewModel(preview: MetaPreview(id: "tt0944947", type: "series", name: "S"), services: services)
+        await model.load()
+        let omdbRequests = transport.requests.filter { $0.url?.host == "www.omdbapi.com" }
+        #expect(omdbRequests.isEmpty, "opening the page asks for no episode scores")
+        let query = { (n: Int) in
+            transport.requests.compactMap { $0.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems }
+                .contains { $0.contains(URLQueryItem(name: "Episode", value: String(n))) }
+        }
+        await model.episodeAppeared(Video(id: "tt0944947:1:3", season: 1, episode: 3))
+        #expect(query(3) && !query(4))
     }
 
     @Test(arguments: [false, true])
@@ -243,7 +263,7 @@ import StremioKitTestSupport
         let meta = #"{"meta":{"id":"\#(seriesID)","type":"series","name":"Show","videos":[{"id":"tt0944947:1:1","season":1,"episode":1}]}}"#
         let transport = StubTransport { request, _ in
             let json = request.url?.host == "www.omdbapi.com"
-                ? #"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"# : meta
+                ? #"{"Response":"True","imdbRating":"8.9"}"# : meta
             return StubTransport.response(Data(json.utf8), for: request)
         }
         let manifest = Manifest(id: "test.meta", name: "Meta", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])
@@ -254,6 +274,7 @@ import StremioKitTestSupport
                                     services: AppServices(registry: registry, client: client, posterRatings: ratings))
         await model.load()
         let episode = try #require(model.episodes.first)
+        await model.episodeAppeared(episode)
         #expect(model.score(for: episode) == .init(value: 8.9, isIMDb: true))
         #expect(transport.requests.filter { $0.url?.host == "www.omdbapi.com" }.count == 1)
         #expect(!transport.requests.contains { $0.url?.host == "api.themoviedb.org" }, "IMDb already covered the season")

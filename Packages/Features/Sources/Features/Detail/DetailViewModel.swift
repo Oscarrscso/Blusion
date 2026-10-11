@@ -12,10 +12,7 @@ public final class DetailViewModel {
     public private(set) var isLoading = true
     /// True when no addon returned `meta` and Detail is built from the catalog preview alone.
     public private(set) var isFallback = false
-    /// Choosing a season fills in its episode ratings from TMDb, when the addon sent none (see `loadEpisodeRatings`).
-    public var selectedSeason: Int? {
-        didSet { if selectedSeason != oldValue { Task { await loadEpisodeRatings() } } }
-    }
+    public var selectedSeason: Int?
     public private(set) var isInLibrary = false
     /// Episode cards are as wide as the text above them, as chosen with the toggle beside the season name. The choice is saved, and read
     /// again when the details load.
@@ -81,7 +78,6 @@ public final class DetailViewModel {
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
-        await loadEpisodeRatings()
         // Reviews and cast photos are secondary: they start after the hero and the page above, and never hold up the page above.
         async let reviews: Void = loadReviews()
         async let credits: Void = loadTitleCredits()
@@ -155,17 +151,14 @@ public final class DetailViewModel {
         return detail.videos.lazy.compactMap { Video.seriesIMDbID(fromVideoID: $0.id) }.first
     }
 
-    private func loadEpisodeRatings() async {
-        guard isSeries, let season = selectedSeason, !episodeRatingSeasons.contains(season), let seriesID = seriesIMDbID else { return }
+    /// TMDb scores for a season, for the episodes the addon sent none for. One request fills the season; it is made when the first
+    /// card of the season comes on screen.
+    private func loadEpisodeRatings(season: Int?) async {
+        guard let season, isSeries, !episodeRatingSeasons.contains(season), let seriesID = seriesIMDbID,
+              detail.episodes(inSeason: season).contains(where: { $0.rating == nil }) else { return }
         episodeRatingSeasons.insert(season)
-        await loadEpisodeScores(season: season)
-        guard !Task.isCancelled else { return }
-        let needsFallback = detail.episodes(inSeason: season).contains { video in
-            video.rating == nil && video.episode.flatMap { omdbEpisodeScores[season]?[$0] } == nil
-        }
-        guard needsFallback else { return }
         let scores = await services.posterRatings.episodeRatings(seriesIMDbID: seriesID, season: season)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { episodeRatingSeasons.remove(season); return }
         if scores.isEmpty { episodeRatingSeasons.remove(season) }
         detail.fillEpisodeRatings(season: season, scores: scores, source: .tmdb)
     }
@@ -282,18 +275,36 @@ public final class DetailViewModel {
         public var text: String { value.formatted(.number.precision(.fractionLength(1))) }
     }
 
-    /// OMDb's scores by season, then episode number. A season is here once it has been asked for, even when OMDb had none.
+    /// OMDb's scores by season, then episode number, for the episodes asked about so far.
     public private(set) var omdbEpisodeScores: [Int: [Int: Double]] = [:]
+    @ObservationIgnored private var requestedEpisodeScores: Set<String> = []
+    @ObservationIgnored private var scoresRevision = 0
 
-    /// Changes when review credentials do, so the screen asks again for the season on show.
+    /// Changes when review credentials do, so the cards ask again.
     public var reviewServicesRevision: Int { services.posterRatings.reviewServicesRevision }
 
-    /// Asks OMDb for the season's episode scores. Nothing without an OMDb key; the screen calls it as seasons are picked.
-    public func loadEpisodeScores(season: Int?) async {
-        guard let season, isSeries, let seriesID = seriesIMDbID else { return }
-        let scores = await services.posterRatings.episodeRatings(for: seriesID, season: season)
-        guard !Task.isCancelled else { return }
-        omdbEpisodeScores[season] = scores
+    /// An episode card came on screen: ask OMDb for its score and, when neither OMDb nor the addon has one, for its season's TMDb
+    /// scores. Nothing is asked for episodes that are never scrolled to. OMDb needs a key; without one nothing is requested.
+    public func episodeAppeared(_ video: Video) async {
+        await loadEpisodeScore(for: video)
+        guard !Task.isCancelled, score(for: video) == nil else { return }
+        await loadEpisodeRatings(season: video.season)
+    }
+
+    /// Asks OMDb for one episode's IMDb score, once. A card that is scrolled past before the answer arrives is asked again if it
+    /// comes back (the answer is cached by then).
+    public func loadEpisodeScore(for video: Video) async {
+        guard isSeries, let season = video.season, let episode = video.episode, let seriesID = seriesIMDbID else { return }
+        let revision = reviewServicesRevision
+        if scoresRevision != revision {
+            scoresRevision = revision
+            requestedEpisodeScores.removeAll()
+            omdbEpisodeScores.removeAll()
+        }
+        guard requestedEpisodeScores.insert(video.id).inserted else { return }
+        let score = await services.posterRatings.episodeRating(for: seriesID, season: season, episode: episode)
+        guard !Task.isCancelled, scoresRevision == revision else { requestedEpisodeScores.remove(video.id); return }
+        if let score { omdbEpisodeScores[season, default: [:]][episode] = score }
     }
 
     public func score(for video: Video) -> EpisodeScore? {

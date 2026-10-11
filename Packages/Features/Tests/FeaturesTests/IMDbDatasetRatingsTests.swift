@@ -122,15 +122,6 @@ import StremioKitTestSupport
         #expect(refreshes == 3 && lookups == 1)
     }
 
-    @Test func omdbDoesNotReplaceTheDatasetScore() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"7.4","Metascore":"61"}"#.utf8))
-        let dataset = FakeDataset(ratings: ["tt0468569": entry("tt0468569", 8.1)])
-        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport), apiKey: "k"), dataset: dataset)
-        let ratings = store.ratings(for: bare)
-        try await waitUntil { ratings.metacritic == 61 }
-        #expect(ratings.imdb == 8.1)
-    }
-
     @Test func withoutADatasetNothingChanges() async throws {
         let store = PosterRatingsStore()
         await store.refreshIMDbDataset()
