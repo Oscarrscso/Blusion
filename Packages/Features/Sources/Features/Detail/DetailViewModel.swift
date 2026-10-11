@@ -54,6 +54,8 @@ public final class DetailViewModel {
         let known = artwork ?? services.posterRatings.cachedHeroArtwork(for: preview)
         self.tmdbArtwork = known
         self.isLoadingArtwork = known == nil && !artworkChecked
+        // The age rating the spotlight already showed for this title is there from the first frame, so the line does not change on opening.
+        self.certification = services.posterRatings.cachedCertification(for: preview)
     }
 
     public func load(afterHero hero: (@MainActor @Sendable () async -> Void)? = nil) async {

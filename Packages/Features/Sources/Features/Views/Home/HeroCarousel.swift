@@ -86,7 +86,8 @@ struct HeroCarousel: View {
                     TabView(selection: $pageID) {
                         ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                             HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow,
-                                     cachedArtwork: ratings.cachedHeroArtwork(for: item), distance: abs(index - currentIndex))
+                                     cachedArtwork: ratings.cachedHeroArtwork(for: item),
+                                     cachedCertification: ratings.cachedCertification(for: item), distance: abs(index - currentIndex))
                                 .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
@@ -208,14 +209,18 @@ private struct HeroPage: View {
     /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name. Starts set when the artwork is known.
     @State private var artworkChecked: Bool
     @State private var hero = HeroLoader()
+    /// The age rating in the metadata line. Starts from the one already looked up this session.
+    @State private var certification: String?
 
-    init(item: MetaPreview, isScrolling: Bool, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?, distance: Int) {
+    init(item: MetaPreview, isScrolling: Bool, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?, cachedCertification: String?,
+         distance: Int) {
         self.distance = distance
         self.item = item
         self.isScrolling = isScrolling
         self.artworkHeight = artworkHeight
         _heroArtwork = State(initialValue: cachedArtwork)
         _artworkChecked = State(initialValue: cachedArtwork != nil)
+        _certification = State(initialValue: cachedCertification)
     }
 
     private var isInWindow: Bool { distance <= HeroCarousel.loadWindow(isLandscape: isLandscape) }
@@ -289,6 +294,13 @@ private struct HeroPage: View {
             heroArtwork = loaded
             artworkChecked = true
         }
+        // The age rating has its own task, so it never holds the picture back.
+        .task(id: "certification|\(ratings.reviewServicesRevision)|\(isInWindow)") {
+            guard isInWindow else { return }
+            let loaded = await ratings.certification(for: item)
+            guard !Task.isCancelled else { return }
+            certification = loaded
+        }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(isInWindow)|\(distance <= 1)") {
             // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
             guard isInWindow else { hero.release(keeping: []); return }
@@ -319,7 +331,7 @@ private struct HeroPage: View {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
                 // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
-                MetaLine(DetailViewModel.heroMetaParts(for: item, certification: nil))
+                MetaLine(DetailViewModel.heroMetaParts(for: item, certification: certification))
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
@@ -370,7 +382,7 @@ private struct HeroPage: View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
-            MetaLine(DetailViewModel.heroMetaParts(for: item, certification: nil))
+            MetaLine(DetailViewModel.heroMetaParts(for: item, certification: certification))
                 .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }

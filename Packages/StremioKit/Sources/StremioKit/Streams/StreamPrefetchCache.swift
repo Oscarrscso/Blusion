@@ -48,11 +48,11 @@ actor StreamPrefetchCache {
         entries[key] = Entry(token: token, created: ContinuousClock.now, started: started, askedTask: askedTask)
         entries[key]?.task = Task { [self] in
             let lookup = await started.value
-            await self.begin(key: key, token: token, asked: lookup.asked)
+            self.begin(key: key, token: token, asked: lookup.asked)
             for await response in lookup.responses {
-                await self.absorb(key: key, token: token, response)
+                self.absorb(key: key, token: token, response)
             }
-            await self.complete(key: key, token: token)
+            self.complete(key: key, token: token)
         }
     }
 
@@ -89,7 +89,7 @@ actor StreamPrefetchCache {
         entries[key]?.releaseTask = Task { [self] in
             try? await Task.sleep(for: Self.releaseGrace)
             guard !Task.isCancelled else { return }
-            await self.dropIfUnclaimed(key: key, token: token)
+            self.dropIfUnclaimed(key: key, token: token)
         }
     }
 

@@ -253,6 +253,8 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         guard pan.state == .began, let page, controller?.transitionCoordinator == nil else { return }
         // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
         page.isUserInteractionEnabled = false
+        // The same light tap as opening a title, once per swipe that closes a screen.
+        Haptics.tap()
         onSwipe()
         // Should the pop not happen, the screen works again.
         Task { [weak page] in

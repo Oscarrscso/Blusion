@@ -283,7 +283,7 @@ private struct NoITunesTransport: HTTPTransport {
         await model.load()
         let omdbRequests = transport.requests.filter { $0.url?.host == "www.omdbapi.com" }
         #expect(omdbRequests.isEmpty, "opening the page asks for no episode scores")
-        let videos = (1...3).map { Video(id: "tt0944947:1:\($0)", season: 1, episode: $0) }
+        let videos = (1...3).map { (number: Int) in Video(id: "tt0944947:1:\(number)", season: 1, episode: number) }
         async let a: Void = model.episodeAppeared(videos[0])
         async let b: Void = model.episodeAppeared(videos[1])
         async let c: Void = model.episodeAppeared(videos[2])

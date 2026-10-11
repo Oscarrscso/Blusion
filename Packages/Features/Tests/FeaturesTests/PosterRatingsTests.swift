@@ -471,6 +471,23 @@ import StremioKitTestSupport
         #expect(transport.requests.filter { $0.url?.path.contains("/find/") == true }.count == 1, "one lookup, not one per caller")
     }
 
+    @Test func theSpotlightsAgeRatingIsAskedOnceAndKeptForTheSession() async throws {
+        let transport = StubTransport { request, _ in
+            if request.url?.path.hasSuffix("/release_dates") == true {
+                return StubTransport.response(Data(#"{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"PG-13"}]}]}"#.utf8), for: request)
+            }
+            return StubTransport.response(Data(#"{"movie_results":[{"id":155}],"tv_results":[]}"#.utf8), for: request)
+        }
+        let store = heroStore(transport)
+        #expect(store.cachedCertification(for: movie) == nil, "nothing is known before the first lookup")
+        #expect(await store.certification(for: movie) == "PG-13")
+        #expect(store.cachedCertification(for: movie) == "PG-13")
+        let asked = transport.callCount
+        #expect(await store.certification(for: movie) == "PG-13")
+        #expect(transport.callCount == asked, "a known age rating is not asked for again")
+        #expect(await PosterRatingsStore().certification(for: movie) == nil, "without TMDb there is none")
+    }
+
     @Test func aPrewarmAsksTMDbOnceForTheArtworkAndNeverForAPicture() async throws {
         let transport = tmdbHeroTransport()
         let store = heroStore(transport)
