@@ -193,6 +193,7 @@ struct RatingButtonsRow: View {
 
     private func buttons(ratings: TitleRatings?) -> some View {
         let sites = ReviewSite.allCases.filter { $0 == .imdb || ratings?.shortText(for: $0) != nil }
+        let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in
             let gap = min(6, max(4, (geometry.size.width - CGFloat(sites.count) * 64) / CGFloat(max(1, sites.count - 1))))
             let pillWidth = (geometry.size.width - gap * CGFloat(sites.count - 1)) / CGFloat(sites.count)
@@ -202,7 +203,7 @@ struct RatingButtonsRow: View {
                     if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
                         RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
                                      isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name,
-                                     horizontalInset: inset)
+                                     horizontalInset: inset, showsLinkIcon: showsLinkIcon)
                     }
                 }
             }
@@ -214,7 +215,7 @@ struct RatingButtonsRow: View {
 }
 
 /// One small rating button: the site's icon, then the score. Without a score it is the icon alone, and IMDb's gets an outward arrow so it
-/// still reads as a link to the title's page.
+/// still reads as a link to the title's page. When four or fewer sites are shown, every button gets the arrow.
 struct RatingButton: View {
     let site: ReviewSite
     let score: String?
@@ -223,13 +224,14 @@ struct RatingButton: View {
     let isSearch: Bool
     let title: String
     var horizontalInset: CGFloat = 10
+    var showsLinkIcon = false
 
     var body: some View {
         Link(destination: url) {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
                     .foregroundStyle(.white)
-                if site == .imdb && score == nil {
+                if showsLinkIcon || (site == .imdb && score == nil) {
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white)
