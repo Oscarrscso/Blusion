@@ -19,6 +19,7 @@ struct WidgetEditorView: View {
     @State private var showsPicker = false
     @State private var showsTraktBrowser = false
     @State private var showsTileSource = false
+    @State private var showsMoreOptions = false
     @State private var editedTile: CollectionItem?
     @Environment(\.dismiss) private var dismiss
 
@@ -301,7 +302,17 @@ struct WidgetEditorView: View {
             .pickerStyle(.segmented)
             .accessibilityIdentifier("widgetEditor.style")
             Toggle("Show ratings", isOn: row.presentation.showsRatings)
-            DisclosureGroup("More options") {
+            Button {
+                withAnimation(.snappy(duration: 0.25)) { showsMoreOptions.toggle() }
+            } label: {
+                Text("More options")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(showsMoreOptions ? "Expanded" : "Collapsed")
+            if showsMoreOptions {
                 if style.wrappedValue == .row {
                     Picker("Shape", selection: row.presentation.aspectRatio) {
                         ForEach(WidgetPresentation.AspectRatio.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }

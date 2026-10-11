@@ -27,10 +27,6 @@ struct BestEditionView: View {
                             .foregroundStyle(summaryColor)
                             .lineLimit(1)
                         Spacer(minLength: Theme.Spacing.s)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     }
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.vertical, Theme.Spacing.s + 2)

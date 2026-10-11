@@ -10,6 +10,7 @@ struct StreamPickerView: View {
     @State private var model: StreamPickerViewModel
     @State private var plan: PlaybackPlan?
     @State private var expandedDetails: RankedStream?
+    @State private var isNotesExpanded = false
     @State private var autoPickTask: Task<Void, Never>?
     @State private var hasSelectedManually = false
     @State private var isOpeningPlayer = false
@@ -354,11 +355,23 @@ struct StreamPickerView: View {
     @ViewBuilder
     private var links: some View {
         if !model.links.isEmpty {
-            DisclosureGroup("Notes from your addons") {
-                VStack(spacing: Theme.Spacing.s) {
-                    ForEach(model.links) { item in streamButton(item, isRecommended: false) }
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { isNotesExpanded.toggle() }
+                } label: {
+                    Text("Notes from your addons")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .padding(.top, Theme.Spacing.s)
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityValue(isNotesExpanded ? "Expanded" : "Collapsed")
+                if isNotesExpanded {
+                    VStack(spacing: Theme.Spacing.s) {
+                        ForEach(model.links) { item in streamButton(item, isRecommended: false) }
+                    }
+                    .padding(.top, Theme.Spacing.s)
+                }
             }
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, streamMargin)

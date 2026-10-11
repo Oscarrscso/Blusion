@@ -91,11 +91,10 @@ struct PersonView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                // A double tap folds or opens it too, as on a title page.
-                .onTapGesture(count: 2) {
+                // A tap folds or opens it, as on a title page.
+                .onTapGesture {
                     if folds { toggle() }
                 }
-            if folds { FoldButton(isExpanded: isBiographyExpanded, action: toggle) }
         }
         .frame(maxWidth: metrics.readableWidth, alignment: .leading)
         .frame(maxWidth: .infinity)

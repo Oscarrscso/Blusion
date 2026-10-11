@@ -675,8 +675,8 @@ struct DetailView: View {
 
 // MARK: - Pieces
 
-/// One TMDb review. Folded, every card is the same height: the text keeps six lines whether or not it fills them, and the button
-/// keeps its place whether or not it shows. It shows only when the review runs past those lines.
+/// One TMDb review. Folded, every card is the same height: the text keeps six lines whether or not it fills them. A tap opens or
+/// folds it, and only a review that runs past those lines folds.
 private struct ReviewCard: View {
     let review: TMDbReview
     let isExpanded: Bool
@@ -713,14 +713,9 @@ private struct ReviewCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
+            .onTapGesture {
                 if folds { onToggle() }
             }
-            FoldButton(isExpanded: isExpanded, action: onToggle)
-                .opacity(folds ? 1 : 0)
-                .allowsHitTesting(folds)
-                .accessibilityHidden(!folds)
-                .accessibilityIdentifier("detail.review.\(review.id).toggle")
         }
         .padding(16)
         .cardSurface()

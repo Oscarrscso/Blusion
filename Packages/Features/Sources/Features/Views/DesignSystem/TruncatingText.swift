@@ -1,7 +1,7 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// Text cut off after `lineLimit` lines that says whether anything was cut, so a "More" button shows only when there is more to
+/// Text cut off after `lineLimit` lines that says whether anything was cut, so a tap opens or folds it only when there is more to
 /// read. The whole text is laid out behind it, unseen, at the same width: when that is taller than the cut text, some is hidden.
 /// Expanded, the two are the same height, so the answer from the cut state stands.
 ///
@@ -37,22 +37,6 @@ struct TruncatingText: View {
         guard !isExpanded, shownHeight > 0, fullHeight > 0 else { return }
         let truncated = fullHeight > shownHeight + 1
         if truncated != isTruncated { isTruncated = truncated }
-    }
-}
-/// The round glass button under a text that folds: a chevron that opens it and, turned over, folds it again.
-struct FoldButton: View {
-    let isExpanded: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.down")
-                .fontWeight(.semibold)
-                .rotationEffect(.degrees(isExpanded ? 180 : 0))
-        }
-        .glassCircleButton(.small)
-        .accessibilityLabel(isExpanded ? "Less" : "More")
-        .help(isExpanded ? "Less" : "More")
     }
 }
 #endif

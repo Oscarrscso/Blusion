@@ -127,9 +127,6 @@ struct StreamTechnicalDetails: View {
                 HStack(spacing: Theme.Spacing.xs) {
                     Text("Technical details")
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
