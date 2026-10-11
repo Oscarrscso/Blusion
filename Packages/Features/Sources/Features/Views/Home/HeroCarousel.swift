@@ -99,8 +99,12 @@ struct HeroCarousel: View {
                         view.scaleEffect(settle.scale)
                     } keyframes: { _ in
                         KeyframeTrack(\.scale) {
-                            LinearKeyframe(1.025, duration: 0)
+                            // A move, not a keyframe of no length: that one has no speed to hand the spring, and the scale comes out
+                            // infinite, which draws nothing and takes no touches.
+                            MoveKeyframe(1.025)
                             SpringKeyframe(1, duration: 0.4, spring: .smooth)
+                            // The spring is not quite at rest when its time is up. The spotlight ends at exactly its own size.
+                            LinearKeyframe(1, duration: 0.1)
                         }
                     }
                     .frame(width: geometry.size.width, height: height)
@@ -314,11 +318,11 @@ private struct HeroPage: View {
             VStack(spacing: 0) {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
-                // The metadata line starts at the picture's bottom edge, as it does on the title page, left-aligned at the page's margin.
+                // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
                 MetaLine(DetailViewModel.heroMetaParts(for: item, certification: nil))
-                    .multilineTextAlignment(.leading)
+                    .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                     .padding(.horizontal, metrics.contentMargin)
                     .frame(height: TitleHero.captionBelow, alignment: .top)
             }

@@ -264,21 +264,16 @@ struct DetailView: View {
             .accessibilityIdentifier("detail.title")
     }
 
-    /// The metadata line, the same text as the spotlight's. It sits under the actions, left-aligned.
+    /// The metadata line, the same text as the spotlight's. It sits above the actions.
     private var metaParts: [String?] {
         DetailViewModel.heroMetaParts(for: model.detail.preview, certification: model.certification)
     }
 
     private var controls: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
-            // Hidden, and it keeps the space the line used to take above Play, so the actions stay where they were.
             MetaLine(metaParts)
-                .hidden()
-                .accessibilityHidden(true)
+                .multilineTextAlignment(isLandscape ? .leading : .center)
             actionRow
-            MetaLine(metaParts)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
             if model.isFallback && !model.isLoading {
                 Label("Only basic details are available for this title.", systemImage: "info.circle")
                     .font(.footnote)
@@ -643,10 +638,6 @@ struct DetailView: View {
                     }
                 }
             }
-            // Trailers sit below TMDb Reviews and above Cast & Crew.
-            if !model.trailers.isEmpty {
-                trailersSection
-            }
             if let people = model.castAndCrew, !people.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
@@ -689,28 +680,6 @@ struct DetailView: View {
             }
             .frame(maxWidth: metrics.readableWidth, alignment: .leading)
             .padding(.horizontal, contentMargin)
-        }
-    }
-
-    /// The title's trailers in one shelf. A direct file plays in Blusion; a YouTube trailer opens in the YouTube app.
-    private var trailersSection: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            SectionHeader("Trailers")
-                .padding(.horizontal, contentMargin)
-            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
-                ForEach(model.trailers) { trailer in
-                    Button {
-                        Haptics.tap()
-                        playingTrailer = trailer
-                    } label: {
-                        TrailerCard(trailer: trailer, fallbackArtwork: model.backdropURL)
-                    }
-                    .buttonStyle(PressableCardStyle())
-                    .reportsShelfEdge(id: trailer.id)
-                    .accessibilityIdentifier("detail.trailer.\(trailer.id)")
-                }
-            }
-            .accessibilityIdentifier("detail.trailers")
         }
     }
 
