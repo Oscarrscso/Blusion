@@ -172,7 +172,9 @@ struct DetailView: View {
     private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
 
     private var placeholderURL: URL? { model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id) }
-    private var logoURL: URL? { model.logoURL }
+    /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
+    private var hidesLogo: Bool { !isLandscape && model.portraitHidesLogo }
+    private var logoURL: URL? { hidesLogo ? nil : model.logoURL }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: !model.isLoadingArtwork) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: !model.isLoadingArtwork) }
     /// The picture and the logo are revealed together, once neither is still pending.
@@ -235,7 +237,7 @@ struct DetailView: View {
             .background(alignment: .top) {
                 // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
                 HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
-                    .frame(width: size.width, height: height + scrollPull)
+                    .frame(width: size.width, height: TitleHero.pictureHeight(height) + scrollPull)
                     .clipped()
                     .overlay(alignment: .bottom) {
                         BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
@@ -247,7 +249,7 @@ struct DetailView: View {
     }
 
     private func titleArt(alignment: Alignment) -> some View {
-        HeroTitleArt(name: model.detail.name, slot: logoSlot, alignment: alignment, compact: isLandscape)
+        HeroTitleArt(name: model.detail.name, slot: logoSlot, alignment: alignment, compact: isLandscape, hidden: hidesLogo)
             .frame(maxWidth: .infinity, alignment: alignment)
             // Hidden rather than removed, so the layout does not move when the title appears.
             .opacity(isHeroRevealed ? 1 : 0)

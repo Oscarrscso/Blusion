@@ -123,11 +123,14 @@ struct HeroCarousel: View {
         }
         guard !Task.isCancelled else { return }
         let ratings = ratings
+        let portrait = !isLandscape
         await withTaskGroup(of: Void.self) { group in
             for item in nearestFirst {
                 group.addTask(priority: .medium) {
                     let artwork = await ratings.heroArtwork(for: item)
-                    guard !Task.isCancelled, let url = item.logo ?? artwork?.logo else { return }
+                    // A portrait picture that carries the title hides the logo, so there is nothing to warm.
+                    guard !Task.isCancelled, !(portrait && artwork?.portraitHidesLogo == true),
+                          let url = item.logo ?? artwork?.logo else { return }
                     await HeroLoader.warmLogo(url, priority: .medium)
                 }
             }
@@ -207,7 +210,9 @@ private struct HeroPage: View {
             ?? (artworkChecked ? (item.background ?? MetahubArtwork.background(imdbID: item.id)) : nil)
     }
     private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
-    private var logoURL: URL? { item.logo ?? heroArtwork?.logo }
+    /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
+    private var hidesLogo: Bool { !isLandscape && heroArtwork?.portraitHidesLogo == true }
+    private var logoURL: URL? { hidesLogo ? nil : (item.logo ?? heroArtwork?.logo) }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: artworkChecked) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
@@ -279,11 +284,6 @@ private struct HeroPage: View {
         } else {
             VStack(spacing: 0) {
                 ZStack(alignment: .bottom) {
-                    artwork
-                        .allowsHitTesting(false)
-                    // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
-                    BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
-                        .padding(.bottom, -TitleHero.fadeOverscan)
                     portraitTitle
                 }
                 .frame(height: artworkHeight)
@@ -294,12 +294,23 @@ private struct HeroPage: View {
                     .frame(height: TitleHero.captionBelow, alignment: .top)
             }
             .foregroundStyle(.white)
+            // The picture is zoomed, so it is taller than the hero and runs behind the metadata line. The page clips what passes its bottom.
+            .background(alignment: .top) {
+                ZStack(alignment: .bottom) {
+                    artwork
+                        .allowsHitTesting(false)
+                    // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
+                    BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                        .padding(.bottom, -TitleHero.fadeOverscan)
+                }
+                .frame(height: TitleHero.pictureHeight(artworkHeight))
+            }
         }
     }
 
     /// The portrait title, low on the picture, with the same gap above the metadata line as on the title page.
     private var portraitTitle: some View {
-        HeroTitleArt(name: item.name, slot: logoSlot, alignment: .center, compact: false)
+        HeroTitleArt(name: item.name, slot: logoSlot, alignment: .center, compact: false, hidden: hidesLogo)
             .frame(maxWidth: .infinity, alignment: .center)
             // Hidden until the hero reveals, and its space is kept while the logo is pending.
             .opacity(isRevealed ? 1 : 0)

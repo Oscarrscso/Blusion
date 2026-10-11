@@ -4,6 +4,8 @@ public struct TMDbArtwork: Sendable, Hashable {
     public let backdrop: URL?
     public let portrait: URL?
     public let logo: URL?
+    /// The portrait is a poster that already carries the title's English wording, so the separate logo is not shown in portrait.
+    public var portraitHidesLogo = false
 }
 
 public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
@@ -122,7 +124,8 @@ public struct TMDbRatings: Sendable {
         }
     }
 
-    /// The backdrop is the best one `BackdropPicker` finds (textless first, then the highest rated). The poster and logo keep the most-voted pick.
+    /// The backdrop is the best one `BackdropPicker` finds (textless first, then the highest rated). The portrait is `portraitPick`,
+    /// and the logo is the most-voted English one.
     public func artwork(imdbID: String, type: String) async throws -> TMDbArtwork? {
         guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return nil }
         let id = String(number)
@@ -133,12 +136,24 @@ public struct TMDbRatings: Sendable {
         let images: Images
         do { images = try JSONDecoder().decode(Images.self, from: result.data) } catch { throw AddonError.invalidJSON }
         let logos = images.logos ?? []
-        let english = logos.filter { $0.iso_639_1 == "en" }
-        let portraits = images.posters ?? []
-        let textless = portraits.filter { $0.iso_639_1 == nil }
-        return TMDbArtwork(backdrop: BackdropPicker.best(Self.backdropCandidates(images.backdrops ?? [])),
-                           portrait: Self.popular(textless.isEmpty ? portraits : textless)?.url(size: "original"),
-                           logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"))
+        let english = logos.filter { $0.language == "en" }
+        let backdrops = images.backdrops ?? []
+        let portrait = Self.portraitPick(posters: images.posters ?? [], backdrops: backdrops)
+        return TMDbArtwork(backdrop: BackdropPicker.best(Self.backdropCandidates(backdrops)),
+                           portrait: portrait?.url,
+                           logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"),
+                           portraitHidesLogo: portrait?.hidesLogo ?? false)
+    }
+
+    /// The portrait hero, in this order: the best textless poster; else the best textless backdrop, which the view fills and crops;
+    /// else the best English poster; else the best other poster. `hidesLogo` is false only when the image carries no words of its own
+    /// (a textless poster or backdrop), so an English or other-language poster hides the separate logo.
+    private static func portraitPick(posters: [Image], backdrops: [Image]) -> (url: URL, hidesLogo: Bool)? {
+        if let poster = popular(posters.filter(\.isTextless)), let url = poster.url(size: "original") { return (url, false) }
+        if let url = BackdropPicker.best(backdropCandidates(backdrops.filter(\.isTextless))) { return (url, false) }
+        if let poster = popular(posters.filter { $0.language == "en" }), let url = poster.url(size: "original") { return (url, true) }
+        if let poster = popular(posters), let url = poster.url(size: "original") { return (url, !poster.isTextless) }
+        return nil
     }
 
     public func reviews(imdbID: String, type: String) async throws -> [TMDbReview] {
@@ -214,6 +229,12 @@ public struct TMDbRatings: Sendable {
         let vote_count: Int?
         let vote_average: Double?
         let width: Int?
+        /// The language tag, trimmed and lowercased. Nil when blank.
+        var language: String? {
+            let tag = iso_639_1?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return tag?.isEmpty == false ? tag : nil
+        }
+        var isTextless: Bool { language == nil }
         func url(size: String) -> URL? { URL(string: "https://image.tmdb.org/t/p/\(size)\(file_path)") }
     }
 

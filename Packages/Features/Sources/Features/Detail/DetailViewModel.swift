@@ -391,6 +391,9 @@ public final class DetailViewModel {
     /// The title's logo (a transparent image), when the preview or the TMDb lookup has one.
     public var logoURL: URL? { preview.logo ?? tmdbArtwork?.logo }
 
+    /// Whether the portrait picture already carries the title, so the separate logo is not shown in portrait.
+    public var portraitHidesLogo: Bool { tmdbArtwork?.portraitHidesLogo ?? false }
+
     /// Year, certification and runtime for a `MetaLine`: "2008", "PG-13", "152 min". Parts the addon left out are skipped. The rating
     /// is not here: the page shows it as a button under the title.
     public var metaParts: [String] {

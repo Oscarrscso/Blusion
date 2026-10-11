@@ -92,4 +92,63 @@ import StremioKitTestSupport
             .artwork(imdbID: "tt0468569", type: "movie")
         #expect(artwork?.backdrop == URL(string: "https://image.tmdb.org/t/p/original/clean-rated.jpg"))
     }
+
+    private func image(_ name: String, language: String? = nil, votes: Int = 10, rating: Double = 6.0) -> String {
+        let tag = language.map { "\"\($0)\"" } ?? "null"
+        return #"{"file_path":"/\#(name).jpg","iso_639_1":\#(tag),"vote_average":\#(rating),"vote_count":\#(votes),"width":1920}"#
+    }
+
+    private func portraitArtwork(posters: [String] = [], backdrops: [String] = []) async throws -> TMDbArtwork? {
+        let images = #"{"backdrops":[\#(backdrops.joined(separator: ","))],"posters":[\#(posters.joined(separator: ","))],"logos":[]}"#
+        let transport = StubTransport { request, _ in
+            let json = request.url?.lastPathComponent == "images" ? images : #"{"movie_results":[{"id":155}],"tv_results":[]}"#
+            return StubTransport.response(Data(json.utf8), for: request)
+        }
+        return try await TMDbRatings(client: makeClient(transport), readAccessToken: jwt, titleIDs: TMDbTitleIDCache())
+            .artwork(imdbID: "tt0468569", type: "movie")
+    }
+
+    @Test func aTextlessPosterIsThePortraitBeforeATextlessBackdrop() async throws {
+        let artwork = try await portraitArtwork(posters: [image("poster-clean", votes: 10)],
+                                                backdrops: [image("backdrop-clean", votes: 900, rating: 9.0)])
+        #expect(artwork?.portrait == url("poster-clean"))
+        #expect(artwork?.portraitHidesLogo == false)
+    }
+
+    @Test func aTextlessBackdropIsThePortraitWhenThereIsNoTextlessPoster() async throws {
+        let artwork = try await portraitArtwork(posters: [image("poster-en", language: "en", votes: 900, rating: 9.0)],
+                                                backdrops: [image("backdrop-clean", votes: 10)])
+        #expect(artwork?.portrait == url("backdrop-clean"))
+        #expect(artwork?.backdrop == url("backdrop-clean"))
+        #expect(artwork?.portraitHidesLogo == false)
+    }
+
+    @Test func anEnglishPosterIsThePortraitAndHidesTheLogo() async throws {
+        let artwork = try await portraitArtwork(posters: [image("poster-fr", language: "fr", votes: 900, rating: 9.0),
+                                                          image("poster-en", language: "en", votes: 10)],
+                                                backdrops: [image("backdrop-en", language: "en", votes: 900)])
+        #expect(artwork?.portrait == url("poster-en"))
+        #expect(artwork?.portraitHidesLogo == true)
+    }
+
+    @Test func anOtherLanguagePosterIsThePortraitAndHidesTheLogo() async throws {
+        let artwork = try await portraitArtwork(posters: [image("poster-fr", language: "fr")],
+                                                backdrops: [image("backdrop-fr", language: "fr", votes: 900)])
+        #expect(artwork?.portrait == url("poster-fr"))
+        #expect(artwork?.portraitHidesLogo == true)
+    }
+
+    @Test func thePortraitIsTheMostVotedImageWithinItsTier() async throws {
+        let textless = try await portraitArtwork(posters: [image("low", votes: 10, rating: 9.0), image("top", votes: 50, rating: 6.0),
+                                                           image("en", language: "en", votes: 900)])
+        #expect(textless?.portrait == url("top"))
+        #expect(textless?.portraitHidesLogo == false)
+        let blank = try await portraitArtwork(posters: [image("top", votes: 50), image("blank", language: " ", votes: 60)])
+        #expect(blank?.portrait == url("blank"))
+        #expect(blank?.portraitHidesLogo == false)
+        let english = try await portraitArtwork(posters: [image("en-low", language: "en", votes: 10),
+                                                          image("en-top", language: " EN ", votes: 50)])
+        #expect(english?.portrait == url("en-top"))
+        #expect(english?.portraitHidesLogo == true)
+    }
 }

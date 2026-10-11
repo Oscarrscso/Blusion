@@ -4,8 +4,11 @@ import SwiftUI
 /// The portrait hero's numbers, shared by Home's spotlight and the title page so that opening a title from one looks the same on the
 /// other: the same picture size, fade, logo and placement. Both screens read them; change one here and both move together.
 enum TitleHero {
-    /// The share of the picture's height that the bottom fade covers.
-    static let fadeLength = 0.42
+    /// The portrait picture is drawn this much larger than its frame (see `pictureHeight`).
+    static let zoom: CGFloat = 1.15
+    /// The share of the picture's height that the bottom fade covers. Divided by `zoom` because the picture is zoomed, so the fade's length
+    /// stays 0.42 of the unzoomed height and ends at the zoomed picture's bottom.
+    static let fadeLength = 0.42 / Double(zoom)
     static let fadeStrength = 1.0
     /// How far the bottom fade runs past the picture's bottom edge, so no row of picture pixels shows under it while the page moves.
     static let fadeOverscan: CGFloat = 2
@@ -56,6 +59,10 @@ enum TitleHero {
     static func height(width: CGFloat, metrics: LayoutMetrics) -> CGFloat {
         min(width * 1.5, metrics.heroMaxHeight)
     }
+
+    /// The height of the zoomed portrait picture on a hero `height` tall. The picture is zoomed, so it is taller than the hero and reaches
+    /// below its bottom edge, behind the text.
+    static func pictureHeight(_ height: CGFloat) -> CGFloat { height * zoom }
 }
 
 /// What one hero image is doing: still loading, decoded and ready, or there is none (no URL once the lookup has finished, or it failed).
@@ -257,6 +264,8 @@ struct HeroTitleArt: View {
     let slot: HeroSlot
     let alignment: Alignment
     let compact: Bool
+    /// Draws nothing, not even the name, but keeps the logo's space, for a portrait picture that already carries the title.
+    var hidden = false
 
     /// The tallest a logo can be on this page.
     private var logoHeight: CGFloat { compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight }
@@ -266,11 +275,13 @@ struct HeroTitleArt: View {
         return false
     }
     /// A title keeps the logo's space until the logo is ready or known to be absent.
-    private var reservesLogoHeight: Bool { !isNone }
+    private var reservesLogoHeight: Bool { !isNone || hidden }
 
     var body: some View {
         Group {
-            if case .ready(let image) = slot {
+            if hidden {
+                Color.clear.frame(height: 0)
+            } else if case .ready(let image) = slot {
                 LogoLayout(imageSize: image.size, maxWidth: compact ? TitleHero.landscapeLogoMaxWidth : .infinity, maxHeight: logoHeight) {
                     Image(uiImage: image)
                         .resizable()
