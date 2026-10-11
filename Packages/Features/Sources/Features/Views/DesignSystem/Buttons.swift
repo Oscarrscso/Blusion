@@ -86,6 +86,8 @@ struct CircleActionButton: View {
     let onTitle: String?
     let onSystemImage: String?
     let action: () -> Void
+    /// The height of the large glass capsule beside it, so the circles are level with Play and equally wide.
+    static let diameter: CGFloat = 50
 
     init(title: String, systemImage: String, isOn: Bool = false, onTitle: String? = nil, onSystemImage: String? = nil,
          action: @escaping () -> Void) {
@@ -103,9 +105,12 @@ struct CircleActionButton: View {
                 .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
                 .fontWeight(.semibold)
                 .contentTransition(.symbolEffect(.replace))
+                // Every symbol is a different width; the label fills the same square so each button is the same circle.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         // The large size, like the main action beside it on the title page, so the two read as one row.
         .glassCircleButton()
+        .frame(width: Self.diameter, height: Self.diameter)
         // The caption is gone, so the name is spoken here instead.
         .accessibilityLabel(isOn ? (onTitle ?? title) : title)
         .help(isOn ? (onTitle ?? title) : title)

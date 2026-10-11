@@ -81,9 +81,9 @@ final class HeroLoader {
     /// The one reveal condition: neither is still pending. A missing or failed one does not hold the other back.
     static func isRevealed(_ picture: HeroSlot, _ logo: HeroSlot) -> Bool { !picture.isPending && !logo.isPending }
 
-    /// Starts the picture and the logo together at high priority and returns when both have finished. Does nothing until both URLs are
+    /// Starts the picture and the logo together at `priority` (high by default) and returns when both have finished. Does nothing until both URLs are
     /// known, or known to be absent (`lookupFinished`), so neither starts alone. The reveal is one state change in one transaction.
-    func load(picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat, lookupFinished: Bool) async {
+    func load(priority: TaskPriority = .high, picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat, lookupFinished: Bool) async {
         guard (picture != nil || lookupFinished), (logo != nil || lookupFinished) else { return }
         let wanted = [(picture, pictureSize), (logo, logoSize)].compactMap { url, size in
             url.map { ($0, size) }
@@ -92,7 +92,7 @@ final class HeroLoader {
         let failures = await withTaskGroup(of: String?.self, returning: [String].self) { group in
             for (url, size) in wanted {
                 group.addTask {
-                    do { _ = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: .high); return nil }
+                    do { _ = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority); return nil }
                     catch { return Task.isCancelled ? nil : Self.key(url, size) }
                 }
             }

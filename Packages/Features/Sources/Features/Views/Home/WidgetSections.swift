@@ -123,10 +123,13 @@ struct UnsupportedWidgetRow: View {
 struct CollectionRow: View {
     let widget: HomeWidget
     let items: [CollectionItem]
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
         if !items.isEmpty {
-            MediaRow(widget.title, hideTitle: widget.hideTitle) {
+            // The genre shelf's header opens the Search tab's category browser, which lists the same genres.
+            MediaRow(widget.title, hideTitle: widget.hideTitle,
+                     onSeeAll: widget.id == "auto.genres" ? { router.showSearchBrowse() } : nil) {
                 ForEach(items) { item in
                     NavigationLink(value: CatalogListRequest(title: item.title, sources: item.sources, presentation: WidgetPresentation())) {
                         CollectionTile(title: item.title, imageURL: item.imageURL, aspect: item.imageAspect.cardAspect, hideTitle: item.hideTitle)

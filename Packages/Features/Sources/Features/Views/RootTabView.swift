@@ -47,6 +47,13 @@ public final class AppRouter {
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
+    /// The Search tab on its category browser, as if the tab had been tapped from another tab.
+    func showSearchBrowse() {
+        searchPath = NavigationPath()
+        searchBrowseRevision += 1
+        tab = .search
+    }
+
     /// The Settings tab, on its first screen.
     public func showSettings() { showSettings(.settings) }
 

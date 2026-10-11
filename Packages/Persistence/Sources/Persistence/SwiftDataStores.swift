@@ -40,10 +40,12 @@ public enum PersistenceContainer {
 
 /// `AddonStore` backed by SwiftData. The context is confined to this actor.
 public actor SwiftDataAddonStore: AddonStore {
-    private let context: ModelContext
+    private let container: ModelContainer
+    /// Created on first use, on this actor's executor, so the context is never bound to the main queue the store was built on.
+    private lazy var context = ModelContext(container)
 
     public init(container: ModelContainer) {
-        self.context = ModelContext(container)
+        self.container = container
     }
 
     public func loadAll() async throws -> [AddonRecord] {
@@ -78,10 +80,12 @@ public actor SwiftDataAddonStore: AddonStore {
 
 /// `ProgressStore` backed by SwiftData.
 public actor SwiftDataProgressStore: ProgressStore {
-    private let context: ModelContext
+    private let container: ModelContainer
+    /// Created on first use, on this actor's executor, so the context is never bound to the main queue the store was built on.
+    private lazy var context = ModelContext(container)
 
     public init(container: ModelContainer) {
-        self.context = ModelContext(container)
+        self.container = container
     }
 
     private func fetch(_ identity: String) -> WatchProgressEntity? {
@@ -165,10 +169,12 @@ public actor SwiftDataProgressStore: ProgressStore {
 
 /// `LibraryStore` backed by SwiftData.
 public actor SwiftDataLibraryStore: LibraryStore {
-    private let context: ModelContext
+    private let container: ModelContainer
+    /// Created on first use, on this actor's executor, so the context is never bound to the main queue the store was built on.
+    private lazy var context = ModelContext(container)
 
     public init(container: ModelContainer) {
-        self.context = ModelContext(container)
+        self.container = container
     }
 
     private func fetch(_ id: String) -> LibraryEntity? {

@@ -50,7 +50,8 @@ struct DetailView: View {
         #if targetEnvironment(macCatalyst)
         return max(sideInset, windowSideInset) + Self.backButtonColumn
         #else
-        return metrics.contentMargin + max(sideInset, windowSideInset)
+        // Just clear of the notch and rounded corners: the side inset plus a small gap, never less than a slim margin.
+        return max(max(sideInset, windowSideInset) + Theme.Spacing.xs, Theme.Spacing.m)
         #endif
     }
 
@@ -140,7 +141,7 @@ struct DetailView: View {
                         PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     titleArt(alignment: .leading)
                     controls
                 }
@@ -160,10 +161,9 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
-                    // The block below the logo keeps the section gap from the logo, the same gap the season picker or the credits keep
-                    // below it, so the block sits centred between the two. The stack's own spacing is part of that gap.
+                    // The block below the logo sits close to it: 60% of the section gap. The stack's own spacing is part of that gap.
                     controls
-                        .padding(.top, sectionSpacing - Theme.Spacing.m)
+                        .padding(.top, sectionSpacing * 0.6 - Theme.Spacing.m)
                     synopsis
                     RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
                 }
@@ -193,7 +193,7 @@ struct DetailView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.m) {
+        VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
             MetaLine([model.detail.preview.genres.first] + model.metaParts.map { Optional($0) })
                 .multilineTextAlignment(isLandscape ? .leading : .center)
             actionRow

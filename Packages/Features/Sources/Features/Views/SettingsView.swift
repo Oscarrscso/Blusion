@@ -125,25 +125,21 @@ struct SettingsView: View {
                     Text(LazyLoadLookahead.levels[min(max(lookaheadLevel, 1), LazyLoadLookahead.levels.count) - 1].label)
                         .foregroundStyle(.secondary)
                 }
-                Slider(value: Binding(get: { Double(lookaheadLevel) }, set: { value in
-                    let level = Int(value.rounded())
-                    if level != lookaheadLevel { Haptics.selection(); lookaheadLevel = level }
-                }), in: 1...Double(LazyLoadLookahead.levels.count), step: 1) {
-                    Text("Lazy load")
-                } minimumValueLabel: {
-                    Text(LazyLoadLookahead.levels[0].label).font(.caption)
-                } maximumValueLabel: {
-                    Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label).font(.caption)
+                GlassSlider(value: $lookaheadLevel, stops: LazyLoadLookahead.levels.count)
+                    .accessibilityLabel("Lazy load")
+                    .accessibilityIdentifier("settings.lazyLoadLookahead")
+                HStack {
+                    Text(LazyLoadLookahead.levels[0].label)
+                    Spacer()
+                    Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label)
                 }
-                .accessibilityIdentifier("settings.lazyLoadLookahead")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         } header: {
             Text("Lazy load")
         } footer: {
-            Text("""
-                How far ahead the next titles start loading while you scroll a long list, and how far behind the artwork of titles \
-                you have scrolled past is released. Further loads sooner, uses more data and keeps more artwork in memory.
-                """)
+            Text("How early long lists load. Further uses more data and memory.")
         }
     }
 

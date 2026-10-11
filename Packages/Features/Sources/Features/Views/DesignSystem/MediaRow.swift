@@ -117,7 +117,7 @@ struct MediaRow<Content: View>: View {
 }
 
 /// A grid of titles that fills the width: three posters across a phone, as many as fit in a Mac window. `onLastAppear` makes it paged:
-/// it fires as soon as any title within `LazyLoadLookahead.titlesAhead` of the end appears, so a caller can load the next page. A paged
+/// it fires as soon as any title within the lazy-load buffer of the end appears, so a caller can load the next page. A paged
 /// grid also releases the artwork of titles that have scrolled that far behind the first one on screen; they show a blank card of the
 /// same size until they come back.
 struct MediaGrid: View {
@@ -139,9 +139,11 @@ struct MediaGrid: View {
     }
 
     var body: some View {
-        let loadIndex = LazyLoadLookahead.triggerIndex(count: items.count)
+        // A row is as many titles as the grid is wide: three on a phone, more in a Mac window.
+        let columns = metrics.isRegular ? 6 : LazyLoadLookahead.phoneColumns
+        let loadIndex = LazyLoadLookahead.triggerIndex(count: items.count, columns: columns)
         // Only a paged grid releases artwork; before anything has appeared nothing is released.
-        let releaseBelow = onLastAppear == nil ? nil : visibleIndices.min().map { $0 - LazyLoadLookahead.titlesAhead }
+        let releaseBelow = onLastAppear == nil ? nil : visibleIndices.min().map { $0 - LazyLoadLookahead.titlesAhead(columns: columns) }
         // A poster in landscape is drawn as a wide card without a caption (see `MediaCard`), so its blank card has that shape.
         let landscapePoster = isLandscape && aspect == .poster
         LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.cardSpacing) {

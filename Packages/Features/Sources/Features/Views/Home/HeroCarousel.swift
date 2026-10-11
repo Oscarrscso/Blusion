@@ -55,6 +55,14 @@ struct HeroCarousel: View {
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
+    /// How many pages ahead of (and behind) the one on screen load their full-quality picture. The nearest page and its neighbour start at
+    /// once; the rest of the window follows. Pages beyond it show their poster until the swipe brings them in range.
+    static let loadWindow = 2
+
+    private var currentIndex: Int {
+        items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
+    }
+
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
         let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + TitleHero.captionBelow
@@ -67,9 +75,9 @@ struct HeroCarousel: View {
                     let pull = isLandscape ? 0 : heroPull
                     let height = geometry.size.height + pull
                     TabView(selection: $pageID) {
-                        ForEach(items, id: \.identity) { item in
+                        ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                             HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow,
-                                     cachedArtwork: ratings.cachedHeroArtwork(for: item))
+                                     cachedArtwork: ratings.cachedHeroArtwork(for: item), distance: abs(index - currentIndex))
                                 .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
@@ -138,6 +146,8 @@ private struct HeroPage: View {
     let isScrolling: Bool
     /// The picture's height in portrait: the page less the caption band under it, so a pull stretches the picture too.
     let artworkHeight: CGFloat
+    /// Pages between this one and the one on screen. Only pages inside `HeroCarousel.loadWindow` load their picture.
+    let distance: Int
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
@@ -149,13 +159,20 @@ private struct HeroPage: View {
     @State private var artworkChecked: Bool
     @State private var hero = HeroLoader()
 
-    init(item: MetaPreview, isScrolling: Bool, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?) {
+    init(item: MetaPreview, isScrolling: Bool, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?, distance: Int) {
+        self.distance = distance
         self.item = item
         self.isScrolling = isScrolling
         self.artworkHeight = artworkHeight
         _heroArtwork = State(initialValue: cachedArtwork)
         _artworkChecked = State(initialValue: cachedArtwork != nil)
     }
+
+    private var isInWindow: Bool { distance <= HeroCarousel.loadWindow }
+    /// The nearest two pages jump the queue; the next one waits behind them.
+    private var loadPriority: TaskPriority { distance <= 1 ? .high : .medium }
+    /// What stands in for the picture and logo until both are ready.
+    private var placeholderURL: URL? { item.poster ?? MetahubArtwork.poster(imdbID: item.id) }
 
     private var heroURL: URL? {
         (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
@@ -198,14 +215,16 @@ private struct HeroPage: View {
             }
         }
         .coordinateSpace(name: HeroPage.sourceID(for: item))
-        .task(id: ratings.reviewServicesRevision) {
+        .task(id: "\(ratings.reviewServicesRevision)|\(isInWindow)") {
+            guard isInWindow else { return }
             let loaded = await ratings.heroArtwork(for: item)
             guard !Task.isCancelled else { return }
             heroArtwork = loaded
             artworkChecked = true
         }
-        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)") {
-            await hero.load(picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(isInWindow)|\(distance <= 1)") {
+            guard isInWindow else { return }
+            await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
                             lookupFinished: artworkChecked)
         }
     }
@@ -254,7 +273,7 @@ private struct HeroPage: View {
     private var artwork: some View {
         Color.clear
             .overlay {
-                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill)
+                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill, placeholderURL: placeholderURL)
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }

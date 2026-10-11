@@ -140,7 +140,7 @@ struct PersonView: View {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.knownFor) { credit in
                         NavigationLink(value: credit.titleDestination) {
-                            MediaCard(item: credit.preview, aspect: .wide, showsRating: false, subtitle: credit.roleText)
+                            KnownForCard(title: credit.title.isEmpty ? "Untitled" : credit.title, backdrop: credit.backdrop, role: credit.roleText)
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
@@ -175,6 +175,8 @@ struct PersonView: View {
                     .accessibilityIdentifier("person.noCredits")
             }
             // A lazy stack builds a card only when it is about to scroll on screen, so artwork is requested for what is visible.
+            // The next page loads when a row inside the lazy-load buffer from the end appears, not only at the very end.
+            let triggerID = LazyLoadLookahead.triggerElement(in: model.sections.flatMap(\.credits))?.id
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 ForEach(model.sections) { section in
                     VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -184,6 +186,7 @@ struct PersonView: View {
                             .accessibilityIdentifier("person.year.\(section.id)")
                         ForEach(section.credits) { credit in
                             CreditRow(credit: credit, isUnreleased: model.isUnreleased(credit))
+                                .onAppear { if credit.id == triggerID { model.loadMore() } }
                         }
                     }
                 }
@@ -222,6 +225,28 @@ struct PersonView: View {
 }
 
 // MARK: - Pieces
+
+/// A Known For card: the Continue card's picture (darkened backdrop, title centred, same size, corners and shadow) without its bottom
+/// fade and playback row.
+private struct KnownForCard: View {
+    let title: String
+    let backdrop: URL?
+    let role: String
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.displayScale) private var displayScale
+
+    var body: some View {
+        let width = metrics.continueCardWidth
+        Color.clear
+            .frame(width: width, height: width / CardAspect.wide.ratio)
+            .overlay {
+                LandscapeArtwork(title: title, artwork: backdrop, logo: nil, maxPixelSize: min((width * displayScale).rounded(.up), 1200))
+            }
+            .mediaArtwork()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([title, role].filter { !$0.isEmpty }.joined(separator: ", "))
+    }
+}
 
 /// One credit as a row in the filmography: a poster, the title and kind, the role, and the rating when TMDb has one.
 private struct CreditRow: View {
