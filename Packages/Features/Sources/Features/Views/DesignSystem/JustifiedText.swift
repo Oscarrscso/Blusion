@@ -344,8 +344,9 @@ final class JustifiedLabel: UIView {
         return result
     }
 
-    /// The look of a link: the system link colour, underlined, with the URL as its value. Core Text reads its own keys for the colour and the
-    /// underline, so both sets are given.
+    /// The look of a link: the system link colour, underlined, with the URL as its value. Core Text reads its own key for the colour, so
+    /// both are given. The underline has one key: Core Text's is the same string as `.underlineStyle`, and a dictionary literal traps on
+    /// a key given twice.
     private func linkAttributes(url: URL) -> [NSAttributedString.Key: Any] {
         let tint = UIColor.link.resolvedColor(with: traitCollection)
         return [
@@ -353,7 +354,6 @@ final class JustifiedLabel: UIView {
             .foregroundColor: tint,
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): tint.cgColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
-            NSAttributedString.Key(kCTUnderlineStyleAttributeName as String): NSUnderlineStyle.single.rawValue,
         ]
     }
 
