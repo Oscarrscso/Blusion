@@ -50,6 +50,10 @@ struct LibraryView: View {
         }
         .screenBackground()
         .navigationTitle("Library")
+        #if !targetEnvironment(macCatalyst)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
+        #endif
         .task { model.attachRatings(ratings) }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
@@ -68,10 +72,17 @@ struct LibraryView: View {
         .accessibilityIdentifier("library.list")
     }
 
+    /// Half of the gap between the selector and the posters, so the sorts sit centred between them. The total gap is unchanged.
+    private var sortGap: CGFloat { (Theme.Spacing.s + metrics.shelfSpacing) / 2 }
+    /// The sort menus are a little shorter than the default filter label.
+    private static let sortHeight: CGFloat = 40
+
+    /// The Movies/Series selector, then the sort menus centred between it and the posters: `sortGap` above them and, from the
+    /// negative bottom padding, `sortGap` below them to the grid. Chips under the sorts keep their own padding.
     private var filters: some View {
         @Bindable var model = model
         let kinds: [LibraryKind] = [.movie, .series]
-        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        return VStack(alignment: .leading, spacing: sortGap) {
             QualitySelector(titles: ["All"] + kinds.map(\.title), selection: Binding {
                 kinds.firstIndex(where: { model.filter.kinds.contains($0) }).map { $0 + 1 } ?? 0
             } set: { index in
@@ -108,13 +119,14 @@ struct LibraryView: View {
             }
             .padding(.horizontal, metrics.pageMargin)
         }
+        .padding(.bottom, model.filter.chips.isEmpty ? sortGap - metrics.shelfSpacing : 0)
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: model.filter)
         .accessibilityIdentifier("library.filters")
     }
 
     private func filterLabel(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false) -> some View {
-        FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive)
+        FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive, minHeight: Self.sortHeight)
     }
 
     private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {

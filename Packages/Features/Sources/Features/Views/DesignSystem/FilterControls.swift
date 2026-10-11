@@ -8,12 +8,14 @@ struct FilterMenuLabel: View {
     let systemImage: String?
     let tint: Color
     let isActive: Bool
+    let minHeight: CGFloat
 
-    init(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false) {
+    init(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false, minHeight: CGFloat = 44) {
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
         self.isActive = isActive
+        self.minHeight = minHeight
     }
 
     var body: some View {
@@ -26,7 +28,7 @@ struct FilterMenuLabel: View {
         .font(.subheadline.weight(.semibold))
         .foregroundStyle(tint)
         .padding(.horizontal, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: minHeight)
         .glassEffect(.regular.tint(tint.opacity(isActive ? 0.25 : 0.08)).interactive(), in: .capsule)
         .accessibilityAddTraits(isActive ? .isSelected : [])
         .pointerFeedback()

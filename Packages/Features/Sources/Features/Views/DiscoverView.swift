@@ -27,6 +27,10 @@ struct DiscoverView: View {
         }
         .screenBackground()
         .navigationTitle("Discover")
+        #if !targetEnvironment(macCatalyst)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
+        #endif
         .task { await model.loadSources() }
         .accessibilityIdentifier("discover.scroll")
     }
