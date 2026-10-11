@@ -188,7 +188,7 @@ struct SettingsView: View {
         } footer: {
             Text("""
                 Optional. IMDb scores for titles come from the ratings file on this device, with no key. An OMDb key adds the IMDb score \
-                of each episode, asked for only as its card comes on screen. The free key allows 1,000 lookups a day. TMDB uses a Read \
+                of each episode, one request per season, made when its first episode card comes on screen. The free key allows 1,000 lookups a day. TMDB uses a Read \
                 Access Token. Credentials stay in the Keychain. Site links work without keys.
                 """)
         }

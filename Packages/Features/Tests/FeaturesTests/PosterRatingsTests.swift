@@ -262,31 +262,70 @@ import StremioKitTestSupport
         #expect(sink.lines.contains { $0.contains("episode lookup for season 1 failed") })
     }
 
-    private let omdbEpisode = Data(#"{"Response":"True","imdbRating":"8.9"}"#.utf8)
+    private let omdbSeason = Data(#"{"Response":"True","Season":"2","Episodes":[{"Episode":"1","imdbRating":"8.9"},{"Episode":"2","imdbRating":"N/A"}]}"#.utf8)
 
-    @Test func anEpisodeScoreComesFromOMDbOnceAndIsCached() async throws {
+    @Test func episodeScoresComeFromOMDbOncePerSeasonAndAreCached() async throws {
         let cache = InMemoryRatingsCache()
-        let transport = StubTransport(data: omdbEpisode)
+        let transport = StubTransport(data: omdbSeason)
         let store = PosterRatingsStore(cache: cache, now: { when }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
-        async let first = store.episodeRating(for: "tt0944947", season: 2, episode: 1)
-        async let second = store.episodeRating(for: "tt0944947", season: 2, episode: 1)
+        async let first = store.episodeRatings(for: "tt0944947", season: 2)
+        async let second = store.episodeRatings(for: "tt0944947", season: 2)
         let (a, b) = await (first, second)
-        #expect(a == 8.9 && b == 8.9)
-        let again = await store.episodeRating(for: "tt0944947", season: 2, episode: 1)
-        #expect(again == 8.9 && transport.callCount == 1)
-        let stored = await cache.value(for: "omdb:tt0944947:s2e1")
-        #expect(stored == CachedRating(rating: 8.9, fetchedAt: when))
-        _ = await store.episodeRating(for: "tt0944947", season: 2, episode: 2)
-        #expect(transport.callCount == 2, "each episode is its own request")
+        #expect(a == [1: 8.9] && b == a)
+        let again = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(again == a && transport.callCount == 1)
+        let stored = await cache.value(for: "omdb:tt0944947:s2")
+        #expect(stored == CachedRating(rating: nil, fetchedAt: when, episodes: [1: 8.9]))
+        _ = await store.episodeRatings(for: "tt0944947", season: 3)
+        #expect(transport.callCount == 2)
     }
 
     @Test func episodeScoresNeedAnOMDbKeyAndAnIMDbID() async throws {
-        let transport = StubTransport(data: omdbEpisode)
+        let transport = StubTransport(data: omdbSeason)
         let without = PosterRatingsStore()
         let withKey = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
-        let noKey = await without.episodeRating(for: "tt0944947", season: 1, episode: 1)
-        let notIMDb = await withKey.episodeRating(for: "kitsu:1", season: 1, episode: 1)
-        #expect(noKey == nil && notIMDb == nil && transport.callCount == 0)
+        let noKey = await without.episodeRatings(for: "tt0944947", season: 1)
+        let notIMDb = await withKey.episodeRatings(for: "kitsu:1", season: 1)
+        #expect(noKey.isEmpty && notIMDb.isEmpty && transport.callCount == 0)
+    }
+
+    @Test func refreshingEpisodesBypassesCachedMissesAndDeduplicatesTheNewAnswer() async throws {
+        let cache = InMemoryRatingsCache()
+        await cache.store(CachedRating(rating: nil, fetchedAt: when, episodes: [:]), for: "omdb:tt0944947:s2")
+        let transport = StubTransport(data: omdbSeason)
+        let store = PosterRatingsStore(cache: cache, now: { when }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        let before = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(before.isEmpty && transport.callCount == 0)
+        await store.refresh()
+        let after = await store.episodeRatings(for: "tt0944947", season: 2)
+        let again = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(after == [1: 8.9] && again == after && transport.callCount == 1)
+    }
+
+    @Test func episodeScoresRemainAvailableOfflineAfterTheirDailyExpiry() async throws {
+        let cache = InMemoryRatingsCache()
+        let cached = CachedRating(rating: nil, fetchedAt: when.addingTimeInterval(-86_400), episodes: [1: 8.9])
+        await cache.store(cached, for: "omdb:tt0944947:s2")
+        let transport = StubTransport { _, _ in throw AddonError.offline }
+        let store = PosterRatingsStore(cache: cache, now: { when }, omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "test-key"))
+        let scores = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(scores == [1: 8.9] && transport.callCount == 1)
+        #expect(store.omdbError?.contains("connection") == true)
+        let again = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(again == scores && transport.callCount == 1)
+        let retained = await cache.value(for: "omdb:tt0944947:s2")
+        #expect(retained == cached)
+    }
+
+    @Test func aRefusedOMDbKeyStopsSeasonLookupsUntilCredentialsChange() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
+        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "bad"))
+        for season in 1...4 { _ = await store.episodeRatings(for: "tt0944947", season: season) }
+        #expect(transport.callCount == 1, "the first refusal pauses the rest")
+        #expect(store.omdbError?.contains("rejected") == true)
+        await store.setReviewServices(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "good"), tmdb: nil)
+        _ = await store.episodeRatings(for: "tt0944947", season: 5)
+        #expect(transport.callCount == 2)
     }
 
     @Test func postersAndTitlePagesNeverAskOMDb() async throws {
@@ -297,45 +336,6 @@ import StremioKitTestSupport
         _ = store.ratings(for: MetaPreview(id: "tt7654321", type: "series"))
         try await Task.sleep(for: .milliseconds(60))
         #expect(transport.callCount == 0 && entry.imdb == nil && entry.metacritic == nil)
-    }
-
-    @Test func aMissingEpisodeScoreIsRetriedAfterAnHourAndAFoundOneAfterAWeek() async throws {
-        let clock = RatingsTestState(now: when)
-        let transport = StubTransport { request, call in
-            let body = call == 1 ? #"{"Response":"True","imdbRating":"N/A"}"# : #"{"Response":"True","imdbRating":"7.5"}"#
-            return StubTransport.response(Data(body.utf8), for: request)
-        }
-        let store = PosterRatingsStore(now: { clock.date }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
-        #expect(await store.episodeRating(for: "tt0944947", season: 1, episode: 1) == nil)
-        clock.advance(1_800)
-        #expect(await store.episodeRating(for: "tt0944947", season: 1, episode: 1) == nil && transport.callCount == 1)
-        clock.advance(1_800)
-        #expect(await store.episodeRating(for: "tt0944947", season: 1, episode: 1) == 7.5 && transport.callCount == 2)
-        clock.advance(6 * 86_400)
-        #expect(await store.episodeRating(for: "tt0944947", season: 1, episode: 1) == 7.5 && transport.callCount == 2)
-    }
-
-    @Test func aCachedEpisodeScoreSurvivesBeingOffline() async throws {
-        let cache = InMemoryRatingsCache()
-        let cached = CachedRating(rating: 8.9, fetchedAt: when.addingTimeInterval(-8 * 86_400))
-        await cache.store(cached, for: "omdb:tt0944947:s2e1")
-        let transport = StubTransport { _, _ in throw AddonError.offline }
-        let store = PosterRatingsStore(cache: cache, now: { when }, omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "test-key"))
-        #expect(await store.episodeRating(for: "tt0944947", season: 2, episode: 1) == 8.9)
-        #expect(store.omdbError?.contains("connection") == true)
-        let retained = await cache.value(for: "omdb:tt0944947:s2e1")
-        #expect(retained == cached)
-    }
-
-    @Test func aRefusedOMDbKeyStopsEpisodeLookupsUntilCredentialsChange() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
-        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "bad"))
-        for episode in 1...4 { _ = await store.episodeRating(for: "tt0944947", season: 1, episode: episode) }
-        #expect(transport.callCount == 1, "the first refusal pauses the rest")
-        #expect(store.omdbError?.contains("rejected") == true)
-        await store.setReviewServices(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "good"), tmdb: nil)
-        _ = await store.episodeRating(for: "tt0944947", season: 1, episode: 5)
-        #expect(transport.callCount == 2)
     }
 
     @Test func postersPreferTwoSourcesAndFillEitherMissingPreferredScore() {

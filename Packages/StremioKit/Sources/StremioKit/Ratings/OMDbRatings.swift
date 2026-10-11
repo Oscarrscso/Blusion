@@ -22,16 +22,34 @@ public struct OMDbRatings: Sendable {
         return try Self.parse(result.data)
     }
 
-    /// IMDb score of one episode (`Season` and `Episode` with the series' ID), or nil when OMDb does not know the episode or has no score
-    /// for it. One small request per episode, made when its card comes on screen.
-    public func episodeRating(imdbID: String, season: Int, episode: Int) async throws -> Double? {
-        guard LetterboxdRatings.isIMDbID(imdbID), season >= 0, episode >= 0, !apiKey.isEmpty else { return nil }
+    /// IMDb scores of one season's episodes, by episode number. Empty when OMDb does not know the season or has no scores in it.
+    /// Cinemeta sends `"0"` for the episodes of most shows, so this is where per-episode IMDb scores come from.
+    public func episodeRatings(imdbID: String, season: Int) async throws -> [Int: Double] {
+        guard LetterboxdRatings.isIMDbID(imdbID), season >= 0, !apiKey.isEmpty else { return [:] }
         var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         parts?.queryItems = [URLQueryItem(name: "apikey", value: apiKey), URLQueryItem(name: "i", value: imdbID),
-                             URLQueryItem(name: "Season", value: String(season)), URLQueryItem(name: "Episode", value: String(episode))]
+                             URLQueryItem(name: "Season", value: String(season))]
         guard let url = parts?.url else { throw AddonError.invalidURL }
-        let result = try await client.get(url, limits: FetchLimits(maxBytes: 64 * 1024), timeout: 6)
-        return try Self.parse(result.data).imdb.flatMap { $0 > 0 ? $0 : nil }
+        let result = try await client.get(url, limits: FetchLimits(maxBytes: 256 * 1024), timeout: 8)
+        return try Self.parseSeason(result.data)
+    }
+
+    /// `Episodes` of a season answer, as episode number to score. Episodes without a score (`"N/A"`) are left out.
+    public static func parseSeason(_ data: Data) throws -> [Int: Double] {
+        let response: SeasonResponse
+        do { response = try JSONDecoder().decode(SeasonResponse.self, from: data) } catch { throw AddonError.invalidJSON }
+        if response.Response == "False" {
+            if isMissingTitle(response.Error) { return [:] }
+            throw failure(for: response.Error)
+        }
+        guard response.Response == "True" else { throw AddonError.invalidJSON }
+        var scores: [Int: Double] = [:]
+        for episode in response.Episodes ?? [] {
+            guard let number = episode.Episode.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }), number >= 0,
+                  let value = score(episode.imdbRating, scale: 10), value > 0 else { continue }
+            scores[number] = value
+        }
+        return scores
     }
 
     public static func parse(_ data: Data) throws -> ReviewRatings {
@@ -80,4 +98,14 @@ public struct OMDbRatings: Sendable {
         let Ratings: [Rating]?
     }
     private struct Rating: Decodable { let Source: String; let Value: String }
+
+    private struct SeasonResponse: Decodable {
+        let Response: String?
+        let Error: String?
+        let Episodes: [SeasonEpisode]?
+    }
+    private struct SeasonEpisode: Decodable {
+        let Episode: String?
+        let imdbRating: String?
+    }
 }

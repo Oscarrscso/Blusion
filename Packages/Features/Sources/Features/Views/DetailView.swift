@@ -482,7 +482,7 @@ struct DetailView: View {
             }
         }
         .accessibilityIdentifier("detail.episode.\(video.id)")
-        // IMDb's per-episode score comes from OMDb, asked for as the card comes on screen (and again if the key changes).
+        // IMDb's episode scores come from OMDb, a season at a time, asked for when its first card comes on screen (and again if the key changes).
         .task(id: "\(video.id):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
             guard model.hasSettledHero else { return }
             await model.episodeAppeared(video)

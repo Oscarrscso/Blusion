@@ -49,11 +49,11 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   Titles with fewer than two available scores show only genuine scores. All configured sources are fetched and cached as you browse.
 - **Title details:** small buttons under the title (a site's icon, then its score) open the title on IMDb, Letterboxd, Rotten Tomatoes,
   Metacritic or TMDb. IMDb is always there; the others appear once they have a score. **Settings → Review services** accepts an optional
-  OMDb API key (per-episode IMDb scores only) and a TMDb API Read Access Token for TMDb ratings;
+  OMDb API key (episode IMDb scores only) and a TMDb API Read Access Token for TMDb ratings;
   select **Save Review Services**. Credentials are stored in the Keychain. The free OMDb key allows 1,000 lookups a day; if OMDb refuses the
   key or the quota runs out, Blusion stops asking for an hour.
   Saving credentials refreshes visible posters and episodes, including cached missing scores. **Refresh Ratings** or reopen the screen
-  checks again while keeping existing scores visible. Title scores refresh weekly, episode scores weekly, and missing scores hourly;
+  checks again while keeping existing scores visible. Title scores refresh weekly, episode seasons daily, and missing scores hourly;
   temporary failures leave cached scores available offline and can retry after a minute. OMDb errors appear under Review services.
 - **Offline IMDb ratings:** Blusion keeps IMDb's own public ratings file (`title.ratings.tsv.gz`, about 9 MB, 1.7 million titles) on the
   device and reads IMDb scores and vote counts from it with no network and no key. At launch, and when the app comes back to the front,
@@ -65,9 +65,9 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   and title pages. **Settings → IMDb ratings** shows the title count and the date of the last update, and carries IMDb's credit line.
   IMDb allows this data for personal, non-commercial use only (https://developer.imdb.com/non-commercial-datasets/): Blusion never
   uploads, shares or redistributes it. Check those terms before putting a build of Blusion in anyone else's hands.
-- **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each episode's IMDb score is
-  fetched only as its card scrolls onto the screen (one small request per episode, kept a week) and shown with the IMDb mark after the
-  episode's description. OMDb is used for nothing else: posters and title pages read the offline file.
+- **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key a season's IMDb scores are
+  fetched in one request when its first episode card scrolls onto the screen (nothing is asked when the page opens or for seasons you never
+  reach) and shown with the IMDb mark after each episode's description. OMDb is used for nothing else: posters and title pages read the offline file.
   A TMDb credential also fills episodes that have no addon rating, labeled TMDb to identify their source.
 - **Best Blu-ray edition:** pressing **Play** on a film automatically looks it up on
   [Best Blurays](https://www.bestblurays.com) while addons search for streams. The streams page shows the recommended release,

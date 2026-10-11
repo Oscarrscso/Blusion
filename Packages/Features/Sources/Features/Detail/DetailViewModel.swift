@@ -275,36 +275,45 @@ public final class DetailViewModel {
         public var text: String { value.formatted(.number.precision(.fractionLength(1))) }
     }
 
-    /// OMDb's scores by season, then episode number, for the episodes asked about so far.
+    /// OMDb's scores by season, then episode number. A season is here once it has been asked for, even when OMDb had none.
     public private(set) var omdbEpisodeScores: [Int: [Int: Double]] = [:]
-    @ObservationIgnored private var requestedEpisodeScores: Set<String> = []
+    @ObservationIgnored private var scoreTasks: [Int: Task<Void, Never>] = [:]
     @ObservationIgnored private var scoresRevision = 0
 
     /// Changes when review credentials do, so the cards ask again.
     public var reviewServicesRevision: Int { services.posterRatings.reviewServicesRevision }
 
-    /// An episode card came on screen: ask OMDb for its score and, when neither OMDb nor the addon has one, for its season's TMDb
-    /// scores. Nothing is asked for episodes that are never scrolled to. OMDb needs a key; without one nothing is requested.
+    /// An episode card came on screen: ask OMDb for its season's scores (one request, once per season) and, when neither OMDb nor the
+    /// addon has this episode's score, for the season's TMDb scores. Seasons whose cards are never scrolled to are never asked for.
+    /// OMDb needs a key; without one nothing is requested.
     public func episodeAppeared(_ video: Video) async {
-        await loadEpisodeScore(for: video)
+        await loadEpisodeScores(season: video.season)
         guard !Task.isCancelled, score(for: video) == nil else { return }
         await loadEpisodeRatings(season: video.season)
     }
 
-    /// Asks OMDb for one episode's IMDb score, once. A card that is scrolled past before the answer arrives is asked again if it
-    /// comes back (the answer is cached by then).
-    public func loadEpisodeScore(for video: Video) async {
-        guard isSeries, let season = video.season, let episode = video.episode, let seriesID = seriesIMDbID else { return }
+    /// Asks OMDb for a season's episode scores, once. Cards that appear while the request is running wait for it, so none of them acts
+    /// on a score that has not arrived yet. Scrolling away does not cancel it: the answer is cached either way.
+    public func loadEpisodeScores(season: Int?) async {
+        guard let season, isSeries, let seriesID = seriesIMDbID else { return }
         let revision = reviewServicesRevision
         if scoresRevision != revision {
             scoresRevision = revision
-            requestedEpisodeScores.removeAll()
+            scoreTasks.removeAll()
             omdbEpisodeScores.removeAll()
         }
-        guard requestedEpisodeScores.insert(video.id).inserted else { return }
-        let score = await services.posterRatings.episodeRating(for: seriesID, season: season, episode: episode)
-        guard !Task.isCancelled, scoresRevision == revision else { requestedEpisodeScores.remove(video.id); return }
-        if let score { omdbEpisodeScores[season, default: [:]][episode] = score }
+        if let running = scoreTasks[season] {
+            await running.value
+            return
+        }
+        let ratings = services.posterRatings
+        let task = Task { [weak self] in
+            let scores = await ratings.episodeRatings(for: seriesID, season: season)
+            guard let self, scoresRevision == revision else { return }
+            omdbEpisodeScores[season] = scores
+        }
+        scoreTasks[season] = task
+        await task.value
     }
 
     public func score(for video: Video) -> EpisodeScore? {

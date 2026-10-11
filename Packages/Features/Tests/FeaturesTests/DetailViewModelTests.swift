@@ -222,7 +222,7 @@ import StremioKitTestSupport
     }
 
     @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"8.9"}"#.utf8))
+        let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
         let ratings = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "test-key"))
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
@@ -231,17 +231,14 @@ import StremioKitTestSupport
         let first = Video(id: "tt0944947:1:1", season: 1, episode: 1, rating: 6)
         let second = Video(id: "tt0944947:1:2", season: 1, episode: 2, rating: 7.5)
         #expect(model.score(for: first) == .init(value: 6, isIMDb: false))
-        await model.loadEpisodeScore(for: first)
+        await model.loadEpisodeScores(season: 1)
         #expect(model.score(for: first) == .init(value: 8.9, isIMDb: true))
-        #expect(model.score(for: second) == .init(value: 7.5, isIMDb: false), "an episode nobody scrolled to is not asked for")
-        #expect(transport.callCount == 1)
+        #expect(model.score(for: second) == .init(value: 7.5, isIMDb: false))
         #expect(model.score(for: Video(id: "x")) == nil)
-        await model.loadEpisodeScore(for: first)
-        #expect(transport.callCount == 1, "an episode is asked for once")
     }
 
-    @Test func aCardIsOnlyAskedAboutWhenItAppears() async throws {
-        let transport = StubTransport(data: Data(#"{"Response":"True","imdbRating":"8.9"}"#.utf8))
+    @Test func aSeasonIsAskedForOnceWhenItsCardsAppearAndNeverBefore() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
                                    client: client, posterRatings: PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "k")))
@@ -249,12 +246,15 @@ import StremioKitTestSupport
         await model.load()
         let omdbRequests = transport.requests.filter { $0.url?.host == "www.omdbapi.com" }
         #expect(omdbRequests.isEmpty, "opening the page asks for no episode scores")
-        let query = { (n: Int) in
-            transport.requests.compactMap { $0.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems }
-                .contains { $0.contains(URLQueryItem(name: "Episode", value: String(n))) }
-        }
-        await model.episodeAppeared(Video(id: "tt0944947:1:3", season: 1, episode: 3))
-        #expect(query(3) && !query(4))
+        let videos = (1...3).map { Video(id: "tt0944947:1:\($0)", season: 1, episode: $0) }
+        async let a: Void = model.episodeAppeared(videos[0])
+        async let b: Void = model.episodeAppeared(videos[1])
+        async let c: Void = model.episodeAppeared(videos[2])
+        _ = await (a, b, c)
+        #expect(transport.callCount == 1, "three cards of one season share one request")
+        #expect(model.score(for: videos[0]) == .init(value: 8.9, isIMDb: true))
+        await model.episodeAppeared(Video(id: "tt0944947:2:1", season: 2, episode: 1))
+        #expect(transport.callCount == 2, "another season is its own request")
     }
 
     @Test(arguments: [false, true])
@@ -263,7 +263,7 @@ import StremioKitTestSupport
         let meta = #"{"meta":{"id":"\#(seriesID)","type":"series","name":"Show","videos":[{"id":"tt0944947:1:1","season":1,"episode":1}]}}"#
         let transport = StubTransport { request, _ in
             let json = request.url?.host == "www.omdbapi.com"
-                ? #"{"Response":"True","imdbRating":"8.9"}"# : meta
+                ? #"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"# : meta
             return StubTransport.response(Data(json.utf8), for: request)
         }
         let manifest = Manifest(id: "test.meta", name: "Meta", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])

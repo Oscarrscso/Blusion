@@ -90,7 +90,7 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var nextLookupAt: [String: Date] = [:]
     /// An explicit refresh bypasses disk freshness once per lookup; nextLookupAt then prevents repeated requests.
     @ObservationIgnored private var ignoresCachedFreshness = false
-    @ObservationIgnored private var episodeTasks: [String: Task<Double?, Never>] = [:]
+    @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
     /// Hero artwork answers by title, kept for the session and dropped with the other review data by `forgetAll`.
     @ObservationIgnored private var heroArtworkByID: [String: TMDbArtwork] = [:]
     /// Set when OMDb refused the key or the daily quota ran out: nothing asks it again until then, so a bad key does not
@@ -367,31 +367,30 @@ public final class PosterRatingsStore {
         }
     }
 
-    /// IMDb score of one episode, from OMDb. Called as an episode's card comes on screen, so only the episodes you scroll to are asked
-    /// for. Needs an OMDb key for new requests; cached scores work offline. A found score is kept a week, a missing one an hour. An
-    /// episode asked for twice at once is fetched once.
-    public func episodeRating(for seriesID: String, season: Int, episode: Int) async -> Double? {
-        guard !isClearing, LetterboxdRatings.isIMDbID(seriesID), season >= 0, episode >= 0 else { return nil }
-        let key = "omdb:\(seriesID):s\(season)e\(episode)"
+    /// IMDb scores of one season's episodes, by episode number. New requests need an OMDb key; cached scores work offline.
+    /// Seasons refresh daily (hourly when empty). A season asked for twice at once is fetched once.
+    public func episodeRatings(for seriesID: String, season: Int) async -> [Int: Double] {
+        guard !isClearing, LetterboxdRatings.isIMDbID(seriesID), season >= 0 else { return [:] }
+        let key = "omdb:\(seriesID):s\(season)"
         if let running = episodeTasks[key] { return await running.value }
-        let task = Task<Double?, Never> { [self] in
+        let task = Task<[Int: Double], Never> { [self] in
             let cached = await cache.value(for: key)
-            guard !Task.isCancelled else { return nil }
-            let previous = cached?.rating
+            guard !Task.isCancelled else { return [:] }
+            let previous = cached?.episodes ?? [:]
             if let until = nextLookupAt[key], now() < until { return previous }
             if let cached, !ignoresCachedFreshness,
-               now().timeIntervalSince(cached.fetchedAt) < (previous == nil ? 3_600 : 7 * 86_400) {
+               now().timeIntervalSince(cached.fetchedAt) < (previous.isEmpty ? 3_600 : 86_400) {
                 return previous
             }
             guard let omdb, !isOMDbPaused else { return previous }
             do {
-                let score = try await omdb.episodeRating(imdbID: seriesID, season: season, episode: episode)
-                guard !Task.isCancelled else { return nil }
-                await cache.store(CachedRating(rating: score, fetchedAt: now()), for: key)
-                guard !Task.isCancelled else { return nil }
-                nextLookupAt[key] = now().addingTimeInterval(score == nil ? 3_600 : 7 * 86_400)
+                let scores = try await omdb.episodeRatings(imdbID: seriesID, season: season)
+                guard !Task.isCancelled else { return [:] }
+                await cache.store(CachedRating(rating: nil, fetchedAt: now(), episodes: scores), for: key)
+                guard !Task.isCancelled else { return [:] }
+                nextLookupAt[key] = now().addingTimeInterval(scores.isEmpty ? 3_600 : 86_400)
                 if !isOMDbPaused { omdbError = nil }
-                return score
+                return scores
             } catch {
                 if !Task.isCancelled {
                     nextLookupAt[key] = now().addingTimeInterval(60)
@@ -401,9 +400,9 @@ public final class PosterRatingsStore {
             }
         }
         episodeTasks[key] = task
-        let score = await task.value
+        let scores = await task.value
         if episodeTasks[key] == task { episodeTasks[key] = nil }
-        return score
+        return scores
     }
 
     private var isOMDbPaused: Bool { omdbPausedUntil.map { now() < $0 } ?? false }
