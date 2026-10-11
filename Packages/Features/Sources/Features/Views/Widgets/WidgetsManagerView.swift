@@ -44,6 +44,7 @@ struct WidgetsManagerView: View {
             Image(systemName: isEditing ? "wrench.adjustable.fill" : "wrench.adjustable")
         }
         .accessibilityLabel(isEditing ? "Done Editing" : "Edit Widgets")
+        .help(isEditing ? "Done Editing" : "Edit Widgets")
         .accessibilityIdentifier("widgets.edit")
     }
 

@@ -105,6 +105,7 @@ struct CircleActionButton: View {
         .glassCircleButton()
         // The caption is gone, so the name is spoken here instead.
         .accessibilityLabel(isOn ? (onTitle ?? title) : title)
+        .help(isOn ? (onTitle ?? title) : title)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: isOn)
     }

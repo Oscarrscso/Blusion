@@ -88,6 +88,7 @@ struct SearchView: View {
                         Button("Clear", systemImage: "xmark") { model.clearRecents() }
                             .labelStyle(.iconOnly)
                             .glassCircleButton(.small)
+                            .help("Clear")
                             .accessibilityIdentifier("search.clearRecents")
                     }
                     ForEach(model.recentQueries, id: \.self) { query in
@@ -97,6 +98,7 @@ struct SearchView: View {
                         } label: {
                             Label(query, systemImage: "clock")
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .pointerInteraction(cornerRadius: Theme.Radius.card)
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("search.recent.\(query)")

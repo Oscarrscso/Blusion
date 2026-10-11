@@ -139,6 +139,7 @@ struct HomeView: View {
         .padding(.trailing, homeMetrics.pageMargin)
         .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
         .accessibilityLabel("Widgets")
+        .help("Widgets")
         .accessibilityIdentifier("home.customize")
     }
 

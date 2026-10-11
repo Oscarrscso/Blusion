@@ -268,6 +268,7 @@ struct TraktListRow: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .pointerInteraction(cornerRadius: Theme.Radius.card)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -307,6 +308,7 @@ private struct TraktUserRow: View {
         .frame(minHeight: 56)
         .glassCardSurface(cornerRadius: Theme.Radius.card)
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .pointerInteraction(cornerRadius: Theme.Radius.card)
         .accessibilityElement(children: .combine)
     }
 }

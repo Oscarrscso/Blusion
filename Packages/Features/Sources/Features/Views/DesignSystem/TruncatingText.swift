@@ -52,6 +52,7 @@ struct FoldButton: View {
         }
         .glassCircleButton(.small)
         .accessibilityLabel(isExpanded ? "Less" : "More")
+        .help(isExpanded ? "Less" : "More")
     }
 }
 #endif

@@ -382,7 +382,7 @@ struct DetailView: View {
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.episodes) { episode in
                         episodeRow(episode, width: width, overviewHeight: isWide ? tallestOverview : nil)
@@ -391,6 +391,7 @@ struct DetailView: View {
                 }
                 .scrollTargetLayout()
             }
+            .shelfIndicators()
             .contentMargins(.horizontal, contentMargin, for: .scrollContent)
             .softSnappingScroll()
             .scrollClipDisabled()
@@ -464,6 +465,7 @@ struct DetailView: View {
         .glassCircleButton(.regular)
         .titleTapHaptic()
         .accessibilityLabel("Episode width")
+        .help("Episode width")
         .accessibilityValue(isWide ? "Full width" : "Fixed width")
         .accessibilityIdentifier("detail.episodeWidthToggle")
     }
@@ -540,7 +542,7 @@ struct DetailView: View {
                     }
                     .padding(.horizontal, contentMargin)
                     ScrollViewReader { proxy in
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        ScrollView(.horizontal) {
                             HStack(alignment: .top, spacing: metrics.cardSpacing) {
                                 ForEach(sortedReviews) { review in
                                     ReviewCard(review: review, isExpanded: expandedReviewID == review.id) {
@@ -567,6 +569,7 @@ struct DetailView: View {
                             }
                             .scrollTargetLayout()
                         }
+                        .shelfIndicators()
                         .contentMargins(.horizontal, contentMargin, for: .scrollContent)
                         .softSnappingScroll()
                         .scrollClipDisabled()
@@ -578,12 +581,13 @@ struct DetailView: View {
                     // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
                     SectionHeader("Cast & Crew")
                         .padding(.horizontal, contentMargin)
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollView(.horizontal) {
                         LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                             ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
                         }
                         .scrollTargetLayout()
                     }
+                    .shelfIndicators()
                     .contentMargins(.horizontal, contentMargin, for: .scrollContent)
                     .softSnappingScroll()
                     .scrollClipDisabled()
@@ -594,7 +598,7 @@ struct DetailView: View {
                     // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
                     SectionHeader("Cast & Crew")
                         .padding(.horizontal, contentMargin)
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollView(.horizontal) {
                         LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                             ForEach(model.detail.cast, id: \.self) { name in
                                 VStack(spacing: 8) {
@@ -612,6 +616,7 @@ struct DetailView: View {
                         }
                         .scrollTargetLayout()
                     }
+                    .shelfIndicators()
                     .contentMargins(.horizontal, contentMargin, for: .scrollContent)
                     .softSnappingScroll()
                     .scrollClipDisabled()
@@ -635,7 +640,7 @@ struct DetailView: View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("More Like This")
                 .padding(.horizontal, contentMargin)
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.relatedTitles) { title in
                         NavigationLink(value: title.titleDestination) {
@@ -649,6 +654,7 @@ struct DetailView: View {
                 }
                 .scrollTargetLayout()
             }
+            .shelfIndicators()
             .contentMargins(.horizontal, contentMargin, for: .scrollContent)
             .scrollClipDisabled()
             .softSnappingScroll()

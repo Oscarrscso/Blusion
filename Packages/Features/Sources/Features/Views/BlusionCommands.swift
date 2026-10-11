@@ -14,7 +14,12 @@ public struct BlusionCommands: Commands {
             Button("Home") { router?.open(.home) }.keyboardShortcut("1")
             Button("Discover") { router?.open(.discover) }.keyboardShortcut("2")
             Button("Library") { router?.open(.library) }.keyboardShortcut("3")
-            Button("Search") { router?.open(.search) }.keyboardShortcut("f")
+            Button("Search") {
+                router?.open(.search)
+                #if targetEnvironment(macCatalyst)
+                router?.searchFocusRevision += 1
+                #endif
+            }.keyboardShortcut("f")
         }
     }
 }

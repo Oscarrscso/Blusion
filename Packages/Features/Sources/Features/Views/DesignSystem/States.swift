@@ -132,7 +132,7 @@ struct SkeletonRow: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: metrics.cardSpacing) {
                 ForEach(0..<max(count, 0), id: \.self) { _ in
                     SkeletonShapes(aspect: aspect, size: size, showsTitle: showsTitle)
@@ -140,6 +140,7 @@ struct SkeletonRow: View {
             }
             .shimmering()
         }
+        .shelfIndicators()
         .scrollDisabled(true)
         .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
         .scrollClipDisabled()

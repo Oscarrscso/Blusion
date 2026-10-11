@@ -79,6 +79,9 @@ struct PlayerContent: View {
         .persistentSystemOverlays(.hidden)
         #endif
         .accessibilityIdentifier("player.screen")
+        #if targetEnvironment(macCatalyst)
+        .background { PlayerKeyboard(model: model, onClose: close) }
+        #endif
     }
 
     @ViewBuilder
@@ -120,7 +123,9 @@ struct PlayerContent: View {
                     }
                 }
                 .onTapGesture { model.toggleControls() }
+                #if !targetEnvironment(macCatalyst)
                 .gesture(DragGesture(minimumDistance: 40).onEnded { if $0.translation.height > 140 { close() } })
+                #endif
         }
         .accessibilityHidden(true)
     }
@@ -179,6 +184,32 @@ private struct PlayerChrome: ViewModifier {
         #endif
     }
 }
+
+#if targetEnvironment(macCatalyst)
+/// Mac keyboard shortcuts that work while the controls are hidden. They call the same actions as the buttons in `PlayerControls`,
+/// whose own shortcuts are compiled out on Mac so each key has one registration.
+private struct PlayerKeyboard: View {
+    let model: PlayerViewModel
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Button("Close", action: onClose)
+                .keyboardShortcut(.escape, modifiers: [])
+            Button("Play or pause") { model.togglePlayPause() }
+                .keyboardShortcut(" ", modifiers: [])
+            Button("Back 10 seconds") { Task { await model.skip(by: -10) } }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+            Button("Forward 10 seconds") { Task { await model.skip(by: 10) } }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+#endif
 
 struct SubtitleOverlay: View {
     let text: String?

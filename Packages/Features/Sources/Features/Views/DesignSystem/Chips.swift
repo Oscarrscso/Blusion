@@ -77,13 +77,14 @@ struct ChipRow<Content: View>: View {
             }
             .padding(.horizontal, metrics.pageMargin)
         } else {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     content()
                 }
             }
         }
+        .shelfIndicators()
         .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
         .scrollClipDisabled()
         }

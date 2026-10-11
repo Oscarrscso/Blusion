@@ -127,6 +127,7 @@ private struct BannerFeature: View {
                     .allowsHitTesting(false)
             }
             .contentShape(Rectangle())
+            .pointerInteraction(cornerRadius: HeroBanner.cornerRadius)
             .onTapGesture(perform: openTitle)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.name)

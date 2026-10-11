@@ -280,7 +280,7 @@ struct RowPlaceholder: View {
             case .none:
                 EmptyView()
             }
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: Theme.cardSpacing) {
                     ForEach(0..<6, id: \.self) { _ in
                         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -300,6 +300,7 @@ struct RowPlaceholder: View {
                 }
                 .shimmering()
             }
+            .shelfIndicators()
             .scrollDisabled(true)
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()

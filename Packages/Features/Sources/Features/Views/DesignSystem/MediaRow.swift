@@ -99,7 +99,7 @@ struct MediaRow<Content: View>: View {
                 SectionHeader(title, subtitle: subtitle, onSeeAll: onSeeAll)
                     .padding(.horizontal, metrics.pageMargin)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(subviews: content()) { card in
                         card.id(card.id).reportsShelfEdge(id: card.id)
@@ -107,6 +107,7 @@ struct MediaRow<Content: View>: View {
                 }
                 .scrollTargetLayout()
             }
+            .shelfIndicators()
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .softSnappingScroll()
             .scrollClipDisabled()

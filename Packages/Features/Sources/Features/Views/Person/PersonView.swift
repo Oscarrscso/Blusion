@@ -108,7 +108,7 @@ struct PersonView: View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Photos")
                 .padding(.horizontal, metrics.pageMargin)
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.photoStrip, id: \.self) { url in
                         ArtworkImage(url: url, title: "", maxPixelSize: 360, contentMode: .fill)
@@ -119,6 +119,7 @@ struct PersonView: View {
                 }
                 .scrollTargetLayout()
             }
+            .shelfIndicators()
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
             .softSnappingScroll()
@@ -133,7 +134,7 @@ struct PersonView: View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Known For")
                 .padding(.horizontal, metrics.pageMargin)
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.knownFor) { credit in
                         NavigationLink(value: credit.titleDestination) {
@@ -147,6 +148,7 @@ struct PersonView: View {
                 }
                 .scrollTargetLayout()
             }
+            .shelfIndicators()
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
             .scrollClipDisabled()
             .softSnappingScroll()

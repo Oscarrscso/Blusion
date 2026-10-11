@@ -43,7 +43,7 @@ YAML
 xcodegen generate --spec "$WORK/project.install.yml" --project "$WORK" --quiet || fail "xcodegen failed"
 echo "install-mac: building (log: $LOG)"
 xcodebuild -project "$WORK/Blusion.xcodeproj" -scheme Blusion -configuration Release \
-  -destination 'platform=macOS,variant=Mac Catalyst' -derivedDataPath "$WORK/DerivedData" -jobs 4 build >"$LOG" 2>&1 || true
+  -destination 'platform=macOS,variant=Mac Catalyst' -derivedDataPath "$WORK/DerivedData" -jobs 4 BLUSION_BUILD_TAG="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" build >"$LOG" 2>&1 || true
 if ! grep -q '\*\* BUILD SUCCEEDED \*\*' "$LOG"; then
   grep -E 'error:' "$LOG" | sed -E "s#$ROOT/##g" | sort -u | head -40 >&2
   fail "BUILD FAILED (full log: $LOG)"

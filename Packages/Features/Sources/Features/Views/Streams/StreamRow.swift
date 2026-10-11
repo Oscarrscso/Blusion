@@ -136,6 +136,7 @@ struct StreamTechnicalDetails: View {
                 .padding(.horizontal, Theme.Spacing.m)
                 .padding(.vertical, Theme.Spacing.s)
                 .contentShape(Rectangle())
+                .pointerInteraction(cornerRadius: Theme.Radius.card)
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")

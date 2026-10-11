@@ -36,7 +36,9 @@ struct PlayerControls: View {
                     .glassEffect(.regular.interactive(), in: .circle)
                     .pointerInteraction(cornerRadius: 22)
             }
+            #if !targetEnvironment(macCatalyst)
             .keyboardShortcut(.escape, modifiers: [])
+            #endif
             .help("Close (Esc)")
             .accessibilityLabel("Close")
             .accessibilityIdentifier("player.close")
@@ -80,7 +82,9 @@ struct PlayerControls: View {
                         .glassEffect(.regular.interactive(), in: .circle)
                         .pointerInteraction(cornerRadius: 28)
                 }
+                #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(.leftArrow, modifiers: [])
+                #endif
                 .help("Back 10 seconds (←)")
                 .accessibilityLabel("Back 10 seconds")
                 .accessibilityIdentifier("player.skipBack")
@@ -90,7 +94,9 @@ struct PlayerControls: View {
                         .frame(width: 76, height: 76).glassEffect(.regular.interactive(), in: .circle)
                         .pointerInteraction(cornerRadius: 38)
                 }
+                #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(" ", modifiers: [])
+                #endif
                 .help(model.isPlaying ? "Pause (Space)" : "Play (Space)")
                 .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
                 .accessibilityIdentifier("player.playPause")
@@ -99,7 +105,9 @@ struct PlayerControls: View {
                         .glassEffect(.regular.interactive(), in: .circle)
                         .pointerInteraction(cornerRadius: 28)
                 }
+                #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(.rightArrow, modifiers: [])
+                #endif
                 .help("Forward 10 seconds (→)")
                 .accessibilityLabel("Forward 10 seconds")
                 .accessibilityIdentifier("player.skipForward")
