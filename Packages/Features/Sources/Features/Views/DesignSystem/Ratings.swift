@@ -215,7 +215,8 @@ struct RatingButtonsRow: View {
     }
 }
 
-/// One small rating button: the site's icon, then the score. Without a score it is the icon alone.
+/// One small rating button: the site's icon, then the score. Without a score it is the icon alone, and IMDb's gets an outward arrow so it
+/// still reads as a link to the title's page.
 struct RatingButton: View {
     let site: ReviewSite
     let score: String?
@@ -230,6 +231,12 @@ struct RatingButton: View {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
                     .foregroundStyle(.white)
+                if site == .imdb && score == nil {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                        .accessibilityHidden(true)
+                }
                 if let score {
                     Text(score)
                         .font(.system(size: 13, weight: .semibold))

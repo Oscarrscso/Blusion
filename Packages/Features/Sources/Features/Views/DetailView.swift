@@ -337,7 +337,7 @@ struct DetailView: View {
     @ViewBuilder
     private var synopsis: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
-            // Folded when it runs past three lines; one that fits has nothing to fold and no button.
+            // Folded when it runs past three lines; one that fits has nothing to fold, so a tap does nothing.
             let folds = isDescriptionExpanded || isDescriptionTruncated
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 TruncatingText(text: Text(description), lineLimit: 3, isExpanded: isDescriptionExpanded, isTruncated: $isDescriptionTruncated)
@@ -345,11 +345,12 @@ struct DetailView: View {
                     .foregroundStyle(.white.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    // A double tap folds or opens the synopsis too, as it does a review.
-                    .onTapGesture(count: 2) {
+                    // A tap on the text folds or opens it.
+                    .onTapGesture {
                         if folds { toggleDescription() }
                     }
-                if folds { FoldButton(isExpanded: isDescriptionExpanded, action: toggleDescription) }
+                    .accessibilityAddTraits(folds ? .isButton : [])
+                    .accessibilityHint(folds ? (isDescriptionExpanded ? "Collapses the synopsis" : "Expands the synopsis") : "")
             }
         }
     }
@@ -433,11 +434,12 @@ struct DetailView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.shelfTitle)
-                Image(systemName: "chevron.down").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.glass)
+        .controlSize(.small)
         .accessibilityIdentifier("detail.seasonPicker")
     }
 
