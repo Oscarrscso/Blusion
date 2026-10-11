@@ -191,7 +191,7 @@ struct DetailView: View {
                         PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                VStack(alignment: .leading, spacing: Self.logoControlsGap) {
                     titleArt(alignment: .leading)
                     controls
                 }
@@ -805,6 +805,9 @@ private struct TitleArt: View {
                     .lineLimit(compact ? 2 : 3)
                     .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
+                    // A logo ends at its last visible pixel; the name's frame ends a descender lower, so that space is taken back and the
+                    // text under either sits the same distance from what can be seen.
+                    .padding(.bottom, -abs(UIFont.preferredFont(forTextStyle: compact ? .title2 : .largeTitle).descender))
                     .opacity(isNone ? 1 : 0)
                     .transition(.identity)
             }

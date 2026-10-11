@@ -84,8 +84,16 @@ final class HeroLoader {
     /// The logo of `url` if one has been loaded this session.
     static func storedLogo(_ url: URL) -> UIImage? { logos[key(url, logoPixelSize)] }
 
+    /// The logo cropped to its visible pixels (see `LogoTrim`), so every title's logo-to-text gap is the same.
+    private static func trimmedLogo(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        let trimmed = LogoTrim.trimmed(cgImage)
+        return trimmed === cgImage ? image : UIImage(cgImage: trimmed, scale: image.scale, orientation: image.imageOrientation)
+    }
+
     private static func storeLogo(_ image: UIImage, for url: URL) {
         let key = key(url, logoPixelSize)
+        let image = trimmedLogo(image)
         if logos.updateValue(image, forKey: key) != nil { logoOrder.removeAll { $0 == key } }
         logoOrder.append(key)
         while logoOrder.count > logoLimit { logos[logoOrder.removeFirst()] = nil }
