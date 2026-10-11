@@ -99,3 +99,30 @@ enum JustifiedLineBreaker {
         return widths[index] + space + widths[index + 1] <= width && characters[index] + 1 + characters[index + 1] <= maximum
     }
 }
+
+/// The sums behind a justified text's size, apart from UIKit so they can be tested. The height SwiftUI is given comes from a layout at
+/// the width it proposed; the text is drawn at the width the view ends up with, which can differ by a pixel after SwiftUI snaps the
+/// frame. A different width can break into a different number of lines, and a line the height did not count is cut off. So the drawing
+/// uses the layout the size was measured with whenever the two widths are that close.
+enum JustifiedSizing {
+    /// How far the drawn width may differ from the measured one (pixel snapping) before the text is laid out afresh.
+    static let widthTolerance: CGFloat = 1.5
+
+    /// The width to lay the text out at when drawing it in `bounds`.
+    static func layoutWidth(measured: CGFloat?, bounds: CGFloat) -> CGFloat {
+        guard let measured, measured.isFinite, abs(measured - bounds) <= widthTolerance else { return bounds }
+        return max(measured, 1)
+    }
+
+    /// The lines drawn: all of them, or the limit.
+    static func shownLines(total: Int, lineLimit: Int) -> Int {
+        lineLimit > 0 ? min(lineLimit, total) : total
+    }
+
+    /// The height of the text: whole lines, and with `reservesSpace` at least the limit.
+    static func height(totalLines: Int, lineLimit: Int, reservesSpace: Bool, lineHeight: CGFloat) -> CGFloat {
+        let shown = shownLines(total: totalLines, lineLimit: lineLimit)
+        let lines = reservesSpace && lineLimit > 0 ? max(shown, lineLimit) : shown
+        return ceil(CGFloat(lines) * lineHeight)
+    }
+}

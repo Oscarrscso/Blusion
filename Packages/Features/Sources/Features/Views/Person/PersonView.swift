@@ -10,6 +10,9 @@ struct PersonView: View {
     @State private var isBiographyExpanded = false
     @State private var isBiographyTruncated = false
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(AppRouter.self) private var router
+    @State private var hasEntered = false
+    @State private var depth = 0
 
     init(destination: PersonDestination, services: AppServices) {
         _model = State(initialValue: PersonViewModel(destination: destination, services: services))
@@ -39,6 +42,15 @@ struct PersonView: View {
         .navigationTitle(model.destination.name)
         .navigationBarTitleDisplayMode(.inline)
         .swipeBackPops()
+        .onAppear {
+            guard !hasEntered else { return }
+            hasEntered = true
+            // Reached from a title that another actor's page opened: the back queue starts over here, with this page as its top.
+            router.enterTitleOrPerson(model.destination)
+            router.actorPageAppeared()
+            depth = router.depth
+        }
+        .onDisappear { if depth > 0 { router.actorPageDisappeared(depth: depth) } }
         .task { await model.load() }
         .accessibilityIdentifier("person.scroll")
     }

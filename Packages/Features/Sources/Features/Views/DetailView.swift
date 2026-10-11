@@ -63,6 +63,9 @@ struct DetailView: View {
         let insets = UIApplication.shared.connectedScenes.lazy.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets
         return max(insets?.left ?? 0, insets?.right ?? 0)
     }
+    /// The gap between the bottom of the logo and the controls under it, in both orientations. The artwork above the logo is reserved
+    /// so the controls start at the picture's bottom edge, however small the gap.
+    private static let logoControlsGap = Theme.Spacing.s
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
     /// Half of the gap between the ratings row and the section after it: the faint line sits in the middle, this far from each side.
     /// The whole gap is `sectionSpacing` plus `Theme.Spacing.s`.
@@ -179,13 +182,13 @@ struct DetailView: View {
             VStack(spacing: 0) {
                 // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
                 Color.clear
-                    .frame(height: max(0, height - renderedLogoHeight - TitleHero.logoBottomGap))
+                    .frame(height: max(0, height - renderedLogoHeight - Self.logoControlsGap))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
-                    // The block below the logo sits close to it: 60% of the section gap. The stack's own spacing is part of that gap.
+                    // The block below the logo sits close to it. The stack's own spacing is part of that gap.
                     controls
-                        .padding(.top, sectionSpacing * 0.6 - Theme.Spacing.m)
+                        .padding(.top, Self.logoControlsGap - Theme.Spacing.m)
                     // The same gap as between the ratings and the line under them. The stack's own spacing is part of it.
                     synopsis
                         .padding(.top, halfRatingsGap - Theme.Spacing.m)
@@ -433,19 +436,12 @@ struct DetailView: View {
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
             }
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    ForEach(model.episodes) { episode in
-                        episodeRow(episode, width: width)
-                            .id(episode.id).reportsShelfEdge(id: episode.id)
-                    }
+            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+                ForEach(model.episodes) { episode in
+                    episodeRow(episode, width: width)
+                        .id(episode.id).reportsShelfEdge(id: episode.id)
                 }
-                .scrollTargetLayout()
             }
-            .shelfIndicators()
-            .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-            .softSnappingScroll()
-            .scrollClipDisabled()
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
     }
@@ -575,8 +571,7 @@ struct DetailView: View {
                     }
                     .padding(.horizontal, contentMargin)
                     ScrollViewReader { proxy in
-                        ScrollView(.horizontal) {
-                            HStack(alignment: .top, spacing: metrics.cardSpacing) {
+                        ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
                                 ForEach(sortedReviews) { review in
                                     let foldedWidth: CGFloat = metrics.isRegular ? 340 : 280
                                     let expandedWidth = max(0, width - contentMargin * 2)
@@ -598,13 +593,7 @@ struct DetailView: View {
                                         }
                                     }
                                 }
-                            }
-                            .scrollTargetLayout()
                         }
-                        .shelfIndicators()
-                        .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-                        .softSnappingScroll()
-                        .scrollClipDisabled()
                     }
                 }
             }
@@ -613,16 +602,9 @@ struct DetailView: View {
                     // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
                     SectionHeader("Cast & Crew")
                         .padding(.horizontal, contentMargin)
-                    ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                            ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
-                        }
-                        .scrollTargetLayout()
+                    ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+                        ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
                     }
-                    .shelfIndicators()
-                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-                    .softSnappingScroll()
-                    .scrollClipDisabled()
                     .accessibilityIdentifier("detail.castCarousel")
                 }
             } else if !model.detail.cast.isEmpty {
@@ -630,8 +612,7 @@ struct DetailView: View {
                     // Without TMDb (no read token, or it did not answer) the addon's names still show, as initials, and open nothing.
                     SectionHeader("Cast & Crew")
                         .padding(.horizontal, contentMargin)
-                    ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                    ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
                             ForEach(model.detail.cast, id: \.self) { name in
                                 VStack(spacing: 8) {
                                     Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
@@ -645,13 +626,7 @@ struct DetailView: View {
                                 .accessibilityLabel(name)
                                 .reportsShelfEdge(id: name)
                             }
-                        }
-                        .scrollTargetLayout()
                     }
-                    .shelfIndicators()
-                    .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-                    .softSnappingScroll()
-                    .scrollClipDisabled()
                 }
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -672,24 +647,17 @@ struct DetailView: View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("More Like This")
                 .padding(.horizontal, contentMargin)
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    ForEach(model.relatedTitles) { title in
-                        NavigationLink(value: title.titleDestination) {
-                            MediaCard(item: title.preview, aspect: .poster, showsRating: false)
-                        }
-                        .buttonStyle(PressableCardStyle())
-                        .titleTapHaptic()
-                        .reportsShelfEdge(id: title.id)
-                        .accessibilityIdentifier("detail.related.\(title.id)")
+            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+                ForEach(model.relatedTitles) { title in
+                    NavigationLink(value: title.titleDestination) {
+                        MediaCard(item: title.preview, aspect: .poster, showsRating: false)
                     }
+                    .buttonStyle(PressableCardStyle())
+                    .titleTapHaptic()
+                    .reportsShelfEdge(id: title.id)
+                    .accessibilityIdentifier("detail.related.\(title.id)")
                 }
-                .scrollTargetLayout()
             }
-            .shelfIndicators()
-            .contentMargins(.horizontal, contentMargin, for: .scrollContent)
-            .scrollClipDisabled()
-            .softSnappingScroll()
             .accessibilityIdentifier("detail.related")
         }
     }

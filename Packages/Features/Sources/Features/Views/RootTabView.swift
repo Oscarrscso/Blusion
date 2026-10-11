@@ -15,6 +15,10 @@ public final class AppRouter {
     public var tab: LaunchRoute.Tab
     public var homePath = NavigationPath()
     var searchPath = NavigationPath()
+    var discoverPath = NavigationPath()
+    var libraryPath = NavigationPath()
+    /// Per tab, how deep in its stack an actor's page sits while it is on screen (see `enterTitleOrPerson`).
+    private var actorDepths: [LaunchRoute.Tab: Int] = [:]
     var searchBrowseRevision = 0
     var searchFocusRevision = 0
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
@@ -46,6 +50,53 @@ public final class AppRouter {
     }
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
+
+    private func path(for tab: LaunchRoute.Tab) -> NavigationPath {
+        switch tab {
+        case .home: homePath
+        case .discover: discoverPath
+        case .library: libraryPath
+        case .search: searchPath
+        case .settings: settingsPath
+        }
+    }
+
+    private func setPath(_ path: NavigationPath, for tab: LaunchRoute.Tab) {
+        switch tab {
+        case .home: homePath = path
+        case .discover: discoverPath = path
+        case .library: libraryPath = path
+        case .search: searchPath = path
+        case .settings: settingsPath = path
+        }
+    }
+
+    /// How many screens the current tab's stack holds above its first.
+    var depth: Int { path(for: tab).count }
+
+    /// An actor's page has appeared in the current tab's stack: remember how deep it is.
+    func actorPageAppeared() {
+        actorDepths[tab] = path(for: tab).count
+    }
+
+    /// The actor's page is gone from the stack (popped, not just covered): forget it.
+    func actorPageDisappeared(depth: Int) {
+        guard path(for: tab).count < depth, actorDepths[tab] == depth else { return }
+        actorDepths[tab] = nil
+    }
+
+    /// A title or actor page has appeared as the stack's top. When it was opened from a title that an actor's page opened, the back
+    /// queue starts over: the stack becomes just this page, so back goes to the tab's first screen. Returns whether it did.
+    @discardableResult
+    func enterTitleOrPerson(_ destination: some Hashable) -> Bool {
+        let tab = tab
+        guard let actorDepth = actorDepths[tab], path(for: tab).count == actorDepth + 2 else { return false }
+        actorDepths[tab] = nil
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { setPath(NavigationPath([destination]), for: tab) }
+        return true
+    }
 
     /// The Search tab on its category browser, as if the tab had been tapped from another tab.
     func showSearchBrowse() {
@@ -133,7 +184,7 @@ public struct RootTabView: View {
                 }
             }
             Tab(value: LaunchRoute.Tab.discover) {
-                NavigationStack {
+                NavigationStack(path: $router.discoverPath) {
                     DiscoverView(services: services) { router.showAddons() }
                         .appDestinations(services: services)
                 }
@@ -148,7 +199,7 @@ public struct RootTabView: View {
             }
             TabSection("Library") {
                 Tab(value: LaunchRoute.Tab.library) {
-                    NavigationStack {
+                    NavigationStack(path: $router.libraryPath) {
                         LibraryView(services: services) { router.open(.discover) }
                             .appDestinations(services: services)
                     }

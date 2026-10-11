@@ -51,6 +51,34 @@ extension View {
     }
 }
 
+/// The one horizontal card shelf: a lazy row of cards that snaps to the page margin, bleeds past the screen's edge, and ticks as cards
+/// cross the leading edge. Every card shelf is built with this, so they all scroll and tick alike. Each card must call
+/// `reportsShelfEdge(id:)` and have a stable `id`. The row's height comes from its first card (a lazy stack cannot measure the others).
+struct ShelfScroll<Content: View>: View {
+    let margin: CGFloat
+    let spacing: CGFloat
+    let content: Content
+
+    init(margin: CGFloat, spacing: CGFloat, @ViewBuilder content: () -> Content) {
+        self.margin = margin
+        self.spacing = spacing
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: spacing) {
+                content
+            }
+            .scrollTargetLayout()
+        }
+        .shelfIndicators()
+        .contentMargins(.horizontal, margin, for: .scrollContent)
+        .softSnappingScroll()
+        .scrollClipDisabled()
+    }
+}
+
 /// The coordinate space of a shelf's viewport: a card's `minX` in it is where the card's leading edge sits on screen.
 private let shelfScrollSpace = "softSnappingShelf"
 

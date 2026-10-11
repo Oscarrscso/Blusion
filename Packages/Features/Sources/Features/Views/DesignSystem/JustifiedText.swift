@@ -42,9 +42,9 @@ struct JustifiedText: UIViewRepresentable {
         if let isTruncated, lineLimit > 0 {
             report(truncated: measured.totalLines > lineLimit, to: isTruncated)
         }
-        let shown = lineLimit > 0 ? min(lineLimit, measured.totalLines) : measured.totalLines
-        let lines = reservesSpace && lineLimit > 0 ? max(shown, lineLimit) : shown
-        return CGSize(width: proposal.width ?? measured.widestLine, height: ceil(CGFloat(lines) * measured.lineHeight))
+        let height = JustifiedSizing.height(totalLines: measured.totalLines, lineLimit: lineLimit, reservesSpace: reservesSpace,
+                                            lineHeight: measured.lineHeight)
+        return CGSize(width: proposal.width ?? measured.widestLine, height: height)
     }
 
     private func configure(_ label: JustifiedLabel) {
@@ -120,6 +120,8 @@ final class JustifiedLabel: UIView {
     private var look: Look?
     private var content: Content?
     private var layouts: [(key: LayoutKey, layout: Layout)] = []
+    /// The width of the last measurement. Drawing uses that layout when the view's width is within a pixel of it (see `JustifiedSizing`).
+    private var measuredWidth: CGFloat?
 
     /// The lines shown; zero shows them all.
     var lineLimit = 0 {
@@ -164,6 +166,7 @@ final class JustifiedLabel: UIView {
     /// What the text takes at `width`: its lines in all, the widest of them, and the height of one line.
     func measure(width: CGFloat) -> (totalLines: Int, widestLine: CGFloat, lineHeight: CGFloat) {
         guard let content else { return (0, 0, UIFont.preferredFont(forTextStyle: .body).lineHeight) }
+        measuredWidth = width
         let layout = layout(forWidth: width)
         return (layout.lines.count, layout.widestLine, content.font.lineHeight)
     }
@@ -290,10 +293,11 @@ final class JustifiedLabel: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let content, let context = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
-        let layout = layout(forWidth: bounds.width)
+        // The layout the height was measured with, so every line it counted is drawn.
+        let layout = layout(forWidth: JustifiedSizing.layoutWidth(measured: measuredWidth, bounds: bounds.width))
         let width = bounds.width
         let total = layout.lines.count
-        let shown = lineLimit > 0 ? min(lineLimit, total) : total
+        let shown = JustifiedSizing.shownLines(total: total, lineLimit: lineLimit)
         let isCut = lineLimit > 0 && total > lineLimit
         let scale = max(contentScaleFactor, 1)
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)

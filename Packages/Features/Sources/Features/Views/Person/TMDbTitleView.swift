@@ -9,6 +9,8 @@ struct TMDbTitleView: View {
     let services: AppServices
 
     @State private var phase: Phase = .loading
+    @Environment(AppRouter.self) private var router
+    @State private var hasEntered = false
 
     private enum Phase {
         case loading
@@ -33,6 +35,13 @@ struct TMDbTitleView: View {
                     .screenBackground()
                     .accessibilityIdentifier("tmdbTitle.unavailable")
             }
+        }
+        .swipeBackPops()
+        .onAppear {
+            // Opened from a title that an actor's page opened: the back queue starts over here.
+            guard !hasEntered else { return }
+            hasEntered = true
+            router.enterTitleOrPerson(destination)
         }
         .task { await resolve() }
     }
