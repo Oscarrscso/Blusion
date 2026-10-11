@@ -335,7 +335,8 @@ final class Clock: @unchecked Sendable {
         #expect(await service.refreshIfNeeded() == .updated(titles: 1_000))
         #expect(await service.rating(for: "tt0000001")?.votes == 3)
         let status = await service.status()
-        #expect(status == IMDbDatasetStatus(titleCount: 1_000, updatedAt: start, checkedAt: start))
+        #expect(status == IMDbDatasetStatus(titleCount: 1_000, updatedAt: start, checkedAt: start, fileSize: status?.fileSize))
+        #expect((status?.fileSize ?? 0) > 0, "the database takes space on disk")
 
         let request = try #require(transport.requests.first)
         #expect(request.url == IMDbRatingsUpdater.datasetURL)

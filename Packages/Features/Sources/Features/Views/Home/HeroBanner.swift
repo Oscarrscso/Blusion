@@ -8,16 +8,29 @@ struct HeroBannerSection: View {
     let section: HomeViewModel.Section
     let row: RowConfiguration
     let onRetry: () -> Void
+    @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             if !section.widget.hideTitle {
-                SectionHeader(section.widget.title).padding(.horizontal, metrics.pageMargin)
+                header.padding(.horizontal, metrics.pageMargin)
             }
             content
         }
         .accessibilityIdentifier("board.row.\(section.widget.id)")
+    }
+
+    /// The title, which opens the whole list once the banner has items, like the header of a row.
+    @ViewBuilder
+    private var header: some View {
+        if case .loaded(let items) = section.state, !items.isEmpty {
+            SectionHeader(section.widget.title, onSeeAll: {
+                router.homePath.append(CatalogListRequest(title: section.widget.title, sources: [row.source], presentation: row.presentation))
+            })
+        } else {
+            SectionHeader(section.widget.title)
+        }
     }
 
     @ViewBuilder

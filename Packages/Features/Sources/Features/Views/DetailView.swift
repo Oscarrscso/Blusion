@@ -61,6 +61,9 @@ struct DetailView: View {
         return max(insets?.left ?? 0, insets?.right ?? 0)
     }
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
+    /// Half of the gap between the ratings row and the section after it: the faint line sits in the middle, this far from each side.
+    /// The whole gap is `sectionSpacing` plus `Theme.Spacing.s`.
+    private let halfRatingsGap = (Theme.Spacing.xl + Theme.Spacing.l + Theme.Spacing.s) / 2
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked))
@@ -71,9 +74,18 @@ struct DetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     feature(in: geometry.size)
-                    if model.isSeries { episodesSection(pageWidth: geometry.size.width) }
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(height: 1)
+                        .padding(.horizontal, contentMargin)
+                        .padding(.top, halfRatingsGap)
+                        .accessibilityHidden(true)
+                    if model.isSeries {
+                        episodesSection(pageWidth: geometry.size.width)
+                            .padding(.top, halfRatingsGap)
+                    }
                     credits(in: geometry.size.width)
-                        .padding(.top, sectionSpacing)
+                        .padding(.top, model.isSeries ? sectionSpacing : halfRatingsGap)
                     if !model.relatedTitles.isEmpty {
                         related
                             .padding(.top, sectionSpacing)
@@ -134,6 +146,8 @@ struct DetailView: View {
     private func feature(in size: CGSize) -> some View {
         if isLandscape {
             let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * TitleHero.landscapeArtworkShare)
+            // The column beside the artwork, where the play buttons sit. The ratings row is never wider than that.
+            let controlsWidth = max(0, size.width - contentMargin * 2 - Theme.Spacing.xl - artworkWidth)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit, placeholderURL: placeholderURL)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
@@ -152,6 +166,11 @@ struct DetailView: View {
             synopsis
                 .padding(.horizontal, contentMargin)
                 .padding(.top, Theme.Spacing.s)
+            RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
+                .frame(maxWidth: controlsWidth, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, contentMargin)
+                .padding(.top, Theme.Spacing.m)
         } else {
             let height = TitleHero.height(width: size.width, metrics: metrics)
             VStack(spacing: 0) {
@@ -170,13 +189,15 @@ struct DetailView: View {
                 .padding(.horizontal, contentMargin)
             }
             .background(alignment: .top) {
-                ZStack(alignment: .bottom) {
-                    HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
-                    BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
-                }
-                .frame(width: size.width, height: height + scrollPull)
-                .clipped()
-                .offset(y: -scrollPull)
+                // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
+                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
+                    .frame(width: size.width, height: height + scrollPull)
+                    .clipped()
+                    .overlay(alignment: .bottom) {
+                        BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                            .padding(.bottom, -TitleHero.fadeOverscan)
+                    }
+                    .offset(y: -scrollPull)
             }
         }
     }
@@ -404,7 +425,6 @@ struct DetailView: View {
             .scrollClipDisabled()
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
-        .padding(.top, sectionSpacing)
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
@@ -508,10 +528,6 @@ struct DetailView: View {
 
     private func credits(in width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
-            if isLandscape {
-                RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
-                    .padding(.horizontal, contentMargin)
-            }
             if !model.reviews.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     HStack(spacing: 0) {
@@ -539,14 +555,15 @@ struct DetailView: View {
                         ScrollView(.horizontal) {
                             HStack(alignment: .top, spacing: metrics.cardSpacing) {
                                 ForEach(sortedReviews) { review in
-                                    ReviewCard(review: review, isExpanded: expandedReviewID == review.id) {
+                                    let foldedWidth: CGFloat = metrics.isRegular ? 340 : 280
+                                    let expandedWidth = max(0, width - contentMargin * 2)
+                                    ReviewCard(review: review, isExpanded: expandedReviewID == review.id,
+                                               foldedWidth: foldedWidth, expandedWidth: expandedWidth) {
                                         withAnimation(.snappy(duration: 0.35)) {
                                             expandedReviewID = expandedReviewID == review.id ? nil : review.id
                                         }
                                     }
-                                    .frame(width: expandedReviewID == review.id
-                                           ? max(0, width - contentMargin * 2)
-                                           : (metrics.isRegular ? 340 : 280))
+                                    .frame(width: expandedReviewID == review.id ? expandedWidth : foldedWidth)
                                     .id(review.id)
                                     .reportsShelfEdge(id: review.id)
                                     .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
@@ -672,6 +689,9 @@ struct DetailView: View {
 private struct ReviewCard: View {
     let review: TMDbReview
     let isExpanded: Bool
+    /// The card's outer width folded and expanded. The text is laid out at the inner width of each and never re-wraps while the card animates.
+    let foldedWidth: CGFloat
+    let expandedWidth: CGFloat
     let onToggle: () -> Void
     @State private var isTruncated = false
 
@@ -699,18 +719,33 @@ private struct ReviewCard: View {
                         .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
                 }
-                JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: isExpanded ? 0 : 6,
-                              reservesSpace: true, isTruncated: $isTruncated)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Two texts, each at its final width: the old one fades out as laid out and the new one fades in already laid out.
+                ZStack(alignment: .topLeading) {
+                    if isExpanded {
+                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 0)
+                            .frame(width: max(0, expandedWidth - Self.padding * 2), alignment: .leading)
+                            .transition(.opacity)
+                    } else {
+                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 6,
+                                      reservesSpace: true, isTruncated: $isTruncated)
+                            .frame(width: max(0, foldedWidth - Self.padding * 2), alignment: .leading)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 if folds { onToggle() }
             }
         }
-        .padding(16)
+        .padding(Self.padding)
         .cardSurface()
+        // Fixed-width text never draws outside the card while it grows or shrinks.
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
     }
+
+    private static let padding: CGFloat = 16
 }
 
 /// The logo, or the name when there is no logo or it failed to load. The logo comes from the shared hero loader and is revealed with the

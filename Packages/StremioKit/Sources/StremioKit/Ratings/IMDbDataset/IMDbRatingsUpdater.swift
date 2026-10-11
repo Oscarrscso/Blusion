@@ -236,11 +236,14 @@ private extension JSONDecoder {
 public struct IMDbRatingsService: IMDbDataset {
     public let database: IMDbRatingsDatabase
     public let updater: IMDbRatingsUpdater
+    private let fileURL: URL
 
     public init(directory: URL, transport: any IMDbDatasetTransport = URLSessionIMDbTransport(),
                 source: URL = IMDbRatingsUpdater.datasetURL, now: @escaping @Sendable () -> Date = { Date() },
                 minimumRows: Int = IMDbRatingsUpdater.minimumTitles) {
-        let database = IMDbRatingsDatabase(fileURL: directory.appendingPathComponent("title.ratings.sqlite"))
+        let fileURL = directory.appendingPathComponent("title.ratings.sqlite")
+        let database = IMDbRatingsDatabase(fileURL: fileURL)
+        self.fileURL = fileURL
         self.database = database
         self.updater = IMDbRatingsUpdater(directory: directory, database: database, transport: transport, source: source, now: now,
                                           minimumRows: minimumRows)
@@ -260,7 +263,16 @@ public struct IMDbRatingsService: IMDbDataset {
     public func status() async -> IMDbDatasetStatus? {
         guard let count = await database.titleCount() else { return nil }
         let state = await updater.state()
-        return IMDbDatasetStatus(titleCount: count, updatedAt: state.updatedAt, checkedAt: state.checkedAt)
+        return IMDbDatasetStatus(titleCount: count, updatedAt: state.updatedAt, checkedAt: state.checkedAt,
+                                 fileSize: Self.size(ofDatabaseAt: fileURL))
+    }
+
+    /// The database file plus its write-ahead log and shared-memory siblings, when present. Nil if the database file can't be read.
+    static func size(ofDatabaseAt url: URL) -> Int64? {
+        let manager = FileManager.default
+        func bytes(_ path: String) -> Int64? { (try? manager.attributesOfItem(atPath: path))?[.size] as? Int64 }
+        guard let main = bytes(url.path) else { return nil }
+        return main + (bytes(url.path + "-wal") ?? 0) + (bytes(url.path + "-shm") ?? 0)
     }
 
     public func refreshIfNeeded() async -> IMDbDatasetRefresh { await updater.updateIfNeeded() }

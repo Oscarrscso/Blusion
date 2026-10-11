@@ -26,7 +26,7 @@ actor ImagePipeline {
         // Artwork rarely changes, so a cached copy is served without asking the server again.
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         session = URLSession(configuration: configuration)
-        decoded.totalCostLimit = 64 * 1024 * 1024
+        decoded.totalCostLimit = 256 * 1024 * 1024
     }
 
     /// A picture that is already decoded, without waiting. A card that scrolls back into view shows its artwork in the same

@@ -135,5 +135,10 @@ import StremioKitTestSupport
         let day = Date(timeIntervalSince1970: 1_800_000_000)
         #expect(IMDbDatasetSummary.text(IMDbDatasetStatus(titleCount: 1_719_427, updatedAt: day, checkedAt: nil)).hasPrefix("1,719,427 titles"))
         #expect(IMDbDatasetSummary.text(IMDbDatasetStatus(titleCount: 12, updatedAt: nil, checkedAt: nil)) == "12 titles")
+        let sized = IMDbDatasetStatus(titleCount: 1_234_567, updatedAt: day, checkedAt: nil, fileSize: 48_000_000)
+        #expect(IMDbDatasetSummary.text(sized).hasPrefix("1,234,567 titles · "))
+        #expect(IMDbDatasetSummary.text(sized).hasSuffix(" · " + Int64(48_000_000).formatted(.byteCount(style: .file))))
+        #expect(IMDbDatasetSummary.text(IMDbDatasetStatus(titleCount: 12, updatedAt: nil, checkedAt: nil, fileSize: 2_000_000))
+                == "12 titles · " + Int64(2_000_000).formatted(.byteCount(style: .file)))
     }
 }

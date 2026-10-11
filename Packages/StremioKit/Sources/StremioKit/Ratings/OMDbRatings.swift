@@ -6,11 +6,13 @@ public struct OMDbRatings: Sendable {
     private let client: AddonClient
     private let apiKey: String
     private let baseURL: URL
+    private let usage: OMDbUsage
 
-    public init(client: AddonClient, apiKey: String, baseURL: URL = OMDbRatings.defaultBaseURL) {
+    public init(client: AddonClient, apiKey: String, baseURL: URL = OMDbRatings.defaultBaseURL, usage: OMDbUsage = .shared) {
         self.client = client
         self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.baseURL = baseURL
+        self.usage = usage
     }
 
     public func ratings(imdbID: String) async throws -> ReviewRatings {
@@ -18,6 +20,7 @@ public struct OMDbRatings: Sendable {
         var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         parts?.queryItems = [URLQueryItem(name: "apikey", value: apiKey), URLQueryItem(name: "i", value: imdbID)]
         guard let url = parts?.url else { throw AddonError.invalidURL }
+        usage.record()
         let result = try await client.get(url, limits: FetchLimits(maxBytes: 64 * 1024), timeout: 6)
         return try Self.parse(result.data)
     }
@@ -30,6 +33,7 @@ public struct OMDbRatings: Sendable {
         parts?.queryItems = [URLQueryItem(name: "apikey", value: apiKey), URLQueryItem(name: "i", value: imdbID),
                              URLQueryItem(name: "Season", value: String(season))]
         guard let url = parts?.url else { throw AddonError.invalidURL }
+        usage.record()
         let result = try await client.get(url, limits: FetchLimits(maxBytes: 256 * 1024), timeout: 8)
         return try Self.parseSeason(result.data)
     }

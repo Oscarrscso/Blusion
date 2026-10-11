@@ -3,10 +3,10 @@ import SwiftUI
 import StremioKit
 import UIKit
 
+/// The Settings root: one row per area, each with a one-line summary of its current state. The areas are pages of their own below,
+/// all reading and writing the one `SettingsViewModel` the root owns.
 struct SettingsView: View {
     @State private var model: SettingsViewModel
-    @State private var infuseInstalled = true
-    @State private var pendingScope: DataResetService.Scope?
     @State private var datasetStatus: IMDbDatasetStatus?
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
     private let services: AppServices
@@ -19,43 +19,471 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Form {
+        List {
             Section("Content") {
                 NavigationLink(value: SettingsDestination.addons) {
-                    HStack {
-                        Label("Addons", systemImage: "puzzlepiece.extension")
-                        Spacer()
-                        Text("\(model.installedAddonCount)").foregroundStyle(.secondary)
-                    }
+                    SettingsRow(title: "Addons", summary: "\(model.installedAddonCount) installed", systemImage: "puzzlepiece.extension")
                 }
-                    .accessibilityIdentifier("settings.addons")
-                NavigationLink(value: SettingsDestination.widgets) { Label("Widgets", systemImage: "rectangle.3.group") }
-                    .accessibilityIdentifier("settings.widgets")
+                .accessibilityIdentifier("settings.addons")
+                NavigationLink(value: SettingsDestination.widgets) {
+                    SettingsRow(title: "Widgets", summary: "Home rows and layout", systemImage: "rectangle.3.group")
+                }
+                .accessibilityIdentifier("settings.widgets")
             }
-            playbackSection
-            appearanceSection
-            lazyLoadSection
-            reviewServicesSection
-            imdbDatasetSection
-            traktSection
-            serverSection
-            if fallbackEngineLinked { fallbackSection }
-            dataSection
-            aboutSection
+            Section("Playback & appearance") {
+                NavigationLink { PlaybackSettingsPage(model: model) } label: {
+                    SettingsRow(title: "Playback", summary: playbackSummary, systemImage: "play.rectangle")
+                }
+                .accessibilityIdentifier("settings.section.playback")
+                NavigationLink { AppearanceSettingsPage(model: model) } label: {
+                    SettingsRow(title: "Appearance", summary: appearanceSummary, systemImage: "paintpalette")
+                }
+                .accessibilityIdentifier("settings.section.appearance")
+                NavigationLink { LazyLoadSettingsPage() } label: {
+                    SettingsRow(title: "Lazy load", summary: lazyLoadLabel(lookaheadLevel), systemImage: "arrow.down.to.line")
+                }
+                .accessibilityIdentifier("settings.section.lazyLoad")
+            }
+            Section("Ratings") {
+                NavigationLink { ReviewServicesPage(model: model, services: services) } label: {
+                    SettingsRow(title: "Review services", summary: reviewServicesSummary, systemImage: "star.bubble")
+                }
+                .accessibilityIdentifier("settings.section.reviews")
+                NavigationLink { IMDbRatingsPage(status: datasetStatus) } label: {
+                    SettingsRow(title: "IMDb ratings", summary: IMDbDatasetSummary.text(datasetStatus), systemImage: "arrow.down.circle")
+                }
+                .accessibilityIdentifier("settings.section.imdb")
+            }
+            Section("Accounts & server") {
+                NavigationLink { TraktAccountView(services: services) } label: {
+                    SettingsRow(title: "Trakt", summary: "Sync and lists", systemImage: "person.crop.circle")
+                }
+                .accessibilityIdentifier("settings.trakt")
+                NavigationLink { AccountsSettingsPage(model: model) } label: {
+                    SettingsRow(title: "Continue refresh", summary: continueRefreshSummary, systemImage: "arrow.clockwise")
+                }
+                .accessibilityIdentifier("settings.section.accounts")
+                NavigationLink { ServerSettingsPage(model: model) } label: {
+                    SettingsRow(title: "Streaming server", summary: model.settings.streamingServerURL ?? "Not set", systemImage: "server.rack")
+                }
+                .accessibilityIdentifier("settings.section.server")
+                if fallbackEngineLinked {
+                    NavigationLink { FallbackSettingsPage(model: model) } label: {
+                        SettingsRow(title: "Fallback player", summary: model.settings.fallbackEngineEnabled ? "On" : "Off",
+                                    systemImage: "film")
+                    }
+                    .accessibilityIdentifier("settings.section.fallback")
+                }
+            }
+            Section("Data") {
+                NavigationLink { DataSettingsPage(model: model, services: services) } label: {
+                    SettingsRow(title: "Clear data", summary: "History, library, settings", systemImage: "trash")
+                }
+                .accessibilityIdentifier("settings.section.data")
+            }
+            Section("About") {
+                NavigationLink { AboutSettingsPage(fallbackEngineLinked: fallbackEngineLinked) } label: {
+                    SettingsRow(title: "About", summary: "Version \(SettingsViewModel.appVersion)", systemImage: "info.circle")
+                }
+                .accessibilityIdentifier("settings.section.about")
+            }
         }
+        .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .screenBackground()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await model.load()
-            if let url = URL(string: "infuse://") { infuseInstalled = UIApplication.shared.canOpenURL(url) }
             datasetStatus = await services.posterRatings.imdbDatasetStatus()
         }
-        // A new copy of the IMDb data arrived while Settings was open.
+        // A new copy of the IMDb data arrived while Settings was open, or the review services changed.
         .onChange(of: services.posterRatings.reviewServicesRevision) {
+            model.refreshOMDbUsage()
             Task { datasetStatus = await services.posterRatings.imdbDatasetStatus() }
         }
+        .accessibilityIdentifier("settings.form")
+    }
+
+    private var playbackSummary: String {
+        let quality = SettingsViewModel.resolutionOptions.first { $0.value == model.settings.preferredResolution }?.label ?? "Best available"
+        return "\(model.settings.playerPreference.title) · \(quality)"
+    }
+
+    private var appearanceSummary: String {
+        var on: [String] = []
+        if model.settings.showsPosterRatings { on.append("Ratings on posters") }
+        if model.settings.showsColouredRatingLogos { on.append("Coloured logos") }
+        return on.isEmpty ? "Rating options off" : on.joined(separator: ", ")
+    }
+
+    private var reviewServicesSummary: String {
+        var saved: [String] = []
+        if model.settings.omdbAPIKey != nil { saved.append("OMDb") }
+        if model.settings.tmdbReadToken != nil { saved.append("TMDB") }
+        var text = saved.isEmpty ? "Not set up" : saved.joined(separator: ", ")
+        if model.settings.omdbAPIKey != nil {
+            text += " · \(model.omdbRequestsToday.formatted()) of \(SettingsViewModel.omdbDailyLimit.formatted()) today"
+        }
+        return text
+    }
+
+    private var continueRefreshSummary: String {
+        let seconds = model.settings.continueWatchingRefreshSeconds ?? 300
+        return SettingsViewModel.continueWatchingRefreshOptions.first { $0.value == seconds }?.label ?? "Every 5 minutes"
+    }
+}
+
+private func lazyLoadLabel(_ level: Int) -> String {
+    LazyLoadLookahead.levels[min(max(level, 1), LazyLoadLookahead.levels.count) - 1].label
+}
+
+/// One row of the Settings root, in the format of the Widgets page: a symbol, a title and a one-line summary.
+private struct SettingsRow: View {
+    let title: String
+    let summary: String
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+        }
+    }
+}
+
+/// The look every Settings page shares with the Widgets page.
+private extension View {
+    func settingsPage(_ title: String) -> some View {
+        listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .screenBackground()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct PlaybackSettingsPage: View {
+    let model: SettingsViewModel
+    @State private var infuseInstalled = true
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Play with", selection: Binding(get: { model.settings.playerPreference }, set: { value in
+                    Task { await model.setPlayerPreference(value) }
+                })) {
+                    ForEach(PlayerPreference.allCases) { Text($0.title).tag($0) }
+                }
+                .accessibilityIdentifier("settings.player")
+                if model.settings.playerPreference.externalPlayer != nil && !infuseInstalled {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Infuse isn’t installed on this device.").font(.footnote).foregroundStyle(.secondary)
+                        if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url) }
+                    }
+                    .accessibilityIdentifier("settings.player.missing")
+                }
+                Toggle("Play best stream automatically", isOn: Binding(get: { model.settings.autoPlayBestStream }, set: { value in
+                    Task { await model.setAutoPlayBestStream(value) }
+                }))
+                .accessibilityIdentifier("settings.autoPlay")
+                Picker("Preferred quality",
+                       selection: Binding(get: { model.settings.preferredResolution },
+                                          set: { value in Haptics.selection(); Task { await model.setPreferredResolution(value) } })) {
+                    ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
+                }
+                .accessibilityIdentifier("settings.resolution")
+                Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in
+                    Haptics.selection()
+                    Task { await model.setSubtitleLanguage(value) }
+                })) {
+                    ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
+                }
+                .accessibilityIdentifier("settings.subtitleLanguage")
+            } footer: {
+                Text("""
+                    If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as \
+                    MKV and DTS, and returns your progress when you come back.
+                    """)
+            }
+        }
+        .settingsPage("Playback")
+        .task {
+            if let url = URL(string: "infuse://") { infuseInstalled = UIApplication.shared.canOpenURL(url) }
+        }
+    }
+}
+
+private struct AppearanceSettingsPage: View {
+    let model: SettingsViewModel
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Ratings on posters", isOn: Binding(get: { model.settings.showsPosterRatings }, set: { value in
+                    Task { await model.setShowsPosterRatings(value) }
+                }))
+                .accessibilityIdentifier("settings.posterRatings")
+                Toggle("Coloured rating logos", isOn: Binding(get: { model.settings.showsColouredRatingLogos }, set: { value in
+                    Task { await model.setShowsColouredRatingLogos(value) }
+                }))
+                .accessibilityIdentifier("settings.colouredRatingLogos")
+            }
+        }
+        .settingsPage("Appearance")
+    }
+}
+
+private struct LazyLoadSettingsPage: View {
+    @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    HStack {
+                        Text("Lazy load")
+                        Spacer()
+                        Text(lazyLoadLabel(lookaheadLevel)).foregroundStyle(.secondary)
+                    }
+                    GlassSlider(value: $lookaheadLevel, stops: LazyLoadLookahead.levels.count)
+                        .accessibilityLabel("Lazy load")
+                        .accessibilityIdentifier("settings.lazyLoadLookahead")
+                    HStack {
+                        Text(LazyLoadLookahead.levels[0].label)
+                        Spacer()
+                        Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("""
+                    How many posters stay loaded off screen above and below what you see in a long list: 3 on Near, 9 on Balanced, 18 on \
+                    Far. Further uses more data and memory.
+                    """)
+            }
+        }
+        .settingsPage("Lazy load")
+    }
+}
+
+private struct ReviewServicesPage: View {
+    @Bindable var model: SettingsViewModel
+    let services: AppServices
+
+    private var used: Int { model.omdbRequestsToday }
+    private var limit: Int { SettingsViewModel.omdbDailyLimit }
+
+    var body: some View {
+        List {
+            Section {
+                SecureField("OMDb API Key", text: $model.omdbAPIKeyText)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("settings.omdbAPIKey")
+                VStack(alignment: .leading, spacing: 6) {
+                    LabeledContent("Requests today", value: "\(used.formatted()) of \(limit.formatted())")
+                    ProgressView(value: Double(min(used, limit)), total: Double(limit))
+                        .tint(Double(used) >= Double(limit) * 0.9 ? .orange : nil)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("settings.omdbUsage")
+                if let url = URL(string: "https://www.omdbapi.com/apikey.aspx") { Link("Get an OMDb key", destination: url) }
+            } header: {
+                Text("OMDb")
+            } footer: {
+                Text("""
+                    A key adds the IMDb score of each episode, one request per season. The free key allows 1,000 requests a day, counted on \
+                    this device and reset at midnight UTC.
+                    """)
+            }
+            Section {
+                SecureField("TMDB Read Access Token", text: $model.tmdbReadTokenText)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .accessibilityIdentifier("settings.tmdbReadToken")
+                if let url = URL(string: "https://www.themoviedb.org/settings/api") { Link("TMDB API settings", destination: url) }
+            } header: {
+                Text("TMDB")
+            } footer: {
+                Text("TMDB provides reviews, cast and artwork. It uses a Read Access Token.")
+            }
+            Section {
+                Button("Save Review Services") { Task { await model.commitReviewCredentials() } }
+                    .accessibilityIdentifier("settings.reviews.save")
+                Button("Refresh Ratings") { Task { await model.refreshRatings() } }
+                    .accessibilityIdentifier("settings.reviews.refresh")
+                if let error = services.posterRatings.omdbError ?? services.posterRatings.reviewServiceIssue {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("settings.reviews.error")
+                }
+            } footer: {
+                Text("""
+                    Title scores come from the IMDb file on this device, with no key. Credentials stay in the Keychain. Site links work \
+                    without keys.
+                    """)
+            }
+        }
+        .settingsPage("Review services")
+        .task { model.refreshOMDbUsage() }
+        .onChange(of: services.posterRatings.reviewServicesRevision) { model.refreshOMDbUsage() }
+    }
+}
+
+/// What the offline IMDb scores are, when they were last updated, and whose they are (IMDb asks for the credit and limits the data
+/// to personal, non-commercial use).
+private struct IMDbRatingsPage: View {
+    let status: IMDbDatasetStatus?
+
+    var body: some View {
+        List {
+            Section {
+                if let status {
+                    LabeledContent {
+                        Text(status.titleCount.formatted())
+                    } label: {
+                        HStack(spacing: 6) {
+                            ReviewSiteIcon(site: .imdb, size: 13)
+                            Text("Titles")
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.imdbDataset")
+                    LabeledContent("Updated", value: (status.updatedAt ?? status.checkedAt)
+                        .map { $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? "Not yet")
+                    LabeledContent("Size on disk", value: status.fileSize.map { $0.formatted(.byteCount(style: .file)) } ?? "Unknown")
+                } else {
+                    LabeledContent {
+                        Text(IMDbDatasetSummary.text(nil))
+                    } label: {
+                        HStack(spacing: 6) {
+                            ReviewSiteIcon(site: .imdb, size: 13)
+                            Text("Titles")
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.imdbDataset")
+                }
+                if let url = IMDbAttribution.termsURL { Link("IMDb data terms", destination: url) }
+            } footer: {
+                Text("""
+                    \(IMDbAttribution.notice) Scores come from IMDb's public ratings file, which Blusion updates once a day in the background \
+                    and keeps on this device. \(IMDbAttribution.terms)
+                    """)
+            }
+        }
+        .settingsPage("IMDb ratings")
+    }
+}
+
+private struct AccountsSettingsPage: View {
+    let model: SettingsViewModel
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Continue refresh", selection: Binding(get: { model.settings.continueWatchingRefreshSeconds ?? 300 }, set: { value in
+                    Task { await model.setContinueWatchingRefreshSeconds(value) }
+                })) {
+                    ForEach(SettingsViewModel.continueWatchingRefreshOptions) { Text($0.label).tag($0.value) }
+                }
+                .accessibilityIdentifier("settings.continueWatchingRefresh")
+            } footer: {
+                Text("How often Continue Watching checks for newer progress.")
+            }
+        }
+        .settingsPage("Continue refresh")
+    }
+}
+
+private struct ServerSettingsPage: View {
+    @Bindable var model: SettingsViewModel
+
+    var body: some View {
+        List {
+            Section {
+                TextField("http://192.168.1.10:11470", text: $model.serverURLText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .submitLabel(.done)
+                    .onSubmit { Task { await model.commitServerURL() } }
+                    .accessibilityLabel("Streaming server address")
+                    .accessibilityIdentifier("settings.serverURL")
+                if let message = model.serverURLMessage {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("settings.serverURL.message")
+                }
+                Button("Save address") { Task { await model.commitServerURL() } }
+                    .disabled(model.serverURLMessage != nil)
+                    .accessibilityIdentifier("settings.serverURL.save")
+            } footer: {
+                Text("""
+                    Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion \
+                    doesn't include one. Leave this empty if you don't use any.
+                    """)
+            }
+        }
+        .settingsPage("Streaming server")
+    }
+}
+
+private struct FallbackSettingsPage: View {
+    let model: SettingsViewModel
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Use the fallback player", isOn: Binding(get: { model.settings.fallbackEngineEnabled },
+                                        set: { value in Haptics.selection(); Task { await model.setFallbackEngineEnabled(value) } }))
+                    .accessibilityIdentifier("settings.fallbackToggle")
+            } footer: {
+                Text("Plays formats the system player can't, such as MKV and some audio tracks. Turn it off to use only the system player.")
+            }
+        }
+        .settingsPage("Fallback player")
+    }
+}
+
+private struct DataSettingsPage: View {
+    let model: SettingsViewModel
+    let services: AppServices
+    @State private var pendingScope: DataResetService.Scope?
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(DataResetService.Scope.allCases, id: \.self) { scope in
+                    Button(scope.title, role: .destructive) { pendingScope = scope }
+                        .accessibilityIdentifier("settings.clear.\(String(describing: scope))")
+                }
+                if let message = model.lastMessage {
+                    Label(message, systemImage: "checkmark.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.clearMessage")
+                }
+            } footer: {
+                if services.secretsInKeychain {
+                    Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
+                } else {
+                    // A Mac build signed without a provisioning profile: the other screens still say Keychain.
+                    Text("""
+                        This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library \
+                        folder instead. Trakt sync sends only the items you choose to share.
+                        """)
+                }
+            }
+        }
+        .settingsPage("Clear data")
         .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "",
                             isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
                             titleVisibility: .visible, presenting: pendingScope) { scope in
@@ -65,241 +493,26 @@ struct SettingsView: View {
         } message: { scope in
             Text(scope.warning)
         }
-        .accessibilityIdentifier("settings.form")
     }
+}
 
-    private var playbackSection: some View {
-        Section {
-            Picker("Play with", selection: Binding(get: { model.settings.playerPreference }, set: { value in
-                Task { await model.setPlayerPreference(value) }
-            })) {
-                ForEach(PlayerPreference.allCases) { Text($0.title).tag($0) }
-            }
-            .accessibilityIdentifier("settings.player")
-            if model.settings.playerPreference.externalPlayer != nil && !infuseInstalled {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Infuse isn’t installed on this device.").font(.footnote).foregroundStyle(.secondary)
-                    if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url) }
-                }
-                .accessibilityIdentifier("settings.player.missing")
-            }
-            Toggle("Play best stream automatically", isOn: Binding(get: { model.settings.autoPlayBestStream }, set: { value in
-                Task { await model.setAutoPlayBestStream(value) }
-            }))
-            .accessibilityIdentifier("settings.autoPlay")
-            Picker("Preferred quality",
-                   selection: Binding(get: { model.settings.preferredResolution },
-                                      set: { value in Haptics.selection(); Task { await model.setPreferredResolution(value) } })) {
-                ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
-            }
-            .accessibilityIdentifier("settings.resolution")
-            Picker("Subtitles", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in
-                Haptics.selection()
-                Task { await model.setSubtitleLanguage(value) }
-            })) {
-                ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
-            }
-            .accessibilityIdentifier("settings.subtitleLanguage")
-        } header: {
-            Text("Playback")
-        } footer: {
-            Text("""
-                If no stream matches your quality preference, the best available is used. Infuse plays formats Blusion can’t, such as \
-                MKV and DTS, and returns your progress when you come back.
-                """)
-        }
-    }
+private struct AboutSettingsPage: View {
+    let fallbackEngineLinked: Bool
 
-    private var appearanceSection: some View {
-        Section("Appearance") {
-            Toggle("Ratings on posters", isOn: Binding(get: { model.settings.showsPosterRatings }, set: { value in
-                Task { await model.setShowsPosterRatings(value) }
-            }))
-            .accessibilityIdentifier("settings.posterRatings")
-            Toggle("Coloured rating logos", isOn: Binding(get: { model.settings.showsColouredRatingLogos }, set: { value in
-                Task { await model.setShowsColouredRatingLogos(value) }
-            }))
-            .accessibilityIdentifier("settings.colouredRatingLogos")
-        }
-    }
-
-    private var lazyLoadSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                HStack {
-                    Text("Lazy load")
-                    Spacer()
-                    Text(LazyLoadLookahead.levels[min(max(lookaheadLevel, 1), LazyLoadLookahead.levels.count) - 1].label)
-                        .foregroundStyle(.secondary)
-                }
-                GlassSlider(value: $lookaheadLevel, stops: LazyLoadLookahead.levels.count)
-                    .accessibilityLabel("Lazy load")
-                    .accessibilityIdentifier("settings.lazyLoadLookahead")
-                HStack {
-                    Text(LazyLoadLookahead.levels[0].label)
-                    Spacer()
-                    Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Lazy load")
-        } footer: {
-            Text("How early long lists load. Further uses more data and memory.")
-        }
-    }
-
-    private var traktSection: some View {
-        Section("Accounts") {
-            NavigationLink { TraktAccountView(services: services) } label: { Label("Trakt", systemImage: "person.crop.circle") }
-                .accessibilityIdentifier("settings.trakt")
-            Picker("Continue refresh", selection: Binding(get: { model.settings.continueWatchingRefreshSeconds ?? 300 }, set: { value in
-                Task { await model.setContinueWatchingRefreshSeconds(value) }
-            })) {
-                ForEach(SettingsViewModel.continueWatchingRefreshOptions) { Text($0.label).tag($0.value) }
-            }
-            .accessibilityIdentifier("settings.continueWatchingRefresh")
-        }
-    }
-
-    private var reviewServicesSection: some View {
-        Section {
-            SecureField("OMDb API Key", text: $model.omdbAPIKeyText)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .accessibilityIdentifier("settings.omdbAPIKey")
-            SecureField("TMDB Read Access Token", text: $model.tmdbReadTokenText)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .accessibilityIdentifier("settings.tmdbReadToken")
-            Button("Save Review Services") { Task { await model.commitReviewCredentials() } }
-                .accessibilityIdentifier("settings.reviews.save")
-            Button("Refresh Ratings") { Task { await model.refreshRatings() } }
-                .accessibilityIdentifier("settings.reviews.refresh")
-            if let error = services.posterRatings.omdbError ?? services.posterRatings.reviewServiceIssue {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .accessibilityIdentifier("settings.reviews.error")
-            }
-            if let url = URL(string: "https://www.omdbapi.com/apikey.aspx") { Link("Get an OMDb key", destination: url) }
-            if let url = URL(string: "https://www.themoviedb.org/settings/api") { Link("TMDB API settings", destination: url) }
-        } header: {
-            Text("Review services")
-        } footer: {
-            Text("""
-                Optional. IMDb scores for titles come from the ratings file on this device, with no key. An OMDb key adds the IMDb score \
-                of each episode, one request per season, made when its first episode card comes on screen. The free key allows 1,000 lookups a day. TMDB uses a Read \
-                Access Token. Credentials stay in the Keychain. Site links work without keys.
-                """)
-        }
-    }
-
-    /// What the offline IMDb scores are, when they were last updated, and whose they are (IMDb asks for the credit and limits the data
-    /// to personal, non-commercial use).
-    private var imdbDatasetSection: some View {
-        Section {
-            HStack {
-                ReviewSiteIcon(site: .imdb, size: 13)
-                Text("Offline IMDb ratings")
-                Spacer()
-                Text(IMDbDatasetSummary.text(datasetStatus))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("settings.imdbDataset")
-            if let url = IMDbAttribution.termsURL { Link("IMDb data terms", destination: url) }
-        } header: {
-            Text("IMDb ratings")
-        } footer: {
-            Text("""
-                \(IMDbAttribution.notice) Scores come from IMDb's public ratings file, which Blusion updates once a day in the background \
-                and keeps on this device. \(IMDbAttribution.terms)
-                """)
-        }
-    }
-
-    private var serverSection: some View {
-        Section {
-            TextField("http://192.168.1.10:11470", text: $model.serverURLText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .textContentType(.URL)
-                .submitLabel(.done)
-                .onSubmit { Task { await model.commitServerURL() } }
-                .accessibilityLabel("Streaming server address")
-                .accessibilityIdentifier("settings.serverURL")
-            if let message = model.serverURLMessage {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                    .accessibilityIdentifier("settings.serverURL.message")
-            }
-            Button("Save address") { Task { await model.commitServerURL() } }
-                .disabled(model.serverURLMessage != nil)
-                .accessibilityIdentifier("settings.serverURL.save")
-        } header: {
-            Text("Streaming server")
-        } footer: {
-            Text("""
-                Optional. Torrent and other non-direct streams need a streaming server on your network that you run yourself. Blusion \
-                doesn't include one. Leave this empty if you don't use any.
-                """)
-        }
-    }
-
-    private var fallbackSection: some View {
-        Section {
-            Toggle("Use the fallback player", isOn: Binding(get: { model.settings.fallbackEngineEnabled },
-                                    set: { value in Haptics.selection(); Task { await model.setFallbackEngineEnabled(value) } }))
-                .accessibilityIdentifier("settings.fallbackToggle")
-        } header: {
-            Text("Fallback player")
-        } footer: {
-            Text("Plays formats the system player can't, such as MKV and some audio tracks. Turn it off to use only the system player.")
-        }
-    }
-
-    private var dataSection: some View {
-        Section {
-            ForEach(DataResetService.Scope.allCases, id: \.self) { scope in
-                Button(scope.title, role: .destructive) { pendingScope = scope }
-                    .accessibilityIdentifier("settings.clear.\(String(describing: scope))")
-            }
-            if let message = model.lastMessage {
-                Label(message, systemImage: "checkmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("settings.clearMessage")
-            }
-        } header: {
-            Text("Clear data")
-        } footer: {
-            if services.secretsInKeychain {
-                Text("Addon links and account credentials are kept in the Keychain. Trakt sync sends only the items you choose to share.")
-            } else {
-                // A Mac build signed without a provisioning profile: the other screens still say Keychain.
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Version", value: SettingsViewModel.appVersion)
+                NavigationLink("Acknowledgements") { AcknowledgementsView(fallbackEngineLinked: fallbackEngineLinked) }
+                    .accessibilityIdentifier("settings.acknowledgements")
+            } footer: {
                 Text("""
-                    This build may not use the Keychain: addon links and account credentials are kept in a private file in your Library \
-                    folder instead. Trakt sync sends only the items you choose to share.
+                    Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › \
+                    Addons. Blusion isn’t affiliated with any addon or service.
                     """)
             }
         }
-    }
-
-    private var aboutSection: some View {
-        Section("About") {
-            LabeledContent("Version", value: SettingsViewModel.appVersion)
-            NavigationLink("Acknowledgements") { AcknowledgementsView(fallbackEngineLinked: fallbackEngineLinked) }
-                .accessibilityIdentifier("settings.acknowledgements")
-            Text("""
-                Blusion includes no content or stream sources. Cinemeta provides catalogs and search; you can remove it in Settings › \
-                Addons. Blusion isn’t affiliated with any addon or service.
-                """)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
+        .settingsPage("About")
     }
 }
 

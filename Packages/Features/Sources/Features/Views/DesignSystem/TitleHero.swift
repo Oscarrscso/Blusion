@@ -7,6 +7,8 @@ enum TitleHero {
     /// The share of the picture's height that the bottom fade covers.
     static let fadeLength = 0.42
     static let fadeStrength = 1.0
+    /// How far the bottom fade runs past the picture's bottom edge, so no row of picture pixels shows under it while the page moves.
+    static let fadeOverscan: CGFloat = 2
     /// The tallest logo, bottom-aligned above the bottom gap.
     static let logoMaxHeight: CGFloat = 150
     /// The gap between the bottom of the logo and the bottom of the picture.
@@ -61,20 +63,66 @@ enum HeroSlot {
 }
 
 /// Loads the hero picture and the logo together and answers from the image cache, so a decoded one is there in the first frame.
+/// It also holds what it has shown, so the shared cache evicting a large picture never sends a shown hero back to loading, and every
+/// logo lives in a process-wide store, so a title's logo is there in the first frame for the rest of the session.
 @MainActor @Observable
 final class HeroLoader {
     /// Longest edge the logo is decoded to, on Home and on the title page.
     static let logoPixelSize: CGFloat = 800
+    /// Logos are small, so this many are kept for the whole session; the oldest go first.
+    private static let logoLimit = 80
+    private static var logos: [String: UIImage] = [:]
+    private static var logoOrder: [String] = []
+
     private var failed: Set<String> = []
     private var revision = 0
+    /// The pictures this loader has resolved, held strongly so they outlive the shared cache's eviction. Not observed: `revision` is.
+    @ObservationIgnored private var held: [String: UIImage] = [:]
 
     nonisolated private static func key(_ url: URL, _ size: CGFloat) -> String { "\(Int(size))|\(url.absoluteString)" }
+
+    /// The logo of `url` if one has been loaded this session.
+    static func storedLogo(_ url: URL) -> UIImage? { logos[key(url, logoPixelSize)] }
+
+    private static func storeLogo(_ image: UIImage, for url: URL) {
+        let key = key(url, logoPixelSize)
+        if logos.updateValue(image, forKey: key) != nil { logoOrder.removeAll { $0 == key } }
+        logoOrder.append(key)
+        while logoOrder.count > logoLimit { logos[logoOrder.removeFirst()] = nil }
+    }
+
+    /// Loads a logo into the process-wide store without any loader, so it is ready before its page is built. Ignores failures.
+    static func warmLogo(_ url: URL, priority: TaskPriority) async {
+        if storedLogo(url) != nil { return }
+        if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: logoPixelSize) { storeLogo(cached, for: url); return }
+        guard let image = try? await ImagePipeline.shared.image(for: url, maxPixelSize: logoPixelSize, priority: priority),
+              !Task.isCancelled else { return }
+        storeLogo(image, for: url)
+    }
+
+    /// Remembers an image that has been resolved: logos in the shared store, pictures in this loader.
+    private func remember(_ image: UIImage, url: URL, size: CGFloat) {
+        if size == Self.logoPixelSize { Self.storeLogo(image, for: url) } else { held[Self.key(url, size)] = image }
+    }
+
+    /// Drops the pictures this loader holds except those in `kept`, so a page that has left the load window stops pinning memory.
+    /// Logos are never dropped.
+    func release(keeping kept: [(URL, CGFloat)]) {
+        guard !held.isEmpty else { return }
+        let keys = Set(kept.map { Self.key($0.0, $0.1) })
+        held = held.filter { keys.contains($0.key) }
+    }
 
     /// A slot's state. A nil URL is pending until `lookupFinished`, then there is none.
     func slot(url: URL?, maxPixelSize: CGFloat, lookupFinished: Bool) -> HeroSlot {
         _ = revision
         guard let url else { return lookupFinished ? .none : .pending }
-        if let image = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) { return .ready(image) }
+        if maxPixelSize == Self.logoPixelSize, let logo = Self.storedLogo(url) { return .ready(logo) }
+        if let image = held[Self.key(url, maxPixelSize)] { return .ready(image) }
+        if let image = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
+            remember(image, url: url, size: maxPixelSize)
+            return .ready(image)
+        }
         return failed.contains(Self.key(url, maxPixelSize)) ? .none : .pending
     }
 
@@ -87,20 +135,33 @@ final class HeroLoader {
         guard (picture != nil || lookupFinished), (logo != nil || lookupFinished) else { return }
         let wanted = [(picture, pictureSize), (logo, logoSize)].compactMap { url, size in
             url.map { ($0, size) }
-        }.filter { ImagePipeline.shared.cachedImage(for: $0.0, maxPixelSize: $0.1) == nil }
-        guard !wanted.isEmpty else { return }
-        let failures = await withTaskGroup(of: String?.self, returning: [String].self) { group in
-            for (url, size) in wanted {
+        }
+        var pending: [(URL, CGFloat)] = []
+        for (url, size) in wanted {
+            if size == Self.logoPixelSize, Self.storedLogo(url) != nil { continue }
+            if held[Self.key(url, size)] != nil { continue }
+            if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: size) { remember(cached, url: url, size: size); continue }
+            pending.append((url, size))
+        }
+        guard !pending.isEmpty else { return }
+        let results = await withTaskGroup(of: (URL, CGFloat, UIImage?, Bool).self, returning: [(URL, CGFloat, UIImage?, Bool)].self) { group in
+            for (url, size) in pending {
                 group.addTask {
-                    do { _ = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority); return nil }
-                    catch { return Task.isCancelled ? nil : Self.key(url, size) }
+                    do {
+                        let image = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: priority)
+                        return (url, size, image, false)
+                    } catch { return (url, size, nil, !Task.isCancelled) }
                 }
             }
-            var keys: [String] = []
-            for await key in group { if let key { keys.append(key) } }
-            return keys
+            var all: [(URL, CGFloat, UIImage?, Bool)] = []
+            for await result in group { all.append(result) }
+            return all
         }
         guard !Task.isCancelled else { return }
+        var failures: [String] = []
+        for (url, size, image, didFail) in results {
+            if let image { remember(image, url: url, size: size) } else if didFail { failures.append(Self.key(url, size)) }
+        }
         withAnimation(.easeOut(duration: 0.25)) {
             failed.formUnion(failures)
             revision += 1

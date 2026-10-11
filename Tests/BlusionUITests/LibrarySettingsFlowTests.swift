@@ -120,6 +120,9 @@ final class LibrarySettingsFlowTests: XCTestCase {
         captureScreenshot(app, named: "M7-settings")
 
         // An invalid server address explains itself and cannot be saved.
+        let serverRow = app.buttons["settings.section.server"]
+        while !serverRow.isHittable { app.swipeUp() }
+        serverRow.tap()
         let server = app.textFields["settings.serverURL"]
         XCTAssertTrue(server.waitForExistence(timeout: 5))
         server.tap()
@@ -127,10 +130,14 @@ final class LibrarySettingsFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["settings.serverURL.message"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["settings.serverURL.save"].isEnabled)
         captureScreenshot(app, named: "M7-settings-invalid-server")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
 
         // Clearing asks first, and Cancel changes nothing.
+        let dataRow = app.buttons["settings.section.data"]
+        while !dataRow.isHittable { app.swipeUp() }
+        dataRow.tap()
         let clearHistory = app.buttons["settings.clear.history"]
-        while !clearHistory.isHittable { app.swipeUp() }
+        XCTAssertTrue(clearHistory.waitForExistence(timeout: 5))
         clearHistory.tap()
         XCTAssertTrue(app.buttons["settings.confirmClear"].waitForExistence(timeout: 5))
         captureScreenshot(app, named: "M7-settings-confirm")
@@ -138,9 +145,14 @@ final class LibrarySettingsFlowTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["settings.clearMessage"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["settings.clearMessage"].label, "Watch history cleared.")
 
-        // Acknowledgements.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        // Acknowledgements, on the About page.
+        let aboutRow = app.buttons["settings.section.about"]
+        while !aboutRow.isHittable { app.swipeUp() }
+        aboutRow.tap()
         let acknowledgements = app.buttons["settings.acknowledgements"]
-        while !acknowledgements.isHittable { app.swipeUp() }
+        XCTAssertTrue(acknowledgements.waitForExistence(timeout: 5))
         acknowledgements.tap()
         XCTAssertTrue(app.staticTexts["Apple frameworks"].waitForExistence(timeout: 5))
         captureScreenshot(app, named: "M7-acknowledgements")

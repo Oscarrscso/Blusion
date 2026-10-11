@@ -20,11 +20,14 @@ public struct IMDbDatasetStatus: Sendable, Equatable {
     public var updatedAt: Date?
     /// When the server last confirmed that this copy is the current one.
     public var checkedAt: Date?
+    /// Bytes the database takes on disk, its `-wal` and `-shm` files included. Nil when the files can't be read.
+    public var fileSize: Int64?
 
-    public init(titleCount: Int, updatedAt: Date?, checkedAt: Date?) {
+    public init(titleCount: Int, updatedAt: Date?, checkedAt: Date?, fileSize: Int64? = nil) {
         self.titleCount = titleCount
         self.updatedAt = updatedAt
         self.checkedAt = checkedAt
+        self.fileSize = fileSize
     }
 }
 

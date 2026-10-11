@@ -68,9 +68,9 @@ private struct ShelfEdgeKey: PreferenceKey {
 }
 
 private struct SoftSnappingScrollModifier: ViewModifier {
-    /// How far the shelf must travel from the last tick before another card crossing ticks. A small nudge across an edge and back is
-    /// not a step between cards, so it stays silent.
-    private static let minimumTravel: CGFloat = 120
+    /// How far the shelf must travel from the last tick before another card crossing ticks. Only enough to keep a card resting on the
+    /// edge from chattering: a swipe that goes back over the gap it just crossed ticks again, in either direction.
+    private static let minimumTravel: CGFloat = 12
 
     /// The card whose leading edge last reached the screen's leading edge. It changes exactly when a card crosses it.
     @State private var leadingID: AnyHashable?

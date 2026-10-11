@@ -37,6 +37,9 @@ public final class SettingsViewModel {
     /// Every installed addon, disabled ones included.
     public private(set) var installedAddonCount = 0
     public private(set) var lastMessage: String?
+    /// OMDb requests this device has sent today (UTC). `refreshOMDbUsage()` updates it.
+    public private(set) var omdbRequestsToday = 0
+    public static let omdbDailyLimit = OMDbUsage.dailyLimit
 
     private let services: AppServices
     private let reset: DataResetService
@@ -58,6 +61,11 @@ public final class SettingsViewModel {
         services.posterRatings.isEnabled = settings.showsPosterRatings
         services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
         installedAddonCount = await services.registry.addons.count
+        refreshOMDbUsage()
+    }
+
+    public func refreshOMDbUsage() {
+        omdbRequestsToday = OMDbUsage.shared.today()
     }
 
     public func setPreferredResolution(_ value: Int?) async {

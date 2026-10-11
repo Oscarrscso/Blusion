@@ -55,9 +55,19 @@ struct HeroCarousel: View {
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
-    /// How many pages ahead of (and behind) the one on screen load their full-quality picture. The nearest page and its neighbour start at
-    /// once; the rest of the window follows. Pages beyond it show their poster until the swipe brings them in range.
-    static let loadWindow = 2
+    /// The zoom source of every spotlight page: a clear view the size of the whole screen, so opening a title scales nothing and the title
+    /// page simply fades in over Home.
+    static let screenSourceID = "hero/screen"
+
+    /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
+    /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
+    /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
+    /// range.
+    static func loadWindow(isLandscape: Bool) -> Int { isLandscape ? 2 : 4 }
+
+    /// The poster every page shows until its picture is ready, and the size `ArtworkImage` asks the pipeline for when it shows one.
+    fileprivate static func placeholderURL(for item: MetaPreview) -> URL? { item.poster ?? MetahubArtwork.poster(imdbID: item.id) }
+    private static let placeholderPixelSize: CGFloat = 600
 
     private var currentIndex: Int {
         items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
@@ -100,6 +110,32 @@ struct HeroCarousel: View {
             .overlay(alignment: .bottom) {
                 if items.count > 1 { pageDots }
             }
+            .task(id: items.map(\.identity)) { await preload() }
+    }
+
+    /// Loads every item's poster, then every item's logo, nearest the current page first, so no page shows a grey box or a missing logo
+    /// when a swipe reaches it. Failures are ignored; a page that needs one asks again.
+    private func preload() async {
+        let nearestFirst = items.enumerated().sorted { abs($0.offset - currentIndex) < abs($1.offset - currentIndex) }.map(\.element)
+        await withTaskGroup(of: Void.self) { group in
+            for item in nearestFirst {
+                guard let url = Self.placeholderURL(for: item) else { continue }
+                group.addTask(priority: .high) {
+                    _ = try? await ImagePipeline.shared.image(for: url, maxPixelSize: Self.placeholderPixelSize, priority: .high)
+                }
+            }
+        }
+        guard !Task.isCancelled else { return }
+        let ratings = ratings
+        await withTaskGroup(of: Void.self) { group in
+            for item in nearestFirst {
+                group.addTask(priority: .medium) {
+                    let artwork = await ratings.heroArtwork(for: item)
+                    guard !Task.isCancelled, let url = item.logo ?? artwork?.logo else { return }
+                    await HeroLoader.warmLogo(url, priority: .medium)
+                }
+            }
+        }
     }
 
     private var pageDots: some View {
@@ -139,17 +175,13 @@ struct HeroPlaceholder: View {
 
 /// One hero page of the spotlight, using a separate image for each orientation.
 private struct HeroPage: View {
-    /// The zoom source of this page's artwork: the title's screen zooms out of it.
-    nonisolated static func sourceID(for item: MetaPreview) -> String { "hero/\(item.identity)" }
-
     let item: MetaPreview
     let isScrolling: Bool
     /// The picture's height in portrait: the page less the caption band under it, so a pull stretches the picture too.
     let artworkHeight: CGFloat
-    /// Pages between this one and the one on screen. Only pages inside `HeroCarousel.loadWindow` load their picture.
+    /// Pages between this one and the one on screen. Only pages inside `HeroCarousel.loadWindow(isLandscape:)` load their picture.
     let distance: Int
     @Environment(AppRouter.self) private var router
-    @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(PosterRatingsStore.self) private var ratings
@@ -168,11 +200,11 @@ private struct HeroPage: View {
         _artworkChecked = State(initialValue: cachedArtwork != nil)
     }
 
-    private var isInWindow: Bool { distance <= HeroCarousel.loadWindow }
+    private var isInWindow: Bool { distance <= HeroCarousel.loadWindow(isLandscape: isLandscape) }
     /// The nearest two pages jump the queue; the next one waits behind them.
     private var loadPriority: TaskPriority { distance <= 1 ? .high : .medium }
     /// What stands in for the picture and logo until both are ready.
-    private var placeholderURL: URL? { item.poster ?? MetahubArtwork.poster(imdbID: item.id) }
+    private var placeholderURL: URL? { HeroCarousel.placeholderURL(for: item) }
 
     private var heroURL: URL? {
         (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
@@ -185,7 +217,7 @@ private struct HeroPage: View {
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
     var body: some View {
-        let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork,
+        let destination = TitleDestination(preview: item, sourceID: HeroCarousel.screenSourceID, artwork: heroArtwork,
                                            artworkChecked: artworkChecked)
         let openTitle = {
             Haptics.tap()
@@ -214,7 +246,7 @@ private struct HeroPage: View {
                     .allowsHitTesting(false)
             }
         }
-        .coordinateSpace(name: HeroPage.sourceID(for: item))
+        .coordinateSpace(name: "hero/\(item.identity)")
         .task(id: "\(ratings.reviewServicesRevision)|\(isInWindow)") {
             guard isInWindow else { return }
             let loaded = await ratings.heroArtwork(for: item)
@@ -223,7 +255,10 @@ private struct HeroPage: View {
             artworkChecked = true
         }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(isInWindow)|\(distance <= 1)") {
-            guard isInWindow else { return }
+            // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
+            guard isInWindow else { hero.release(keeping: []); return }
+            // After a rotation the other orientation's picture goes too.
+            hero.release(keeping: heroURL.map { [($0, heroPixelSize)] } ?? [])
             await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
                             lookupFinished: artworkChecked)
         }
@@ -248,7 +283,9 @@ private struct HeroPage: View {
                 ZStack(alignment: .bottom) {
                     artwork
                         .allowsHitTesting(false)
+                    // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
                     BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                        .padding(.bottom, -TitleHero.fadeOverscan)
                     portraitTitle
                 }
                 .frame(height: artworkHeight)
@@ -275,7 +312,6 @@ private struct HeroPage: View {
             .overlay {
                 HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill, placeholderURL: placeholderURL)
             }
-            .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
 
     /// The title, its logo and the metadata line.
