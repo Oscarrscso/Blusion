@@ -35,6 +35,7 @@ struct RootView: View {
     @State private var isReady = false
     @State private var addonLink: String?
     @State private var userStateRevision = 0
+    @Environment(\.scenePhase) private var scenePhase
 
     /// The OMDb and TMDb review services from the saved keys. Run at launch, and again when settings or secrets change on another device.
     private func reloadReviewServices() async {
@@ -42,6 +43,13 @@ struct RootView: View {
         await environment.services.posterRatings.setReviewServices(
             omdb: settings.omdbAPIKey.map { OMDbRatings(client: environment.services.client, apiKey: $0) },
             tmdb: settings.tmdbReadToken.map { TMDbRatings(client: environment.services.client, readAccessToken: $0) })
+    }
+
+    /// Starts the daily IMDb ratings check without waiting for it: the download and the import run off the main actor, and a check that
+    /// is not due (the last one was under 24 hours ago) returns at once.
+    private func refreshIMDbDataset() {
+        let ratings = environment.services.posterRatings
+        Task(priority: .utility) { await ratings.refreshIMDbDataset() }
     }
 
     var body: some View {
@@ -85,6 +93,7 @@ struct RootView: View {
             await DebugDemoData.seedIfRequested(environment.services)
             #endif
             isReady = true
+            refreshIMDbDataset()
             #if targetEnvironment(macCatalyst)
             if ProcessInfo.processInfo.environment["BLUSION_WINDOW_SIZE"] == nil {
                 for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
@@ -98,6 +107,10 @@ struct RootView: View {
             DebugHangSampler.start()
             await DebugHandoffProbe.startIfRequested(environment.services)
             #endif
+        }
+        // An app left open for days is still checked once a day: coming back to the front asks again, and the 24-hour rule decides.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, isReady { refreshIMDbDataset() }
         }
         // Settings or secrets changed on the user's other device (iCloud): reread them here.
         .onReceive(NotificationCenter.default.publisher(for: .cloudSecretsDidChange)) { _ in

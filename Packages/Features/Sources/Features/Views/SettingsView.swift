@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var model: SettingsViewModel
     @State private var infuseInstalled = true
     @State private var pendingScope: DataResetService.Scope?
+    @State private var datasetStatus: IMDbDatasetStatus?
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
     private let services: AppServices
     let fallbackEngineLinked: Bool
@@ -35,6 +36,7 @@ struct SettingsView: View {
             appearanceSection
             lazyLoadSection
             reviewServicesSection
+            imdbDatasetSection
             traktSection
             serverSection
             if fallbackEngineLinked { fallbackSection }
@@ -48,6 +50,11 @@ struct SettingsView: View {
         .task {
             await model.load()
             if let url = URL(string: "infuse://") { infuseInstalled = UIApplication.shared.canOpenURL(url) }
+            datasetStatus = await services.posterRatings.imdbDatasetStatus()
+        }
+        // A new copy of the IMDb data arrived while Settings was open.
+        .onChange(of: services.posterRatings.reviewServicesRevision) {
+            Task { datasetStatus = await services.posterRatings.imdbDatasetStatus() }
         }
         .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "",
                             isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
@@ -182,6 +189,31 @@ struct SettingsView: View {
             Text("""
                 Optional. OMDb fills in IMDb scores that catalogs leave out (on posters and for each episode) and adds Rotten Tomatoes and Metacritic. \
                 The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.
+                """)
+        }
+    }
+
+    /// What the offline IMDb scores are, when they were last updated, and whose they are (IMDb asks for the credit and limits the data
+    /// to personal, non-commercial use).
+    private var imdbDatasetSection: some View {
+        Section {
+            HStack {
+                ReviewSiteIcon(site: .imdb, size: 13)
+                Text("Offline IMDb ratings")
+                Spacer()
+                Text(IMDbDatasetSummary.text(datasetStatus))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("settings.imdbDataset")
+            if let url = IMDbAttribution.termsURL { Link("IMDb data terms", destination: url) }
+        } header: {
+            Text("IMDb ratings")
+        } footer: {
+            Text("""
+                \(IMDbAttribution.notice) Scores come from IMDb's public ratings file, which Blusion updates once a day in the background \
+                and keeps on this device. \(IMDbAttribution.terms)
                 """)
         }
     }

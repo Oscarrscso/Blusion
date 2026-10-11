@@ -1,4 +1,5 @@
 import Foundation
+import StremioKit
 
 /// What the app ships and under which terms. The default build links no third-party code (ADR-001), so the list is short; the fallback
 /// player's LGPL components appear only when that engine is built in (ADR-006, docs/licenses.md).
@@ -23,6 +24,9 @@ public struct Acknowledgement: Sendable, Equatable, Identifiable {
             Acknowledgement(name: "TMDB", license: "TMDB API attribution",
                             detail: "This product uses the TMDB API but is not endorsed or certified by TMDB.",
                             sourceURL: URL(string: "https://www.themoviedb.org")),
+            Acknowledgement(name: "IMDb", license: "IMDb non-commercial dataset terms",
+                            detail: "\(IMDbAttribution.notice) \(IMDbAttribution.terms) The ratings file is downloaded to this device and not shared.",
+                            sourceURL: IMDbAttribution.termsURL),
             Acknowledgement(name: "Review site icons", license: "Respective service trademarks",
                             detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic and TMDB marks identify links to their services. "
                                 + "Blusion is not affiliated with them."),

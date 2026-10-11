@@ -55,6 +55,16 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   Saving credentials refreshes visible posters and episodes, including cached missing scores. **Refresh Ratings** or reopen the screen
   checks again while keeping existing scores visible. Title scores refresh weekly, episode seasons daily, and missing scores hourly;
   temporary failures leave cached scores available offline and can retry after a minute. OMDb errors appear under Review services.
+- **Offline IMDb ratings:** Blusion keeps IMDb's own public ratings file (`title.ratings.tsv.gz`, about 9 MB, 1.7 million titles) on the
+  device and reads IMDb scores and vote counts from it with no network and no key. At launch, and when the app comes back to the front,
+  it checks whether the last check was over 24 hours ago; if so it asks datasets.imdbws.com for the file with `If-None-Match` and
+  `If-Modified-Since`, so an unchanged file costs a 304 and no download. A new file is unpacked and indexed in the background into a SQLite
+  database beside the current one, checked (gzip CRC and length, header, row count, no more than one bad line in a thousand, not 20% smaller
+  than the copy in use), and only then renamed over it. Any failure keeps the old database and waits an hour before trying again.
+  The data lives in Application Support, outside backups and iCloud; the scores it supplies replace the catalog's IMDb number on posters
+  and title pages. **Settings → IMDb ratings** shows the title count and the date of the last update, and carries IMDb's credit line.
+  IMDb allows this data for personal, non-commercial use only (https://developer.imdb.com/non-commercial-datasets/): Blusion never
+  uploads, shares or redistributes it. Check those terms before putting a build of Blusion in anyone else's hands.
 - **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key each season's IMDb scores are
   fetched when you open it and shown with the IMDb mark after each episode's description.
   A TMDb credential also fills episodes that have no addon rating, labeled TMDb to identify their source.

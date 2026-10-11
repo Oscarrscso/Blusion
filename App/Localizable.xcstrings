@@ -1024,6 +1024,28 @@
         }
       }
     },
+    "IMDb data terms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMDb data terms"
+          }
+        }
+      }
+    },
+    "IMDb ratings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IMDb ratings"
+          }
+        }
+      }
+    },
     "Id prefixes": {
       "extractionState": "manual",
       "localizations": {
@@ -1581,6 +1603,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Numbered (top list)"
+          }
+        }
+      }
+    },
+    "Offline IMDb ratings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline IMDb ratings"
           }
         }
       }

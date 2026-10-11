@@ -145,7 +145,11 @@ final class AppEnvironment {
         } else {
             ratingsCache = InMemoryRatingsCache()
         }
-        let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache, logger: logger)
+        // IMDb's ratings dataset, downloaded in the background once a day and read offline. UI tests never touch the network or the disk.
+        var imdbDataset: IMDbRatingsService?
+        if !uiTesting, let directory = IMDbRatingsService.standardDirectory() { imdbDataset = IMDbRatingsService(directory: directory) }
+        let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache,
+                                               dataset: imdbDataset, logger: logger)
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,

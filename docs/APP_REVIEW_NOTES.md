@@ -29,7 +29,7 @@ or media the owner is authorized to make available. A public review endpoint nee
 | Area | Current behavior |
 |---|---|
 | Sources | Cinemeta is installed once for metadata; no stream addon or media file is bundled. |
-| Network | Enabled addons supply catalogs, metadata, streams, and subtitles. Letterboxd ratings use public pages; an optional TMDb credential enables TMDb scores and episode ratings. Review icons open external sites. Configured Trakt widgets and manual account sync contact Trakt. |
+| Network | Enabled addons supply catalogs, metadata, streams, and subtitles. Letterboxd ratings use public pages; once a day the app downloads IMDb's public ratings file (datasets.imdbws.com, personal and non-commercial use, credited in Settings) and reads it offline; an optional TMDb credential enables TMDb scores and episode ratings. Review icons open external sites. Configured Trakt widgets and manual account sync contact Trakt. |
 | Local storage | Addon links, streaming-server address, Trakt API credentials/tokens, TMDb API Read Access Token use the Keychain. Library, progress, widget layouts, recent searches, and caches stay on the device; users can manually share saved titles and watched marks with Trakt. |
 | Account sync | Device-code Trakt sign-in; manual import/export of selected watchlist and watched movie/episode data with IMDb IDs. Sync only adds missing items. Playback positions and removals are not transferred. |
 | External playback | The app registers `blusion://` callback URLs, accepts addon install links through `stremio://`, and checks the `infuse` scheme. |

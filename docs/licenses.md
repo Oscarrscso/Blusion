@@ -14,6 +14,12 @@ release (PLAN §8, §9). Items marked ☐ are open.
 
 No third-party code is linked into the **default** build: the dependency list is empty by design (ADR-001).
 
+## Data the app downloads
+
+| Data | Terms | Notes |
+|---|---|---|
+| IMDb `title.ratings.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Downloaded to the device once a day, kept out of backups, never uploaded or redistributed. Credit line in Settings → IMDb ratings and Acknowledgements. ☐ A public or commercial release needs IMDb's permission or a licence: do not ship this to others on the current terms. |
+
 ## Opt-in fallback engine (ADR-006) — only when built with `FALLBACK=1`
 
 Linking MPVKit's **LGPL** build makes the app a distributor of LGPL libraries. Typical component set of that build (verify against the exact

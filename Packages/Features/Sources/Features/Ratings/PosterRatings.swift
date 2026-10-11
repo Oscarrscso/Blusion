@@ -7,8 +7,10 @@ import StremioKit
 @Observable
 public final class TitleRatings: Identifiable {
     public nonisolated let id: String
-    /// IMDb's score out of 10, usually already carried by the catalog.
+    /// IMDb's score out of 10: from IMDb's own dataset on the device when it has the title, else the catalog's, else OMDb's.
     public internal(set) var imdb: Double?
+    /// The votes behind `imdb`, known only when the score comes from the dataset.
+    public internal(set) var imdbVotes: Int?
     /// Letterboxd's average out of 5, for films only.
     public internal(set) var letterboxd: Double?
     public internal(set) var rottenTomatoes: Double?
@@ -16,6 +18,7 @@ public final class TitleRatings: Identifiable {
     public internal(set) var tmdb: Double?
     public internal(set) var tmdbURL: URL?
     @ObservationIgnored var catalogIMDb: Double?
+    @ObservationIgnored var datasetIMDb: Double?
 
     nonisolated init(id: String, imdb: Double? = nil, letterboxd: Double? = nil) {
         self.id = id
@@ -98,14 +101,21 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var omdb: OMDbRatings?
     @ObservationIgnored private var tmdb: TMDbRatings?
     @ObservationIgnored private let cache: any RatingsCache
+    /// IMDb's ratings dataset kept on the device. Read for every IMDb title shown, with no network.
+    @ObservationIgnored private let dataset: (any IMDbDataset)?
+    /// Counts dataset installs. A title looked up under an older count is looked up again the next time it is asked for.
+    @ObservationIgnored private var datasetGeneration = 0
+    @ObservationIgnored private var datasetChecked: [String: Int] = [:]
     @ObservationIgnored private let maxConcurrentLookups: Int
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let logger: AddonLogger
 
     public nonisolated init(isEnabled: Bool = true, letterboxd: LetterboxdRatings? = nil, cache: (any RatingsCache)? = nil,
                             maxConcurrentLookups: Int = 3, now: @escaping @Sendable () -> Date = { Date() },
-                            omdb: OMDbRatings? = nil, tmdb: TMDbRatings? = nil, logger: AddonLogger = .silent) {
+                            omdb: OMDbRatings? = nil, tmdb: TMDbRatings? = nil, dataset: (any IMDbDataset)? = nil,
+                            logger: AddonLogger = .silent) {
         self._isEnabled = isEnabled
+        self.dataset = dataset
         self.letterboxd = letterboxd
         self.omdb = omdb
         self.tmdb = tmdb
@@ -127,13 +137,15 @@ public final class PosterRatingsStore {
             entry = known
             if let rating = item.imdbRating {
                 known.catalogIMDb = rating
-                if known.imdb != rating { Task { known.imdb = known.catalogIMDb } }
+                let shown = known.datasetIMDb ?? rating
+                if known.imdb != shown { Task { known.imdb = known.datasetIMDb ?? known.catalogIMDb } }
             }
         } else {
             entry = TitleRatings(id: item.identity, imdb: item.imdbRating)
             entries[item.identity] = entry
         }
         guard !isClearing, isEnabled || includeReviews, LetterboxdRatings.isIMDbID(item.id) else { return entry }
+        if source == nil || source == .imdb { lookUpInDataset(item, entry: entry) }
         if letterboxd != nil, item.type == "movie", source == nil || source == .letterboxd {
             enqueue(item, provider: .letterboxd, includeReviews: includeReviews)
         }
@@ -147,6 +159,45 @@ public final class PosterRatingsStore {
         }
         return entry
     }
+
+    /// Reads the title's score from the dataset on the device. A title is read once per dataset install, however often views ask.
+    private func lookUpInDataset(_ item: MetaPreview, entry: TitleRatings) {
+        guard let dataset, datasetChecked[item.identity] != datasetGeneration else { return }
+        datasetChecked[item.identity] = datasetGeneration
+        let generation = datasetGeneration
+        Task { [self] in
+            let found = await dataset.rating(for: item.id)
+            guard !isClearing, generation == datasetGeneration else {
+                // Dropped on purpose (clearing, or a newer dataset arrived): ask again next time.
+                if datasetChecked[item.identity] == generation { datasetChecked[item.identity] = nil }
+                return
+            }
+            guard let found else { return }
+            entry.datasetIMDb = found.rating
+            if entry.imdb != found.rating { entry.imdb = found.rating }
+            if entry.imdbVotes != found.votes { entry.imdbVotes = found.votes }
+        }
+    }
+
+    /// Fetches a newer copy of the IMDb dataset when one is due (at most once a day; see `IMDbRatingsUpdater`). Runs off the main actor
+    /// and never blocks a view. When new data arrives, visible titles read it at once.
+    public func refreshIMDbDataset() async {
+        guard let dataset else { return }
+        let outcome = await dataset.refreshIfNeeded()
+        switch outcome {
+        case .updated(let titles):
+            logger.log(.info, "IMDb ratings updated: \(titles) titles")
+            datasetGeneration += 1
+            reviewServicesRevision += 1
+        case .failed(let reason):
+            logger.log(.warning, "IMDb ratings update failed: \(reason)")
+        case .skipped, .notModified:
+            break
+        }
+    }
+
+    /// What the device holds, for Settings. Nil when nothing has been downloaded yet.
+    public func imdbDatasetStatus() async -> IMDbDatasetStatus? { await dataset?.status() }
 
     /// Called after the user saves or removes credentials. Old requests finish cancelling before the clients change.
     public func setReviewServices(omdb: OMDbRatings? = nil, tmdb: TMDbRatings?, refreshCache: Bool = false) async {
@@ -188,7 +239,7 @@ public final class PosterRatingsStore {
         await cache.clear()
         heroArtworkByID.removeAll()
         for entry in entries.values {
-            entry.imdb = entry.catalogIMDb
+            entry.imdb = entry.datasetIMDb ?? entry.catalogIMDb
             entry.letterboxd = nil
             entry.rottenTomatoes = nil
             entry.metacritic = nil
@@ -400,7 +451,7 @@ public final class PosterRatingsStore {
         case .letterboxd:
             if let rating = cached.rating { entry.letterboxd = rating }
         case .omdb:
-            if entry.catalogIMDb == nil, let rating = cached.reviews?.imdb { entry.imdb = rating }
+            if entry.catalogIMDb == nil, entry.datasetIMDb == nil, let rating = cached.reviews?.imdb { entry.imdb = rating }
             if let rating = cached.reviews?.rottenTomatoes { entry.rottenTomatoes = rating }
             if let rating = cached.reviews?.metacritic { entry.metacritic = rating }
         case .tmdb:
