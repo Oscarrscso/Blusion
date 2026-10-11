@@ -390,6 +390,8 @@ public final class PosterRatingsStore {
                 guard !Task.isCancelled else { return [:] }
                 nextLookupAt[key] = now().addingTimeInterval(scores.isEmpty ? 3_600 : 86_400)
                 if !isOMDbPaused { omdbError = nil }
+                // The request that used up the allowance: cards ask again, and TMDb fills in from now on.
+                if omdb.usage.today() >= OMDbUsage.dailyLimit { reviewServicesRevision += 1 }
                 return scores
             } catch {
                 if !Task.isCancelled {
@@ -405,6 +407,13 @@ public final class PosterRatingsStore {
         return scores
     }
 
+    /// Whether OMDb can still be asked for episode scores: there is a key, OMDb has not refused it (401 or the 429 quota pause) and today's
+    /// requests from this device are under the daily limit. TMDb's episode scores are used only while this is false.
+    public var omdbAllowsEpisodeRequests: Bool {
+        guard let omdb else { return false }
+        return !isOMDbPaused && omdb.usage.today() < OMDbUsage.dailyLimit
+    }
+
     private var isOMDbPaused: Bool { omdbPausedUntil.map { now() < $0 } ?? false }
 
     /// A rejected key or an exhausted quota will fail the same way for every other title, so stop asking for an hour.
@@ -416,6 +425,8 @@ public final class PosterRatingsStore {
         }
         guard case AddonError.http(let status) = error, status == 401 || status == 429 else { return }
         omdbPausedUntil = now().addingTimeInterval(3600)
+        // Episode cards ask again, now that TMDb may fill their scores.
+        reviewServicesRevision += 1
     }
 
     private func cacheLifetime(_ cached: CachedRating, provider: Provider) -> TimeInterval {

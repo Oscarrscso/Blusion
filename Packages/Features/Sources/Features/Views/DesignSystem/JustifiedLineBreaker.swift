@@ -20,6 +20,19 @@ enum JustifiedLineBreaker {
     private static let widowPenalty = 0.5
     /// A last line of one word with fewer characters than this is a widow.
     private static let widowCharacters = 8
+    /// The narrowest a gap between two words may be, as a share of the natural space. A line takes another word before it stretches, as long
+    /// as its gaps stay at least this wide. The breaker and the drawing use the same figure, so a line fits the same way in both.
+    static let minimumGapFactor: CGFloat = 0.75
+    /// The widest a gap may be, as a share of the natural space, on a line that is justified. A line that would need more is drawn
+    /// with natural gaps from the leading edge instead of stretched.
+    static let maximumGapFactor: CGFloat = 1.9
+    /// What a gap stretched past the natural space costs, per unit of stretch cubed (the stretch in natural spaces). Steeper than the
+    /// slack, so the breaker prefers lines of alike gaps.
+    private static let stretchWeight = 1.0
+    /// What a gap compressed under the natural space costs, per unit of compression squared.
+    private static let compressWeight = 2.0
+    /// What a line costs on top when its gaps would pass `maximumGapFactor`, so it is drawn unstretched.
+    private static let overStretchPenalty = 3.0
     /// Costs closer than this are equal, and the tie-break decides.
     private static let epsilon = 1e-9
 
@@ -43,26 +56,36 @@ enum JustifiedLineBreaker {
         var next = [Int](repeating: count, count: count + 1)
 
         for start in stride(from: count - 1, through: 0, by: -1) {
-            var natural: CGFloat = 0
+            var wordsWidth: CGFloat = 0
             var characters = 0
             var bestCost = Double.infinity
             var bestLines = Int.max
             var bestEnd = start + 1
             var end = start
             while end < count {
-                natural += wordWidths[end] + (end > start ? spaceWidth : 0)
+                wordsWidth += wordWidths[end]
                 characters += wordCharacters[end] + (end > start ? 1 : 0)
                 end += 1
+                let gaps = CGFloat(end - start - 1)
+                let natural = wordsWidth + gaps * spaceWidth
                 let isSingle = end - start == 1
-                if !isSingle && (natural > width || characters > maximumCharacters) { break }
+                // The line fits when its gaps can shrink to the minimum.
+                if !isSingle && (wordsWidth + gaps * spaceWidth * minimumGapFactor > width || characters > maximumCharacters) { break }
 
                 var lineCost: Double
                 if end == count {
                     lineCost = isSingle && !(natural > width) && wordCharacters[start] < widowCharacters && count > 1 && start > 0
                         ? widowPenalty : 0
                 } else {
-                    let slack = max(0, Double((width - natural) / width))
+                    let slack = abs(Double((width - natural) / width))
                     lineCost = slack * slack
+                    if !isSingle, spaceWidth > 0 {
+                        let ratio = (width - wordsWidth) / (gaps * spaceWidth)
+                        let stretch = Double(max(0, ratio - 1))
+                        let compress = Double(max(0, 1 - ratio))
+                        lineCost += stretchWeight * stretch * stretch * stretch + compressWeight * compress * compress
+                        if ratio > maximumGapFactor { lineCost += overStretchPenalty }
+                    }
                     if characters < minimumCharacters {
                         lineCost += shortLinePenalty + Double(minimumCharacters - characters) / Double(max(minimumCharacters, 1))
                     }
@@ -96,7 +119,27 @@ enum JustifiedLineBreaker {
     private static func wordFitsWithNext(_ index: Int, _ widths: [CGFloat], _ characters: [Int], _ space: CGFloat, _ width: CGFloat,
                                          _ maximum: Int) -> Bool {
         guard index + 1 < widths.count else { return false }
-        return widths[index] + space + widths[index + 1] <= width && characters[index] + 1 + characters[index + 1] <= maximum
+        return widths[index] + space * minimumGapFactor + widths[index + 1] <= width && characters[index] + 1 + characters[index + 1] <= maximum
+    }
+}
+
+/// How wide the gaps of one drawn line are, apart from UIKit so it can be tested.
+enum JustifiedSpacing {
+    /// The gap between the words of a line of `wordCount` words whose words take `wordsWidth` in all, in a line `lineWidth` wide.
+    /// A line too long at the natural space shrinks its gaps, to the minimum at most. A justified line stretches them to fill the line,
+    /// unless that takes more than the maximum, and then it keeps the natural space (and is drawn from the leading edge). A line that is
+    /// not justified keeps the natural space.
+    static func gap(wordsWidth: CGFloat, wordCount: Int, spaceWidth: CGFloat, lineWidth: CGFloat, justified: Bool) -> CGFloat {
+        guard wordCount > 1 else { return spaceWidth }
+        let fill = (lineWidth - wordsWidth) / CGFloat(wordCount - 1)
+        if fill < spaceWidth { return max(fill, spaceWidth * JustifiedLineBreaker.minimumGapFactor) }
+        guard justified, fill <= spaceWidth * JustifiedLineBreaker.maximumGapFactor else { return spaceWidth }
+        return fill
+    }
+
+    /// The width of a line of words at the narrowest gaps: the least it can take.
+    static func compressedWidth(wordsWidth: CGFloat, wordCount: Int, spaceWidth: CGFloat) -> CGFloat {
+        wordsWidth + spaceWidth * JustifiedLineBreaker.minimumGapFactor * CGFloat(max(0, wordCount - 1))
     }
 }
 

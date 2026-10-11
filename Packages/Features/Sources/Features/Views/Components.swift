@@ -127,7 +127,7 @@ struct AppDestinations: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
+            .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services).swipeBackPops() }
             .navigationDestination(for: TitleDestination.self) { destination in
                 let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
                                         artworkChecked: destination.artworkChecked)
@@ -139,8 +139,8 @@ struct AppDestinations: ViewModifier {
             }
             .navigationDestination(for: PersonDestination.self) { PersonView(destination: $0, services: services) }
             .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services) }
-            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
-            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }
+            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services).swipeBackPops() }
+            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services).swipeBackPops() }
     }
 }
 

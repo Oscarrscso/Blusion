@@ -152,8 +152,9 @@ public final class DetailViewModel {
     }
 
     /// TMDb scores for a season, for the episodes the addon sent none for. One request fills the season; it is made when the first
-    /// card of the season comes on screen.
+    /// card of the season comes on screen, and only when OMDb cannot give episode scores (no key, paused, or the day's allowance spent).
     private func loadEpisodeRatings(season: Int?) async {
+        guard !services.posterRatings.omdbAllowsEpisodeRequests else { return }
         guard let season, isSeries, !episodeRatingSeasons.contains(season), let seriesID = seriesIMDbID,
               detail.episodes(inSeason: season).contains(where: { $0.rating == nil }) else { return }
         episodeRatingSeasons.insert(season)
@@ -283,9 +284,10 @@ public final class DetailViewModel {
     /// Changes when review credentials do, so the cards ask again.
     public var reviewServicesRevision: Int { services.posterRatings.reviewServicesRevision }
 
-    /// An episode card came on screen: ask OMDb for its season's scores (one request, once per season) and, when neither OMDb nor the
-    /// addon has this episode's score, for the season's TMDb scores. Seasons whose cards are never scrolled to are never asked for.
-    /// OMDb needs a key; without one nothing is requested.
+    /// An episode card came on screen: ask OMDb for its season's scores (one request, once per season). Only when OMDb is unavailable
+    /// (no key, paused after a 401 or 429, or today's limit reached) and the addon has no score for the episode is the season's TMDb
+    /// score asked for. An empty OMDb answer does not bring TMDb in while OMDb is available. Seasons whose cards are never scrolled to
+    /// are never asked for.
     public func episodeAppeared(_ video: Video) async {
         await loadEpisodeScores(season: video.season)
         guard !Task.isCancelled, score(for: video) == nil else { return }
@@ -316,10 +318,13 @@ public final class DetailViewModel {
         await task.value
     }
 
+    /// OMDb's IMDb score, else the addon's own. A TMDb score (filled in earlier) is shown only while OMDb is unavailable, so it is hidden
+    /// again once OMDb can answer.
     public func score(for video: Video) -> EpisodeScore? {
         if let season = video.season, let episode = video.episode, let value = omdbEpisodeScores[season]?[episode] {
             return EpisodeScore(value: value, isIMDb: true)
         }
+        if video.ratingSource == .tmdb, services.posterRatings.omdbAllowsEpisodeRequests { return nil }
         return video.rating.map { EpisodeScore(value: $0, isIMDb: false) }
     }
 

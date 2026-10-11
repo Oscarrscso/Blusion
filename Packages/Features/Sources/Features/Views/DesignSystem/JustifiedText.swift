@@ -285,6 +285,10 @@ final class JustifiedLabel: UIView {
         return Layout(lines: lines, widestLine: min(widest, width))
     }
 
+    private func compressedWidth(_ words: ArraySlice<Word>, _ space: CGFloat) -> CGFloat {
+        JustifiedSpacing.compressedWidth(wordsWidth: words.reduce(0) { $0 + $1.width }, wordCount: words.count, spaceWidth: space)
+    }
+
     private func naturalWidth(_ words: ArraySlice<Word>, _ space: CGFloat) -> CGFloat {
         words.reduce(0) { $0 + $1.width } + space * CGFloat(max(0, words.count - 1))
     }
@@ -312,8 +316,10 @@ final class JustifiedLabel: UIView {
         }
     }
 
-    /// Draws one line. Justified, the gaps between words share the slack equally; otherwise the words keep single spaces from the leading
-    /// edge. A word wider than the line is drawn scaled down to fit. With `ellipsis`, trailing words are dropped until the mark fits.
+    /// Draws one line. Justified, the gaps between words share the slack equally, up to a cap (see `JustifiedSpacing`); otherwise the words
+    /// keep single spaces from the leading edge. A line too long at single spaces shrinks its gaps. A word wider than the line is cut
+    /// short with an ellipsis to fit, never scaled and never drawn past the line. With `ellipsis`, trailing words are dropped until the
+    /// mark fits.
     private func drawLine(_ words: [Word], in context: CGContext, content: Content, width: CGFloat, baseline: CGFloat, scale: CGFloat,
                           justified: Bool, ellipsis: Bool) {
         var kept = words
@@ -321,21 +327,24 @@ final class JustifiedLabel: UIView {
         if ellipsis, let last = words.last {
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: last.endAttributes))
             mark = (line, CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)))
-            while kept.count > 1, naturalWidth(kept[...], content.spaceWidth) + (mark?.width ?? 0) > width { kept.removeLast() }
+            while kept.count > 1, compressedWidth(kept[...], content.spaceWidth) + (mark?.width ?? 0) > width { kept.removeLast() }
         }
         let markWidth = mark?.width ?? 0
         let widths = kept.enumerated().map { $0.element.width + ($0.offset == kept.count - 1 ? markWidth : 0) }
         let sum = widths.reduce(0, +)
-        let natural = sum + content.spaceWidth * CGFloat(kept.count - 1)
-        var gap = content.spaceWidth
-        var factor: CGFloat = 1
-        if natural > width {
-            factor = width / natural
-        } else if justified, kept.count > 1 {
-            gap = (width - sum) / CGFloat(kept.count - 1)
-        }
         context.saveGState()
-        context.scaleBy(x: factor, y: 1)
+        defer { context.restoreGState() }
+        context.clip(to: CGRect(x: 0, y: -10_000, width: width, height: 20_000_000))
+        if kept.count == 1, let only = kept.first, sum > width {
+            // One word wider than the line: cut at the tail to an ellipsis, on a line of its own.
+            let token = mark?.line ?? CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: only.endAttributes))
+            let line = CTLineCreateTruncatedLine(only.line, Double(width), .end, token) ?? only.line
+            context.textPosition = CGPoint(x: 0, y: baseline)
+            CTLineDraw(line, context)
+            return
+        }
+        let gap = JustifiedSpacing.gap(wordsWidth: sum, wordCount: kept.count, spaceWidth: content.spaceWidth, lineWidth: width,
+                                       justified: justified)
         var x: CGFloat = 0
         for (offset, word) in kept.enumerated() {
             context.textPosition = CGPoint(x: (x * scale).rounded() / scale, y: baseline)
@@ -346,7 +355,6 @@ final class JustifiedLabel: UIView {
             }
             x += widths[offset] + gap
         }
-        context.restoreGState()
     }
 }
 #endif

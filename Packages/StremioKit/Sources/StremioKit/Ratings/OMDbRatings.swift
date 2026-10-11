@@ -6,7 +6,8 @@ public struct OMDbRatings: Sendable {
     private let client: AddonClient
     private let apiKey: String
     private let baseURL: URL
-    private let usage: OMDbUsage
+    /// What this key has been used for today; the daily allowance is `OMDbUsage.dailyLimit`.
+    public let usage: OMDbUsage
 
     public init(client: AddonClient, apiKey: String, baseURL: URL = OMDbRatings.defaultBaseURL, usage: OMDbUsage = .shared) {
         self.client = client

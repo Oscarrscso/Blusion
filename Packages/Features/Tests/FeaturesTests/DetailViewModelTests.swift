@@ -280,6 +280,83 @@ import StremioKitTestSupport
         #expect(!transport.requests.contains { $0.url?.host == "api.themoviedb.org" }, "IMDb already covered the season")
     }
 
+    /// A series page whose meta has two unrated episodes, with OMDb answering `omdbStatus` with no scores and TMDb answering season scores.
+    private func tmdbFallbackModel(omdbKey: Bool, requestsToday: Int = 0, omdbStatus: Int = 200) async throws
+        -> (model: DetailViewModel, transport: StubTransport) {
+        let meta = #"{"meta":{"id":"tt0944947","type":"series","name":"Show","videos":["#
+            + #"{"id":"tt0944947:1:1","season":1,"episode":1},{"id":"tt0944947:1:2","season":1,"episode":2}]}}"#
+        let transport = StubTransport { request, _ in
+            switch request.url?.host {
+            case "www.omdbapi.com":
+                return StubTransport.response(Data(#"{"Response":"True","Episodes":[]}"#.utf8), status: omdbStatus, for: request)
+            case "api.themoviedb.org":
+                let json = request.url?.path.contains("/find/") == true
+                    ? #"{"movie_results":[],"tv_results":[{"id":5}]}"#
+                    : #"{"episodes":[{"episode_number":1,"vote_average":7.5,"vote_count":10}]}"#
+                return StubTransport.response(Data(json.utf8), for: request)
+            default:
+                return StubTransport.response(Data(meta.utf8), for: request)
+            }
+        }
+        let manifest = Manifest(id: "test.meta", name: "Meta", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let name = "DetailViewModelTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        let usage = OMDbUsage(defaults: defaults)
+        for _ in 0..<requestsToday { usage.record() }
+        let ratings = PosterRatingsStore(omdb: omdbKey ? OMDbRatings(client: client, apiKey: "k", usage: usage) : nil,
+                                         tmdb: TMDbRatings(client: client, readAccessToken: "t"))
+        let model = DetailViewModel(preview: MetaPreview(id: "tt0944947", type: "series"),
+                                    services: AppServices(registry: registry, client: client, posterRatings: ratings))
+        await model.load()
+        return (model, transport)
+    }
+
+    private func tmdbRequests(_ transport: StubTransport) -> Int {
+        transport.requests.filter { $0.url?.host == "api.themoviedb.org" }.count
+    }
+
+    @Test func tmdbEpisodeScoresAreNotAskedForWhileOMDbIsAvailable() async throws {
+        let (model, transport) = try await tmdbFallbackModel(omdbKey: true)
+        let episode = try #require(model.episodes.first)
+        await model.episodeAppeared(episode)
+        #expect(transport.requests.contains { $0.url?.host == "www.omdbapi.com" })
+        #expect(tmdbRequests(transport) == 0, "an empty OMDb answer does not bring TMDb in")
+        #expect(model.score(for: episode) == nil)
+    }
+
+    @Test func tmdbEpisodeScoresAreUsedWithoutAnOMDbKey() async throws {
+        let (model, transport) = try await tmdbFallbackModel(omdbKey: false)
+        let episode = try #require(model.episodes.first)
+        await model.episodeAppeared(episode)
+        #expect(tmdbRequests(transport) > 0)
+        #expect(model.score(for: model.episodes[0]) == .init(value: 7.5, isIMDb: false))
+    }
+
+    @Test func tmdbEpisodeScoresAreUsedOnceTheDailyLimitIsReached() async throws {
+        let (model, transport) = try await tmdbFallbackModel(omdbKey: true, requestsToday: OMDbUsage.dailyLimit)
+        await model.episodeAppeared(try #require(model.episodes.first))
+        #expect(tmdbRequests(transport) > 0)
+        #expect(model.score(for: model.episodes[0]) == .init(value: 7.5, isIMDb: false))
+    }
+
+    @Test func tmdbEpisodeScoresAreUsedOnceOMDbIsPausedByARateLimit() async throws {
+        let (model, transport) = try await tmdbFallbackModel(omdbKey: true, omdbStatus: 429)
+        await model.episodeAppeared(try #require(model.episodes.first))
+        #expect(tmdbRequests(transport) > 0)
+        #expect(model.score(for: model.episodes[0]) == .init(value: 7.5, isIMDb: false))
+    }
+
+    @Test func aTMDbScoreFilledEarlierIsHiddenWhileOMDbIsAvailableButAnAddonScoreStays() async throws {
+        let (model, _) = try await tmdbFallbackModel(omdbKey: true)
+        let tmdb = Video(id: "tt0944947:1:1", season: 1, episode: 1, rating: 7.5, ratingSource: .tmdb)
+        let addon = Video(id: "tt0944947:1:2", season: 1, episode: 2, rating: 6, ratingSource: .addon)
+        #expect(model.score(for: tmdb) == nil)
+        #expect(model.score(for: addon) == .init(value: 6, isIMDb: false))
+        let (without, _) = try await tmdbFallbackModel(omdbKey: false)
+        #expect(without.score(for: tmdb) == .init(value: 7.5, isIMDb: false))
+    }
+
     @Test func episodeWidthToggleIsOffByDefaultSavedAndReadBackOnTheNextPage() async {
         let settings = InMemorySettingsStore()
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0))

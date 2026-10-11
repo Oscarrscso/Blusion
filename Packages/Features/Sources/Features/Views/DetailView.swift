@@ -30,6 +30,12 @@ struct DetailView: View {
     @State private var hero = HeroLoader()
     /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
     @State private var sideInset: CGFloat = 0
+    /// The window's top safe-area inset (the status bar or notch). The page runs under it, so its own geometry reports zero.
+    @State private var topInset: CGFloat = 0
+    /// The bottom safe-area inset the layout reports (home indicator, tab bar, bottom accessory), and the bottom inset the page's scroll
+    /// view actually applies to its content, less the extra margin added below.
+    @State private var safeBottom: CGFloat = 0
+    @State private var scrollBottom: CGFloat = 0
     @Environment(\.openURL) private var openURL
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
@@ -63,6 +69,20 @@ struct DetailView: View {
         let insets = UIApplication.shared.connectedScenes.lazy.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets
         return max(insets?.left ?? 0, insets?.right ?? 0)
     }
+    private var windowTopInset: CGFloat {
+        UIApplication.shared.connectedScenes.lazy.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.safeAreaInsets.top ?? 0
+    }
+
+    /// What the scroll view lacks of the bottom safe area. The page is a scroll view inside a geometry reader, so it may not apply the
+    /// tab bar and accessory inset to its content itself. The inset it applies, less the extra margin added here, is what the system
+    /// gives; only the rest of the reported safe area is added, so it is never counted twice.
+    @State private var bottomExtra: CGFloat = 0
+
+    private func refreshBottomExtra() {
+        let next = max(0, safeBottom - max(0, scrollBottom - bottomExtra))
+        if abs(next - bottomExtra) > 0.5 { bottomExtra = next }
+    }
+
     /// The gap between the bottom of the logo and the controls under it, in both orientations. The artwork above the logo is reserved
     /// so the controls start at the picture's bottom edge, however small the gap.
     private static let logoControlsGap = Theme.Spacing.s
@@ -101,13 +121,23 @@ struct DetailView: View {
             }
             // The track of the page's own scroll indicator is inset, so the bar is a short line rather than the whole screen height.
             .contentMargins(.vertical, Self.scrollIndicatorInset, for: .scrollIndicators)
+            .contentMargins(.bottom, bottomExtra, for: .scrollContent)
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.bottom } action: { _, value in
+                scrollBottom = value
+                refreshBottomExtra()
+            }
             .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
                 scrollPull = value
             }
         }
-        .onGeometryChange(for: [CGFloat].self) { [$0.size.width, $0.safeAreaInsets.leading, $0.safeAreaInsets.trailing] } action: { values in
-            // Kept in state so a rotation lays the page out again with the new inset.
+        .onGeometryChange(for: [CGFloat].self) {
+            [$0.size.width, $0.safeAreaInsets.leading, $0.safeAreaInsets.trailing, $0.size.height, $0.safeAreaInsets.bottom]
+        } action: { values in
+            // Kept in state so a rotation lays the page out again with the new insets.
             sideInset = max(values[1], values[2], windowSideInset)
+            topInset = windowTopInset
+            safeBottom = values[4]
+            refreshBottomExtra()
         }
         .screenBackground()
         .ignoresSafeArea(.container, edges: isLandscape ? [] : .top)
@@ -182,7 +212,8 @@ struct DetailView: View {
             VStack(spacing: 0) {
                 // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
                 Color.clear
-                    .frame(height: max(0, height - renderedLogoHeight - Self.logoControlsGap))
+                    // Never less than the top safe area, so a tall logo or title pushes the page down rather than up into the status bar.
+                    .frame(height: max(topInset, height - renderedLogoHeight - Self.logoControlsGap))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
@@ -436,7 +467,8 @@ struct DetailView: View {
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
             }
-            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
+                        resetKey: "\(model.selectedSeason ?? -1)|\(model.matchesEpisodeWidthToText)|\(Int(width))") {
                 ForEach(model.episodes) { episode in
                     episodeRow(episode, width: width)
                         .id(episode.id).reportsShelfEdge(id: episode.id)
@@ -571,7 +603,7 @@ struct DetailView: View {
                     }
                     .padding(.horizontal, contentMargin)
                     ScrollViewReader { proxy in
-                        ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+                        ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing, shrinks: true) {
                                 ForEach(sortedReviews) { review in
                                     let foldedWidth: CGFloat = metrics.isRegular ? 340 : 280
                                     let expandedWidth = max(0, width - contentMargin * 2)

@@ -45,7 +45,8 @@ extension View {
         background {
             GeometryReader { proxy in
                 Color.clear.preference(key: ShelfEdgeKey.self,
-                                       value: [ShelfEdge(id: AnyHashable(id), minX: proxy.frame(in: .named(shelfScrollSpace)).minX)])
+                                       value: [ShelfEdge(id: AnyHashable(id), minX: proxy.frame(in: .named(shelfScrollSpace)).minX,
+                                                           height: proxy.size.height)])
             }
         }
     }
@@ -53,15 +54,25 @@ extension View {
 
 /// The one horizontal card shelf: a lazy row of cards that snaps to the page margin, bleeds past the screen's edge, and ticks as cards
 /// cross the leading edge. Every card shelf is built with this, so they all scroll and tick alike. Each card must call
-/// `reportsShelfEdge(id:)` and have a stable `id`. The row's height comes from its first card (a lazy stack cannot measure the others).
+/// `reportsShelfEdge(id:)` and have a stable `id`. A lazy stack sizes itself from the cards it has built, and a card that changes height
+/// (an opened review) or is taller than the first would spill over the section below. So every card reports its height and the shelf is
+/// given the tallest of them. By default that height only grows (a lazy stack builds only the cards near the screen, so the tallest one
+/// may not exist yet); with `shrinks` it follows the tallest card on screen down as well. When `resetKey` changes (a different season,
+/// a different card width) the height starts again from the cards then built.
 struct ShelfScroll<Content: View>: View {
     let margin: CGFloat
     let spacing: CGFloat
+    let shrinks: Bool
+    let resetKey: String
     let content: Content
+    @State private var height: CGFloat?
+    @State private var measuredKey: String?
 
-    init(margin: CGFloat, spacing: CGFloat, @ViewBuilder content: () -> Content) {
+    init(margin: CGFloat, spacing: CGFloat, shrinks: Bool = false, resetKey: String = "", @ViewBuilder content: () -> Content) {
         self.margin = margin
         self.spacing = spacing
+        self.shrinks = shrinks
+        self.resetKey = resetKey
         self.content = content()
     }
 
@@ -76,6 +87,15 @@ struct ShelfScroll<Content: View>: View {
         .contentMargins(.horizontal, margin, for: .scrollContent)
         .softSnappingScroll()
         .scrollClipDisabled()
+        .frame(height: height)
+        .onPreferenceChange(ShelfEdgeKey.self) { edges in
+            let tallest = edges.map(\.height).max() ?? 0
+            guard tallest > 0 else { return }
+            let previous = measuredKey == resetKey ? height : nil
+            let next = shrinks ? tallest : max(previous ?? 0, tallest)
+            if measuredKey != resetKey { measuredKey = resetKey }
+            if abs(next - (height ?? -1)) > 0.5 { height = next }
+        }
     }
 }
 
@@ -85,6 +105,7 @@ private let shelfScrollSpace = "softSnappingShelf"
 private struct ShelfEdge: Equatable {
     let id: AnyHashable
     let minX: CGFloat
+    let height: CGFloat
 }
 
 private struct ShelfEdgeKey: PreferenceKey {

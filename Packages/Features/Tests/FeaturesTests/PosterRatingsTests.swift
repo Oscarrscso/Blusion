@@ -317,6 +317,30 @@ import StremioKitTestSupport
         #expect(retained == cached)
     }
 
+    @Test func omdbEpisodeRequestsNeedAKeyAnAllowanceAndNoPause() async throws {
+        let name = "PosterRatingsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let usage = OMDbUsage(defaults: defaults)
+        let transport = StubTransport(data: omdbSeason)
+        let client = makeClient(transport, retries: 0)
+        #expect(!PosterRatingsStore().omdbAllowsEpisodeRequests, "no key")
+        let store = PosterRatingsStore(omdb: OMDbRatings(client: client, apiKey: "k", usage: usage))
+        #expect(store.omdbAllowsEpisodeRequests)
+        for _ in 0..<OMDbUsage.dailyLimit { usage.record() }
+        #expect(!store.omdbAllowsEpisodeRequests, "the day's allowance is spent")
+    }
+
+    @Test func aRateLimitedOMDbIsNotAvailableForEpisodesAndAsksTheCardsAgain() async throws {
+        let transport = StubTransport(data: omdbSeason, status: 429)
+        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "k"))
+        let before = store.reviewServicesRevision
+        #expect(store.omdbAllowsEpisodeRequests)
+        _ = await store.episodeRatings(for: "tt0944947", season: 2)
+        #expect(!store.omdbAllowsEpisodeRequests)
+        #expect(store.reviewServicesRevision > before)
+    }
+
     @Test func aRefusedOMDbKeyStopsSeasonLookupsUntilCredentialsChange() async throws {
         let transport = StubTransport(data: Data(#"{"Response":"False","Error":"Invalid API key!"}"#.utf8))
         let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "bad"))
