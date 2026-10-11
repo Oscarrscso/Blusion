@@ -71,7 +71,7 @@ public final class StreamPickerViewModel {
             let streams = group.streams.filter { !Self.isLink($0) }
             return streams.isEmpty ? nil : AddonSection(addon: group.addon, streams: streams)
         }
-        links = listing.items.filter(Self.isLink)
+        links = Self.linksToOffer(in: listing.items)
         bestAssessment = listing.isLoading ? nil : AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration)
     }
 
@@ -316,6 +316,21 @@ public final class StreamPickerViewModel {
     private static func isLink(_ item: RankedStream) -> Bool {
         if case .external = item.route { return true }
         return false
+    }
+
+    /// How many YouTube links the picker offers. Addons give no view counts, so the two best-ranked stand in for the most watched.
+    static let maxYouTubeLinks = 2
+
+    /// The links to offer, in ranked order: at most `maxYouTubeLinks` YouTube streams (the first ones, since `items` is ranked best first),
+    /// and every other link as it is. The YouTube streams past that are dropped.
+    static func linksToOffer(in items: [RankedStream]) -> [RankedStream] {
+        var youTubeOffered = 0
+        return items.filter { item in
+            guard isLink(item) else { return false }
+            guard case .youtube = item.stream.source else { return true }
+            youTubeOffered += 1
+            return youTubeOffered <= maxYouTubeLinks
+        }
     }
 
     /// Whole seconds, rounded down. nil when there is less than a second to resume from.

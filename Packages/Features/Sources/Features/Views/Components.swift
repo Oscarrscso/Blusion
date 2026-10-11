@@ -141,6 +141,7 @@ struct AppDestinations: ViewModifier {
             .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services) }
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services).swipeBackPops() }
             .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services).swipeBackPops() }
+            .navigationDestination(for: TrailerListDestination.self) { TrailersView(destination: $0).swipeBackPops() }
     }
 }
 

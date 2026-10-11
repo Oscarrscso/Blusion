@@ -23,6 +23,23 @@ public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
     private struct AuthorDetails: Decodable, Sendable, Equatable { let rating: Double? }
 }
 
+/// A video TMDb lists for a title (`/videos`), with the fields a trailer needs.
+public struct TMDbVideo: Sendable, Equatable, Decodable {
+    public let name: String
+    public let key: String
+    public let site: String
+    public let type: String
+    public let official: Bool?
+    public let iso_639_1: String?
+    public let published_at: String?
+
+    /// A YouTube trailer or teaser with a usable id: the only kind of TMDb video the trailers show.
+    var isYouTubeTrailerOrTeaser: Bool {
+        site.caseInsensitiveCompare("YouTube") == .orderedSame && ["trailer", "teaser"].contains(type.lowercased())
+            && Trailer.isYouTubeID(key)
+    }
+}
+
 /// The TMDb id of each IMDb title, kept for the session. Artwork, reviews and cast all need it and a title's id never changes, so one
 /// lookup serves them all. Callers that ask at the same time share one lookup. Unknown titles are not kept, so they are asked again.
 public actor TMDbTitleIDCache {
@@ -181,6 +198,26 @@ public struct TMDbRatings: Sendable {
     }
 
     private struct ReviewsResponse: Decodable { let results: [TMDbReview] }
+
+    /// The videos TMDb lists for a movie or series, in English or with no language. Empty when TMDb does not know the title.
+    public func videos(imdbID: String, type: String) async throws -> [TMDbVideo] {
+        guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
+        let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", String(number), "videos"],
+                                         query: [URLQueryItem(name: "language", value: "en-US"),
+                                                 URLQueryItem(name: "include_video_language", value: "en,null")])
+        let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 512 * 1024), timeout: 6)
+        return try Self.parseVideos(result.data)
+    }
+
+    /// The YouTube trailers and teasers in a `videos` answer. Other sites, other kinds and keys that are not YouTube ids are dropped.
+    /// Throws `invalidJSON` when the answer has no `results` list.
+    public static func parseVideos(_ data: Data) throws -> [TMDbVideo] {
+        let response: VideosResponse
+        do { response = try JSONDecoder().decode(VideosResponse.self, from: data) } catch { throw AddonError.invalidJSON }
+        return response.results.filter(\.isYouTubeTrailerOrTeaser)
+    }
+
+    private struct VideosResponse: Decodable { let results: [TMDbVideo] }
 
     /// The US age rating: a film's certificate ("R") from its release dates, or a show's content rating ("TV-MA"). Nil when TMDb
     /// has none for the US.

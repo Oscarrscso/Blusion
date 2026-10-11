@@ -5,10 +5,21 @@ import StremioKit
 import StremioKitTestSupport
 @testable import Features
 
+/// The live transport, except that the iTunes store is never reached: a test must not depend on the network.
+private struct NoITunesTransport: HTTPTransport {
+    private let live = URLSessionTransport()
+
+    func send(_ request: URLRequest, limits: FetchLimits) async throws -> HTTPResult {
+        if request.url?.host == "itunes.apple.com" { throw URLError(.notConnectedToInternet) }
+        return try await live.send(request, limits: limits)
+    }
+}
+
 @MainActor
 @Suite struct DetailViewModelTests {
     private func services(_ server: MockServer) -> AppServices {
-        let client = AddonClient(configuration: AddonClientConfiguration(timeout: server.slowDelay + 4, maxRetries: 0))
+        let client = AddonClient(configuration: AddonClientConfiguration(timeout: server.slowDelay + 4, maxRetries: 0),
+                                 transport: NoITunesTransport())
         return AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client), client: client)
     }
 
@@ -164,10 +175,11 @@ import StremioKitTestSupport
         #expect(model.progressFraction(for: model.movieRequest) == nil, "watched: no bar")
     }
 
-    @Test func trailerURLIsTheFirstTrailerWithAWellFormedYouTubeID() async throws {
+    @Test func withNoDirectFileTheAddonsYouTubeTrailersAreTheFallbackInItsOrder() async throws {
         let json = #"""
         {"meta":{"id":"tt0468569","type":"movie","name":"The Dark Knight",
-         "trailerStreams":[{"title":"Bad","ytId":"not an id"},{"title":"Trailer","ytId":"EXeTwQWrcwY"},{"title":"Other","ytId":"zZZ999"}]}}
+         "trailerStreams":[{"title":"Bad","ytId":"not an id"},{"title":"Trailer","ytId":"EXeTwQWrcwY"},{"title":"Other","ytId":"zZZ999"},
+                           {"title":"Third","ytId":"third1"}]}}
         """#
         let transport = StubTransport { request, _ in StubTransport.response(Data(json.utf8), for: request) }
         let manifest = Manifest(id: "test.stubmeta", name: "Stub", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["movie"])
@@ -176,7 +188,32 @@ import StremioKitTestSupport
                                     services: AppServices(registry: registry, client: client))
         await model.load()
         #expect(!model.isFallback)
-        #expect(model.trailerURL?.absoluteString == "https://www.youtube.com/watch?v=EXeTwQWrcwY")
+        #expect(model.tmdbVideos.isEmpty, "no read token, so TMDb is not asked")
+        #expect(model.itunesTrailer == nil, "the stub answers the store with the meta, which is no search result")
+        #expect(model.trailers.map(\.id) == ["yt:EXeTwQWrcwY", "yt:zZZ999"], "malformed ids dropped, two kept")
+    }
+
+    @Test func anITunesPreviewIsTheFirstTrailerAndYouTubeStepsAside() async throws {
+        let meta = #"""
+        {"meta":{"id":"tt9900001","type":"movie","name":"Preview Ledger Film","releaseInfo":"2019",
+         "trailerStreams":[{"title":"Trailer","ytId":"EXeTwQWrcwY"},{"title":"Direct","url":"https://cdn.example.com/t.mp4"}]}}
+        """#
+        let itunes = #"""
+        {"resultCount":1,"results":[{"trackName":"Preview Ledger Film","releaseDate":"2019-05-01T07:00:00Z",
+         "previewUrl":"https://a.example.com/preview.m4v"}]}
+        """#
+        let transport = StubTransport { request, _ in
+            StubTransport.response(Data((request.url?.host == "itunes.apple.com" ? itunes : meta).utf8), for: request)
+        }
+        let manifest = Manifest(id: "test.stubmeta", name: "Stub", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["movie"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let model = DetailViewModel(preview: MetaPreview(id: "tt9900001", type: "movie", name: "Preview Ledger Film"),
+                                    services: AppServices(registry: registry, client: client))
+        await model.load()
+        #expect(model.itunesTrailer?.directURL == URL(string: "https://a.example.com/preview.m4v"))
+        #expect(model.trailers.map(\.id) == ["url:https://a.example.com/preview.m4v", "url:https://cdn.example.com/t.mp4"],
+                "the preview leads, the addon's direct link follows it, and no YouTube trailer is offered")
+        #expect(model.trailers.first?.youtubeID == nil)
     }
 
     @Test func aWholeShowCanBeMarkedWatchedAndUnmarked() async throws {
@@ -251,10 +288,11 @@ import StremioKitTestSupport
         async let b: Void = model.episodeAppeared(videos[1])
         async let c: Void = model.episodeAppeared(videos[2])
         _ = await (a, b, c)
-        #expect(transport.callCount == 1, "three cards of one season share one request")
+        // Counted for OMDb only: the page's iTunes search goes through the same transport.
+        #expect(transport.requests.filter { $0.url?.host == "www.omdbapi.com" }.count == 1, "three cards of one season share one request")
         #expect(model.score(for: videos[0]) == .init(value: 8.9, isIMDb: true))
         await model.episodeAppeared(Video(id: "tt0944947:2:1", season: 2, episode: 1))
-        #expect(transport.callCount == 2, "another season is its own request")
+        #expect(transport.requests.filter { $0.url?.host == "www.omdbapi.com" }.count == 2, "another season is its own request")
     }
 
     @Test(arguments: [false, true])
@@ -377,9 +415,9 @@ import StremioKitTestSupport
         #expect(!(await settings.load().matchesEpisodeWidthToText))
     }
 
-    @Test func trailerURLIsNilWithoutTrailers() {
+    @Test func trailersAreEmptyWithoutTrailers() {
         let model = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "X"), services: offlineServices())
-        #expect(model.trailerURL == nil)
+        #expect(model.trailers.isEmpty)
     }
 
     @Test(arguments: [false, true])

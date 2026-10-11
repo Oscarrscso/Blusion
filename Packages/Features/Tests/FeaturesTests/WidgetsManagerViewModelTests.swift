@@ -139,6 +139,17 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         #expect(model.widgets[0].id == "a")
     }
 
+    @Test func everySaveBumpsTheRevisionButAnUpdateOfAnUnknownWidgetDoesNot() async throws {
+        let model = await loaded(try await services(widgets: [plainRow("a")]))
+        #expect(model.saveRevision == 0)
+        await model.add(plainRow("b"))
+        #expect(model.saveRevision == 1)
+        await model.update(plainRow("a"))
+        #expect(model.saveRevision == 2)
+        await model.update(plainRow("nobody"))
+        #expect(model.saveRevision == 2, "an update that saves nothing is not a save")
+    }
+
     @Test func resetGoesBackToTheAutomaticLayout() async throws {
         let services = try await services()
         let model = await loaded(services)

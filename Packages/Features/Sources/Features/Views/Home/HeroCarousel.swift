@@ -52,17 +52,17 @@ struct HeroCarousel: View {
     @Environment(\.isHomeScrolling) private var isHomeScrolling
     @Environment(\.heroPull) private var heroPull
     @Environment(PosterRatingsStore.self) private var ratings
+    @Environment(AppRouter.self) private var router
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
+    /// Set while a return from a title moves the spotlight back to its first page, so that move makes no haptic.
+    @State private var isResettingPage = false
 
     /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
     /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
     /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
     /// range.
     static func loadWindow(isLandscape: Bool) -> Int { isLandscape ? 2 : 4 }
-
-    /// The poster a page stands in with until its picture is ready, as the addon sent it. `HeroPicture` shows a larger copy of it.
-    fileprivate static func placeholderURL(for item: MetaPreview) -> URL? { item.poster ?? MetahubArtwork.poster(imdbID: item.id) }
 
     private var currentIndex: Int {
         items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
@@ -93,9 +93,21 @@ struct HeroCarousel: View {
                     .clipped()
                     .offset(y: -pull)
                     .onChange(of: pageID) { oldID, newID in
+                        if isResettingPage {
+                            isResettingPage = false
+                            return
+                        }
                         guard let oldID, let newID, oldID != newID,
                               items.contains(where: { $0.identity == oldID }) else { return }
                         Haptics.scrollSnap()
+                    }
+                    .onChange(of: router.spotlightRevision) { _, _ in
+                        // Back from a title opened from here: the spotlight starts again on its first page, at once and without a haptic.
+                        guard let first = items.first?.identity, pageID != first else { return }
+                        isResettingPage = true
+                        var transaction = Transaction(animation: nil)
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { pageID = first }
                     }
                     .onAppear {
                         pageID = pageID ?? items.first?.identity
@@ -115,7 +127,7 @@ struct HeroCarousel: View {
         let nearestFirst = items.enumerated().sorted { abs($0.offset - currentIndex) < abs($1.offset - currentIndex) }.map(\.element)
         await withTaskGroup(of: Void.self) { group in
             for item in nearestFirst {
-                guard let poster = Self.placeholderURL(for: item), let url = PosterQuality.placeholder(poster) else { continue }
+                guard let url = PosterQuality.poster(for: item) else { continue }
                 group.addTask(priority: .high) {
                     _ = try? await ImagePipeline.shared.image(for: url, maxPixelSize: TitleHero.placeholderPixelSize, priority: .high)
                 }
@@ -203,8 +215,6 @@ private struct HeroPage: View {
     private var isInWindow: Bool { distance <= HeroCarousel.loadWindow(isLandscape: isLandscape) }
     /// The nearest two pages jump the queue; the next one waits behind them.
     private var loadPriority: TaskPriority { distance <= 1 ? .high : .medium }
-    /// The poster that stands in for the picture until both the picture and the logo are ready.
-    private var placeholderURL: URL? { HeroCarousel.placeholderURL(for: item) }
 
     private var heroURL: URL? {
         (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
@@ -227,6 +237,7 @@ private struct HeroPage: View {
             var transaction = Transaction(animation: nil)
             transaction.disablesAnimations = true
             withTransaction(transaction) { router.homePath.append(destination) }
+            router.spotlightDepth = router.homePath.count
         }
         pageContent
         .overlay(alignment: .top) {
@@ -329,7 +340,7 @@ private struct HeroPage: View {
     private var artwork: some View {
         Color.clear
             .overlay {
-                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill, placeholderURL: placeholderURL)
+                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill, preview: item)
             }
     }
 

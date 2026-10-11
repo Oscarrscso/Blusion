@@ -162,16 +162,19 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
     }
 }
 
-/// A trailer as addons send it: `trailerStreams` entries carry a YouTube id in `ytId`, the older `trailers` entries in `source`.
+/// A trailer as addons send it: `trailerStreams` entries carry a YouTube id in `ytId` and sometimes a direct `url`, the older `trailers`
+/// entries carry the id in `source`.
 private struct TrailerEntry: Decodable {
     let ytId: String?
+    let url: URL?
     let source: String?
 
-    private enum Keys: String, CodingKey { case ytId, source }
+    private enum Keys: String, CodingKey { case ytId, url, source }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: Keys.self)
         ytId = container.string(.ytId)
+        url = container.url(.url)
         source = container.string(.source)
     }
 }
@@ -188,6 +191,8 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
     public var defaultVideoID: String?
     /// YouTube ids of the trailers, in the addon's order.
     public var trailers: [String]
+    /// Direct http(s) trailer URLs from `trailerStreams`, in the addon's order.
+    public var trailerURLs: [URL]
 
     public var id: String { preview.id }
     public var type: String { preview.type }
@@ -195,7 +200,7 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
 
     public init(preview: MetaPreview, released: String? = nil, director: [String] = [], cast: [String] = [],
                 writers: [String] = [], links: [MetaLink] = [], videos: [Video] = [], defaultVideoID: String? = nil,
-                trailers: [String] = []) {
+                trailers: [String] = [], trailerURLs: [URL] = []) {
         self.preview = preview
         self.released = released
         self.director = director
@@ -205,6 +210,7 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.videos = videos
         self.defaultVideoID = defaultVideoID
         self.trailers = trailers
+        self.trailerURLs = trailerURLs
     }
 
     private enum Keys: String, CodingKey { case released, director, cast, writer, writers, links, videos, behaviorHints, trailerStreams, trailers }
@@ -219,6 +225,7 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
         }
         var writers = container.stringArray(.writers)
         if writers.isEmpty { writers = container.stringArray(.writer) }
+        let streams: [TrailerEntry] = container.lossyArray(.trailerStreams)
         self.init(preview: preview,
                   released: container.string(.released),
                   director: container.stringArray(.director),
@@ -227,17 +234,18 @@ public struct MetaDetail: Sendable, Equatable, Hashable, Codable, Identifiable {
                   links: container.lossyArray(.links),
                   videos: container.lossyArray(.videos),
                   defaultVideoID: hint,
-                  trailers: Self.trailerIDs(streams: container.lossyArray(.trailerStreams), legacy: container.lossyArray(.trailers)))
+                  trailers: Self.trailerIDs(streams: streams, legacy: container.lossyArray(.trailers)),
+                  trailerURLs: Self.unique(streams.map(\.url)))
     }
 
     /// `trailerStreams[].ytId`, or `trailers[].source` when that yields nothing. Empty and repeated ids are dropped.
     private static func trailerIDs(streams: [TrailerEntry], legacy: [TrailerEntry]) -> [String] {
-        let fromStreams = uniqueIDs(streams.map(\.ytId))
-        return fromStreams.isEmpty ? uniqueIDs(legacy.map(\.source)) : fromStreams
+        let fromStreams = unique(streams.map(\.ytId))
+        return fromStreams.isEmpty ? unique(legacy.map(\.source)) : fromStreams
     }
 
-    private static func uniqueIDs(_ values: [String?]) -> [String] {
-        var seen = Set<String>()
+    private static func unique<Value: Hashable>(_ values: [Value?]) -> [Value] {
+        var seen = Set<Value>()
         return values.compactMap { $0 }.filter { seen.insert($0).inserted }
     }
 
@@ -325,7 +333,7 @@ extension MetaDetail {
         try container.encode(writers, forKey: .writers)
         try container.encode(links, forKey: .links)
         try container.encode(videos, forKey: .videos)
-        try container.encode(trailers.map { ["ytId": $0] }, forKey: .trailerStreams)
+        try container.encode(trailers.map { ["ytId": $0] } + trailerURLs.map { ["url": $0.absoluteString] }, forKey: .trailerStreams)
         if let defaultVideoID { try container.encode(["defaultVideoId": defaultVideoID], forKey: .behaviorHints) }
     }
 }

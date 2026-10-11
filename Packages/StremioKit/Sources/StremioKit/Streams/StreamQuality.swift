@@ -5,10 +5,32 @@ public enum AudioCodec: String, Sendable, Equatable, Hashable {
 
     /// AVPlayer cannot decode these (PLAN §4).
     public var needsFallbackEngine: Bool { self == .dts || self == .dtsHD || self == .trueHD }
+
+    public var label: String {
+        switch self {
+        case .aac: "AAC"
+        case .ac3: "DD"
+        case .eac3: "DD+"
+        case .dts: "DTS"
+        case .dtsHD: "DTS-HD"
+        case .trueHD: "TrueHD"
+        case .flac: "FLAC"
+        case .opus: "Opus"
+        case .mp3: "MP3"
+        }
+    }
 }
 
 public enum VideoCodec: String, Sendable, Equatable, Hashable {
     case h264, hevc, av1
+
+    public var label: String {
+        switch self {
+        case .h264: "H.264"
+        case .hevc: "HEVC"
+        case .av1: "AV1"
+        }
+    }
 }
 
 /// Release source, ordered best to worst by `rank`.
@@ -23,6 +45,17 @@ public enum StreamSourceKind: String, Sendable, Equatable, Hashable {
         case .hdtv: return 2
         case .dvd: return 1
         case .cam: return 0
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .bluray: "Blu-ray"
+        case .webDL: "WEB-DL"
+        case .webRip: "WEBRip"
+        case .hdtv: "HDTV"
+        case .dvd: "DVD"
+        case .cam: "CAM"
         }
     }
 }
@@ -44,9 +77,14 @@ public struct StreamQuality: Sendable, Equatable {
     public var audioCodecs: [AudioCodec] = []
     public var hasAtmos = false
     public var sizeBytes: Int64?
+    /// Peers that have the whole file and upload it, as the addon's text gives them.
+    public var seeders: Int?
+    /// Peers still downloading the file, as the addon's text gives them.
+    public var peers: Int?
 
     public init(resolution: Int? = nil, isHDR: Bool = false, isDolbyVision: Bool = false, source: StreamSourceKind? = nil,
-                videoCodec: VideoCodec? = nil, audioCodecs: [AudioCodec] = [], hasAtmos: Bool = false, sizeBytes: Int64? = nil) {
+                videoCodec: VideoCodec? = nil, audioCodecs: [AudioCodec] = [], hasAtmos: Bool = false, sizeBytes: Int64? = nil,
+                seeders: Int? = nil, peers: Int? = nil) {
         self.resolution = resolution
         self.isHDR = isHDR
         self.isDolbyVision = isDolbyVision
@@ -55,6 +93,8 @@ public struct StreamQuality: Sendable, Equatable {
         self.audioCodecs = audioCodecs
         self.hasAtmos = hasAtmos
         self.sizeBytes = sizeBytes
+        self.seeders = seeders
+        self.peers = peers
     }
 
     /// True when the only audio the text names is something AVPlayer can't decode. A release that also lists AAC or AC-3 is fine,
@@ -93,6 +133,8 @@ public struct StreamQuality: Sendable, Equatable {
         quality.audioCodecs = audioCodecs(in: text)
         quality.hasAtmos = matches(#"\batmos\b"#, in: text)
         quality.sizeBytes = size(in: text)
+        quality.seeders = swarmCount(#"(?:👤|\bseed(?:s|ers)?:|\bs:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#, in: text)
+        quality.peers = swarmCount(#"(?:\bpeers?:|\bp:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#, in: text)
         return quality
     }
 
@@ -103,6 +145,16 @@ public struct StreamQuality: Sendable, Equatable {
     }
 
     // MARK: - Pattern helpers
+
+    /// Seeder and peer counts above this are taken as a misread number, not a swarm.
+    private static let maxSwarmCount = 1_000_000
+
+    /// The count a pattern captures (commas allowed), or nil when there is none or it is absurd.
+    private static func swarmCount(_ pattern: String, in text: String) -> Int? {
+        guard let match = firstMatch(pattern, in: text), match.count == 2,
+              let count = Int(match[1].replacingOccurrences(of: ",", with: "")), count <= maxSwarmCount else { return nil }
+        return count
+    }
 
     private static func resolution(in text: String) -> Int? {
         if matches(#"\b(2160p|4k|uhd)\b"#, in: text) { return 2160 }
@@ -199,6 +251,8 @@ public struct StreamQuality: Sendable, Equatable {
             #"\bopus\b"#,
             #"\bmp3\b"#,
             #"(\d+(?:[.,]\d+)?)\s?(gb|gib|mb|mib)\b"#,
+            #"(?:👤|\bseed(?:s|ers)?:|\bs:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#,
+            #"(?:\bpeers?:|\bp:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#,
         ]
         return Dictionary(uniqueKeysWithValues: patterns.compactMap { pattern in
             (try? NSRegularExpression(pattern: pattern)).map { (pattern, $0) }

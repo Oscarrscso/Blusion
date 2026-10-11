@@ -1,29 +1,17 @@
 import Foundation
 import StremioKit
 
-/// The smallest poster of a title, for cards that draw it small, and the larger poster a hero shows while its picture loads. Metahub's
+/// The poster of a title at the one size every card and the title page's stand-in share, so a title's poster is downloaded once. Metahub's
 /// posters are the English ones and come in three sizes; TMDb's come in several. This only rewrites the URL: no request is made, and a URL
 /// it does not know is returned as it came.
 enum PosterQuality {
-    /// TMDb's poster sizes are w92, w154, w185, w342, w500, w780 and original. w92 is too soft on a 3x phone, so w154 is the floor.
-    static let tmdbSize = "w154"
-    static let metahubSize = "small"
-    /// The size a hero shows while its picture loads: two TMDb steps above the floor, and Metahub's next size up.
-    static let placeholderTMDbSize = "w342"
-    static let placeholderMetahubSize = "medium"
+    /// TMDb's poster sizes are w92, w154, w185, w342, w500, w780 and original. w154 was the old floor, too soft for a hero's stand-in on a 3x
+    /// phone, so w342 is the floor now.
+    static let tmdbSize = "w342"
+    static let metahubSize = "medium"
 
     /// `url` at the smallest usable poster size. Only poster URLs change; a background, a logo or an unknown host is returned as it is.
     static func smallest(_ url: URL?) -> URL? {
-        resized(url, tmdbSize: tmdbSize, metahubSize: metahubSize)
-    }
-
-    /// `url` at the size a hero shows while its picture loads, sharp enough to read before the picture arrives. Only poster URLs change.
-    static func placeholder(_ url: URL?) -> URL? {
-        resized(url, tmdbSize: placeholderTMDbSize, metahubSize: placeholderMetahubSize)
-    }
-
-    /// `url` with its size rewritten for the host it comes from. A host or path it does not know is left alone.
-    private static func resized(_ url: URL?, tmdbSize: String, metahubSize: String) -> URL? {
         guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let host = components.host?.lowercased() else { return url }
         var parts = components.path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
@@ -43,7 +31,8 @@ enum PosterQuality {
         return components.url ?? url
     }
 
-    /// The poster a card shows for `item`: its own, or Metahub's for its IMDb id, at the smallest size.
+    /// The poster a card shows for `item`, and the title page's stand-in until its picture is ready: its own, or Metahub's for its IMDb id,
+    /// at the smallest size.
     static func poster(for item: MetaPreview) -> URL? {
         smallest(item.poster ?? MetahubArtwork.poster(imdbID: item.id))
     }

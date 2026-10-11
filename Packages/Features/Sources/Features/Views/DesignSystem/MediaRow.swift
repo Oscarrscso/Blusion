@@ -18,22 +18,45 @@ struct SectionHeader: View {
 
     var body: some View {
         if let onSeeAll {
-            Button(action: onSeeAll) { header(withChevron: true) }
+            Button(action: onSeeAll) { SectionHeaderLabel(title: title, subtitle: subtitle, withChevron: true) }
                 .buttonStyle(ShelfHeaderButtonStyle())
-                .accessibilityLabel(title)
-                .accessibilityHint("See All")
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("section.seeAll.\(title)")
+                .seeAllAccessibility(title)
         } else {
-            header(withChevron: false)
+            SectionHeaderLabel(title: title, subtitle: subtitle, withChevron: false)
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
         }
     }
+}
 
-    private func header(withChevron: Bool) -> some View {
+/// A `SectionHeader` that opens a pushed screen: the same header, with its chevron, as a link to `value` on the stack it sits in.
+struct SectionHeaderLink<Value: Hashable>: View {
+    let title: String
+    let subtitle: String?
+    let value: Value
+
+    init(_ title: String, subtitle: String? = nil, value: Value) {
+        self.title = title
+        self.subtitle = subtitle
+        self.value = value
+    }
+
+    var body: some View {
+        NavigationLink(value: value) { SectionHeaderLabel(title: title, subtitle: subtitle, withChevron: true) }
+            .buttonStyle(ShelfHeaderButtonStyle())
+            .seeAllAccessibility(title)
+    }
+}
+
+/// The drawing of a shelf header: the title, then an optional grey subtitle. Shared by `SectionHeader` and `SectionHeaderLink`.
+private struct SectionHeaderLabel: View {
+    let title: String
+    let subtitle: String?
+    let withChevron: Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            titleText(withChevron: withChevron)
+            titleText
                 .font(Theme.Typography.shelfTitle)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
@@ -51,7 +74,7 @@ struct SectionHeader: View {
     }
 
     /// The chevron is part of the text, so it stays glued to the last word when a long title wraps.
-    private func titleText(withChevron: Bool) -> Text {
+    private var titleText: Text {
         guard withChevron else { return Text(title) }
         let chevron = Text(Image(systemName: "chevron.right"))
             .font(.footnote.weight(.semibold))
@@ -67,6 +90,16 @@ private struct ShelfHeaderButtonStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.55 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private extension View {
+    /// The "See All" reading and identifier of a header that opens a screen.
+    func seeAllAccessibility(_ title: String) -> some View {
+        accessibilityLabel(title)
+            .accessibilityHint("See All")
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("section.seeAll.\(title)")
     }
 }
 

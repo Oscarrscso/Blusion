@@ -48,6 +48,14 @@ struct HomeView: View {
             .onChange(of: router.tab) { old, _ in
                 if old == .settings { Task { await model.load() } }
             }
+            // The path shrinks when a title opened from the spotlight pops. Such a title opens and closes with no animation (see
+            // `instantDestination()`), so the pop starts and ends together, and nothing is left to finish before Home resets. Resetting
+            // during a zoom or a swipe that may still be cancelled would move the spotlight under the screen.
+            .onChange(of: router.homePath.count) { _, count in
+                guard let depth = router.spotlightDepth, count < depth else { return }
+                router.spotlightDepth = nil
+                router.spotlightRevision += 1
+            }
     }
 
     /// Home's page margin is the title page's content margin, so its headings, the Continue selector and the shelves line up with it.
@@ -90,40 +98,51 @@ struct HomeView: View {
         }
     }
 
+    /// The id of Home's content, which its scroll goes back to when a title opened from the spotlight is popped.
+    private static let topID = "home.top"
+
     private var ready: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                if !model.sections.contains(where: { if case .continueWatching = $0.widget.content { true } else { false } }) {
-                    continueRow
-                }
-                if model.isOffline {
-                    ForEach(model.sections) { section in
-                        if case .continueWatching = section.widget.content { sectionView(section) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                    if !model.sections.contains(where: { if case .continueWatching = $0.widget.content { true } else { false } }) {
+                        continueRow
                     }
-                    OfflineBanner()
-                } else {
-                    ForEach(model.sections) { section in
-                        if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
+                    if model.isOffline {
+                        ForEach(model.sections) { section in
+                            if case .continueWatching = section.widget.content { sectionView(section) }
+                        }
+                        OfflineBanner()
+                    } else {
+                        ForEach(model.sections) { section in
+                            if model.isCustomised || !isEmptyRow(section) { sectionView(section) }
+                        }
                     }
                 }
+                .padding(.bottom, Theme.Spacing.xxl)
+                // In the content, not the navigation bar: it scrolls away with the page instead of staying pinned, and it is one glass
+                // circle instead of a glass button inside the bar's own glass.
+                .overlay(alignment: .topTrailing) { customizeButton }
+                .id(Self.topID)
             }
-            .padding(.bottom, Theme.Spacing.xxl)
-            // In the content, not the navigation bar: it scrolls away with the page instead of staying pinned, and it is one glass
-            // circle instead of a glass button inside the bar's own glass.
-            .overlay(alignment: .topTrailing) { customizeButton }
+            .accessibilityIdentifier("board.rows")
+            .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
+                heroPull = value
+            }
+            .environment(\.heroPull, heroIsFirst ? heroPull : 0)
+            .onScrollPhaseChange { _, phase in isScrolling = phase.isScrolling }
+            .onDisappear { isScrolling = false }
+            .contentMargins(.top, 0, for: .scrollContent)
+            .screenBackground()
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
+            .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
+            .onChange(of: router.spotlightRevision) { _, _ in
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
-        .accessibilityIdentifier("board.rows")
-        .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
-            heroPull = value
-        }
-        .environment(\.heroPull, heroIsFirst ? heroPull : 0)
-        .onScrollPhaseChange { _, phase in isScrolling = phase.isScrolling }
-        .onDisappear { isScrolling = false }
-        .contentMargins(.top, 0, for: .scrollContent)
-        .screenBackground()
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
-        .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
     }
 
     /// One round glass button that opens the widgets page, where widgets are added and edited: the navigation bar's button, in the
@@ -134,10 +153,16 @@ struct HomeView: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .fontWeight(.semibold)
+                .frame(width: Theme.barButtonDiameter, height: Theme.barButtonDiameter)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .contentShape(.circle)
+                .pointerFeedback()
         }
-        .glassCircleButton()
+        .buttonStyle(.plain)
         .padding(.trailing, homeMetrics.pageMargin)
-        .padding(.top, (heroIsFirst ? topInset : 0) + Theme.Spacing.s)
+        // With the spotlight first, the bar is clear above it and `topInset` runs from the top of the screen to the bar's bottom, so the
+        // button is lifted by the bar's height and sits where the title page's back button does. Otherwise the bar is above the content.
+        .padding(.top, heroIsFirst ? max(0, topInset - Theme.barButtonDiameter) : Theme.Spacing.s)
         .accessibilityLabel("Widgets")
         .help("Widgets")
         .accessibilityIdentifier("home.customize")

@@ -33,6 +33,10 @@ public final class DetailViewModel {
     public private(set) var tmdbArtwork: TMDbArtwork?
     public private(set) var isLoadingArtwork = true
     public private(set) var reviews: [TMDbReview] = []
+    /// The YouTube trailers and teasers TMDb lists for the title. Empty until TMDb answers, or when no read token is saved.
+    public private(set) var tmdbVideos: [TMDbVideo] = []
+    /// The title's preview from Apple's iTunes store: a direct file the app plays. Nil until the search answers, or when the store has none.
+    public private(set) var itunesTrailer: Trailer?
     /// The cast and crew with TMDb ids and photos. Nil until TMDb answers, or when no read token is saved.
     public private(set) var titleCredits: TMDbTitleCredits?
     /// Titles TMDb recommends for this one, for the shelf at the bottom of the page. Empty until TMDb answers.
@@ -85,10 +89,14 @@ public final class DetailViewModel {
         async let credits: Void = loadTitleCredits()
         async let related: Void = loadRelatedTitles()
         async let rating: Void = loadCertification()
+        async let videos: Void = loadVideos()
+        async let previews: Void = loadPreview()
         await reviews
         await credits
         await related
         await rating
+        await videos
+        await previews
     }
 
     public func refresh() async {
@@ -145,6 +153,29 @@ public final class DetailViewModel {
         let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).reviews(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         reviews = loaded ?? []
+    }
+
+    private func loadVideos() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { tmdbVideos = []; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).videos(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        tmdbVideos = loaded ?? []
+    }
+
+    /// The iTunes preview for the title, looked up by its name and release year. Needs no TMDb token.
+    private func loadPreview() async {
+        let loaded = try? await ITunesTrailers(client: services.client).preview(title: detail.preview.name,
+                                                                                year: Self.releaseYear(detail.preview.releaseInfo),
+                                                                                type: preview.type)
+        guard !Task.isCancelled else { return }
+        itunesTrailer = loaded
+    }
+
+    /// The first four-digit run in a release text such as "2010" or "2008-2013", as a year.
+    private static func releaseYear(_ text: String?) -> Int? {
+        guard let text, let run = text.range(of: #"\d{4}"#, options: .regularExpression) else { return nil }
+        return Int(text[run])
     }
 
     private var seriesIMDbID: String? {
@@ -405,10 +436,11 @@ public final class DetailViewModel {
         return parts
     }
 
-    /// The first trailer with a well-formed YouTube id, as a watch page.
-    public var trailerURL: URL? {
-        guard let id = detail.trailers.first(where: Self.isYouTubeID) else { return nil }
-        return URL(string: "https://www.youtube.com/watch?v=\(id)")
+    /// The title's trailers, merged and ordered (see `TrailerCatalog`): the iTunes preview first when there is one, then the addon's direct
+    /// links; YouTube trailers only when there is no direct file at all.
+    public var trailers: [Trailer] {
+        TrailerCatalog.merge(previews: itunesTrailer.map { [$0] } ?? [], addonYouTubeIDs: detail.trailers, addonURLs: detail.trailerURLs,
+                             tmdb: tmdbVideos)
     }
 
     public var subtitle: String {
@@ -441,10 +473,5 @@ public final class DetailViewModel {
     private static func nonEmpty(_ text: String?) -> String? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
         return trimmed
-    }
-
-    /// YouTube ids are short runs of letters, digits, `-` and `_`. Anything else an addon sends is never put into a URL.
-    private static func isYouTubeID(_ id: String) -> Bool {
-        !id.isEmpty && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
     }
 }

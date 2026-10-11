@@ -38,7 +38,8 @@ struct DetailView: View {
     @State private var layoutWidth: CGFloat = 0
     /// The bottom inset the page's scroll view actually applies to its content, including the extra margin added below.
     @State private var scrollBottom: CGFloat = 0
-    @Environment(\.openURL) private var openURL
+    /// The trailer playing full screen, if any.
+    @State private var playingTrailer: Trailer?
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
@@ -161,6 +162,7 @@ struct DetailView: View {
         .onAppear { Task { await model.refreshUserState() } }
         .onDisappear { model.releaseStreamPrefetch() }
         .accessibilityIdentifier("detail.scroll")
+        .trailerPlayer(item: $playingTrailer)
     }
 
     // MARK: - Header
@@ -171,7 +173,6 @@ struct DetailView: View {
     /// The longest edge the hero is decoded to: full screen in landscape, the smaller size shared with Home in portrait.
     private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
 
-    private var placeholderURL: URL? { model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id) }
     /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
     private var hidesLogo: Bool { !isLandscape && model.portraitHidesLogo }
     private var logoURL: URL? { hidesLogo ? nil : model.logoURL }
@@ -192,7 +193,7 @@ struct DetailView: View {
             // The column beside the artwork, where the play buttons sit. The ratings row is never wider than that.
             let controlsWidth = max(0, size.width - contentMargin * 2 - Theme.Spacing.xl - artworkWidth)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit, placeholderURL: placeholderURL)
+                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit, preview: model.preview)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
                     .overlay(alignment: .bottomTrailing) {
                         PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
@@ -237,7 +238,7 @@ struct DetailView: View {
             }
             .background(alignment: .top) {
                 // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
-                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
+                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, preview: model.preview)
                     .frame(width: size.width, height: TitleHero.pictureHeight(height) + scrollPull)
                     .frame(height: visible + scrollPull, alignment: .top)
                     .clipped()
@@ -408,14 +409,14 @@ struct DetailView: View {
         }
     }
 
-    /// Opens the trailer with the app's shared web link handler. It is there from the start, so the row does not change when the page
-    /// loads; until the trailer is known it is dimmed and does nothing.
+    /// Plays the first trailer: a direct file in Blusion's player, a YouTube trailer in the YouTube app. It is there from the start, so the row
+    /// does not change when the page loads; until a trailer is known it is dimmed and does nothing.
     private var trailerAction: some View {
         CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {
-            if let url = model.trailerURL { openURL(url) }
+            playingTrailer = model.trailers.first
         }
-        .disabled(model.trailerURL == nil)
-        .opacity(model.trailerURL == nil ? 0.4 : 1)
+        .disabled(model.trailers.isEmpty)
+        .opacity(model.trailers.isEmpty ? 0.4 : 1)
         .accessibilityIdentifier("detail.trailerButton")
     }
 
@@ -579,6 +580,10 @@ struct DetailView: View {
 
     private func credits(in width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
+            // Trailers lead the credits: above TMDb Reviews and Cast & Crew, below the ratings, synopsis and episodes.
+            if !model.trailers.isEmpty {
+                trailersSection
+            }
             if !model.reviews.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     HStack(spacing: 0) {
@@ -673,6 +678,29 @@ struct DetailView: View {
             }
             .frame(maxWidth: metrics.readableWidth, alignment: .leading)
             .padding(.horizontal, contentMargin)
+        }
+    }
+
+    /// The title's trailers in one shelf. A direct file plays in Blusion; a YouTube trailer opens in the YouTube app. "Trailers" opens every one.
+    private var trailersSection: some View {
+        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+            SectionHeaderLink("Trailers", value: TrailerListDestination(title: model.detail.name, trailers: model.trailers,
+                                                                        artwork: model.backdropURL))
+                .padding(.horizontal, contentMargin)
+            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
+                ForEach(model.trailers) { trailer in
+                    Button {
+                        Haptics.tap()
+                        playingTrailer = trailer
+                    } label: {
+                        TrailerCard(trailer: trailer, fallbackArtwork: model.backdropURL)
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .reportsShelfEdge(id: trailer.id)
+                    .accessibilityIdentifier("detail.trailer.\(trailer.id)")
+                }
+            }
+            .accessibilityIdentifier("detail.trailers")
         }
     }
 

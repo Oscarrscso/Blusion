@@ -12,7 +12,6 @@ struct ProgressCard: View {
     let duration: TimeInterval?
     let width: CGFloat?
     @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.displayScale) private var displayScale
 
     init(title: String, subtitle: String? = nil, artwork: URL?, logo: URL? = nil, fraction: Double,
          duration: TimeInterval? = nil, width: CGFloat? = nil) {
@@ -29,13 +28,7 @@ struct ProgressCard: View {
         let progress = fraction.isFinite ? min(max(fraction, 0), 1) : 0
         let fixed = width ?? metrics.continueCardWidth
         let overlay = PlaybackProgressOverlay(fraction: progress, duration: duration, episode: subtitle, width: fixed)
-        Color.clear
-            .frame(width: fixed, height: fixed / CardAspect.wide.ratio)
-            .overlay {
-                LandscapeArtwork(title: title, artwork: artwork, logo: logo, maxPixelSize: min((fixed * displayScale).rounded(.up), 1200))
-            }
-            .overlay { overlay }
-            .mediaArtwork()
+        LandscapeCard(title: title, logo: logo, artwork: artwork, width: width) { overlay }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel([title, subtitle, overlay.remainingTime, "\(Int((progress * 100).rounded())) percent watched"].compactMap { $0 }
                 .filter { !$0.isEmpty }.joined(separator: ", "))
@@ -89,6 +82,31 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
     }
 }
 
+/// The text block at a landscape card's bottom: the shared fade, then `content` in white at the card's padding, `width` wide. It is
+/// decoration: taps pass through and VoiceOver skips it.
+struct CardCaption<Content: View>: View {
+    let width: CGFloat
+    let content: Content
+
+    init(width: CGFloat, @ViewBuilder content: () -> Content) {
+        self.width = width
+        self.content = content()
+    }
+
+    var body: some View {
+        BottomFade(length: 0.70)
+            .overlay(alignment: .bottomLeading) {
+                content
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Theme.Spacing.s)
+                    .padding(.vertical, Theme.Spacing.s)
+                    .frame(width: width, alignment: .leading)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Shared playback styling. Unknown runtime leaves the time label out; unwatched and completed artwork has no playback overlay.
 struct PlaybackProgressOverlay: View {
     let fraction: Double
@@ -106,42 +124,35 @@ struct PlaybackProgressOverlay: View {
 
     var body: some View {
         if hasProgress {
-            BottomFade(length: 0.70)
-                .overlay(alignment: .bottomLeading) {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 9, weight: .semibold))
-                        Capsule()
-                            .fill(.white.opacity(0.32))
-                            .overlay(alignment: .leading) {
-                                Capsule().fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 3)
-                        if let remainingTime {
-                            Text(remainingTime)
-                                .font(.system(size: 10, weight: .medium))
-                                .monospacedDigit()
-                                .fixedSize()
+            CardCaption(width: width) {
+                HStack(spacing: Theme.Spacing.xs) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                    Capsule()
+                        .fill(.white.opacity(0.32))
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
                         }
-                        if let episode, !episode.isEmpty {
-                            Text(episode)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.black)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .padding(.horizontal, Theme.Spacing.xs)
-                                .padding(.vertical, 2)
-                                .background(.white.opacity(0.92), in: Capsule())
-                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 3)
+                    if let remainingTime {
+                        Text(remainingTime)
+                            .font(.system(size: 10, weight: .medium))
+                            .monospacedDigit()
+                            .fixedSize()
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.vertical, Theme.Spacing.s)
-                    .frame(width: width, alignment: .leading)
+                    if let episode, !episode.isEmpty {
+                        Text(episode)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .padding(.horizontal, Theme.Spacing.xs)
+                            .padding(.vertical, 2)
+                            .background(.white.opacity(0.92), in: Capsule())
+                    }
                 }
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            }
         }
     }
 }

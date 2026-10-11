@@ -26,6 +26,9 @@ enum Theme {
 
     /// Horizontal inset of screen content on a phone. Zero: content runs edge to edge. Adaptive screens read `LayoutMetrics.pageMargin`.
     static let screenPadding: CGFloat = 0
+    /// The height of the system navigation bar, and the diameter of the round glass button it holds (the title page's back button). A round
+    /// button beside a screen's content is drawn at this size so it lines up with the bar's own.
+    static let barButtonDiameter: CGFloat = 44
     /// Vertical gap between rows on a phone browse screen. Adaptive screens read `LayoutMetrics.shelfSpacing`.
     static let rowSpacing: CGFloat = 28
     /// Gap between cards in a row or a grid on a phone. Adaptive screens read `LayoutMetrics.cardSpacing`.

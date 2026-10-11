@@ -22,7 +22,7 @@ struct StreamRow: View {
                 if isRemux { QualityBadge.remux }
                 if let source = item.quality.source { QualityBadge.source(source) }
             }
-            Text(headline)
+            Text(Self.headline(for: item))
                 .font(.subheadline.weight(.semibold))
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
@@ -45,7 +45,8 @@ struct StreamRow: View {
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous) }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
-    private var headline: String {
+    /// The technical details use it too, to avoid repeating the description's first line when that is the headline.
+    static func headline(for item: RankedStream) -> String {
         if let filename = item.stream.behaviorHints.filename?.trimmingCharacters(in: .whitespacesAndNewlines), !filename.isEmpty {
             return (filename as NSString).lastPathComponent
         }
@@ -110,8 +111,8 @@ struct StreamRow: View {
     }
 }
 
-/// The card's own section for the technical details: the file name, the addon's description, the container and where else the stream
-/// came from. Folded away until asked for, so the list stays about choosing.
+/// The card's own section for the technical details: every fact the addon and the file name give (seeders, size, hash, trackers and the rest,
+/// see `StreamFacts`), then the addon's description. Folded away until asked for, so the list stays about choosing.
 struct StreamTechnicalDetails: View {
     let item: RankedStream
     @State private var isExpanded = false
@@ -138,63 +139,48 @@ struct StreamTechnicalDetails: View {
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             .accessibilityIdentifier("stream.details.\(item.title)")
-            if isExpanded, !lines.isEmpty {
-                Text(lines.joined(separator: "\n"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Theme.Spacing.m)
-                    .padding(.bottom, Theme.Spacing.s)
+            if isExpanded, !facts.isEmpty || description != nil {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    if !facts.isEmpty { factGrid }
+                    if let description {
+                        Text(description)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.bottom, Theme.Spacing.s)
             }
         }
     }
 
-    private var lines: [String] {
-        [item.stream.behaviorHints.filename,
-         item.container.map { "Container \($0.fileExtension.uppercased())" },
-         item.stream.description,
-         item.alsoProvidedBy.isEmpty ? nil : "Also from \(item.alsoProvidedBy.map(\.name).joined(separator: ", "))"]
-            .compactMap { $0 }
-    }
-}
+    private var facts: [StreamFacts.Fact] { StreamFacts(item).rows }
 
-private extension StreamSourceKind {
-    var label: String {
-        switch self {
-        case .bluray: "Blu-ray"
-        case .webDL: "WEB-DL"
-        case .webRip: "WEBRip"
-        case .hdtv: "HDTV"
-        case .dvd: "DVD"
-        case .cam: "CAM"
+    /// Label in grey, value beside it. Hashes are monospaced so they can be read and selected.
+    private var factGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.xs) {
+            ForEach(facts, id: \.label) { fact in
+                GridRow(alignment: .firstTextBaseline) {
+                    Text(fact.label)
+                        .foregroundStyle(.secondary)
+                    Text(fact.value)
+                        .font(fact.isIdentifier ? .caption.monospaced() : .caption)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
-}
 
-private extension VideoCodec {
-    var label: String {
-        switch self {
-        case .h264: "H.264"
-        case .hevc: "HEVC"
-        case .av1: "AV1"
-        }
-    }
-}
-
-private extension AudioCodec {
-    var label: String {
-        switch self {
-        case .aac: "AAC"
-        case .ac3: "DD"
-        case .eac3: "DD+"
-        case .dts: "DTS"
-        case .dtsHD: "DTS-HD"
-        case .trueHD: "TrueHD"
-        case .flac: "FLAC"
-        case .opus: "Opus"
-        case .mp3: "MP3"
-        }
+    /// The addon's description. Its first line goes when it is the headline already shown above the details.
+    private var description: String? {
+        guard let text = item.stream.description, !text.isEmpty else { return nil }
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        let rest = lines.first.map(String.init) == StreamRow.headline(for: item) ? lines.dropFirst() : lines[...]
+        let kept = rest.joined(separator: "\n")
+        return kept.isEmpty ? nil : kept
     }
 }
 

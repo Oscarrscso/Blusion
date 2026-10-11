@@ -49,6 +49,8 @@ public final class WidgetsManagerViewModel {
     /// One sentence about the last action ("Imported 8 widgets.", "That isn't a widget export.") or nil.
     public private(set) var message: String?
     public private(set) var messageIsError = false
+    /// Goes up by one each time a widget is added or changed, so a view can confirm the save (see `savedHUD(trigger:)`).
+    public private(set) var saveRevision = 0
 
     /// The same limit `FusionWidgetCodec` enforces, applied to the download as well.
     private static let maxImportBytes = 2 * 1024 * 1024
@@ -79,6 +81,7 @@ public final class WidgetsManagerViewModel {
     public func add(_ widget: HomeWidget) async {
         let current = widgets
         await commit(current + WidgetsManagerViewModel.withFreshIDs([widget], existing: current))
+        saveRevision += 1
     }
 
     /// Replaces the widget with the same id. An unknown id changes nothing.
@@ -87,6 +90,7 @@ public final class WidgetsManagerViewModel {
         var list = widgets
         list[index] = widget
         await commit(list)
+        saveRevision += 1
     }
 
     public func remove(id: String) async {

@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import StremioKit
 import SwiftUI
 
 /// The portrait hero's numbers, shared by Home's spotlight and the title page so that opening a title from one looks the same on the
@@ -220,16 +221,16 @@ final class HeroLoader {
     }
 }
 
-/// The hero picture, drawn over the poster it stands in with until the picture is revealed. The stand-in is a larger copy of the poster (see
-/// `PosterQuality.placeholder`), slightly blurred and with a spinner over it, and the poster as it came shows first underneath. The picture
-/// itself is shown only while `isRevealed`, with the logo.
+/// The hero picture, drawn over the poster it stands in with until the picture is revealed. The stand-in is the title's card poster (see
+/// `PosterQuality.poster(for:)`), slightly blurred and with a spinner over it. Metahub's poster takes its place only if that one fails.
+/// The picture itself is shown only while `isRevealed`, with the logo.
 struct HeroPicture: View {
     let slot: HeroSlot
     let isRevealed: Bool
     let contentMode: ContentMode
     var alignment: Alignment = TitleHero.imageAlignment
-    /// The addon's poster as it came, which stands in until the picture is revealed. Nil draws no stand-in.
-    var placeholderURL: URL?
+    /// The title whose poster stands in until the picture is revealed. A title with no poster and no IMDb id draws no stand-in.
+    let preview: MetaPreview
 
     private var hasPicture: Bool {
         if case .ready = slot { return true }
@@ -238,12 +239,12 @@ struct HeroPicture: View {
 
     var body: some View {
         ZStack {
-            if !isRevealed, let placeholderURL {
+            if !isRevealed, let standIn = PosterQuality.poster(for: preview) {
                 // Stays fully opaque while the picture fades in over it (the reveal lasts 0.25 s), then goes unseen. With no picture to
                 // reveal it goes as it did, with a fade.
-                ArtworkImage(url: PosterQuality.placeholder(placeholderURL), maxPixelSize: TitleHero.placeholderPixelSize,
-                             contentMode: contentMode, placeholderURL: placeholderURL, placeholderBlur: 0, imageAlignment: alignment)
-                    // One blur over whichever poster is showing, the small one or the larger one that replaces it.
+                ArtworkImage(url: standIn, maxPixelSize: TitleHero.placeholderPixelSize, contentMode: contentMode,
+                             placeholderBlur: 0, fallbackURL: PosterQuality.smallest(MetahubArtwork.poster(imdbID: preview.id)),
+                             imageAlignment: alignment)
                     .blur(radius: TitleHero.placeholderBlur, opaque: true)
                     .overlay {
                         ProgressView()

@@ -262,6 +262,22 @@ import StremioKitTestSupport
         #expect(model.listing.items.map(\.title) == ["1080", "Removal Reasons"], "links rank below playable streams")
     }
 
+    @Test func onlyTheTwoBestRankedYouTubeLinksAreOffered() async throws {
+        let services = try await services(bodies: [body([#"{"name":"YT 1","ytId":"aaa"}"#, #"{"name":"Site","externalUrl":"https://example.com/w"}"#,
+                                                         #"{"name":"YT 2","ytId":"bbb"}"#, #"{"name":"YT 3","ytId":"ccc"}"#])])
+        let model = StreamPickerViewModel(request: request, services: services)
+        await model.load()
+        let isYouTube = { (item: RankedStream) -> Bool in
+            if case .youtube = item.stream.source { return true }
+            return false
+        }
+        let youTubeInRankOrder = model.listing.items.filter(isYouTube).map(\.title)
+        #expect(youTubeInRankOrder.count == 3, "all three are playable links to the picker's listing")
+        #expect(model.links.filter(isYouTube).map(\.title) == Array(youTubeInRankOrder.prefix(2)), "the two best ranked are kept")
+        #expect(model.links.contains { $0.title == "Site" }, "a link to a web page is not limited")
+        #expect(model.links.count == 3)
+    }
+
     @Test func torrentsShowUpOnceAStreamingServerIsConfigured() async throws {
         let torrent = #"{"name":"T","infoHash":"0123456789abcdef0123456789abcdef01234567","fileIdx":2}"#
         let without = try await services(bodies: [body([torrent])])

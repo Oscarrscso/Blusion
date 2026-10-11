@@ -11,6 +11,8 @@ struct ArtworkImage: View {
     let contentMode: ContentMode
     let placeholderURL: URL?
     let placeholderBlur: CGFloat
+    /// Tried once, at the same size, when `url` fails to load. Nil, or the same URL as `url`, means no second try.
+    let fallbackURL: URL?
     let imageAlignment: Alignment
 
     @State private var image: UIImage?
@@ -19,13 +21,14 @@ struct ArtworkImage: View {
     @State private var placeholderImage: UIImage?
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
-         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, imageAlignment: Alignment = .center) {
+         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, fallbackURL: URL? = nil, imageAlignment: Alignment = .center) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
         self.contentMode = contentMode
         self.placeholderURL = placeholderURL
         self.placeholderBlur = placeholderBlur
+        self.fallbackURL = fallbackURL
         self.imageAlignment = imageAlignment
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
         let cached = url.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: maxPixelSize) }
@@ -99,11 +102,21 @@ struct ArtworkImage: View {
             return
         }
         // Keep the current artwork visible while a replacement downloads.
-        guard let loaded = try? await ImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize), !Task.isCancelled else { return }
+        guard let loaded = try? await download(url), !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
             image = loaded
             imageURL = url
             placeholderImage = nil
+        }
+    }
+
+    /// The picture at `url`, or at `fallbackURL` once when `url` fails. A load that was cancelled does not try the fallback.
+    private func download(_ url: URL) async throws -> UIImage {
+        do {
+            return try await ImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize)
+        } catch {
+            guard !Task.isCancelled, let fallbackURL, fallbackURL != url else { throw error }
+            return try await ImagePipeline.shared.image(for: fallbackURL, maxPixelSize: maxPixelSize)
         }
     }
 }

@@ -24,6 +24,11 @@ public final class AppRouter {
     var demoPlan: PlaybackPlan?
     var addonInstallText: String?
     var userStateRevision = 0
+    /// The depth of `homePath` once a title opened from Home's spotlight is on it. When the path falls below that depth, the spotlight's
+    /// title has been popped and Home is back, see `HomeView`.
+    var spotlightDepth: Int?
+    /// Counts the returns to Home from a spotlight title. The spotlight and Home's scroll reset to their first page and top on each.
+    var spotlightRevision = 0
     /// Navigation values must wait until their stacks and destinations have appeared.
     private var pendingLaunchRoute: LaunchRoute?
 

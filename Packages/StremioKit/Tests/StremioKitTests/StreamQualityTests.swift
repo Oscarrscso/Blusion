@@ -101,4 +101,25 @@ private let cases: [QualityCase] = [
         let withText = AddonStream(name: "x", description: "1 GB", source: .direct(url), behaviorHints: StreamBehaviorHints(videoSize: 5))
         #expect(StreamQuality.parse(withText).sizeBytes == 1_073_741_824, "text wins over the hint")
     }
+
+    @Test func seedersAndPeersReadFromTheFormatsAddonsUse() {
+        #expect(StreamQuality.parse(from: ["Movie 1080p\n👤 12 💾 1.2 GB ⚙️ Site"]).seeders == 12)
+        #expect(StreamQuality.parse(from: ["👤 1,234"]).seeders == 1234, "thousands separators are tolerated")
+        #expect(StreamQuality.parse(from: ["👤1234"]).seeders == 1234)
+        #expect(StreamQuality.parse(from: ["Seeds: 7"]).seeders == 7)
+        #expect(StreamQuality.parse(from: ["Seeders: 8"]).seeders == 8)
+        #expect(StreamQuality.parse(from: ["S: 9"]).seeders == 9)
+        #expect(StreamQuality.parse(from: ["Peers: 12"]).peers == 12)
+        #expect(StreamQuality.parse(from: ["P: 3"]).peers == 3)
+        #expect(StreamQuality.parse(from: ["SEEDS: 4 PEERS: 5"]).seeders == 4 && StreamQuality.parse(from: ["SEEDS: 4 PEERS: 5"]).peers == 5,
+                "case-insensitive")
+        #expect(StreamQuality.parse(from: ["Movie 1080p 💾 1.2 GB"]).seeders == nil)
+        #expect(StreamQuality.parse(from: ["Movie 1080p 💾 1.2 GB"]).peers == nil)
+    }
+
+    @Test func seedersAndPeersIgnoreTextThatIsNotACount() {
+        #expect(StreamQuality.parse(from: ["1080p: 12"]).peers == nil, "p: inside a resolution is not peers")
+        #expect(StreamQuality.parse(from: ["Season: 2"]).seeders == nil)
+        #expect(StreamQuality.parse(from: ["👤 99999999"]).seeders == nil, "an absurd count is a misread, not a swarm")
+    }
 }
