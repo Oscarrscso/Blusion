@@ -257,7 +257,7 @@ private struct CreditRow: View {
     var body: some View {
         NavigationLink(value: credit.titleDestination) {
             HStack(alignment: .center, spacing: Theme.Spacing.m) {
-                ArtworkImage(url: credit.poster, title: credit.title, maxPixelSize: 240, contentMode: .fill)
+                ArtworkImage(url: PosterQuality.smallest(credit.poster), title: credit.title, maxPixelSize: 240, contentMode: .fill)
                     .frame(width: 60, height: 90)
                     .mediaArtwork(cornerRadius: Theme.Radius.poster)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {

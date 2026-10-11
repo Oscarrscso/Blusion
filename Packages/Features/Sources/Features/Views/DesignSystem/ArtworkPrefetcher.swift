@@ -16,17 +16,27 @@ final class ArtworkPrefetcher {
     }
 
     private var wanted: Set<Request> = []
+    /// Everything the last update named, wanted or visible: what the prefetcher is answerable for evicting once it is no longer named.
+    private var tracked: Set<Request> = []
     private var tasks: [Request: Task<Void, Never>] = [:]
     private var held: [Request: UIImage] = [:]
 
-    /// Makes `wanted` the set that is loaded and held: starts what is new, cancels and releases what is gone.
-    func update(wanted newWanted: [Request]) {
+    /// Makes `wanted` the set that is loaded and held: starts what is new, cancels and releases what is gone. `visible` are the requests of
+    /// the cards on screen right now; they load as cards, are never held here, and are never evicted. A request that is named by neither
+    /// is dropped from the decoded cache too, so memory stays at the visible posters plus the buffer. A poster shown elsewhere keeps its
+    /// picture through its own view's state and simply reloads from the URL cache on disk the next time it is asked for.
+    func update(wanted newWanted: [Request], visible: [Request] = []) {
         let newSet = Set(newWanted)
+        let newTracked = newSet.union(visible)
         for request in wanted.subtracting(newSet) {
             tasks.removeValue(forKey: request)?.cancel()
             held.removeValue(forKey: request)
         }
+        for request in tracked.subtracting(newTracked) {
+            ImagePipeline.shared.evict(request.url, maxPixelSize: request.maxPixelSize)
+        }
         wanted = newSet
+        tracked = newTracked
         for request in newWanted where tasks[request] == nil && held[request] == nil {
             if let cached = ImagePipeline.shared.cachedImage(for: request.url, maxPixelSize: request.maxPixelSize) {
                 held[request] = cached
@@ -40,8 +50,13 @@ final class ArtworkPrefetcher {
         }
     }
 
+    /// Stops all loading and lets go of the held images, but leaves the decoded cache alone: the grid may come straight back.
     func cancelAll() {
-        update(wanted: [])
+        for task in tasks.values { task.cancel() }
+        tasks = [:]
+        held = [:]
+        wanted = []
+        tracked = []
     }
 
     private func finish(_ request: Request, image: UIImage) {
@@ -49,29 +64,6 @@ final class ArtworkPrefetcher {
         guard wanted.contains(request) else { return }
         tasks[request] = nil
         held[request] = image
-    }
-
-    /// The images a grid card for `item` asks `ImagePipeline` for, with the same URLs and sizes. This mirrors `MediaCard` (its
-    /// `resolvedWidth`, `pixelSize`, `artworkURL` and the `LandscapeArtwork` branch) for a `.medium` card without a fixed width, which
-    /// is what `MediaGrid` draws. Keep the two in step.
-    static func requests(for item: MetaPreview, aspect: CardAspect, metrics: LayoutMetrics, isLandscape: Bool,
-                         displayScale: CGFloat) -> [Request] {
-        let landscapePoster = isLandscape && aspect == .poster
-        let width = landscapePoster ? metrics.landscapePosterWidth.rounded() : CardSize.medium.width(for: aspect, metrics: metrics)
-        let ratio = (landscapePoster ? CardAspect.wide : aspect).ratio
-        let size = min((max(width, width / ratio) * displayScale).rounded(.up), 1200)
-        if landscapePoster {
-            var requests: [Request] = []
-            if let artwork = item.background ?? MetahubArtwork.background(imdbID: item.id) ?? item.poster {
-                requests.append(Request(url: artwork, maxPixelSize: size))
-            }
-            if let logo = item.logo ?? MetahubArtwork.logo(imdbID: item.id) {
-                requests.append(Request(url: logo, maxPixelSize: 400))
-            }
-            return requests
-        }
-        let url: URL? = aspect == .wide ? item.background ?? item.poster : item.poster
-        return url.map { [Request(url: $0, maxPixelSize: size)] } ?? []
     }
 }
 #endif

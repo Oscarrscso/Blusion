@@ -110,7 +110,52 @@ struct MediaCard: View {
     }
 
     private var resolvedWidth: CGFloat {
-        width ?? (usesLandscapeArtwork ? (metrics.landscapePosterWidth * size.scale).rounded() : size.width(for: aspect, metrics: metrics))
+        Self.resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
+    }
+
+    private static func resolvedWidth(width: CGFloat?, aspect: CardAspect, size: CardSize, metrics: LayoutMetrics, isLandscape: Bool) -> CGFloat {
+        width ?? (isLandscape && aspect == .poster
+            ? (metrics.landscapePosterWidth * size.scale).rounded()
+            : size.width(for: aspect, metrics: metrics))
+    }
+
+    /// The pictures a card for `item` asks `ImagePipeline` for, with the URLs and pixel sizes it uses. The card draws from this, and so does
+    /// the grid's artwork buffer, so what the buffer loads is exactly what the card finds in the cache. A landscape poster also shows the
+    /// title's logo.
+    static func artworkRequests(for item: MetaPreview, aspect: CardAspect, size: CardSize = .medium, width: CGFloat? = nil,
+                                metrics: LayoutMetrics, isLandscape: Bool, displayScale: CGFloat) -> [ArtworkPrefetcher.Request] {
+        let landscape = isLandscape && aspect == .poster
+        let fixed = resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
+        let pixels = pixelSize(width: fixed, artwork: landscape ? .wide : aspect, displayScale: displayScale)
+        var requests: [ArtworkPrefetcher.Request] = []
+        if landscape {
+            if let url = landscapeArtworkURL(for: item) { requests.append(.init(url: url, maxPixelSize: pixels)) }
+            if let logo = landscapeLogoURL(for: item) { requests.append(.init(url: logo, maxPixelSize: logoPixelSize)) }
+        } else if let url = artworkURL(for: item, aspect: aspect) {
+            requests.append(.init(url: url, maxPixelSize: pixels))
+        }
+        return requests
+    }
+
+    /// Decoded no larger than the card is drawn, so a long shelf stays light in memory.
+    private static func pixelSize(width: CGFloat, artwork: CardAspect, displayScale: CGFloat) -> CGFloat {
+        min((max(width, width / artwork.ratio) * displayScale).rounded(.up), 1200)
+    }
+
+    /// The size `LandscapeArtwork` decodes its logo at.
+    private static let logoPixelSize: CGFloat = 400
+
+    private static func landscapeArtworkURL(for item: MetaPreview) -> URL? {
+        item.background ?? MetahubArtwork.background(imdbID: item.id) ?? PosterQuality.poster(for: item)
+    }
+
+    private static func landscapeLogoURL(for item: MetaPreview) -> URL? { item.logo ?? MetahubArtwork.logo(imdbID: item.id) }
+
+    private static func artworkURL(for item: MetaPreview, aspect: CardAspect) -> URL? {
+        switch aspect {
+        case .wide: item.background ?? PosterQuality.poster(for: item)
+        case .poster, .square: PosterQuality.poster(for: item)
+        }
     }
 
     private var usesLandscapeArtwork: Bool { isLandscape && aspect == .poster }
@@ -125,8 +170,8 @@ struct MediaCard: View {
         artworkSpace
             .overlay {
                 if usesLandscapeArtwork {
-                    LandscapeArtwork(title: item.name, artwork: item.background ?? MetahubArtwork.background(imdbID: item.id) ?? item.poster,
-                                     logo: item.logo ?? MetahubArtwork.logo(imdbID: item.id), maxPixelSize: pixelSize)
+                    LandscapeArtwork(title: item.name, artwork: Self.landscapeArtworkURL(for: item), logo: Self.landscapeLogoURL(for: item),
+                                     maxPixelSize: pixelSize)
                 } else {
                     ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize)
                 }
@@ -153,10 +198,8 @@ struct MediaCard: View {
         }
     }
 
-    /// Decoded no larger than the card is drawn, so a long shelf stays light in memory.
     private var pixelSize: CGFloat {
-        let fixed = resolvedWidth
-        return min((max(fixed, fixed / artworkAspect.ratio) * displayScale).rounded(.up), 1200)
+        Self.pixelSize(width: resolvedWidth, artwork: artworkAspect, displayScale: displayScale)
     }
 
     /// One title line and one grey line, always: cards of one kind share a height (a row takes its height from its first card, see
@@ -182,12 +225,7 @@ struct MediaCard: View {
         return line.isEmpty ? " " : line
     }
 
-    private var artworkURL: URL? {
-        switch aspect {
-        case .wide: item.background ?? item.poster
-        case .poster, .square: item.poster
-        }
-    }
+    private var artworkURL: URL? { Self.artworkURL(for: item, aspect: aspect) }
 
     private var spokenName: String {
         [item.name, item.releaseInfo].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")

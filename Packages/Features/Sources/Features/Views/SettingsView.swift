@@ -263,8 +263,8 @@ private struct LazyLoadSettingsPage: View {
                 }
             } footer: {
                 Text("""
-                    How many posters stay loaded off screen above and below what you see in a long list: 3 on Near, 9 on Balanced, 18 on \
-                    Far. Further uses more data and memory.
+                    How many posters stay loaded off screen above and below what you see in a long list: 12 on Near, 24 on Balanced, 48 on \
+                    Far. Posters further away are unloaded. Further uses more data and memory.
                     """)
             }
         }

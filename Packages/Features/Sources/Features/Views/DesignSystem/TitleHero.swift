@@ -178,10 +178,19 @@ struct HeroPicture: View {
     /// Shown until the picture is revealed (the title page's poster). Nil on Home, where the carousel must not show one.
     var placeholderURL: URL?
 
+    private var hasPicture: Bool {
+        if case .ready = slot { return true }
+        return false
+    }
+
     var body: some View {
         ZStack {
             if !isRevealed, let placeholderURL {
+                // Stays fully opaque while the picture fades in over it (the reveal lasts 0.25 s), then goes unseen. With no picture to
+                // reveal it goes as it did, with a fade.
                 ArtworkImage(url: placeholderURL, maxPixelSize: 600, contentMode: contentMode, placeholderBlur: 0, imageAlignment: alignment)
+                    .transition(hasPicture ? .asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.01).delay(0.3)))
+                                           : .opacity)
             }
             Color.clear
                 .overlay(alignment: alignment) {
@@ -189,6 +198,7 @@ struct HeroPicture: View {
                         Image(uiImage: image)
                             .resizable()
                             .aspectRatio(contentMode: contentMode)
+                            .transition(.identity)
                     }
                 }
                 .opacity(isRevealed ? 1 : 0)

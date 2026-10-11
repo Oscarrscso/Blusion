@@ -14,7 +14,6 @@ struct HomeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var actions: TitleActions?
     init(services: AppServices) {
@@ -29,14 +28,6 @@ struct HomeView: View {
                 .environment(\.isHomeScrolling, isScrolling)
                 .environment(\.layoutMetrics, homeMetrics)
         }
-            // The spotlight's zoom source: the whole screen, outside the scroll view so it never moves with it.
-            .background {
-                Color.clear
-                    .ignoresSafeArea()
-                    .zoomSource(id: HeroCarousel.screenSourceID, in: zoomNamespace)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)

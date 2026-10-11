@@ -20,6 +20,9 @@ struct DetailView: View {
     @State private var isConfirmingUnmarkShow = false
     @State private var reviewSort = ReviewSort.highestRated
     @State private var expandedReviewID: String?
+    /// The review whose card is at full width. It follows `expandedReviewID`, except while a card closes: the text folds first, then
+    /// the card narrows.
+    @State private var wideReviewID: String?
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = TitleHero.logoMaxHeight
@@ -183,7 +186,9 @@ struct DetailView: View {
                     // The block below the logo sits close to it: 60% of the section gap. The stack's own spacing is part of that gap.
                     controls
                         .padding(.top, sectionSpacing * 0.6 - Theme.Spacing.m)
+                    // The same gap as between the ratings and the line under them. The stack's own spacing is part of it.
                     synopsis
+                        .padding(.top, halfRatingsGap - Theme.Spacing.m)
                     RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
                 }
                 .padding(.horizontal, contentMargin)
@@ -391,6 +396,24 @@ struct DetailView: View {
         }
     }
 
+    /// Opening a review widens its card and unfolds its text together. Closing one folds the text first and narrows the card after,
+    /// so the two never move at once.
+    private func toggleReview(_ id: String) {
+        guard expandedReviewID == id else {
+            withAnimation(.snappy(duration: 0.35)) {
+                expandedReviewID = id
+                wideReviewID = id
+            }
+            return
+        }
+        withAnimation(.snappy(duration: 0.25)) {
+            expandedReviewID = nil
+        } completion: {
+            guard expandedReviewID == nil else { return }
+            withAnimation(.snappy(duration: 0.3)) { wideReviewID = nil }
+        }
+    }
+
     private func toggleDescription() {
         withAnimation(.easeInOut(duration: 0.25)) { isDescriptionExpanded.toggle() }
     }
@@ -559,11 +582,9 @@ struct DetailView: View {
                                     let expandedWidth = max(0, width - contentMargin * 2)
                                     ReviewCard(review: review, isExpanded: expandedReviewID == review.id,
                                                foldedWidth: foldedWidth, expandedWidth: expandedWidth) {
-                                        withAnimation(.snappy(duration: 0.35)) {
-                                            expandedReviewID = expandedReviewID == review.id ? nil : review.id
-                                        }
+                                        toggleReview(review.id)
                                     }
-                                    .frame(width: expandedReviewID == review.id ? expandedWidth : foldedWidth)
+                                    .frame(width: wideReviewID == review.id ? expandedWidth : foldedWidth)
                                     .id(review.id)
                                     .reportsShelfEdge(id: review.id)
                                     .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
@@ -774,6 +795,8 @@ private struct TitleArt: View {
                         .resizable()
                         .scaledToFit()
                 }
+                // Revealed by the page's opacity alone, on the same curve as the picture.
+                .transition(.identity)
             } else {
                 Text(name)
                     .font(compact ? .title2.bold() : .largeTitle.bold())
@@ -783,6 +806,7 @@ private struct TitleArt: View {
                     .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(isNone ? 1 : 0)
+                    .transition(.identity)
             }
         }
         // Bottom-aligned, so a logo shorter than the reserved space sits where it did before, just above the controls.

@@ -129,9 +129,13 @@ struct AppDestinations: ViewModifier {
         content
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
             .navigationDestination(for: TitleDestination.self) { destination in
-                DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
-                           artworkChecked: destination.artworkChecked)
-                    .zoomDestination(id: destination.sourceID, in: zoomNamespace)
+                let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
+                                        artworkChecked: destination.artworkChecked)
+                if destination.opensInstantly {
+                    detail.instantDestination()
+                } else {
+                    detail.zoomDestination(id: destination.sourceID, in: zoomNamespace)
+                }
             }
             .navigationDestination(for: PersonDestination.self) { PersonView(destination: $0, services: services) }
             .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services) }

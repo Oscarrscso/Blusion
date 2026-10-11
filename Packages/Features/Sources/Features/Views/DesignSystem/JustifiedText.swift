@@ -1,12 +1,14 @@
 #if canImport(UIKit)
+import CoreText
 import SwiftUI
 import UIKit
 
-/// Text set justified, which SwiftUI's `Text` cannot do. A `UILabel` in the body font of `textStyle` (it follows Dynamic Type), with a
-/// justified paragraph style. `lineLimit` cuts the text after that many lines with a tail ellipsis, as `Text` does; zero shows every line.
+/// Text set justified, which SwiftUI's `Text` cannot do. It is laid out and drawn by `JustifiedLabel` in the body font of `textStyle`
+/// (it follows Dynamic Type). Lines break where `JustifiedLineBreaker` puts them so the word gaps come out alike, and every line but the
+/// last of a paragraph is justified by widening only the gaps between words. A word is never split or cut.
 ///
-/// With `isTruncated` it says whether the cut text leaves some out, measured the way `TruncatingText` measures: the whole text against
-/// the cut one, at the same width. Pass `lineLimit` zero (expanded) and it leaves the answer as it was.
+/// `lineLimit` shows that many lines of the same layout, the last one ending in an ellipsis after a whole word; zero shows every line.
+/// With `isTruncated` it says whether the cut text leaves some out. Pass `lineLimit` zero (expanded) and it leaves the answer as it was.
 struct JustifiedText: UIViewRepresentable {
     let text: String
     var textStyle: UIFont.TextStyle = .body
@@ -18,6 +20,9 @@ struct JustifiedText: UIViewRepresentable {
     /// With a line limit, the cut text always takes that many lines, so cards holding texts of different lengths share a height.
     var reservesSpace = false
     var isTruncated: Binding<Bool>?
+    /// The fewest and most characters a line should hold; see `JustifiedLineBreaker`.
+    var minimumLineCharacters = JustifiedLineBreaker.defaultMinimumCharacters
+    var maximumLineCharacters = JustifiedLineBreaker.defaultMaximumCharacters
 
     func makeUIView(context: Context) -> JustifiedLabel {
         let label = JustifiedLabel(frame: .zero)
@@ -27,24 +32,26 @@ struct JustifiedText: UIViewRepresentable {
     }
 
     func updateUIView(_ label: JustifiedLabel, context: Context) {
-        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown)
-        label.numberOfLines = lineLimit
+        configure(label)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView label: JustifiedLabel, context: Context) -> CGSize? {
-        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown)
-        let width = proposal.width ?? .greatestFiniteMagnitude
-        let whole = label.measure(width: width, lines: 0)
-        // Measured last, so the label is left with the line limit it shows.
-        let shown = label.measure(width: width, lines: lineLimit)
+        configure(label)
+        // One layout for this width answers both the whole text and the limited one.
+        let measured = label.measure(width: proposal.width ?? .greatestFiniteMagnitude)
         if let isTruncated, lineLimit > 0 {
-            report(truncated: whole.height > shown.height + 1, to: isTruncated)
+            report(truncated: measured.totalLines > lineLimit, to: isTruncated)
         }
-        var height = shown.height
-        if reservesSpace, lineLimit > 0 {
-            height = max(height, UIFont.preferredFont(forTextStyle: textStyle).lineHeight * CGFloat(lineLimit))
-        }
-        return CGSize(width: proposal.width ?? shown.width, height: height)
+        let shown = lineLimit > 0 ? min(lineLimit, measured.totalLines) : measured.totalLines
+        let lines = reservesSpace && lineLimit > 0 ? max(shown, lineLimit) : shown
+        return CGSize(width: proposal.width ?? measured.widestLine, height: ceil(CGFloat(lines) * measured.lineHeight))
+    }
+
+    private func configure(_ label: JustifiedLabel) {
+        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown)
+        label.lineLimit = lineLimit
+        label.minimumLineCharacters = minimumLineCharacters
+        label.maximumLineCharacters = maximumLineCharacters
     }
 
     /// Sets the answer after the layout pass, and only when it changed, so the state never changes during a layout.
@@ -55,33 +62,86 @@ struct JustifiedText: UIViewRepresentable {
     }
 }
 
-/// The label behind `JustifiedText`. It keeps its text and look, and rebuilds the attributed text when the Dynamic Type size changes.
-final class JustifiedLabel: UILabel {
+/// The view behind `JustifiedText`. It measures each word once, keeps the line layouts of the last few widths, and draws the lines with
+/// Core Text, so a container that animates its width pays for a layout only at widths it has not met.
+final class JustifiedLabel: UIView {
     private struct Look: Equatable {
         let text: String
         let textStyle: UIFont.TextStyle
         let color: UIColor
         let isMarkdown: Bool
+        let category: UIContentSizeCategory
+        let style: UIUserInterfaceStyle
     }
 
-    /// A line is loose when UIKit would have to add more than this much to each gap between its words, as a fraction of the font size.
-    /// A loose line is not left to UIKit, which would spread the letters of a line with few words. The gaps take the stretch instead.
-    static let looseGapEm: CGFloat = 0.5
-    /// The most a gap between words is stretched on a loose line, as a fraction of the font size. A line that needs more is left ragged.
-    static let maxGapStretchEm: CGFloat = 1.0
-    /// Taken off the stretch of a loose line, so rounding can never push its last word to the next line.
-    private static let stretchMargin: CGFloat = 0.5
+    /// A word, ready to draw. Its attributes may change inside it (a bold part), and it keeps those of its last character for an ellipsis.
+    private struct Word {
+        let line: CTLine
+        let width: CGFloat
+        let characters: Int
+        let endAttributes: [NSAttributedString.Key: Any]
+    }
+
+    /// The measured text: its paragraphs of words and the metrics of the base font.
+    private struct Content {
+        let paragraphs: [[Word]]
+        let font: UIFont
+        let spaceWidth: CGFloat
+        let plain: String
+    }
+
+    /// One line of a layout: the words it takes from its paragraph, and whether it is that paragraph's last line (which is not justified).
+    private struct Line {
+        let paragraph: Int
+        let words: Range<Int>
+        let isParagraphEnd: Bool
+    }
+
+    private final class Layout {
+        let lines: [Line]
+        let widestLine: CGFloat
+        init(lines: [Line], widestLine: CGFloat) {
+            self.lines = lines
+            self.widestLine = widestLine
+        }
+    }
+
+    private struct LayoutKey: Equatable {
+        let halfPoints: Int
+        let minimum: Int
+        let maximum: Int
+    }
+
+    /// How many widths keep their layout.
+    private static let cachedLayouts = 4
+    /// The width used when none is proposed: wide enough that only the character limit and newlines break lines.
+    private static let unboundedWidth: CGFloat = 100_000
 
     private var look: Look?
-    /// The text as `render` builds it: font, colour, justified paragraph style. The label shows it, or a shaped copy of it.
-    private var baseText = NSAttributedString()
-    /// The width `attributedText` was shaped for; nil when it shows `baseText` as it is.
-    private var shapedWidth: CGFloat?
+    private var content: Content?
+    private var layouts: [(key: LayoutKey, layout: Layout)] = []
+
+    /// The lines shown; zero shows them all.
+    var lineLimit = 0 {
+        didSet { if lineLimit != oldValue { setNeedsDisplay() } }
+    }
+    var minimumLineCharacters = JustifiedLineBreaker.defaultMinimumCharacters {
+        didSet { if minimumLineCharacters != oldValue { setNeedsDisplay() } }
+    }
+    var maximumLineCharacters = JustifiedLineBreaker.defaultMaximumCharacters {
+        didSet { if maximumLineCharacters != oldValue { setNeedsDisplay() } }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        numberOfLines = 0
-        lineBreakMode = .byTruncatingTail
+        contentMode = .redraw
+        isOpaque = false
+        backgroundColor = .clear
+        isAccessibilityElement = true
+        accessibilityTraits = .staticText
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self, UITraitUserInterfaceStyle.self]) { (label: JustifiedLabel, _) in
+            label.rebuildForTraits()
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -90,122 +150,199 @@ final class JustifiedLabel: UILabel {
 
     /// Sets the text and its look, when either differs from what is shown.
     func show(text: String, textStyle: UIFont.TextStyle, color: UIColor, isMarkdown: Bool) {
-        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown)
+        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown,
+                        category: traitCollection.preferredContentSizeCategory, style: traitCollection.userInterfaceStyle)
         guard next != look else { return }
         look = next
-        render(next)
+        content = build(next)
+        layouts = []
+        accessibilityLabel = content?.plain
+        setNeedsDisplay()
+        invalidateIntrinsicContentSize()
     }
 
-    /// The size the text takes at `width` in `lines` lines (zero for all of them). The label is left at those lines.
-    func measure(width: CGFloat, lines: Int) -> CGSize {
-        numberOfLines = lines
-        shape(forWidth: width)
-        return sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+    /// What the text takes at `width`: its lines in all, the widest of them, and the height of one line.
+    func measure(width: CGFloat) -> (totalLines: Int, widestLine: CGFloat, lineHeight: CGFloat) {
+        guard let content else { return (0, 0, UIFont.preferredFont(forTextStyle: .body).lineHeight) }
+        let layout = layout(forWidth: width)
+        return (layout.lines.count, layout.widestLine, content.font.lineHeight)
     }
 
-    override func layoutSubviews() {
-        shape(forWidth: bounds.width)
-        super.layoutSubviews()
+    private func rebuildForTraits() {
+        guard let look else { return }
+        self.look = nil
+        show(text: look.text, textStyle: look.textStyle, color: look.color, isMarkdown: look.isMarkdown)
     }
 
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        guard previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory,
-              let look else { return }
-        render(look)
-    }
+    // MARK: Building the words
 
-    private func render(_ look: Look) {
+    private func build(_ look: Look) -> Content {
         let font = UIFont.preferredFont(forTextStyle: look.textStyle, compatibleWith: traitCollection)
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .justified
-        paragraph.lineBreakMode = .byTruncatingTail
-        let text: NSMutableAttributedString
-        if look.isMarkdown,
-           let parsed = try? NSAttributedString(markdown: look.text,
-                                                options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            text = NSMutableAttributedString(attributedString: parsed)
-        } else {
-            text = NSMutableAttributedString(string: look.text)
+        let color = look.color.resolvedColor(with: traitCollection)
+        let text = attributed(look, font: font, color: color)
+        let string = text.string as NSString
+        let space = CTLineCreateWithAttributedString(NSAttributedString(string: " ", attributes: attributes(font: font, color: color)))
+        let spaceWidth = CGFloat(CTLineGetTypographicBounds(space, nil, nil, nil))
+
+        var paragraphs: [[Word]] = []
+        var words: [Word] = []
+        var wordStart: Int?
+        func endWord(at end: Int) {
+            guard let start = wordStart else { return }
+            wordStart = nil
+            let range = NSRange(location: start, length: end - start)
+            let piece = text.attributedSubstring(from: range)
+            let line = CTLineCreateWithAttributedString(piece)
+            words.append(Word(line: line, width: CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)),
+                              characters: piece.string.count,
+                              endAttributes: piece.attributes(at: piece.length - 1, effectiveRange: nil)))
         }
-        text.addAttributes([.font: font, .foregroundColor: look.color, .paragraphStyle: paragraph],
-                           range: NSRange(location: 0, length: text.length))
-        baseText = text
-        shapedWidth = nil
-        attributedText = text
-        accessibilityLabel = text.string
-        setNeedsLayout()
+        for index in 0..<string.length {
+            switch string.character(at: index) {
+            case 0x0A:
+                endWord(at: index)
+                paragraphs.append(words)
+                words = []
+            case 0x20, 0x09, 0x0D:
+                endWord(at: index)
+            default:
+                if wordStart == nil { wordStart = index }
+            }
+        }
+        endWord(at: string.length)
+        paragraphs.append(words)
+        while paragraphs.count > 1, paragraphs.last?.isEmpty == true { paragraphs.removeLast() }
+        if paragraphs.count == 1, paragraphs[0].isEmpty { paragraphs = [] }
+        return Content(paragraphs: paragraphs, font: font, spaceWidth: spaceWidth, plain: text.string)
     }
 
-    /// Shows the text shaped for `width`, unless it already is (within half a point). An unbounded or empty width shows the base text.
-    private func shape(forWidth width: CGFloat) {
-        guard width.isFinite, width > 0, width < 1_000_000 else {
-            if shapedWidth != nil {
-                shapedWidth = nil
-                attributedText = baseText
-            }
-            return
-        }
-        if let shapedWidth, abs(shapedWidth - width) <= 0.5 { return }
-        shapedWidth = width
-        attributedText = Self.shaped(baseText, width: width)
+    private func attributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: color, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor]
     }
 
-    /// `base` laid out at `width`, with each loose line (not the last of its paragraph) taking its stretch in the gaps between words:
-    /// the interior spaces get a kern of the line's slack divided by the gaps, at most `maxGapStretchEm`, and the trailing space becomes
-    /// U+2028 so UIKit ends the line there instead of justifying it. A line is loose when it has no gap, or its gaps would each stretch
-    /// by more than `looseGapEm`. The other lines are left to UIKit's justification. One character replaces one, so ranges stay valid.
-    static func shaped(_ base: NSAttributedString, width: CGFloat) -> NSAttributedString {
-        let length = base.length
-        guard length > 0, width > 0 else { return base }
-        let em = (base.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.pointSize ?? UIFont.systemFontSize
-
-        // The base breaks lines by truncating, which would lay out one line; measure with word wrap and no justification.
-        let measured = NSMutableAttributedString(attributedString: base)
-        let natural = NSMutableParagraphStyle()
-        natural.alignment = .natural
-        natural.lineBreakMode = .byWordWrapping
-        measured.addAttribute(.paragraphStyle, value: natural, range: NSRange(location: 0, length: length))
-        let storage = NSTextStorage(attributedString: measured)
-        let layout = NSLayoutManager()
-        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
-        layout.addTextContainer(container)
-        storage.addLayoutManager(layout)
-        layout.ensureLayout(for: container)
-
-        let string = storage.string as NSString
-        var lines: [NSRange] = []
-        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, _, _, glyphRange, _ in
-            lines.append(layout.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil))
-        }
-
-        let result = NSMutableAttributedString(attributedString: base)
-        for line in lines where line.length > 1 {
-            let lastIndex = line.location + line.length - 1
-            // The last line of a paragraph is not justified by UIKit.
-            if lastIndex == length - 1 || string.character(at: lastIndex) == 0x0A { continue }
-            // Without a trailing space the line broke inside a word or at a hyphen: leave it.
-            guard string.character(at: lastIndex) == 0x20 else { continue }
-            let body = NSRange(location: line.location, length: line.length - 1)
-            let used = ceil(measured.attributedSubstring(from: body)
-                .boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
-                              options: [.usesLineFragmentOrigin], context: nil).width)
-            let slack = max(0, width - used)
-            var gaps: [Int] = []
-            for index in body.location..<(body.location + body.length) where string.character(at: index) == 0x20 {
-                gaps.append(index)
+    /// The text in the base font and colour. Markdown keeps its bold and italic as traits of that font; links and code are plain text.
+    private func attributed(_ look: Look, font: UIFont, color: UIColor) -> NSAttributedString {
+        let base = attributes(font: font, color: color)
+        guard look.isMarkdown,
+              let parsed = try? AttributedString(markdown: look.text,
+                                                 options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        else { return NSAttributedString(string: look.text, attributes: base) }
+        let result = NSMutableAttributedString()
+        for run in parsed.runs {
+            var traits: UIFontDescriptor.SymbolicTraits = []
+            if let intent = run.inlinePresentationIntent {
+                if intent.contains(.stronglyEmphasized) { traits.insert(.traitBold) }
+                if intent.contains(.emphasized) { traits.insert(.traitItalic) }
             }
-            if !gaps.isEmpty, slack / CGFloat(gaps.count) <= looseGapEm * em { continue }
-            if !gaps.isEmpty {
-                let count = CGFloat(gaps.count)
-                let kern = max(0, (min(slack / count, maxGapStretchEm * em) * count - stretchMargin) / count)
-                for index in gaps { result.addAttribute(.kern, value: kern, range: NSRange(location: index, length: 1)) }
+            var runFont = font
+            if !traits.isEmpty, let descriptor = font.fontDescriptor.withSymbolicTraits(traits) {
+                runFont = UIFont(descriptor: descriptor, size: font.pointSize)
             }
-            let separator = NSAttributedString(string: "\u{2028}", attributes: base.attributes(at: lastIndex, effectiveRange: nil))
-            result.replaceCharacters(in: NSRange(location: lastIndex, length: 1), with: separator)
+            var runAttributes = base
+            runAttributes[.font] = runFont
+            result.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: runAttributes))
         }
         return result
+    }
+
+    // MARK: Layout
+
+    private func layout(forWidth proposed: CGFloat) -> Layout {
+        let width = proposed.isFinite && proposed < Self.unboundedWidth ? max(proposed, 1) : Self.unboundedWidth
+        let key = LayoutKey(halfPoints: Int((width * 2).rounded(.down)), minimum: minimumLineCharacters, maximum: maximumLineCharacters)
+        if let index = layouts.firstIndex(where: { $0.key == key }) {
+            let entry = layouts.remove(at: index)
+            layouts.append(entry)
+            return entry.layout
+        }
+        // Rounded down to the half point, so a line is never wider than the view.
+        let layout = makeLayout(width: max(1, CGFloat(key.halfPoints) / 2), key: key)
+        layouts.append((key, layout))
+        if layouts.count > Self.cachedLayouts { layouts.removeFirst() }
+        return layout
+    }
+
+    private func makeLayout(width: CGFloat, key: LayoutKey) -> Layout {
+        guard let content else { return Layout(lines: [], widestLine: 0) }
+        var lines: [Line] = []
+        var widest: CGFloat = 0
+        for (index, words) in content.paragraphs.enumerated() {
+            if words.isEmpty {
+                lines.append(Line(paragraph: index, words: 0..<0, isParagraphEnd: true))
+                continue
+            }
+            let ranges = JustifiedLineBreaker.breaks(wordWidths: words.map(\.width), wordCharacters: words.map(\.characters),
+                                                     spaceWidth: content.spaceWidth, lineWidth: width,
+                                                     minimumCharacters: key.minimum, maximumCharacters: key.maximum)
+            for (offset, range) in ranges.enumerated() {
+                lines.append(Line(paragraph: index, words: range, isParagraphEnd: offset == ranges.count - 1))
+                widest = max(widest, naturalWidth(words[range], content.spaceWidth))
+            }
+        }
+        return Layout(lines: lines, widestLine: min(widest, width))
+    }
+
+    private func naturalWidth(_ words: ArraySlice<Word>, _ space: CGFloat) -> CGFloat {
+        words.reduce(0) { $0 + $1.width } + space * CGFloat(max(0, words.count - 1))
+    }
+
+    // MARK: Drawing
+
+    override func draw(_ rect: CGRect) {
+        guard let content, let context = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
+        let layout = layout(forWidth: bounds.width)
+        let width = bounds.width
+        let total = layout.lines.count
+        let shown = lineLimit > 0 ? min(lineLimit, total) : total
+        let isCut = lineLimit > 0 && total > lineLimit
+        let scale = max(contentScaleFactor, 1)
+        context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        for index in 0..<shown {
+            let line = layout.lines[index]
+            let words = Array(content.paragraphs[line.paragraph][line.words])
+            guard !words.isEmpty else { continue }
+            let baseline = ((CGFloat(index) * content.font.lineHeight + content.font.ascender) * scale).rounded() / scale
+            let cut = isCut && index == shown - 1
+            drawLine(words, in: context, content: content, width: width, baseline: baseline, scale: scale,
+                     justified: cut || !line.isParagraphEnd, ellipsis: cut)
+        }
+    }
+
+    /// Draws one line. Justified, the gaps between words share the slack equally; otherwise the words keep single spaces from the leading
+    /// edge. A word wider than the line is drawn scaled down to fit. With `ellipsis`, trailing words are dropped until the mark fits.
+    private func drawLine(_ words: [Word], in context: CGContext, content: Content, width: CGFloat, baseline: CGFloat, scale: CGFloat,
+                          justified: Bool, ellipsis: Bool) {
+        var kept = words
+        var mark: (line: CTLine, width: CGFloat)?
+        if ellipsis, let last = words.last {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: last.endAttributes))
+            mark = (line, CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)))
+            while kept.count > 1, naturalWidth(kept[...], content.spaceWidth) + (mark?.width ?? 0) > width { kept.removeLast() }
+        }
+        let markWidth = mark?.width ?? 0
+        let widths = kept.enumerated().map { $0.element.width + ($0.offset == kept.count - 1 ? markWidth : 0) }
+        let sum = widths.reduce(0, +)
+        let natural = sum + content.spaceWidth * CGFloat(kept.count - 1)
+        var gap = content.spaceWidth
+        var factor: CGFloat = 1
+        if natural > width {
+            factor = width / natural
+        } else if justified, kept.count > 1 {
+            gap = (width - sum) / CGFloat(kept.count - 1)
+        }
+        context.saveGState()
+        context.scaleBy(x: factor, y: 1)
+        var x: CGFloat = 0
+        for (offset, word) in kept.enumerated() {
+            context.textPosition = CGPoint(x: (x * scale).rounded() / scale, y: baseline)
+            CTLineDraw(word.line, context)
+            if offset == kept.count - 1, let mark {
+                context.textPosition = CGPoint(x: ((x + word.width) * scale).rounded() / scale, y: baseline)
+                CTLineDraw(mark.line, context)
+            }
+            x += widths[offset] + gap
+        }
+        context.restoreGState()
     }
 }
 #endif

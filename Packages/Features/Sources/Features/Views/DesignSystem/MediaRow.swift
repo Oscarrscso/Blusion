@@ -118,17 +118,17 @@ struct MediaRow<Content: View>: View {
 
 /// A grid of titles that fills the width: three posters across a phone, as many as fit in a Mac window. Whatever the layout, it keeps the
 /// posters of the "Lazy load" buffer (see `LazyLoadLookahead`) above and below the visible titles loaded, so they are in memory before
-/// they scroll on screen. `onLastAppear` makes it paged: it fires as soon as any title within the buffer of the end appears, so a caller
-/// can load the next page. A paged grid also releases the artwork of titles outside the buffer; they show a blank card of the same size
-/// until they come back.
+/// they scroll on screen, and unloads them from memory once they are further away. `onLastAppear` makes it paged: it fires while the
+/// viewer is within the buffer of the end, so a caller can load the next page. A paged grid also draws a blank card of the same size for
+/// titles outside the buffer. What is visible comes from the grid's own geometry against its scroll view, not from its cells.
 struct MediaGrid: View {
     let items: [MetaPreview]
     let aspect: CardAspect
     let showsRating: Bool
     let onLastAppear: (() -> Void)?
     @State private var zoomScope = UUID().uuidString
-    /// The indices of the cells on screen, kept up to date by each cell's appear and disappear.
-    @State private var visibleIndices: Set<Int> = []
+    /// The titles whose rows are on screen; nil before the first reading.
+    @State private var visible: ClosedRange<Int>?
     @State private var prefetcher = ArtworkPrefetcher()
     /// The chosen level; reading it here makes the grid follow the slider while it is alive.
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
@@ -146,19 +146,20 @@ struct MediaGrid: View {
     /// Titles kept ready on each side of the visible ones.
     private var buffer: Int { LazyLoadLookahead.titles(atLevel: lookaheadLevel) }
 
-    /// The indices that stay loaded: the visible ones and `buffer` titles each way. Nil before anything has appeared.
+    /// The indices that stay loaded: the visible ones and `buffer` titles each way. Nil before the first reading.
     private var bufferRange: ClosedRange<Int>? {
-        guard let first = visibleIndices.min(), let last = visibleIndices.max() else { return nil }
-        return LazyLoadLookahead.bufferRange(visible: first...last, count: items.count, titles: buffer)
+        visible.flatMap { LazyLoadLookahead.bufferRange(visible: $0, count: items.count, titles: buffer) }
     }
 
     var body: some View {
-        let loadIndex = LazyLoadLookahead.triggerIndex(count: items.count, titles: buffer)
-        // Only a paged grid releases artwork; before anything has appeared nothing is released.
+        // Only a paged grid blanks cards; before the first reading nothing is blanked.
         let kept = onLastAppear == nil ? nil : bufferRange
         // A poster in landscape is drawn as a wide card without a caption (see `MediaCard`), so its blank card has that shape.
         let landscapePoster = isLandscape && aspect == .poster
-        LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.cardSpacing) {
+        let columns = metrics.gridColumns(for: aspect, inLandscape: isLandscape)
+        let spacing = metrics.cardSpacing
+        let count = items.count
+        LazyVGrid(columns: columns, alignment: .leading, spacing: spacing) {
             ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                 Group {
                     if let kept, !kept.contains(index) {
@@ -169,18 +170,20 @@ struct MediaGrid: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .onAppear {
-                    visibleIndices.insert(index)
-                    if index >= loadIndex { onLastAppear?() }
-                }
-                .onDisappear {
-                    visibleIndices.remove(index)
-                }
             }
         }
+        // The reading is the range of titles whose rows meet the scroll view's viewport. It changes only when a row enters or leaves.
+        .onGeometryChange(for: ClosedRange<Int>?.self) { proxy in
+            guard let viewport = proxy.bounds(of: .scrollView) else { return count > 0 ? 0...(count - 1) : nil }
+            return LazyLoadLookahead.visibleItems(
+                viewportMinY: viewport.minY, viewportMaxY: viewport.maxY, gridHeight: proxy.size.height, rowSpacing: spacing,
+                columns: Self.columnCount(of: columns, width: proxy.size.width, spacing: spacing), count: count)
+        } action: { visible = $0 }
         .padding(.horizontal, metrics.pageMargin)
         .environment(\.zoomScope, zoomScope)
-        .onChange(of: visibleIndices) { refreshPrefetch() }
+        .onChange(of: visible) { loadNextPageIfNear() }
+        .onChange(of: items.count) { loadNextPageIfNear() }
+        .onChange(of: bufferRange) { refreshPrefetch() }
         .onChange(of: items.count) { refreshPrefetch() }
         .onChange(of: items.first?.identity) { refreshPrefetch() }
         .onChange(of: lookaheadLevel) { refreshPrefetch() }
@@ -189,15 +192,33 @@ struct MediaGrid: View {
         .onDisappear { prefetcher.cancelAll() }
     }
 
+    /// How many columns SwiftUI lays `columns` out in at `width`: one per fixed or flexible item, and for an adaptive item as many
+    /// minimum-width columns (plus spacing) as fit, at least one.
+    private static func columnCount(of columns: [GridItem], width: CGFloat, spacing: CGFloat) -> Int {
+        columns.reduce(0) { total, column in
+            switch column.size {
+            case .adaptive(let minimum, _): total + max(1, Int(((width + spacing) / (minimum + spacing)).rounded(.down)))
+            default: total + 1
+            }
+        }
+    }
+
+    /// Asks for the next page while the viewer is within the buffer of the end.
+    private func loadNextPageIfNear() {
+        guard let onLastAppear, let visible else { return }
+        if visible.upperBound >= LazyLoadLookahead.triggerIndex(count: items.count, titles: buffer) { onLastAppear() }
+    }
+
+    private func requests(_ range: ClosedRange<Int>, skipping skipped: ClosedRange<Int>? = nil) -> [ArtworkPrefetcher.Request] {
+        range.filter { !(skipped?.contains($0) ?? false) && items.indices.contains($0) }.flatMap {
+            MediaCard.artworkRequests(for: items[$0], aspect: aspect, metrics: metrics, isLandscape: isLandscape, displayScale: displayScale)
+        }
+    }
+
     /// Tells the prefetcher to load the posters of the buffer's titles that are not on screen themselves (those load as cards).
     private func refreshPrefetch() {
-        guard let range = bufferRange else { return }
-        var wanted: [ArtworkPrefetcher.Request] = []
-        for index in range where !visibleIndices.contains(index) && items.indices.contains(index) {
-            wanted += ArtworkPrefetcher.requests(for: items[index], aspect: aspect, metrics: metrics, isLandscape: isLandscape,
-                                                 displayScale: displayScale)
-        }
-        prefetcher.update(wanted: wanted)
+        guard let visible, let range = bufferRange else { return }
+        prefetcher.update(wanted: requests(range, skipping: visible), visible: requests(visible))
     }
 }
 

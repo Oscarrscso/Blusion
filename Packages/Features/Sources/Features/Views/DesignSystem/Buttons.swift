@@ -104,6 +104,8 @@ struct CircleActionButton: View {
             Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
                 .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
                 .fontWeight(.semibold)
+                // A little greyed, like the link arrow on the rating buttons.
+                .foregroundStyle(.white.opacity(0.6))
                 .contentTransition(.symbolEffect(.replace))
                 // Every symbol is a different width; the label fills the same square so each button is the same circle.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

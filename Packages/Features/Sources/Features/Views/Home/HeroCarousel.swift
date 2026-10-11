@@ -55,10 +55,6 @@ struct HeroCarousel: View {
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
-    /// The zoom source of every spotlight page: a clear view the size of the whole screen, so opening a title scales nothing and the title
-    /// page simply fades in over Home.
-    static let screenSourceID = "hero/screen"
-
     /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
     /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
     /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
@@ -217,11 +213,14 @@ private struct HeroPage: View {
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
     var body: some View {
-        let destination = TitleDestination(preview: item, sourceID: HeroCarousel.screenSourceID, artwork: heroArtwork,
-                                           artworkChecked: artworkChecked)
+        // The title page repeats the picture and logo in the same place, so it replaces Home with no animation.
+        let destination = TitleDestination(preview: item, sourceID: "hero", artwork: heroArtwork, artworkChecked: artworkChecked,
+                                           opensInstantly: true)
         let openTitle = {
             Haptics.tap()
-            router.homePath.append(destination)
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { router.homePath.append(destination) }
         }
         pageContent
         .overlay(alignment: .top) {
@@ -335,7 +334,9 @@ private struct HeroPage: View {
         Group {
             switch logoSlot {
             case .ready(let image):
+                // Fades with the container, on the same curve as the picture.
                 HeroLogo(image: image, isPortrait: !isLandscape)
+                    .transition(.identity)
             case .none:
                 Text(item.name)
                     .font(.largeTitle.bold())

@@ -10,6 +10,9 @@ struct TitleDestination: Hashable {
     let sourceID: String
     var artwork: TMDbArtwork?
     var artworkChecked = false
+    /// Opens with no animation, for a source whose picture and logo the title page repeats in the same place (Home's spotlight): only
+    /// the content below changes. `sourceID` is unused then.
+    var opensInstantly = false
 }
 
 extension EnvironmentValues {
@@ -64,6 +67,43 @@ extension View {
     func swipeBackPops() -> some View {
         modifier(SwipeBackCloses())
     }
+
+    /// A pushed title that opened with no animation (`TitleDestination.opensInstantly`) also closes with none: its back button and its
+    /// back swipe pop Home's path with animations off. Mac keeps the system back button, which animates its own pop.
+    func instantDestination() -> some View {
+        modifier(InstantDestination())
+    }
+}
+
+private struct InstantDestination: ViewModifier {
+    @Environment(AppRouter.self) private var router
+
+    private func pop() {
+        guard !router.homePath.isEmpty else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { router.homePath.removeLast() }
+    }
+
+    func body(content: Content) -> some View {
+        let screen = content.modifier(SwipeBackCloses(pop: pop))
+        #if targetEnvironment(macCatalyst)
+        screen
+        #else
+        screen
+            .navigationBarBackButtonHidden()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: pop) {
+                        Image(systemName: "chevron.backward")
+                            .fontWeight(.semibold)
+                    }
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("detail.back")
+                }
+            }
+        #endif
+    }
 }
 
 /// A zoomed screen closes on a back swipe the way it does from the back button: at once, without following the finger.
@@ -75,10 +115,12 @@ extension View {
 /// here, and one plain swipe pops the screen instead.
 private struct SwipeBackCloses: ViewModifier {
     @Environment(\.dismiss) private var dismiss
+    /// What a swipe does instead of `dismiss()`, when the screen has its own way to pop.
+    var pop: (() -> Void)?
 
     func body(content: Content) -> some View {
         content.background {
-            SwipeBackCatcher { dismiss() }
+            SwipeBackCatcher { if let pop { pop() } else { dismiss() } }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }

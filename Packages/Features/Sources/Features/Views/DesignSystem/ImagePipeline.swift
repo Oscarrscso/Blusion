@@ -35,6 +35,11 @@ actor ImagePipeline {
         decoded.object(forKey: Self.key(url, maxPixelSize: maxPixelSize) as NSString)
     }
 
+    /// Drops the decoded picture for this URL and size from memory. A view that still shows it keeps its own reference.
+    nonisolated func evict(_ url: URL, maxPixelSize: CGFloat) {
+        decoded.removeObject(forKey: Self.key(url, maxPixelSize: maxPixelSize) as NSString)
+    }
+
     /// The size is part of the key: a 44 pt thumbnail and a full-width backdrop of one title are different images.
     private static func key(_ url: URL, maxPixelSize: CGFloat) -> String {
         "\(Int(min(max(maxPixelSize.rounded(), 1), 4096)))|\(url.absoluteString)"
