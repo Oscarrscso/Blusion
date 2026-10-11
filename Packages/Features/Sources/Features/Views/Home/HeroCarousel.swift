@@ -182,6 +182,7 @@ private struct HeroPage: View {
     let distance: Int
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isLandscape) private var isLandscape
     @Environment(PosterRatingsStore.self) private var ratings
     /// Starts from the artwork already looked up this session, so a title coming back into view shows its logo and picture at once.
@@ -282,6 +283,8 @@ private struct HeroPage: View {
                     .allowsHitTesting(false)
             }
         } else {
+            let visibleHeight = TitleHero.visibleHeight(
+                artworkHeight, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: containerWidth - metrics.contentMargin * 2))
             VStack(spacing: 0) {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
@@ -296,11 +299,11 @@ private struct HeroPage: View {
             .background(alignment: .top) {
                 artwork
                     .frame(height: TitleHero.pictureHeight(artworkHeight))
-                    .frame(height: TitleHero.visibleHeight(artworkHeight), alignment: .top)
+                    .frame(height: visibleHeight, alignment: .top)
                     .clipped()
                     .overlay(alignment: .bottom) {
                         // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
-                        BottomFade(length: TitleHero.fadeLength(height: artworkHeight, visible: TitleHero.visibleHeight(artworkHeight)),
+                        BottomFade(length: TitleHero.fadeLength(height: artworkHeight, visible: visibleHeight),
                                    strength: TitleHero.fadeStrength)
                             .padding(.bottom, -TitleHero.fadeOverscan)
                     }

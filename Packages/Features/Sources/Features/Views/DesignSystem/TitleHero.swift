@@ -63,10 +63,17 @@ enum TitleHero {
     /// below its bottom edge, behind the text.
     static func pictureHeight(_ height: CGFloat) -> CGFloat { height * zoom }
 
-    /// How much of the zoomed picture shows: it ends, fully faded to black, half way up the logo's space (the logo sits `logoTextGap`
-    /// above the hero's bottom edge and is up to `logoMaxHeight` tall).
-    static func visibleHeight(_ height: CGFloat) -> CGFloat {
-        min(pictureHeight(height), max(1, height - logoTextGap - logoMaxHeight / 2))
+    /// The height the logo is drawn at, as `HeroTitleArt` fits it into `width`. The logo's full reserved height while there is no logo
+    /// image to measure or it is hidden, so the picture still ends where a tallest logo would be half covered.
+    static func logoHeight(_ slot: HeroSlot, hidden: Bool, width: CGFloat) -> CGFloat {
+        guard !hidden, case .ready(let image) = slot, image.size.width > 0, image.size.height > 0 else { return logoMaxHeight }
+        return min(width / image.size.width, logoMaxHeight / image.size.height) * image.size.height
+    }
+
+    /// How much of the zoomed picture shows: it ends, fully faded to black, half way up the logo (which sits `logoTextGap` above the
+    /// hero's bottom edge and is `logoHeight` tall), so the fade never ends short of the logo or runs behind all of it.
+    static func visibleHeight(_ height: CGFloat, logoHeight: CGFloat) -> CGFloat {
+        min(pictureHeight(height), max(1, height - logoTextGap - logoHeight / 2))
     }
 
     /// The bottom fade's share of the visible picture, `fadeShare` of the hero height.

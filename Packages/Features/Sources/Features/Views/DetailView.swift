@@ -216,6 +216,7 @@ struct DetailView: View {
                 .padding(.top, Theme.Spacing.m)
         } else {
             let height = TitleHero.height(width: size.width, metrics: metrics)
+            let visible = TitleHero.visibleHeight(height, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: size.width - contentMargin * 2))
             VStack(spacing: 0) {
                 // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
                 Color.clear
@@ -238,10 +239,10 @@ struct DetailView: View {
                 // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
                 HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
                     .frame(width: size.width, height: TitleHero.pictureHeight(height) + scrollPull)
-                    .frame(height: TitleHero.visibleHeight(height) + scrollPull, alignment: .top)
+                    .frame(height: visible + scrollPull, alignment: .top)
                     .clipped()
                     .overlay(alignment: .bottom) {
-                        BottomFade(length: TitleHero.fadeLength(height: height, visible: TitleHero.visibleHeight(height) + scrollPull),
+                        BottomFade(length: TitleHero.fadeLength(height: height, visible: visible + scrollPull),
                                    strength: TitleHero.fadeStrength)
                             .padding(.bottom, -TitleHero.fadeOverscan)
                     }
