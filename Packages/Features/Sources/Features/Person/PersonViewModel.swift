@@ -109,6 +109,8 @@ public final class PersonViewModel {
     public internal(set) var credits: [TMDbPersonCredit] = []
     /// Profile photos, best voted first.
     public private(set) var photos: [URL] = []
+    /// The artwork TMDb has for each Known For title, keyed by credit id. A card shows its plain backdrop until its title's artwork arrives.
+    public private(set) var knownForArtwork: [String: TMDbArtwork] = [:]
     public private(set) var isLoading = true
     /// Set when the page cannot show anything: no TMDb token, or TMDb refused both requests.
     public private(set) var unavailableReason: String?
@@ -157,6 +159,31 @@ public final class PersonViewModel {
         photos = await profilePhotos ?? []
         unavailableReason = person == nil && loaded == nil ? "TMDb could not load this person." : nil
         isLoading = false
+        // The page is up; the Known For cards take their artwork as it arrives. The view's task cancels this when the view goes away.
+        await loadKnownForArtwork(using: tmdb)
+    }
+
+    /// Fetches the artwork of the Known For titles, four at a time, and fills `knownForArtwork` as each answers. A failed lookup is
+    /// ignored, so its card keeps the plain backdrop.
+    func loadKnownForArtwork(using tmdb: TMDbRatings) async {
+        let limit = 4
+        await withTaskGroup(of: (id: String, artwork: TMDbArtwork?).self) { group in
+            var pending = knownFor.makeIterator()
+            for _ in 0..<limit {
+                guard let credit = pending.next() else { break }
+                group.addTask { await Self.artwork(for: credit, using: tmdb) }
+            }
+            for await result in group {
+                if let artwork = result.artwork { knownForArtwork[result.id] = artwork }
+                if !Task.isCancelled, let credit = pending.next() {
+                    group.addTask { await Self.artwork(for: credit, using: tmdb) }
+                }
+            }
+        }
+    }
+
+    private nonisolated static func artwork(for credit: TMDbPersonCredit, using tmdb: TMDbRatings) async -> (id: String, artwork: TMDbArtwork?) {
+        (credit.id, try? await tmdb.artwork(tmdbID: credit.tmdbID, mediaType: credit.mediaType))
     }
 
     /// Credits to show, from the credits the page has loaded so far. A title sits in the list once, even when it has several roles.

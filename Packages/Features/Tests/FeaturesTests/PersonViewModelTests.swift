@@ -86,6 +86,25 @@ import StremioKitTestSupport
         #expect(sparse.knownFor.map(\.title) == ["Only"], "with too few well-rated titles, any title with a backdrop may show")
     }
 
+    @Test func knownForCardsTakeTheTMDbArtworkThatAnswersAndKeepThePlainBackdropOtherwise() async {
+        let model = makeModel([
+            credit(1, "Answers", date: "2010-01-01", votes: 500, average: 8, popularity: 50),
+            credit(2, "Not found", date: "2011-01-01", votes: 500, average: 8, popularity: 40),
+            credit(3, "Answers too", date: "2012-01-01", votes: 500, average: 8, popularity: 30),
+        ])
+        let backdrop = #"{"file_path":"/clean.jpg","iso_639_1":null,"vote_average":6,"vote_count":10,"width":1920}"#
+        let logo = #"{"file_path":"/logo.png","iso_639_1":"en","vote_average":5,"vote_count":3,"width":800}"#
+        let images = #"{"backdrops":[\#(backdrop)],"posters":[],"logos":[\#(logo)]}"#
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/3/movie/2/images" { return StubTransport.response(Data(), status: 404, for: request) }
+            return StubTransport.response(Data(images.utf8), for: request)
+        }
+        await model.loadKnownForArtwork(using: TMDbRatings(client: makeClient(transport, retries: 0), readAccessToken: "token"))
+        #expect(Set(model.knownForArtwork.keys) == ["movie/1", "movie/3"], "a title whose lookup fails has no artwork and keeps its plain backdrop")
+        #expect(model.knownForArtwork["movie/1"]?.backdrop == URL(string: "https://image.tmdb.org/t/p/original/clean.jpg"))
+        #expect(model.knownForArtwork["movie/1"]?.logo == URL(string: "https://image.tmdb.org/t/p/original/logo.png"))
+    }
+
     @Test func aTitleDatedAfterTodayIsUnreleasedAndAnUndatedOneIsNot() {
         let model = makeModel([])
         #expect(model.isUnreleased(credit(1, "Soon", date: "2027-01-01")))

@@ -180,8 +180,12 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         pan.delegate = self
         return pan
     }()
+    /// Every screen with a `SwipeBack` attached. Screens on one stack share its back gestures, see `releaseSilenced()`.
+    private static let live = NSHashTable<SwipeBack>.weakObjects()
     private weak var page: UIView?
     private weak var touched: UIView?
+    /// The navigation controller this screen sits in, kept after `page` is cleared so a detach can still find the stack.
+    private weak var stack: UINavigationController?
     private var startsAtEdge = false
     /// The navigation controller's back gestures, off while this screen is the one showing.
     private var silenced: [UIGestureRecognizer] = []
@@ -193,11 +197,25 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
 
     func attach(to page: UIView?) {
         pan.view?.removeGestureRecognizer(pan)
-        silenced.forEach { $0.isEnabled = true }
-        silenced = []
+        releaseSilenced()
+        Self.live.remove(self)
         self.page = page
         page?.addGestureRecognizer(pan)
+        if page != nil { Self.live.add(self) }
         silenceSystemGestures()
+    }
+
+    /// Passes this screen's silenced back gestures to another attached screen on the same stack, which keeps them off. They come back
+    /// on only when no such screen is left: switching them on while another screen is on top lets UIKit's pop win the next touch.
+    private func releaseSilenced() {
+        if let stack, let heir = Self.live.allObjects.first(where: { $0 !== self && $0.stack === stack }) {
+            for recognizer in silenced where !heir.silenced.contains(where: { $0 === recognizer }) {
+                heir.silenced.append(recognizer)
+            }
+        } else {
+            silenced.forEach { $0.isEnabled = true }
+        }
+        silenced = []
     }
 
     private var controller: UIViewController? { page?.next as? UIViewController }
@@ -221,7 +239,7 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         for recognizer in page.gestureRecognizers ?? [] where recognizer !== pan && recognizer.isEnabled {
             if let delegate = recognizer.delegate, Self.isDismissal(delegate) { recognizer.isEnabled = false }
         }
-        let stack = controller?.navigationController
+        if let found = controller?.navigationController { stack = found }
         for recognizer in [stack?.interactivePopGestureRecognizer, stack?.interactiveContentPopGestureRecognizer] {
             guard let recognizer, recognizer.isEnabled else { continue }
             recognizer.isEnabled = false

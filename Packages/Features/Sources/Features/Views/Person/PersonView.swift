@@ -140,7 +140,9 @@ struct PersonView: View {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.knownFor) { credit in
                         NavigationLink(value: credit.titleDestination) {
-                            KnownForCard(title: credit.title.isEmpty ? "Untitled" : credit.title, backdrop: credit.backdrop, role: credit.roleText)
+                            KnownForCard(title: credit.title.isEmpty ? "Untitled" : credit.title,
+                                         backdrop: model.knownForArtwork[credit.id]?.backdrop ?? credit.backdrop,
+                                         logo: model.knownForArtwork[credit.id]?.logo, role: credit.roleText)
                         }
                         .buttonStyle(PressableCardStyle())
                         .titleTapHaptic()
@@ -226,11 +228,11 @@ struct PersonView: View {
 
 // MARK: - Pieces
 
-/// A Known For card: the Continue card's picture (darkened backdrop, title centred, same size, corners and shadow) without its bottom
-/// fade and playback row.
+/// A Known For card: the Continue card's picture, without its bottom fade and playback row.
 private struct KnownForCard: View {
     let title: String
     let backdrop: URL?
+    let logo: URL?
     let role: String
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
@@ -240,7 +242,7 @@ private struct KnownForCard: View {
         Color.clear
             .frame(width: width, height: width / CardAspect.wide.ratio)
             .overlay {
-                LandscapeArtwork(title: title, artwork: backdrop, logo: nil, maxPixelSize: min((width * displayScale).rounded(.up), 1200))
+                LandscapeArtwork(title: title, artwork: backdrop, logo: logo, maxPixelSize: min((width * displayScale).rounded(.up), 1200))
             }
             .mediaArtwork()
             .accessibilityElement(children: .ignore)

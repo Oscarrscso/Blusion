@@ -128,6 +128,18 @@ public struct TMDbRatings: Sendable {
     /// and the logo is the most-voted English one.
     public func artwork(imdbID: String, type: String) async throws -> TMDbArtwork? {
         guard let number = try await tmdbID(imdbID: imdbID, type: type) else { return nil }
+        return try await imagesArtwork(number: number, type: type)
+    }
+
+    /// The same artwork as `artwork(imdbID:type:)`, for a title already known by its TMDb id, such as a person's credit. `mediaType` is
+    /// "movie" or "tv". Nil when the credential is unusable.
+    public func artwork(tmdbID: Int, mediaType: String) async throws -> TMDbArtwork? {
+        guard ["movie", "tv"].contains(mediaType), credential != nil else { return nil }
+        return try await imagesArtwork(number: tmdbID, type: mediaType)
+    }
+
+    /// The `images` answer for a TMDb id, read into the title's backdrop, portrait and logo.
+    private func imagesArtwork(number: Int, type: String) async throws -> TMDbArtwork {
         let id = String(number)
         let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", id, "images"],
                                          query: [URLQueryItem(name: "include_image_language", value: "en,null")])
