@@ -19,6 +19,33 @@ enum TitleHero {
     /// The band under the picture on Home that holds the metadata line. The title page has no band; its picture is the same height.
     static let captionBelow: CGFloat = 72
 
+    // MARK: Landscape title page (iPhone only; the Mac keeps its original sizes)
+    /// The share of the content width (after the gap) the landscape picture takes.
+    static var landscapeArtworkShare: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        0.48
+        #else
+        0.55
+        #endif
+    }
+    /// The tallest and widest the landscape logo can be.
+    static var landscapeLogoMaxHeight: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        56
+        #else
+        100
+        #endif
+    }
+    static var landscapeLogoMaxWidth: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        220
+        #else
+        300
+        #endif
+    }
+    /// The one gap between Play and every button beside it in landscape: the portrait gap.
+    static let actionGap = Theme.Spacing.s
+
     /// The height of the portrait picture on a screen `width` wide.
     static func height(width: CGFloat, metrics: LayoutMetrics) -> CGFloat {
         min(width * 1.5, metrics.heroMaxHeight)

@@ -39,11 +39,17 @@ struct DetailView: View {
     /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
     private static let backButtonColumn: CGFloat = 72
 
-    /// In landscape the back button floats over the page's top leading corner with nothing behind it, and the page starts beside it
-    /// rather than under it: the content keeps clear of the button's column, on both sides so it stays centred, and nothing scrolls
-    /// beneath the button. In portrait the artwork runs under the bar, so the page margin is enough.
+    /// In portrait the artwork runs under the bar, so the page margin is enough. In landscape on iPhone the page keeps the portrait margin
+    /// plus only the device's side safe-area inset, with no back-button column. On Mac the back button floats over the page's top
+    /// leading corner with nothing behind it, so the page starts beside it rather than under it: the content keeps clear of the
+    /// button's column, on both sides so it stays centred, and nothing scrolls beneath the button.
     private var contentMargin: CGFloat {
-        isLandscape ? max(sideInset, windowSideInset) + Self.backButtonColumn : metrics.contentMargin
+        guard isLandscape else { return metrics.contentMargin }
+        #if targetEnvironment(macCatalyst)
+        return max(sideInset, windowSideInset) + Self.backButtonColumn
+        #else
+        return metrics.contentMargin + max(sideInset, windowSideInset)
+        #endif
     }
 
     /// The window's own side insets. The root lets screens run under them, so the page's geometry may not report them.
@@ -123,7 +129,7 @@ struct DetailView: View {
     @ViewBuilder
     private func feature(in size: CGSize) -> some View {
         if isLandscape {
-            let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * 0.48)
+            let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * TitleHero.landscapeArtworkShare)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
                 HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
@@ -220,7 +226,35 @@ struct DetailView: View {
 
     /// Play fills the remaining width beside the circle actions, on one line. The label shrinks before the row ever stacks, so a long
     /// "Resume S3 · E12" stays beside Save, Watched and Trailer.
+    @ViewBuilder
     private var actionRow: some View {
+        #if !targetEnvironment(macCatalyst)
+        if isLandscape {
+            GlassEffectContainer(spacing: TitleHero.actionGap / 2) {
+                HStack(alignment: .center, spacing: TitleHero.actionGap) {
+                    primaryAction
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(maxWidth: .infinity)
+                    HStack(spacing: TitleHero.actionGap) {
+                        saveAction
+                        watchedAction
+                        if let trailer = model.trailerURL { trailerAction(trailer) }
+                    }
+                    .fixedSize()
+                    .layoutPriority(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            portraitActionRow
+        }
+        #else
+        portraitActionRow
+        #endif
+    }
+
+    private var portraitActionRow: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.s) {
             primaryAction
                 .lineLimit(1)
@@ -697,7 +731,7 @@ private struct TitleArt: View {
     let compact: Bool
 
     /// The tallest a logo can be on this page.
-    private var logoHeight: CGFloat { compact ? 56 : TitleHero.logoMaxHeight }
+    private var logoHeight: CGFloat { compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight }
     /// Whether the slot has no logo: no URL once the lookup has finished, or a failed load.
     private var isNone: Bool {
         if case .none = slot { return true }
@@ -709,7 +743,7 @@ private struct TitleArt: View {
     var body: some View {
         Group {
             if case .ready(let image) = slot {
-                LogoLayout(imageSize: image.size, maxWidth: compact ? 220 : .infinity, maxHeight: logoHeight) {
+                LogoLayout(imageSize: image.size, maxWidth: compact ? TitleHero.landscapeLogoMaxWidth : .infinity, maxHeight: logoHeight) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
