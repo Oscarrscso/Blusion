@@ -129,7 +129,8 @@ struct AppDestinations: ViewModifier {
         content
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
             .navigationDestination(for: TitleDestination.self) { destination in
-                DetailView(preview: destination.preview, services: services, artwork: destination.artwork)
+                DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
+                           artworkChecked: destination.artworkChecked)
                     .zoomDestination(id: destination.sourceID, in: zoomNamespace)
             }
             .navigationDestination(for: PersonDestination.self) { PersonView(destination: $0, services: services) }

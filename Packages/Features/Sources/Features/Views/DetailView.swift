@@ -14,8 +14,6 @@ struct DetailView: View {
         case shortest = "Shortest review"
     }
 
-    private enum HeroPictureStatus { case pending, loaded, failed }
-
     @State private var model: DetailViewModel
     @State private var isDescriptionExpanded = false
     @State private var isDescriptionTruncated = false
@@ -25,12 +23,8 @@ struct DetailView: View {
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     @State private var renderedLogoHeight: CGFloat = TitleHero.logoMaxHeight
-    /// Set once the hero picture has loaded or failed, or the timeout has passed. The title waits for it: the poster shown meanwhile
-    /// often has the title printed on it.
-    @State private var heroSettled = false
-    /// Where the hero picture's download stands. It changes on every finish, so the spinner over the hero updates even after the
-    /// timeout has already revealed the title.
-    @State private var heroPicture = HeroPictureStatus.pending
+    /// Loads the hero picture and logo together, and reveals them together.
+    @State private var hero = HeroLoader()
     /// The height of the season's longest overview at the full card width. See `overviewRuler`.
     @State private var tallestOverview: CGFloat = 0
     /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
@@ -42,8 +36,6 @@ struct DetailView: View {
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
-    /// How long the title waits for the hero picture, counted from opening the page. After this it shows over the poster.
-    private static let heroTimeout: Duration = .seconds(5)
     /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
     private static let backButtonColumn: CGFloat = 72
 
@@ -61,8 +53,8 @@ struct DetailView: View {
     }
     private let sectionSpacing = Theme.Spacing.xl + Theme.Spacing.l
 
-    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
-        _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork))
+    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false) {
+        _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked))
     }
 
     var body: some View {
@@ -95,12 +87,9 @@ struct DetailView: View {
         .scrollEdgeEffectHidden(true, for: .top)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.load() }
-        .task(id: heroURL) { await settleHero() }
-        .task {
-            // Starts on opening, so a slow artwork lookup counts against the same five seconds as a slow download.
-            guard (try? await Task.sleep(for: Self.heroTimeout)) != nil else { return }
-            heroSettled = true
+        .task { await model.load(afterHero: { await loadHero() }) }
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(isLandscape)") {
+            await loadHero()
         }
         .onAppear { Task { await model.refreshUserState() } }
         .accessibilityIdentifier("detail.scroll")
@@ -108,48 +97,21 @@ struct DetailView: View {
 
     // MARK: - Header
 
-    /// The main picture: the backdrop in landscape, the tall artwork in portrait. Until the artwork lookup answers, the poster stands in.
+    /// The main picture: the backdrop in landscape, the tall artwork in portrait. Nil until the artwork lookup answers; nothing is drawn for it until the picture and the logo are both ready.
     private var heroURL: URL? { isLandscape ? model.backdropURL : model.portraitArtworkURL }
-
-    /// The title shows once the hero picture has loaded or failed, with the poster behind it. With no picture to wait for, it shows
-    /// as soon as the artwork lookup has answered. A portrait picture already decoded (Home showed it) shows at once.
-    private var isTitleRevealed: Bool { heroSettled || isHeroCached || (heroURL == nil && !model.isLoadingArtwork) }
 
     /// The longest edge the hero is decoded to: full screen in landscape, the smaller size shared with Home in portrait.
     private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
 
-    /// Whether the hero picture is already decoded at the size this page shows it, so the title need not wait. Landscape keeps its wait.
-    private var isHeroCached: Bool {
-        !isLandscape && (heroURL.map { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: heroPixelSize) != nil } ?? false)
-    }
+    private var logoURL: URL? { model.logoURL }
+    private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: !model.isLoadingArtwork) }
+    private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: !model.isLoadingArtwork) }
+    /// The picture and the logo are revealed together, once neither is still pending.
+    private var isHeroRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
-    /// Waits for the hero picture to finish. `ImagePipeline` shares this download with the `ArtworkImage` showing it, so no extra request.
-    private func settleHero() async {
-        guard let heroURL else { return }
-        heroPicture = .pending
-        let picture = try? await ImagePipeline.shared.image(for: heroURL, maxPixelSize: heroPixelSize)
-        guard !Task.isCancelled else { return }
-        heroPicture = picture == nil ? .failed : .loaded
-        heroSettled = true
-    }
-
-    /// The spinner over the hero until its picture is decoded: while the artwork lookup runs, then while the picture downloads. A
-    /// failed download stops it. `ImagePipeline` caches a picture before it is returned, so a cached one never shows the spinner.
-    private var isHeroLoading: Bool {
-        guard let heroURL else { return model.isLoadingArtwork }
-        return heroPicture != .failed && ImagePipeline.shared.cachedImage(for: heroURL, maxPixelSize: heroPixelSize) == nil
-    }
-
-    /// A small native spinner in the middle of the landscape backdrop, shown while `isHeroLoading`. Portrait shows its poster instead.
-    @ViewBuilder
-    private var heroSpinner: some View {
-        if isHeroLoading {
-            ProgressView()
-                .controlSize(.regular)
-                .tint(.white)
-                .transition(.opacity)
-                .accessibilityHidden(true)
-        }
+    private func loadHero() async {
+        await hero.load(picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                        lookupFinished: !model.isLoadingArtwork)
     }
 
     @ViewBuilder
@@ -157,11 +119,11 @@ struct DetailView: View {
         if isLandscape {
             let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * 0.48)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                ArtworkImage(url: heroURL, maxPixelSize: 4096, contentMode: .fit,
-                             placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id), placeholderBlur: 0)
+                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
-                    .overlay { heroSpinner }
-                    .overlay(alignment: .bottomTrailing) { PosterRatingsOverlay(item: model.preview, isLandscape: true) }
+                    .overlay(alignment: .bottomTrailing) {
+                        PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .leading)
@@ -185,15 +147,13 @@ struct DetailView: View {
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
                     controls
                     synopsis
-                    RatingButtonsRow(item: model.detail.preview)
+                    RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
                 }
                 .padding(.horizontal, contentMargin)
             }
             .background(alignment: .top) {
                 ZStack(alignment: .bottom) {
-                    ArtworkImage(url: heroURL, maxPixelSize: TitleHero.portraitPixelSize, contentMode: .fill,
-                                 placeholderURL: model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id),
-                                 placeholderBlur: TitleHero.placeholderBlur, imageAlignment: TitleHero.imageAlignment)
+                    HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill)
                     BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
                 }
                 .frame(width: size.width, height: height + scrollPull)
@@ -204,11 +164,10 @@ struct DetailView: View {
     }
 
     private func titleArt(alignment: Alignment) -> some View {
-        TitleArt(name: model.detail.name, logo: model.logoURL, alignment: alignment, compact: isLandscape)
+        TitleArt(name: model.detail.name, slot: logoSlot, alignment: alignment, compact: isLandscape)
             .frame(maxWidth: .infinity, alignment: alignment)
             // Hidden rather than removed, so the layout does not move when the title appears.
-            .opacity(isTitleRevealed ? 1 : 0)
-            .animation(.easeOut(duration: 0.25), value: isTitleRevealed)
+            .opacity(isHeroRevealed ? 1 : 0)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(model.detail.name)
             .accessibilityAddTraits(.isHeader)
@@ -401,7 +360,8 @@ struct DetailView: View {
         .background { if isWide { overviewRuler(width: width) } }
         .padding(.top, sectionSpacing)
         // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
-        .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading)") {
+        .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
+            guard model.hasSettledHero else { return }
             await model.loadEpisodeScores(season: model.selectedSeason)
         }
     }
@@ -517,7 +477,7 @@ struct DetailView: View {
     private func credits(in width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: sectionSpacing) {
             if isLandscape {
-                RatingButtonsRow(item: model.detail.preview)
+                RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
                     .padding(.horizontal, contentMargin)
             }
             if !model.reviews.isEmpty {
@@ -722,39 +682,32 @@ private struct ReviewCard: View {
     }
 }
 
-/// The logo, or the name when there is no logo or it failed to load. While a logo loads, the name is not drawn, so it never flashes
-/// before the logo, and the logo's full height is kept, so the text below does not move when it arrives. The logo comes through
-/// `ImagePipeline` because `ArtworkImage` only fills its frame.
+/// The logo, or the name when there is no logo or it failed to load. The logo comes from the shared hero loader and is revealed with the
+/// picture. While it is pending the name is not drawn, and its full height is kept, so the text below does not move when it arrives.
 private struct TitleArt: View {
     let name: String
-    let logo: URL?
+    let slot: HeroSlot
     let alignment: Alignment
     let compact: Bool
-    @State private var image: UIImage?
-    @State private var failed = false
-
-    init(name: String, logo: URL?, alignment: Alignment, compact: Bool = false) {
-        self.name = name
-        self.logo = logo
-        self.alignment = alignment
-        self.compact = compact
-        _image = State(initialValue: logo.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 800) })
-    }
 
     /// The tallest a logo can be on this page.
     private var logoHeight: CGFloat { compact ? 56 : TitleHero.logoMaxHeight }
-    /// A title with a logo URL keeps the logo's space until the logo arrives or fails.
-    private var reservesLogoHeight: Bool { logo != nil && !failed }
+    /// Whether the slot has no logo: no URL once the lookup has finished, or a failed load.
+    private var isNone: Bool {
+        if case .none = slot { return true }
+        return false
+    }
+    /// A title keeps the logo's space until the logo is ready or known to be absent.
+    private var reservesLogoHeight: Bool { !isNone }
 
     var body: some View {
         Group {
-            if let image {
+            if case .ready(let image) = slot {
                 LogoLayout(imageSize: image.size, maxWidth: compact ? 220 : .infinity, maxHeight: logoHeight) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
                 }
-                .transition(.opacity)
             } else {
                 Text(name)
                     .font(compact ? .title2.bold() : .largeTitle.bold())
@@ -763,25 +716,11 @@ private struct TitleArt: View {
                     .lineLimit(compact ? 2 : 3)
                     .minimumScaleFactor(0.7)
                     .fixedSize(horizontal: false, vertical: true)
-                    .opacity(logo == nil || failed ? 1 : 0)
+                    .opacity(isNone ? 1 : 0)
             }
         }
         // Bottom-aligned, so a logo shorter than the reserved space sits where it did before, just above the controls.
         .frame(minHeight: reservesLogoHeight ? logoHeight : nil, alignment: Alignment(horizontal: alignment.horizontal, vertical: .bottom))
-        .task(id: logo) {
-            failed = false
-            guard let logo else {
-                image = nil
-                return
-            }
-            let loaded = try? await ImagePipeline.shared.image(for: logo, maxPixelSize: 800, priority: .high)
-            guard !Task.isCancelled else { return }
-            guard let loaded else {
-                failed = true
-                return
-            }
-            withAnimation(.easeOut(duration: 0.25)) { image = loaded }
-        }
     }
 }
 

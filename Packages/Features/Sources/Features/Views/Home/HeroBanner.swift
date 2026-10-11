@@ -102,7 +102,8 @@ private struct BannerFeature: View {
         let sourceID = "banner/\(item.identity)"
         let openTitle = {
             Haptics.tap()
-            router.homePath.append(TitleDestination(preview: item, sourceID: sourceID, artwork: heroArtwork))
+            router.homePath.append(TitleDestination(preview: item, sourceID: sourceID, artwork: heroArtwork,
+                                                    artworkChecked: heroArtwork != nil))
         }
         Color.clear
             .aspectRatio(16.0 / 9.0, contentMode: .fit)

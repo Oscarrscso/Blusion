@@ -70,6 +70,8 @@ struct RatingsLine: View {
 struct PosterRatingsOverlay: View {
     let item: MetaPreview
     var isLandscape = false
+    /// False holds the lookup back until the screen allows it (the title page waits for its hero).
+    var startsLoading = true
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     var body: some View {
@@ -86,7 +88,8 @@ struct PosterRatingsOverlay: View {
                         .transition(.opacity)
                 }
             }
-            .task(id: "\(item.identity):\(store.reviewServicesRevision)") {
+            .task(id: "\(item.identity):\(store.reviewServicesRevision):\(startsLoading)") {
+                guard startsLoading else { return }
                 _ = store.ratings(for: item)
             }
         }
@@ -162,6 +165,8 @@ struct ReviewSiteIcon: View {
 /// Meant to sit over artwork, so the text is white.
 struct RatingButtonsRow: View {
     let item: MetaPreview
+    /// False holds the lookup back until the screen allows it (the title page waits for its hero).
+    var startsLoading = true
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     /// On a Mac the row keeps a button's natural width however wide the window is (120 pt a site, left-aligned); a phone fills its row.
@@ -185,7 +190,10 @@ struct RatingButtonsRow: View {
                         .accessibilityIdentifier("detail.reviews.issue")
                 }
             }
-            .task(id: "\(item.identity):\(store.reviewServicesRevision)") { _ = store.ratings(for: item, includeReviews: true) }
+            .task(id: "\(item.identity):\(store.reviewServicesRevision):\(startsLoading)") {
+                guard startsLoading else { return }
+                _ = store.ratings(for: item, includeReviews: true)
+            }
         } else {
             buttons(ratings: nil)
         }

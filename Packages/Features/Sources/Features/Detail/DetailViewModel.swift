@@ -40,20 +40,34 @@ public final class DetailViewModel {
     public private(set) var relatedTitles: [TMDbRelatedTitle] = []
     /// The US age rating ("R", "TV-MA") for the meta line. Nil until TMDb answers, or when it has none.
     public private(set) var certification: String?
+    /// Set once the hero picture and logo have loaded (or five seconds have passed), so the page's other requests may start.
+    public private(set) var hasSettledHero = false
 
-    public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil) {
+    public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false) {
         self.preview = preview
         self.detail = .fallback(from: preview)
         self.services = services
         self.tmdbArtwork = artwork
-        self.isLoadingArtwork = artwork == nil
+        self.isLoadingArtwork = artwork == nil && !artworkChecked
     }
 
-    public func load() async {
+    public func load(afterHero hero: (@MainActor @Sendable () async -> Void)? = nil) async {
         isLoading = true
         episodeRatingSeasons.removeAll()
-        // The artwork (the logo) starts first and runs beside the details. The other TMDb calls wait for it, so they do not queue ahead.
-        async let artwork: Void = loadArtwork()
+        // The artwork lookup and then the hero picture and logo come first and alone: nothing else starts until they are loaded
+        // (or five seconds have passed), so no other request can delay them.
+        await loadArtwork()
+        if let hero, !hasSettledHero {
+            let heroTask = Task { @MainActor in await hero() }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await heroTask.value }
+                group.addTask { try? await Task.sleep(for: .seconds(5)) }
+                await group.next()
+                group.cancelAll()
+            }
+        }
+        guard !Task.isCancelled else { return }
+        hasSettledHero = true
         async let playbackSettings = services.settings.load()
         let result = await services.browse.detail(for: preview)
         // A load that was cancelled must not overwrite what the newer load shows.
@@ -66,8 +80,7 @@ public final class DetailViewModel {
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
         await loadEpisodeRatings()
-        await artwork
-        // Reviews and cast photos are secondary: they start once the logo has answered, and never hold up the page above.
+        // Reviews and cast photos are secondary: they start after the hero and the page above, and never hold up the page above.
         async let reviews: Void = loadReviews()
         async let credits: Void = loadTitleCredits()
         async let related: Void = loadRelatedTitles()
@@ -84,7 +97,8 @@ public final class DetailViewModel {
     }
 
     private func loadArtwork() async {
-        isLoadingArtwork = true
+        // An artwork handed over by Home, or a lookup that has answered, is never fetched again.
+        guard tmdbArtwork == nil, isLoadingArtwork else { return }
         defer { isLoadingArtwork = false }
         let settings = await services.settings.load()
         guard let token = settings.tmdbReadToken, !token.isEmpty else { return }
@@ -321,16 +335,17 @@ public final class DetailViewModel {
     /// The same for an episode of this series.
     public func progressFraction(for video: Video) -> Double? { progressFractions[episodeIdentity(video)] }
 
-    /// Separate landscape and portrait heroes. Keep the transition's poster until the artwork lookup finishes.
+    /// Separate landscape and portrait heroes. Keep the transition's poster until the artwork lookup finishes. Falls back to the
+    /// preview this page was opened from, so Home and the title page use the same URL.
     public var backdropURL: URL? {
-        tmdbArtwork?.backdrop ?? (isLoadingArtwork ? nil : detail.preview.background ?? MetahubArtwork.background(imdbID: preview.id))
+        tmdbArtwork?.backdrop ?? (isLoadingArtwork ? nil : preview.background ?? MetahubArtwork.background(imdbID: preview.id))
     }
     public var portraitArtworkURL: URL? {
-        tmdbArtwork?.portrait ?? (isLoadingArtwork ? nil : detail.preview.background ?? MetahubArtwork.background(imdbID: preview.id))
+        tmdbArtwork?.portrait ?? (isLoadingArtwork ? nil : preview.background ?? MetahubArtwork.background(imdbID: preview.id))
     }
 
-    /// The title's logo (a transparent image), when the addon or the catalog has one.
-    public var logoURL: URL? { detail.preview.logo ?? tmdbArtwork?.logo }
+    /// The title's logo (a transparent image), when the preview or the TMDb lookup has one.
+    public var logoURL: URL? { preview.logo ?? tmdbArtwork?.logo }
 
     /// Year, certification and runtime for a `MetaLine`: "2008", "PG-13", "152 min". Parts the addon left out are skipped. The rating
     /// is not here: the page shows it as a button under the title.

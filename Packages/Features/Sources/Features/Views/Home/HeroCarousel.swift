@@ -142,21 +142,32 @@ private struct HeroPage: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(PosterRatingsStore.self) private var ratings
     @State private var heroArtwork: TMDbArtwork?
-    @State private var titleTop: CGFloat = 0
     /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name.
     @State private var artworkChecked = false
+    @State private var hero = HeroLoader()
+
+    private var heroURL: URL? {
+        (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
+            ?? (artworkChecked ? (item.background ?? MetahubArtwork.background(imdbID: item.id)) : nil)
+    }
+    private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
+    private var logoURL: URL? { item.logo ?? heroArtwork?.logo }
+    private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: artworkChecked) }
+    private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
+    private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
     var body: some View {
-        let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork)
+        let destination = TitleDestination(preview: item, sourceID: HeroPage.sourceID(for: item), artwork: heroArtwork,
+                                           artworkChecked: artworkChecked)
         let openTitle = {
             Haptics.tap()
             router.homePath.append(destination)
         }
         pageContent
         .overlay(alignment: .top) {
-            // A tap can open the title, but never claims a drag or disables views during one.
+            // A tap anywhere on the page opens the title, but never claims a drag or disables views during one.
             Color.clear
-                .frame(height: max(0, titleTop - Theme.Spacing.m))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .simultaneousGesture(TapGesture().onEnded {
                     guard !isScrolling else { return }
@@ -181,6 +192,10 @@ private struct HeroPage: View {
             guard !Task.isCancelled else { return }
             heroArtwork = loaded
             artworkChecked = true
+        }
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)") {
+            await hero.load(picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                            lookupFinished: artworkChecked)
         }
     }
 
@@ -217,46 +232,26 @@ private struct HeroPage: View {
         }
     }
 
-    /// The portrait title, low on the picture above the bottom gap. Its top is measured for the tap zone above it.
+    /// The portrait title, low on the picture above the bottom gap.
     private var portraitTitle: some View {
         titleBlock
-            .onGeometryChange(for: CGFloat.self) { geometry in
-                geometry.frame(in: .named(HeroPage.sourceID(for: item))).minY
-            } action: { titleTop = $0 }
             .allowsHitTesting(false)
             .padding(.horizontal, metrics.contentMargin)
             .padding(.bottom, TitleHero.logoBottomGap)
     }
 
-    /// The portrait picture the title page shows: the TMDb one, else the background it falls back to once the lookup has answered.
-    private var portraitURL: URL? {
-        heroArtwork?.portrait ?? (artworkChecked ? (item.background ?? MetahubArtwork.background(imdbID: item.id)) : nil)
-    }
-
     private var artwork: some View {
         Color.clear
             .overlay {
-                if isLandscape {
-                    ArtworkImage(url: heroArtwork?.backdrop ?? item.background ?? MetahubArtwork.background(imdbID: item.id),
-                                 maxPixelSize: 4096, contentMode: .fit,
-                                 placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
-                } else {
-                    ArtworkImage(url: portraitURL,
-                                 maxPixelSize: TitleHero.portraitPixelSize, contentMode: .fill,
-                                 placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id),
-                                 placeholderBlur: TitleHero.placeholderBlur, imageAlignment: TitleHero.imageAlignment)
-                }
+                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill)
             }
             .zoomSource(id: HeroPage.sourceID(for: item), in: zoomNamespace)
     }
 
-    /// The title, its logo and the metadata line. Only the picture above the logo accepts taps.
+    /// The title, its logo and the metadata line.
     private var caption: some View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.frame(in: .named(HeroPage.sourceID(for: item))).minY
-                } action: { titleTop = $0 }
                 .allowsHitTesting(false)
             MetaLine(metaParts)
                 .multilineTextAlignment(.center)
@@ -269,24 +264,29 @@ private struct HeroPage: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// The logo as soon as its URL is known. Blank until then, and the name only once the lookup has found no logo.
-    @ViewBuilder
+    /// The logo once it is loaded, the name when there is no logo, and blank while the logo is pending. Hidden until the hero reveals.
     private var titleBlock: some View {
-        if let logo = item.logo ?? heroArtwork?.logo {
-            HeroLogo(url: logo, title: item.name, isPortrait: !isLandscape)
-        } else if artworkChecked {
-            Text(item.name)
-                .font(.largeTitle.bold())
-                .lineLimit(isLandscape ? 2 : 3)
-                .minimumScaleFactor(isLandscape ? 1 : 0.7)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-        } else if isLandscape {
-            Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
-        } else {
-            Color.clear.frame(maxWidth: .infinity).frame(height: TitleHero.logoMaxHeight)
+        Group {
+            switch logoSlot {
+            case .ready(let image):
+                HeroLogo(image: image, isPortrait: !isLandscape)
+            case .none:
+                Text(item.name)
+                    .font(.largeTitle.bold())
+                    .lineLimit(isLandscape ? 2 : 3)
+                    .minimumScaleFactor(isLandscape ? 1 : 0.7)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            case .pending:
+                if isLandscape {
+                    Color.clear.frame(width: HeroLogo.box.width, height: HeroLogo.box.height)
+                } else {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: TitleHero.logoMaxHeight)
+                }
+            }
         }
+        .opacity(isRevealed ? 1 : 0)
     }
 
     /// Year, the first two genres and the rating, dot-separated. Parts that are missing are left out by `MetaLine`.
@@ -296,27 +296,16 @@ private struct HeroPage: View {
     }
 }
 
-/// A title's logo, fitted into a box of fixed size so the text under it never moves when it arrives. Shows the name when the logo
-/// cannot be loaded. On Home's portrait spotlight the box is the full width and the title page's logo height, so the two match.
+/// A title's logo, fitted into a box of fixed size so the text under it never moves when it arrives. On Home's portrait spotlight the
+/// box is the full width and the title page's logo height, so the two match.
 struct HeroLogo: View {
     static let box = CGSize(width: 260, height: 84)
 
-    let url: URL
-    let title: String
+    let image: UIImage
     var isPortrait = false
-    @State private var image: UIImage?
-    @State private var failed = false
-
-    init(url: URL, title: String, isPortrait: Bool = false) {
-        self.url = url
-        self.title = title
-        self.isPortrait = isPortrait
-        _image = State(initialValue: ImagePipeline.shared.cachedImage(for: url, maxPixelSize: 800))
-    }
 
     var body: some View {
         logoBox
-            .task(id: url) { await load() }
     }
 
     @ViewBuilder
@@ -333,38 +322,10 @@ struct HeroLogo: View {
         }
     }
 
-    @ViewBuilder
     private var picture: some View {
-        if let image {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .transition(.opacity)
-        } else if failed {
-            if isPortrait {
-                Text(title)
-                    .font(.largeTitle.bold())
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.7)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text(title)
-                    .font(.largeTitle.bold())
-                    .lineLimit(2)
-            }
-        }
-    }
-
-    private func load() async {
-        do {
-            let loaded = try await ImagePipeline.shared.image(for: url, maxPixelSize: 800, priority: .high)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.25)) { image = loaded }
-        } catch {
-            guard !Task.isCancelled else { return }
-            failed = true
-        }
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
     }
 }
 #endif

@@ -9,6 +9,7 @@ struct TitleDestination: Hashable {
     let preview: MetaPreview
     let sourceID: String
     var artwork: TMDbArtwork?
+    var artworkChecked = false
 }
 
 extension EnvironmentValues {

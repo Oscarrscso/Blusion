@@ -24,4 +24,82 @@ enum TitleHero {
         min(width * 1.5, metrics.heroMaxHeight)
     }
 }
+
+/// What one hero image is doing: still loading, decoded and ready, or there is none (no URL once the lookup has finished, or it failed).
+enum HeroSlot {
+    case pending
+    case ready(UIImage)
+    case none
+    var isPending: Bool { if case .pending = self { return true } else { return false } }
+}
+
+/// Loads the hero picture and the logo together and answers from the image cache, so a decoded one is there in the first frame.
+@MainActor @Observable
+final class HeroLoader {
+    /// Longest edge the logo is decoded to, on Home and on the title page.
+    static let logoPixelSize: CGFloat = 800
+    private var failed: Set<String> = []
+    private var revision = 0
+
+    nonisolated private static func key(_ url: URL, _ size: CGFloat) -> String { "\(Int(size))|\(url.absoluteString)" }
+
+    /// A slot's state. A nil URL is pending until `lookupFinished`, then there is none.
+    func slot(url: URL?, maxPixelSize: CGFloat, lookupFinished: Bool) -> HeroSlot {
+        _ = revision
+        guard let url else { return lookupFinished ? .none : .pending }
+        if let image = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) { return .ready(image) }
+        return failed.contains(Self.key(url, maxPixelSize)) ? .none : .pending
+    }
+
+    /// The one reveal condition: neither is still pending. A missing or failed one does not hold the other back.
+    static func isRevealed(_ picture: HeroSlot, _ logo: HeroSlot) -> Bool { !picture.isPending && !logo.isPending }
+
+    /// Starts the picture and the logo together at high priority and returns when both have finished. Does nothing until both URLs are
+    /// known, or known to be absent (`lookupFinished`), so neither starts alone. The reveal is one state change in one transaction.
+    func load(picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat, lookupFinished: Bool) async {
+        guard (picture != nil || lookupFinished), (logo != nil || lookupFinished) else { return }
+        let wanted = [(picture, pictureSize), (logo, logoSize)].compactMap { url, size in
+            url.map { ($0, size) }
+        }.filter { ImagePipeline.shared.cachedImage(for: $0.0, maxPixelSize: $0.1) == nil }
+        guard !wanted.isEmpty else { return }
+        let failures = await withTaskGroup(of: String?.self, returning: [String].self) { group in
+            for (url, size) in wanted {
+                group.addTask {
+                    do { _ = try await ImagePipeline.shared.image(for: url, maxPixelSize: size, priority: .high); return nil }
+                    catch { return Task.isCancelled ? nil : Self.key(url, size) }
+                }
+            }
+            var keys: [String] = []
+            for await key in group { if let key { keys.append(key) } }
+            return keys
+        }
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            failed.formUnion(failures)
+            revision += 1
+        }
+    }
+}
+
+/// The hero picture alone: no placeholder, no spinner, no fade of its own. Shown only while `isRevealed`, with the logo.
+struct HeroPicture: View {
+    let slot: HeroSlot
+    let isRevealed: Bool
+    let contentMode: ContentMode
+    var alignment: Alignment = TitleHero.imageAlignment
+
+    var body: some View {
+        Color.clear
+            .overlay(alignment: alignment) {
+                if case .ready(let image) = slot {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: contentMode)
+                }
+            }
+            .clipped()
+            .opacity(isRevealed ? 1 : 0)
+            .accessibilityHidden(true)
+    }
+}
 #endif
