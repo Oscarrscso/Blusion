@@ -19,37 +19,40 @@ struct LibraryView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pageTitle
                 filters
-                if !model.hasLoaded {
-                    SkeletonRow()
-                } else if model.isEmpty {
-                    EmptyStateLayout(title: "Your library is empty", systemImage: "books.vertical",
-                                     message: "Titles you save, and anything you start watching, show up here.") {
-                        Button("Find something to watch", action: onOpenAddons)
-                            .buttonStyle(.primaryActionCompact)
-                            .accessibilityIdentifier("library.empty.action")
-                    }
-                    .accessibilityIdentifier("library.empty")
-                } else {
-                    if !model.hasMatches {
-                        EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
-                                         message: "Try removing a filter.") {
-                            Button("Clear Filters") { model.clearFilters() }
+                VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                    if !model.hasLoaded {
+                        SkeletonRow()
+                    } else if model.isEmpty {
+                        EmptyStateLayout(title: "Your library is empty", systemImage: "books.vertical",
+                                         message: "Titles you save, and anything you start watching, show up here.") {
+                            Button("Find something to watch", action: onOpenAddons)
                                 .buttonStyle(.primaryActionCompact)
-                                .accessibilityIdentifier("library.noMatches.clear")
+                                .accessibilityIdentifier("library.empty.action")
                         }
-                        .accessibilityIdentifier("library.noMatches")
+                        .accessibilityIdentifier("library.empty")
                     } else {
-                        if !model.saved.isEmpty { savedSection }
-                        if !model.watched.isEmpty { watchedSection }
+                        if !model.hasMatches {
+                            EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
+                                             message: "Try removing a filter.") {
+                                Button("Clear Filters") { model.clearFilters() }
+                                    .buttonStyle(.primaryActionCompact)
+                                    .accessibilityIdentifier("library.noMatches.clear")
+                            }
+                            .accessibilityIdentifier("library.noMatches")
+                        } else {
+                            if !model.saved.isEmpty { savedSection }
+                            if !model.watched.isEmpty { watchedSection }
+                        }
                     }
                 }
             }
             .padding(.vertical, Theme.Spacing.l)
         }
         .screenBackground()
-        .navigationTitle("Library")
+        .navigationTitle("")
         #if !targetEnvironment(macCatalyst)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
@@ -72,13 +75,23 @@ struct LibraryView: View {
         .accessibilityIdentifier("library.list")
     }
 
-    /// Half of the gap between the selector and the posters, so the sorts sit centred between them. The total gap is unchanged.
+    /// The page's title, drawn in the content so the navigation bar stays free of text.
+    private var pageTitle: some View {
+        Text("Library")
+            .font(Theme.Typography.largeTitle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.bottom, metrics.headerSpacing)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Half of the gap between the selector and the posters. The sorts sit `sortGap` below the selector and, as the bottom padding,
+    /// `sortGap` above the grid, so they are exactly midway between the two.
     private var sortGap: CGFloat { (Theme.Spacing.s + metrics.shelfSpacing) / 2 }
     /// The sort menus are a little shorter than the default filter label.
-    private static let sortHeight: CGFloat = 40
+    private static let sortHeight: CGFloat = 34
 
-    /// The Movies/Series selector, then the sort menus centred between it and the posters: `sortGap` above them and, from the
-    /// negative bottom padding, `sortGap` below them to the grid. Chips under the sorts keep their own padding.
+    /// The Movies/Series selector, then the sort menus, then the grid. Chips under the sorts keep their own padding.
     private var filters: some View {
         @Bindable var model = model
         let kinds: [LibraryKind] = [.movie, .series]
@@ -93,7 +106,8 @@ struct LibraryView: View {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
                     Menu {
-                        ReleaseYearOptions(model: model)
+                        ReleaseYearOptions(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear,
+                                           identifier: "library.filter.year")
                     } label: {
                         filterLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                     }
@@ -119,7 +133,7 @@ struct LibraryView: View {
             }
             .padding(.horizontal, metrics.pageMargin)
         }
-        .padding(.bottom, model.filter.chips.isEmpty ? sortGap - metrics.shelfSpacing : 0)
+        .padding(.bottom, model.filter.chips.isEmpty ? sortGap : 0)
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: model.filter)
         .accessibilityIdentifier("library.filters")
@@ -141,19 +155,19 @@ struct LibraryView: View {
         }
     }
 
-    /// The active filters, one chip each (tap to clear it), and a chip that clears them all. The stack already adds 8pt above this view
-    /// and `shelfSpacing` below it, so the padding makes those gaps 12pt above and 24pt below. The view is removed with the last chip,
+    /// The active filters, one chip each (tap to clear it), and a chip that clears them all. The stack already adds 8pt above this view,
+    /// so the padding makes that gap 12pt, and the padding below makes the gap to the grid 24pt. The view is removed with the last chip,
     /// so clearing every filter leaves no gap behind.
     private var filterChips: some View {
         ActiveFilterChips(chips: model.filter.chips.map { chip in
             ActiveFilterChip(id: chip.id, label: chip.label) { model.removeFilter(chip) }
         }, identifier: "library", clearAll: { model.clearFilters() })
         .padding(.top, Theme.Spacing.xs)
-        .padding(.bottom, Theme.Spacing.xl - metrics.shelfSpacing)
+        .padding(.bottom, Theme.Spacing.xl)
     }
 
     private var savedSection: some View {
-        LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
+        LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.cardSpacing) {
             ForEach(model.saved) { item in
                 MediaCardLink(item: item.preview).stretched()
                     .accessibilityIdentifier("library.saved.\(item.id)")
@@ -165,7 +179,7 @@ struct LibraryView: View {
     private var watchedSection: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Watched").padding(.horizontal, metrics.pageMargin)
-            LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.gridRowSpacing) {
+            LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.cardSpacing) {
                 ForEach(model.watched) { item in
                     let preview = MetaPreview(id: item.seriesID ?? item.contentID, type: item.type, name: item.title, poster: item.poster)
                     MediaCardLink(item: preview).stretched()
@@ -195,26 +209,29 @@ struct RatingPicker: View {
     }
 }
 
-/// Release years in ten-year spans, "1920 - 1929" up to "2020 - 2029". Choosing a span sets both ends of the year filter to it; "Any" clears it.
+/// Release years in ten-year spans, "1920 - 1929" up to "2020 - 2029", shared by the Library and Discover. Choosing a span sets both ends
+/// of the year filter to it; "Any" clears it. `identifier` names the spans: each is "<identifier>.<start year>".
 struct ReleaseYearOptions: View {
-    let model: LibraryViewModel
+    @Binding var minimumYear: Int?
+    @Binding var maximumYear: Int?
+    let identifier: String
     private static let starts = Array(stride(from: 1920, through: 2020, by: 10))
 
     var body: some View {
         Button { setSpan(nil) } label: {
-            choice("Any", isOn: model.filter.minimumYear == nil && model.filter.maximumYear == nil)
+            choice("Any", isOn: minimumYear == nil && maximumYear == nil)
         }
         ForEach(Self.starts, id: \.self) { start in
             Button { setSpan(start) } label: {
-                choice("\(start) - \(start + 9)", isOn: model.filter.minimumYear == start && model.filter.maximumYear == start + 9)
+                choice("\(start) - \(start + 9)", isOn: minimumYear == start && maximumYear == start + 9)
             }
-            .accessibilityIdentifier("library.filter.year.\(start)")
+            .accessibilityIdentifier("\(identifier).\(start)")
         }
     }
 
     private func setSpan(_ start: Int?) {
-        model.filter.minimumYear = start
-        model.filter.maximumYear = start.map { $0 + 9 }
+        minimumYear = start
+        maximumYear = start.map { $0 + 9 }
     }
 
     @ViewBuilder private func choice(_ title: String, isOn: Bool) -> some View {

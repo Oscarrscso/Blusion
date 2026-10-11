@@ -1,8 +1,10 @@
 #if canImport(UIKit)
 import Foundation
 
-/// How many titles before the end of a list the next page starts loading. Level 1 is the original behaviour: load when the last
-/// title appears. The level is a device-local iPhone setting (UserDefaults only, never synced); the Mac always loads at the last title.
+/// How far a long list works ahead and behind the viewer, the "Lazy load" setting. Level 1 is the original behaviour: the next page loads
+/// when the last title appears, and no artwork is released. Higher levels start the next page sooner, and a paged grid releases the
+/// artwork of titles that are that many titles behind the first one on screen. The level is a device-local setting (UserDefaults only,
+/// never synced); the Mac reads the same key.
 enum LazyLoadLookahead {
     struct Level {
         let label: String
@@ -21,16 +23,12 @@ enum LazyLoadLookahead {
         return min(max(saved, 1), levels.count)
     }
 
-    /// Titles ahead of the end at which the next page loads. Always 0 on the Mac.
+    /// Titles ahead of the end at which the next page loads, and titles behind the first one on screen at which artwork is released.
     static var titlesAhead: Int {
-        #if !targetEnvironment(macCatalyst)
         levels[level - 1].titlesAhead
-        #else
-        0
-        #endif
     }
 
-    /// The index in a list of `count` titles whose appearance loads the next page.
+    /// The index in a list of `count` titles from which an appearing title loads the next page: every title at or after it does.
     static func triggerIndex(count: Int) -> Int { max(0, count - 1 - titlesAhead) }
 
     /// The element whose appearance loads the next page, or nil when the list is empty.

@@ -114,19 +114,26 @@ struct HeroPicture: View {
     let isRevealed: Bool
     let contentMode: ContentMode
     var alignment: Alignment = TitleHero.imageAlignment
+    /// Shown until the picture is revealed (the title page's poster). Nil on Home, where the carousel must not show one.
+    var placeholderURL: URL?
 
     var body: some View {
-        Color.clear
-            .overlay(alignment: alignment) {
-                if case .ready(let image) = slot {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: contentMode)
-                }
+        ZStack {
+            if !isRevealed, let placeholderURL {
+                ArtworkImage(url: placeholderURL, maxPixelSize: 600, contentMode: contentMode, placeholderBlur: 0, imageAlignment: alignment)
             }
-            .clipped()
-            .opacity(isRevealed ? 1 : 0)
-            .accessibilityHidden(true)
+            Color.clear
+                .overlay(alignment: alignment) {
+                    if case .ready(let image) = slot {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: contentMode)
+                    }
+                }
+                .opacity(isRevealed ? 1 : 0)
+        }
+        .clipped()
+        .accessibilityHidden(true)
     }
 }
 #endif

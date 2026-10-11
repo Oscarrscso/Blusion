@@ -58,6 +58,12 @@ extension View {
             self
         }
     }
+
+    /// A pushed screen that does not zoom still pops on a back swipe, whatever is under the finger. Needed where a zoomed screen sits
+    /// below it: that screen switches off the navigation stack's own back swipe, which only comes back when the zoomed screen goes.
+    func swipeBackPops() -> some View {
+        modifier(SwipeBackCloses())
+    }
 }
 
 /// A zoomed screen closes on a back swipe the way it does from the back button: at once, without following the finger.

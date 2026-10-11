@@ -153,8 +153,8 @@ struct HomeView: View {
         switch section.widget.content {
         case .hero:
             HeroSection(section: section, onRetry: { retry(section) })
-                // The next shelf starts directly below the hero, without the normal gap between shelves.
-                .padding(.bottom, -metrics.shelfSpacing)
+                // The next shelf starts 20 pt below the hero: the shelf spacing that follows it, less the 20 pt gap wanted here.
+                .padding(.bottom, 20 - metrics.shelfSpacing)
         case .banner(let row):
             HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
         case .row(let row):

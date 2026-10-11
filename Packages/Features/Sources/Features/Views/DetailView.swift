@@ -25,8 +25,6 @@ struct DetailView: View {
     @State private var renderedLogoHeight: CGFloat = TitleHero.logoMaxHeight
     /// Loads the hero picture and logo together, and reveals them together.
     @State private var hero = HeroLoader()
-    /// The height of the season's longest overview at the full card width. See `overviewRuler`.
-    @State private var tallestOverview: CGFloat = 0
     /// The screen's safe-area inset at its sides: the notch side of a phone held in landscape, zero elsewhere.
     @State private var sideInset: CGFloat = 0
     @Environment(\.openURL) private var openURL
@@ -38,6 +36,10 @@ struct DetailView: View {
     private static let scrollIndicatorInset: CGFloat = 260
     /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
     private static let backButtonColumn: CGFloat = 72
+    /// The one gap in the action row: between Play and the round actions beside it, and between those actions. All gaps are equal.
+    private static let actionGap: CGFloat = 6
+    /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
+    private static let secondaryControlHeight: CGFloat = 36
 
     /// In portrait the artwork runs under the bar, so the page margin is enough. In landscape on iPhone the page keeps the portrait margin
     /// plus only the device's side safe-area inset, with no back-button column. On Mac the back button floats over the page's top
@@ -115,6 +117,7 @@ struct DetailView: View {
     /// The longest edge the hero is decoded to: full screen in landscape, the smaller size shared with Home in portrait.
     private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
 
+    private var placeholderURL: URL? { model.preview.poster ?? MetahubArtwork.poster(imdbID: model.preview.id) }
     private var logoURL: URL? { model.logoURL }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: !model.isLoadingArtwork) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: !model.isLoadingArtwork) }
@@ -131,7 +134,7 @@ struct DetailView: View {
         if isLandscape {
             let artworkWidth = max(120, (size.width - contentMargin * 2 - Theme.Spacing.xl) * TitleHero.landscapeArtworkShare)
             HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit)
+                HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fit, placeholderURL: placeholderURL)
                     .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
                     .overlay(alignment: .bottomTrailing) {
                         PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
@@ -157,7 +160,10 @@ struct DetailView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     titleArt(alignment: .center)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }
+                    // The block below the logo keeps the section gap from the logo, the same gap the season picker or the credits keep
+                    // below it, so the block sits centred between the two. The stack's own spacing is part of that gap.
                     controls
+                        .padding(.top, sectionSpacing - Theme.Spacing.m)
                     synopsis
                     RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
                 }
@@ -165,7 +171,7 @@ struct DetailView: View {
             }
             .background(alignment: .top) {
                 ZStack(alignment: .bottom) {
-                    HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill)
+                    HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
                     BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
                 }
                 .frame(width: size.width, height: height + scrollPull)
@@ -230,16 +236,16 @@ struct DetailView: View {
     private var actionRow: some View {
         #if !targetEnvironment(macCatalyst)
         if isLandscape {
-            GlassEffectContainer(spacing: TitleHero.actionGap / 2) {
-                HStack(alignment: .center, spacing: TitleHero.actionGap) {
+            GlassEffectContainer(spacing: Self.actionGap / 2) {
+                HStack(alignment: .center, spacing: Self.actionGap) {
                     primaryAction
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity)
-                    HStack(spacing: TitleHero.actionGap) {
+                    HStack(spacing: Self.actionGap) {
                         saveAction
                         watchedAction
-                        if let trailer = model.trailerURL { trailerAction(trailer) }
+                        trailerAction
                     }
                     .fixedSize()
                     .layoutPriority(1)
@@ -255,7 +261,7 @@ struct DetailView: View {
     }
 
     private var portraitActionRow: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.s) {
+        HStack(alignment: .center, spacing: Self.actionGap) {
             primaryAction
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -267,11 +273,11 @@ struct DetailView: View {
     }
 
     private var secondaryActions: some View {
-        GlassEffectContainer(spacing: Theme.Spacing.s) {
-            HStack(spacing: Theme.Spacing.s) {
+        GlassEffectContainer(spacing: Self.actionGap) {
+            HStack(spacing: Self.actionGap) {
                 saveAction
                 watchedAction
-                if let trailer = model.trailerURL { trailerAction(trailer) }
+                trailerAction
             }
         }
         .fixedSize()
@@ -332,11 +338,14 @@ struct DetailView: View {
         }
     }
 
-    /// Opens the trailer with the app's shared web link handler.
-    private func trailerAction(_ url: URL) -> some View {
+    /// Opens the trailer with the app's shared web link handler. It is there from the start, so the row does not change when the page
+    /// loads; until the trailer is known it is dimmed and does nothing.
+    private var trailerAction: some View {
         CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {
-            openURL(url)
+            if let url = model.trailerURL { openURL(url) }
         }
+        .disabled(model.trailerURL == nil)
+        .opacity(model.trailerURL == nil ? 0.4 : 1)
         .accessibilityIdentifier("detail.trailerButton")
     }
 
@@ -346,9 +355,8 @@ struct DetailView: View {
             // Folded when it runs past three lines; one that fits has nothing to fold, so a tap does nothing.
             let folds = isDescriptionExpanded || isDescriptionTruncated
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                TruncatingText(text: Text(description), lineLimit: 3, isExpanded: isDescriptionExpanded, isTruncated: $isDescriptionTruncated)
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.85))
+                JustifiedText(text: description, color: UIColor.white.withAlphaComponent(0.85), lineLimit: isDescriptionExpanded ? 0 : 3,
+                              isTruncated: $isDescriptionTruncated)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     // A tap on the text folds or opens it.
@@ -370,7 +378,6 @@ struct DetailView: View {
 
     /// The season chips and the episodes of the selected season, each a row with its still, progress and watched mark.
     private func episodesSection(pageWidth: CGFloat) -> some View {
-        let isWide = model.matchesEpisodeWidthToText
         let width = episodeWidth(pageWidth: pageWidth)
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             HStack(spacing: Theme.Spacing.m) {
@@ -385,7 +392,7 @@ struct DetailView: View {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.episodes) { episode in
-                        episodeRow(episode, width: width, overviewHeight: isWide ? tallestOverview : nil)
+                        episodeRow(episode, width: width)
                             .id(episode.id).reportsShelfEdge(id: episode.id)
                     }
                 }
@@ -397,29 +404,12 @@ struct DetailView: View {
             .scrollClipDisabled()
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
-        .background { if isWide { overviewRuler(width: width) } }
         .padding(.top, sectionSpacing)
         // IMDb's per-episode scores come from OMDb, a season at a time as the viewer picks one (and again if the key changes).
         .task(id: "\(model.selectedSeason.map(String.init) ?? "-"):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
             guard model.hasSettledHero else { return }
             await model.loadEpisodeScores(season: model.selectedSeason)
         }
-    }
-
-    /// Every overview of the season at the full card width, unseen. Full-width cards show the whole overview, and a lazy row takes
-    /// its height from its first card, so the tallest overview sets one height for all of them.
-    private func overviewRuler(width: CGFloat) -> some View {
-        ZStack(alignment: .top) {
-            ForEach(model.episodes) { episode in
-                Text(episode.overview ?? "")
-                    .font(.footnote)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(width: width)
-        .hidden()
-        .accessibilityHidden(true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { tallestOverview = $0 }
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
@@ -442,13 +432,13 @@ struct DetailView: View {
                 .accessibilityIdentifier("detail.seasonWatched")
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
-                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.glass)
-        .controlSize(.small)
+        .frame(height: Self.secondaryControlHeight)
         .pointerFeedback()
         .accessibilityIdentifier("detail.seasonPicker")
     }
@@ -465,6 +455,7 @@ struct DetailView: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .glassCircleButton(.regular)
+        .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
         .titleTapHaptic()
         .accessibilityLabel("Episode width")
         .help("Episode width")
@@ -478,10 +469,11 @@ struct DetailView: View {
         model.matchesEpisodeWidthToText ? pageWidth - contentMargin * 2 : metrics.episodeWidth
     }
 
-    private func episodeRow(_ video: Video, width: CGFloat, overviewHeight: CGFloat?) -> some View {
+    private func episodeRow(_ video: Video, width: CGFloat) -> some View {
         NavigationLink(value: model.request(for: video)) {
             EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                       artwork: model.backdropURL, score: model.score(for: video), width: width, overviewHeight: overviewHeight)
+                       artwork: model.backdropURL, score: model.score(for: video), width: width,
+                       showsWholeOverview: model.matchesEpisodeWidthToText)
         }
         .buttonStyle(PressableCardStyle())
         .titleTapHaptic()
@@ -533,8 +525,8 @@ struct DetailView: View {
                                 }
                             }
                         } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.caption.weight(.semibold))
+                            Image(systemName: "arrow.up.arrow.down")
+                                .font(.caption2.weight(.semibold))
                         }
                         .glassCircleButton(.small)
                         .padding(.leading, Theme.Spacing.s)
@@ -707,9 +699,8 @@ private struct ReviewCard: View {
                         .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
                     }
                 }
-                TruncatingText(text: Text(LocalizedStringKey(review.content)), lineLimit: 6, reservesSpace: true,
-                               isExpanded: isExpanded, isTruncated: $isTruncated)
-                    .font(.subheadline)
+                JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: isExpanded ? 0 : 6,
+                              reservesSpace: true, isTruncated: $isTruncated)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .contentShape(Rectangle())
@@ -791,8 +782,8 @@ private struct EpisodeRow: View {
     let artwork: URL?
     let score: DetailViewModel.EpisodeScore?
     let width: CGFloat
-    /// Set for a full-width card: the whole overview shows, in a box this tall (the season's longest), so the cards share a height.
-    var overviewHeight: CGFloat?
+    /// Set for a full-width card: the whole overview shows at its own height, so the rating sits under this episode's own text.
+    var showsWholeOverview = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -804,17 +795,9 @@ private struct EpisodeRow: View {
                 Text(video.title)
                     .font(.headline)
                     .lineLimit(2)
-                if let overviewHeight {
-                    Text(video.overview ?? "")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(minHeight: overviewHeight, alignment: .top)
-                } else if let overview = video.overview, !overview.isEmpty {
-                    Text(overview)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                if let overview = video.overview, !overview.isEmpty {
+                    JustifiedText(text: overview, textStyle: .footnote, color: .secondaryLabel,
+                                  lineLimit: showsWholeOverview ? 0 : 3)
                 }
                 dateAndScore
             }

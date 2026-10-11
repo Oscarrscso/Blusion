@@ -203,12 +203,20 @@ struct RatingButtonsRow: View {
         let sites = ReviewSite.allCases.filter { $0 == .imdb || ratings?.shortText(for: $0) != nil }
         let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in
-            let gap = min(6, max(4, (geometry.size.width - CGFloat(sites.count) * 64) / CGFloat(max(1, sites.count - 1))))
-            let pillWidth = (geometry.size.width - gap * CGFloat(sites.count - 1)) / CGFloat(sites.count)
+            // A divider stands between each two buttons, with the same gap on either side of it as between the buttons themselves.
+            let dividers = CGFloat(max(0, sites.count - 1))
+            let gap = min(6, max(4, (geometry.size.width - CGFloat(sites.count) * 64 - dividers) / max(1, dividers * 2)))
+            let pillWidth = (geometry.size.width - dividers * (gap * 2 + 1)) / CGFloat(sites.count)
             let inset = min(10, max(2, (pillWidth - 54) / 2))
             HStack(spacing: gap) {
                 ForEach(sites) { site in
                     if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
+                        if site != sites.first {
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.4))
+                                .frame(width: 1, height: 20)
+                                .accessibilityHidden(true)
+                        }
                         RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
                                      isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name,
                                      horizontalInset: inset, showsLinkIcon: showsLinkIcon)
@@ -239,12 +247,6 @@ struct RatingButton: View {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
                     .foregroundStyle(.white)
-                if showsLinkIcon || (site == .imdb && score == nil) {
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .accessibilityHidden(true)
-                }
                 if let score {
                     Text(score)
                         .font(.system(size: 13, weight: .semibold))
@@ -252,6 +254,13 @@ struct RatingButton: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                }
+                // After the score, a little greyed, so it reads as a link rather than as part of the rating.
+                if showsLinkIcon || (site == .imdb && score == nil) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, horizontalInset)
@@ -262,6 +271,7 @@ struct RatingButton: View {
             .pointerInteraction(cornerRadius: 999)
         }
         .buttonStyle(.plain)
+        .titleTapHaptic()
         .help(isSearch ? "Search \(site.name) for \(title)" : "Open \(title) on \(site.name)")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(score.map { "\(site.name) \($0)" } ?? site.name)

@@ -116,14 +116,18 @@ struct MediaRow<Content: View>: View {
     }
 }
 
-/// A grid of titles that fills the width: three posters across a phone, as many as fit in a Mac window. `onLastAppear` fires
-/// when the title `LazyLoadLookahead` names scrolls in (the last one by default on the Mac), so a caller can load the next page.
+/// A grid of titles that fills the width: three posters across a phone, as many as fit in a Mac window. `onLastAppear` makes it paged:
+/// it fires as soon as any title within `LazyLoadLookahead.titlesAhead` of the end appears, so a caller can load the next page. A paged
+/// grid also releases the artwork of titles that have scrolled that far behind the first one on screen; they show a blank card of the
+/// same size until they come back.
 struct MediaGrid: View {
     let items: [MetaPreview]
     let aspect: CardAspect
     let showsRating: Bool
     let onLastAppear: (() -> Void)?
     @State private var zoomScope = UUID().uuidString
+    /// The indices of the cells on screen, kept up to date by each cell's appear and disappear.
+    @State private var visibleIndices: Set<Int> = []
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
 
@@ -135,19 +139,55 @@ struct MediaGrid: View {
     }
 
     var body: some View {
-        let triggerID = LazyLoadLookahead.triggerElement(in: items)?.identity
-        LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.gridRowSpacing) {
-            ForEach(items, id: \.identity) { item in
-                MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
-                    .stretched()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onAppear {
-                        if item.identity == triggerID { onLastAppear?() }
+        let loadIndex = LazyLoadLookahead.triggerIndex(count: items.count)
+        // Only a paged grid releases artwork; before anything has appeared nothing is released.
+        let releaseBelow = onLastAppear == nil ? nil : visibleIndices.min().map { $0 - LazyLoadLookahead.titlesAhead }
+        // A poster in landscape is drawn as a wide card without a caption (see `MediaCard`), so its blank card has that shape.
+        let landscapePoster = isLandscape && aspect == .poster
+        LazyVGrid(columns: metrics.gridColumns(for: aspect, inLandscape: isLandscape), alignment: .leading, spacing: metrics.cardSpacing) {
+            ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
+                Group {
+                    if let releaseBelow, index < releaseBelow {
+                        UnloadedCard(artwork: landscapePoster ? .wide : aspect, showsCaption: aspect.showsCaptionByDefault)
+                    } else {
+                        MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
+                            .stretched()
                     }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onAppear {
+                    visibleIndices.insert(index)
+                    if index >= loadIndex { onLastAppear?() }
+                }
+                .onDisappear {
+                    visibleIndices.remove(index)
+                }
             }
         }
         .padding(.horizontal, metrics.pageMargin)
         .environment(\.zoomScope, zoomScope)
+    }
+}
+
+/// The stand-in for a title whose artwork has been released: a blank box of its card's shape, with the two caption lines when the card
+/// has them, so the grid keeps the same row heights and its scroll position.
+private struct UnloadedCard: View {
+    let artwork: CardAspect
+    let showsCaption: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            RoundedRectangle(cornerRadius: artwork.cornerRadius, style: .continuous)
+                .fill(.quaternary)
+                .aspectRatio(artwork.ratio, contentMode: .fit)
+            if showsCaption {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(" ").font(Theme.Typography.cardTitle).lineLimit(1)
+                    Text(" ").font(Theme.Typography.cardSubtitle).lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 #endif

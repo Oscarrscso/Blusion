@@ -38,6 +38,7 @@ struct PersonView: View {
         .screenBackground()
         .navigationTitle(model.destination.name)
         .navigationBarTitleDisplayMode(.inline)
+        .swipeBackPops()
         .task { await model.load() }
         .accessibilityIdentifier("person.scroll")
     }
@@ -93,9 +94,8 @@ struct PersonView: View {
         let folds = isBiographyExpanded || isBiographyTruncated
         let toggle = { withAnimation(.easeInOut(duration: 0.25)) { isBiographyExpanded.toggle() } }
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            TruncatingText(text: Text(biography), lineLimit: 4, isExpanded: isBiographyExpanded, isTruncated: $isBiographyTruncated)
-                .font(.body)
-                .foregroundStyle(.white.opacity(0.85))
+            JustifiedText(text: biography, color: UIColor.white.withAlphaComponent(0.85), lineLimit: isBiographyExpanded ? 0 : 4,
+                          isTruncated: $isBiographyTruncated)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 // A tap folds or opens it, as on a title page.
@@ -111,26 +111,22 @@ struct PersonView: View {
 
     /// Every profile photo TMDb has for the person, best voted first, as a strip of portraits.
     private var photos: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            SectionHeader("Photos")
-                .padding(.horizontal, metrics.pageMargin)
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
-                    ForEach(model.photoStrip, id: \.self) { url in
-                        ArtworkImage(url: url, title: "", maxPixelSize: 360, contentMode: .fill)
-                            .frame(width: metrics.posterWidth, height: metrics.posterWidth * 1.5)
-                            .mediaArtwork(cornerRadius: Theme.Radius.poster)
-                            .reportsShelfEdge(id: url)
-                    }
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
+                ForEach(model.photoStrip, id: \.self) { url in
+                    ArtworkImage(url: url, title: "", maxPixelSize: 360, contentMode: .fill)
+                        .frame(width: metrics.posterWidth, height: metrics.posterWidth * 1.5)
+                        .mediaArtwork(cornerRadius: Theme.Radius.poster)
+                        .reportsShelfEdge(id: url)
                 }
-                .scrollTargetLayout()
             }
-            .shelfIndicators()
-            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
-            .scrollClipDisabled()
-            .softSnappingScroll()
-            .accessibilityIdentifier("person.photos")
+            .scrollTargetLayout()
         }
+        .shelfIndicators()
+        .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+        .scrollClipDisabled()
+        .softSnappingScroll()
+        .accessibilityIdentifier("person.photos")
     }
 
     // MARK: - Known For

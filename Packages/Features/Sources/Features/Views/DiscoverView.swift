@@ -15,10 +15,13 @@ struct DiscoverView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pageTitle
                 if model.hasSources {
-                    filters
-                    results
+                    VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                        filters
+                        results
+                    }
                 } else {
                     EmptyAddonsView(onOpenAddons: onOpenAddons)
                 }
@@ -26,7 +29,7 @@ struct DiscoverView: View {
             .padding(.vertical, Theme.Spacing.l)
         }
         .screenBackground()
-        .navigationTitle("Discover")
+        .navigationTitle("")
         #if !targetEnvironment(macCatalyst)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
@@ -35,8 +38,19 @@ struct DiscoverView: View {
         .accessibilityIdentifier("discover.scroll")
     }
 
+    /// The page's title, drawn in the content so the navigation bar stays free of text.
+    private var pageTitle: some View {
+        Text("Discover")
+            .font(Theme.Typography.largeTitle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.bottom, metrics.headerSpacing)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     /// The same filter row as the Library: the type control, menus that show their active choice, and removable chips under them.
     private var filters: some View {
+        @Bindable var model = model
         // Movies and Series only: the other catalogue types stay out of the type control.
         let types = model.types.filter { ["movie", "series"].contains($0.lowercased()) }
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -76,6 +90,12 @@ struct DiscoverView: View {
                         }
                         .accessibilityIdentifier("discover.genreMenu")
                     }
+                    Menu {
+                        ReleaseYearOptions(minimumYear: $model.minimumYear, maximumYear: $model.maximumYear, identifier: "discover.filter.year")
+                    } label: {
+                        FilterMenuLabel("Year", systemImage: "calendar", isActive: model.minimumYear != nil || model.maximumYear != nil)
+                    }
+                    .accessibilityIdentifier("discover.filter.year")
                 }
             }
             .padding(.horizontal, metrics.pageMargin)
@@ -89,12 +109,17 @@ struct DiscoverView: View {
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: model.selectedGenre)
         .sensoryFeedback(.selection, trigger: model.selectedSource)
+        .sensoryFeedback(.selection, trigger: model.minimumYear)
     }
 
     @ViewBuilder
     private var results: some View {
-        if !model.items.isEmpty {
-            MediaGrid(items: model.items, onLastAppear: { Task { await model.loadMore() } })
+        if !model.visibleItems.isEmpty {
+            MediaGrid(items: model.visibleItems, onLastAppear: { Task { await model.loadMore() } })
+        } else if !model.items.isEmpty {
+            // Every title loaded so far is outside the year span: keep reading until one fits, or the catalogue ends.
+            EmptyStateView("No titles match", systemImage: "line.3.horizontal.decrease.circle", message: "Try another year.")
+                .task(id: model.items.count) { if model.canLoadMore { await model.loadMore() } }
         }
         switch model.state {
         case .idle, .loadingFirstPage:

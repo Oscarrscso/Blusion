@@ -51,6 +51,7 @@ struct HeroCarousel: View {
     @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isHomeScrolling) private var isHomeScrolling
     @Environment(\.heroPull) private var heroPull
+    @Environment(PosterRatingsStore.self) private var ratings
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
@@ -67,7 +68,8 @@ struct HeroCarousel: View {
                     let height = geometry.size.height + pull
                     TabView(selection: $pageID) {
                         ForEach(items, id: \.identity) { item in
-                            HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow)
+                            HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow,
+                                     cachedArtwork: ratings.cachedHeroArtwork(for: item))
                                 .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
@@ -141,10 +143,19 @@ private struct HeroPage: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(PosterRatingsStore.self) private var ratings
+    /// Starts from the artwork already looked up this session, so a title coming back into view shows its logo and picture at once.
     @State private var heroArtwork: TMDbArtwork?
-    /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name.
-    @State private var artworkChecked = false
+    /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name. Starts set when the artwork is known.
+    @State private var artworkChecked: Bool
     @State private var hero = HeroLoader()
+
+    init(item: MetaPreview, isScrolling: Bool, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?) {
+        self.item = item
+        self.isScrolling = isScrolling
+        self.artworkHeight = artworkHeight
+        _heroArtwork = State(initialValue: cachedArtwork)
+        _artworkChecked = State(initialValue: cachedArtwork != nil)
+    }
 
     private var heroURL: URL? {
         (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)

@@ -25,6 +25,9 @@ public final class DiscoverViewModel {
     public private(set) var state: State = .idle
     public private(set) var canLoadMore = false
     public var isOffline: Bool { state == .failed(.offline) }
+    /// The release-year span the Year menu chose, inclusive bounds. Titles outside it are hidden from `visibleItems`; nothing is fetched again.
+    public var minimumYear: Int?
+    public var maximumYear: Int?
 
     /// One catalog feeding the "All" mix, with how far it has been read.
     private struct Cursor {
@@ -50,6 +53,17 @@ public final class DiscoverViewModel {
         return all
     }
     public var hasSources: Bool { !sources.isEmpty }
+
+    /// The loaded titles inside the year span, in catalogue order. As in the Library, a title with no known year is hidden while a span is set.
+    public var visibleItems: [MetaPreview] {
+        guard minimumYear != nil || maximumYear != nil else { return items }
+        return items.filter { item in
+            guard let year = LibraryFiltering.year(from: item.releaseInfo) else { return false }
+            if let minimumYear, year < minimumYear { return false }
+            if let maximumYear, year > maximumYear { return false }
+            return true
+        }
+    }
 
     /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
     public var types: [String] {

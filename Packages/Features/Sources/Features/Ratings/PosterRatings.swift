@@ -88,6 +88,8 @@ public final class PosterRatingsStore {
     /// An explicit refresh bypasses disk freshness once per lookup; nextLookupAt then prevents repeated requests.
     @ObservationIgnored private var ignoresCachedFreshness = false
     @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
+    /// Hero artwork answers by title, kept for the session and dropped with the other review data by `forgetAll`.
+    @ObservationIgnored private var heroArtworkByID: [String: TMDbArtwork] = [:]
     /// Set when OMDb refused the key or the daily quota ran out: nothing asks it again until then, so a bad key does not
     /// spend one failing request per poster.
     @ObservationIgnored private var omdbPausedUntil: Date?
@@ -184,6 +186,7 @@ public final class PosterRatingsStore {
     public func forgetAll() async {
         await cancelLookups()
         await cache.clear()
+        heroArtworkByID.removeAll()
         for entry in entries.values {
             entry.imdb = entry.catalogIMDb
             entry.letterboxd = nil
@@ -289,10 +292,19 @@ public final class PosterRatingsStore {
         }
     }
 
+    /// The hero artwork already fetched for this title this session, read without waiting. Nil until a lookup for it has succeeded.
+    public func cachedHeroArtwork(for item: MetaPreview) -> TMDbArtwork? {
+        heroArtworkByID[item.id]
+    }
+
     /// Original-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
+    /// Successful answers are kept for the session, so a title coming back into the spotlight is ready at once.
     public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
+        if let known = heroArtworkByID[item.id] { return known }
         guard let tmdb, !isClearing else { return nil }
-        return try? await tmdb.artwork(imdbID: item.id, type: item.type)
+        guard let artwork = try? await tmdb.artwork(imdbID: item.id, type: item.type) else { return nil }
+        heroArtworkByID[item.id] = artwork
+        return artwork
     }
 
     /// TMDb scores fill episodes that have no rating from their addon.

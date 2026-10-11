@@ -20,10 +20,8 @@ struct LayoutMetrics: Equatable, Sendable {
     var shelfSpacing: CGFloat
     /// Gap between a shelf's header and its cards.
     var headerSpacing: CGFloat
-    /// Gap between cards in a shelf and between grid cells.
+    /// Gap between cards in a shelf, and between the columns and the rows of a grid. Every grid uses this one value.
     var cardSpacing: CGFloat
-    /// Gap between rows of a grid.
-    var gridRowSpacing: CGFloat
     /// Width of a 2:3 poster in a shelf (`CardSize.medium`).
     var posterWidth: CGFloat
     /// Width of a 16:9 card with a caption: Up Next, landscape shelves (`CardSize.medium`).
@@ -44,13 +42,13 @@ struct LayoutMetrics: Equatable, Sendable {
     var heroMaxHeight: CGFloat
 
     static let compact = LayoutMetrics(
-        isRegular: false, pageMargin: Theme.Spacing.l, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12, gridRowSpacing: 16,
+        isRegular: false, pageMargin: Theme.Spacing.l, shelfSpacing: 28, headerSpacing: 10, cardSpacing: 12,
         posterWidth: 128, wideCardWidth: 260, squareWidth: 124, tileWidth: 200, episodeWidth: 250, avatarSize: 72,
         readableWidth: .infinity, heroHeightFraction: 0.66, heroMaxHeight: 640
     )
 
     static let regular = LayoutMetrics(
-        isRegular: true, pageMargin: Theme.Spacing.l, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16, gridRowSpacing: 20,
+        isRegular: true, pageMargin: Theme.Spacing.l, shelfSpacing: 36, headerSpacing: 12, cardSpacing: 16,
         posterWidth: 180, wideCardWidth: 300, squareWidth: 176, tileWidth: 260, episodeWidth: 280, avatarSize: 88,
         readableWidth: 640, heroHeightFraction: 0.58, heroMaxHeight: 620
     )

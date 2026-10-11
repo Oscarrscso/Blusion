@@ -170,6 +170,8 @@ struct ContinueWatchingRow: View {
                         .lineLimit(1)
                         .layoutPriority(1)
                         .accessibilityAddTraits(.isHeader)
+                        // The kind selector sits right beside the title, as the chevron does after a row title.
+                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
                         ProgressView()
                             .controlSize(.small)
                             .tint(.gray)
@@ -190,7 +192,6 @@ struct ContinueWatchingRow: View {
                             }
                         }
                         Spacer(minLength: 0)
-                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
                     }
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, metrics.pageMargin)
