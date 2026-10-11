@@ -7,6 +7,8 @@ public final class StreamService: Sendable {
     private let sniffer: any ContainerSniffing
     /// How many ranged sniff requests run at once.
     private let sniffConcurrency: Int
+    /// Lookups started ahead of the picker (see `prefetch`).
+    private let prefetches = StreamPrefetchCache()
 
     public init(registry: AddonRegistry, client: AddonClient, sniffer: (any ContainerSniffing)? = nil, sniffConcurrency: Int = 4) {
         self.registry = registry
@@ -15,8 +17,28 @@ public final class StreamService: Sendable {
         self.sniffConcurrency = max(1, sniffConcurrency)
     }
 
-    /// Addons that will be asked, in the user's order, and the stream of their answers as each arrives.
+    /// Addons that will be asked, in the user's order, and the stream of their answers as each arrives. A lookup started by `prefetch` for
+    /// this title is used when it is still live; otherwise the addons are asked now.
     public func fetch(_ request: StreamRequest) async -> (asked: [AddonSummary], responses: AsyncStream<AddonResponse<[AddonStream]>>) {
+        if let cached = await prefetches.claim(key: Self.prefetchKey(request)) { return cached }
+        return await fetchFresh(request)
+    }
+
+    /// Starts the addons' stream lookup for a title now, so the picker finds it loaded. One lookup per title while it lives. Never sniffs, never plays.
+    public func prefetch(_ request: StreamRequest) async {
+        let key = Self.prefetchKey(request)
+        await prefetches.prefetch(key: key) { [self] in await fetchFresh(request) }
+    }
+
+    /// The title's page was left: an unclaimed lookup is cancelled after a short grace period.
+    public func releasePrefetch(_ request: StreamRequest) {
+        let key = Self.prefetchKey(request)
+        Task { await prefetches.release(key: key) }
+    }
+
+    private static func prefetchKey(_ request: StreamRequest) -> String { "\(request.type)/\(request.id)" }
+
+    private func fetchFresh(_ request: StreamRequest) async -> (asked: [AddonSummary], responses: AsyncStream<AddonResponse<[AddonStream]>>) {
         let addons = await registry.addons(for: .stream, type: request.type, id: request.id)
         let client = self.client
         let responses = FanOut.run(over: addons) { addon in

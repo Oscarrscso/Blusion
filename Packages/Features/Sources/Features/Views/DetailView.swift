@@ -91,7 +91,13 @@ struct DetailView: View {
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(isLandscape)") {
             await loadHero()
         }
+        // The Play button's stream lookup starts once the hero has settled, so it never delays the hero images.
+        .task(id: "\(model.hasSettledHero)|\(primaryRequest?.id ?? "-")") {
+            guard model.hasSettledHero else { return }
+            model.prefetchStreams(for: primaryRequest)
+        }
         .onAppear { Task { await model.refreshUserState() } }
+        .onDisappear { model.releaseStreamPrefetch() }
         .accessibilityIdentifier("detail.scroll")
     }
 

@@ -31,6 +31,8 @@ public final class DetailViewModel {
     private var savedProgress: [String: WatchProgress] = [:]
 
     private let services: AppServices
+    /// The Play request whose stream lookup was started from this page.
+    private var prefetchedStreamRequest: StreamRequest?
     public private(set) var tmdbArtwork: TMDbArtwork?
     public private(set) var isLoadingArtwork = true
     public private(set) var reviews: [TMDbReview] = []
@@ -309,6 +311,22 @@ public final class DetailViewModel {
     public var movieRequest: StreamRequest { StreamRequest(movie: detail.preview.type.isEmpty ? preview : detail.preview) }
 
     public func request(for video: Video) -> StreamRequest { StreamRequest(episode: video, of: detail) }
+
+    /// Starts the stream lookup for the Play button's request, once per title. A new request (a series moving to its next episode) lets the previous lookup go.
+    public func prefetchStreams(for request: StreamRequest?) {
+        guard let request else { return }
+        if let previous = prefetchedStreamRequest, previous.id == request.id, previous.type == request.type { return }
+        if let previous = prefetchedStreamRequest { services.streams.releasePrefetch(previous) }
+        prefetchedStreamRequest = request
+        Task { await services.streams.prefetch(request) }
+    }
+
+    /// Leaving the page lets an unclaimed lookup go (after a short grace).
+    public func releaseStreamPrefetch() {
+        guard let request = prefetchedStreamRequest else { return }
+        services.streams.releasePrefetch(request)
+        prefetchedStreamRequest = nil
+    }
 
     /// Series: the episode to play next. The most recently updated unfinished episode, else the first unwatched one in watching
     /// order, else the first episode. Nil for movies and for series without episodes.
