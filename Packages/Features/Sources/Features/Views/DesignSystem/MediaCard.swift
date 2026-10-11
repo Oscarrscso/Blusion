@@ -228,6 +228,7 @@ struct MediaCardLink: View {
             stretches ? card.stretched() : card
         }
         .buttonStyle(PressableCardStyle())
+        .pointerFeedback()
         .titleTapHaptic()
         .help(item.name)
         .contextMenu {
@@ -270,6 +271,7 @@ struct MediaCardLink: View {
 struct PressableCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         PressableCardLabel(configuration: configuration)
+            .pointerFeedback()
     }
 }
 

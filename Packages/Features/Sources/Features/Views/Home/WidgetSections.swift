@@ -238,7 +238,7 @@ struct ContinueWatchingRow: View {
             HStack {
                 Text("Sign in to Trakt to see paused movies and episodes.")
                 Spacer(minLength: 8)
-                Button("Sign In") { router.showSettings() }.buttonStyle(.glass)
+                Button("Sign In") { router.showSettings() }.buttonStyle(.glass).pointerFeedback()
             }
         case .failed(let message):
             InlineErrorView(message, retry: retry)
@@ -343,6 +343,7 @@ struct IssueMessage: View {
                 Button("Open Settings") { router.showSettings() }
                     .buttonStyle(.glass)
                     .controlSize(.small)
+                    .pointerFeedback()
                     .accessibilityIdentifier("home.openSettings")
             }
         }

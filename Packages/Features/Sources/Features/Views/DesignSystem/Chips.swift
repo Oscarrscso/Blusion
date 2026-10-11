@@ -32,6 +32,7 @@ struct GlassChip: View {
         }
         .buttonBorderShape(.capsule)
         .controlSize(isCompact ? .small : fillsWidth ? .large : .regular)
+        .pointerFeedback()
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("chip.\(title)")
         .sensoryFeedback(.selection, trigger: isSelected)

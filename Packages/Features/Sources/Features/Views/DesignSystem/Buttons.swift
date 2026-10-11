@@ -31,6 +31,7 @@ private struct PrimaryActionButton: View {
         .buttonBorderShape(.capsule)
         // A main action is one size up from the controls around it.
         .controlSize(controlSize == .regular ? .large : controlSize)
+        .pointerFeedback()
     }
 }
 
@@ -47,6 +48,7 @@ struct GlassCapsuleButtonStyle: PrimitiveButtonStyle {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        .pointerFeedback()
     }
 }
 
@@ -68,6 +70,7 @@ extension View {
         buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(size)
+            .pointerFeedback()
     }
 }
 

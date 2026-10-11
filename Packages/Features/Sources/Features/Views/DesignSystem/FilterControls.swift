@@ -29,6 +29,7 @@ struct FilterMenuLabel: View {
         .frame(maxWidth: .infinity, minHeight: 44)
         .glassEffect(.regular.tint(tint.opacity(isActive ? 0.25 : 0.08)).interactive(), in: .capsule)
         .accessibilityAddTraits(isActive ? .isSelected : [])
+        .pointerFeedback()
     }
 }
 

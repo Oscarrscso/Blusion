@@ -356,6 +356,7 @@ struct DetailView: View {
                     .onTapGesture {
                         if folds { toggleDescription() }
                     }
+                    .pointerFeedback(folds)
                     .accessibilityAddTraits(folds ? .isButton : [])
                     .accessibilityHint(folds ? (isDescriptionExpanded ? "Collapses the synopsis" : "Expands the synopsis") : "")
             }
@@ -448,6 +449,7 @@ struct DetailView: View {
         }
         .buttonStyle(.glass)
         .controlSize(.small)
+        .pointerFeedback()
         .accessibilityIdentifier("detail.seasonPicker")
     }
 

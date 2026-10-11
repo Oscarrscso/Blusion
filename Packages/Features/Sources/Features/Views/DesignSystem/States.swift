@@ -86,6 +86,7 @@ struct InlineErrorView: View {
                 Button("Try again", action: retry)
                     .buttonStyle(.glass)
                     .controlSize(.small)
+                    .pointerFeedback()
                     .accessibilityIdentifier("inlineError.retry")
             }
         }

@@ -31,6 +31,7 @@ struct WidgetsManagerView: View {
         } label: {
             Image(systemName: "plus")
         }
+        .pointerFeedback()
         .accessibilityLabel("Add Widget")
         .accessibilityIdentifier("widgets.add")
     }

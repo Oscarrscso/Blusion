@@ -164,6 +164,15 @@ struct RatingButtonsRow: View {
     let item: MetaPreview
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
+    /// On a Mac the row keeps a button's natural width however wide the window is (120 pt a site, left-aligned); a phone fills its row.
+    private static func maxRowWidth(forSites count: Int) -> CGFloat {
+        #if targetEnvironment(macCatalyst)
+        CGFloat(count) * 120
+        #else
+        .infinity
+        #endif
+    }
+
     var body: some View {
         if let store {
             let ratings = store.ratings(for: item)
@@ -199,6 +208,7 @@ struct RatingButtonsRow: View {
             }
         }
         .frame(height: 28)
+        .frame(maxWidth: Self.maxRowWidth(forSites: sites.count), alignment: .leading)
         .accessibilityIdentifier("detail.reviews")
     }
 }

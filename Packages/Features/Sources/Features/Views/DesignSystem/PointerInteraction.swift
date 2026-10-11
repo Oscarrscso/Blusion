@@ -30,6 +30,17 @@ private struct PointerInteractionModifier: ViewModifier {
 }
 
 extension View {
+    /// The system's hover highlight over something that can be clicked, so the pointer reacts to it. Mac only: a phone has no pointer.
+    /// (Mac Catalyst has no SwiftUI cursor API, so this is the system's own pointer feedback rather than a hand cursor.)
+    @ViewBuilder
+    func pointerFeedback(_ isActive: Bool = true) -> some View {
+        #if targetEnvironment(macCatalyst)
+        hoverEffect(.highlight, isEnabled: isActive)
+        #else
+        self
+        #endif
+    }
+
     func pointerInteraction(cornerRadius: CGFloat = Theme.Radius.card, lifts: Bool = false, highlightColor: Color = .white) -> some View {
         modifier(PointerInteractionModifier(cornerRadius: cornerRadius, lifts: lifts, highlightColor: highlightColor))
     }
