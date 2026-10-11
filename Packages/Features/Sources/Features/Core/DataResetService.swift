@@ -47,6 +47,7 @@ public struct DataResetService: Sendable {
         case .settings:
             await services.settings.save(PlaybackSettings())
             await services.traktAccount.clearCredentials()
+            await services.traktSync.signedOut()
             await services.posterRatings.setReviewServices(tmdb: nil)
             await MainActor.run {
                 services.posterRatings.isEnabled = PlaybackSettings().showsPosterRatings
@@ -64,6 +65,7 @@ public struct DataResetService: Sendable {
             services.searchHistory.save([])
             await services.posterRatings.forgetAll()
             await services.handoffs.clear()
+            await services.traktSync.reset()
         }
         return "\(scope.title) cleared."
     }

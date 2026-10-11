@@ -59,6 +59,16 @@ struct LayoutMetrics: Equatable, Sendable {
     /// headings, selector and shelves line up with the title page.
     var contentMargin: CGFloat { max(pageMargin, Theme.Spacing.l) }
 
+    /// The folded width of a TMDb review card on a title page.
+    var reviewCardWidth: CGFloat { isRegular ? 340 : 280 }
+
+    /// The gap between a title page's sections.
+    var titleSectionSpacing: CGFloat { Theme.Spacing.xl + Theme.Spacing.l }
+
+    /// Half of the gap between the ratings row and the section after it: the faint line sits in the middle, this far from each side.
+    /// The whole gap is `titleSectionSpacing` plus `Theme.Spacing.s`.
+    var titleRatingsGap: CGFloat { (Theme.Spacing.xl + Theme.Spacing.l + Theme.Spacing.s) / 2 }
+
     /// Other landscape rows keep their own base, so a larger Continue card does not resize them.
     var landscapePosterWidth: CGFloat { (isRegular ? 180 : 148) * 1.2 }
 
@@ -107,6 +117,9 @@ extension EnvironmentValues {
     /// Home supplies its width too, so the portrait spotlight is the same height as the title page's picture.
     @Entry var heroContainerWidth: CGFloat = 390
     @Entry var isHomeScrolling = false
+    /// The safe-area insets of the window this view is in, as its root measured them. A screen that runs under the bars or the notch reads
+    /// these when its own geometry cannot report them.
+    @Entry var windowSafeArea = EdgeInsets()
     /// Set only to force a layout; `layoutMetrics` falls back to the one the size class asks for.
     @Entry var layoutMetricsOverride: LayoutMetrics?
 

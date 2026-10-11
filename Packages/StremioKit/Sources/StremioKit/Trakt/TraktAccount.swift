@@ -42,6 +42,17 @@ public enum TraktAccountError: Error, Sendable, Equatable {
         case .network: return "Couldn’t reach Trakt. Check your connection and try again."
         }
     }
+
+    /// Worth sending again later, unchanged: the request never reached Trakt, or Trakt was busy or failing. A refused request (most 4xx),
+    /// a sign-in problem or an unreadable answer is not.
+    public var isTransient: Bool {
+        guard case .network(let error) = self else { return false }
+        switch error {
+        case .timeout, .offline, .network, .cancelled: return true
+        case .http(let status): return status == 408 || status == 429 || (500...599).contains(status)
+        default: return false
+        }
+    }
 }
 
 /// A watched movie or episode. IMDb identities match the addon metadata and local progress stores.
@@ -66,7 +77,37 @@ public struct TraktWatchedItem: Sendable, Equatable {
     public var identity: String { LibraryItem.identity(type: preview.type, contentID: contentID) }
 }
 
-/// OAuth credentials live only in the supplied SecretStore. Sync adds items; it never removes items from either account.
+/// A title on the Trakt watchlist or in the collection, with the date Trakt gives for it.
+public struct TraktSavedItem: Sendable, Equatable {
+    public let preview: MetaPreview
+    /// When it was put on the watchlist, or collected. Nil when Trakt sent no date.
+    public let addedAt: Date?
+
+    public init(preview: MetaPreview, addedAt: Date?) {
+        self.preview = preview
+        self.addedAt = addedAt
+    }
+
+    /// The saved title's identity in the local library, e.g. `movie/tt1`.
+    public var identity: String { LibraryItem.identity(type: preview.type, contentID: preview.id) }
+}
+
+/// When each kind of Trakt data last changed, from `sync/last_activities`. Comparing two of these says what to fetch again.
+public struct TraktLastActivities: Sendable, Codable, Equatable {
+    public var watchlist: Date?
+    public var collection: Date?
+    public var watched: Date?
+    public var playback: Date?
+
+    public init(watchlist: Date? = nil, collection: Date? = nil, watched: Date? = nil, playback: Date? = nil) {
+        self.watchlist = watchlist
+        self.collection = collection
+        self.watched = watched
+        self.playback = playback
+    }
+}
+
+/// OAuth credentials live only in the supplied SecretStore. Sync adds items; removals happen only through the explicit remove calls.
 public actor TraktAccount {
     public static let defaultClientID = "uWo0Ywaz_S4_-uH6KDVh6G8bahxb2bD_pIUz2DgIDno"
 
@@ -255,12 +296,17 @@ public actor TraktAccount {
     }
 
     public func watchlist() async throws -> [MetaPreview] {
-        var items: [MetaPreview] = []
+        try await watchlistEntries().map(\.preview)
+    }
+
+    /// Watchlist titles with the date each was listed.
+    public func watchlistEntries() async throws -> [TraktSavedItem] {
+        var items: [TraktSavedItem] = []
         var page = 1
         while true {
             let result = try await authorizedRequest(path: "sync/watchlist?page=\(page)&limit=100&extended=full")
             let entries = try decodeEntries(result.data)
-            items += entries.compactMap(\.watchlistPreview)
+            items += entries.compactMap(\.watchlistItem)
             let pageCount = result.response.headers["x-pagination-page-count"].flatMap(Int.init) ?? 1
             guard page < pageCount else { return items }
             page += 1
@@ -269,17 +315,22 @@ public actor TraktAccount {
 
     /// Collected movies and shows map to saved titles; collection membership does not mark them watched.
     public func collection() async throws -> [MetaPreview] {
-        var items: [MetaPreview] = []
+        try await collectionEntries().map(\.preview)
+    }
+
+    /// Collected titles with the date each was collected: movies by `collected_at`, shows by `last_collected_at`.
+    public func collectionEntries() async throws -> [TraktSavedItem] {
+        var items: [TraktSavedItem] = []
         var page = 1
         while true {
             let result = try await authorizedRequest(path: "sync/collection/movies?page=\(page)&limit=100&extended=full")
-            items += try decodeEntries(result.data).compactMap(\.watchlistPreview)
+            items += try decodeEntries(result.data).compactMap(\.collectionItem)
             let pageCount = result.response.headers["x-pagination-page-count"].flatMap(Int.init) ?? 1
             guard page < pageCount else { break }
             page += 1
         }
         let shows = try await authorizedRequest(path: "sync/collection/shows?extended=full")
-        return items + (try decodeEntries(shows.data).compactMap(\.watchlistPreview))
+        return items + (try decodeEntries(shows.data).compactMap(\.collectionItem))
     }
 
     public func watched() async throws -> [TraktWatchedItem] {
@@ -321,6 +372,39 @@ public actor TraktAccount {
         return try addedCount(result.data)
     }
 
+    /// Only this explicit call removes watchlist items; sync never does.
+    public func removeFromWatchlist(_ items: [MetaPreview]) async throws -> Int {
+        let payload = Self.watchlistPayload(items)
+        guard !payload.isEmpty else { return 0 }
+        let result = try await authorizedRequest(path: "sync/watchlist/remove", body: payload)
+        return try deletedCount(result.data)
+    }
+
+    /// Only this explicit call removes history records; sync never does. Trakt matches by title and episode, so no dates are sent.
+    public func removeFromHistory(_ items: [TraktWatchedItem]) async throws -> Int {
+        let payload = Self.historyPayload(items, dated: false)
+        guard !payload.isEmpty else { return 0 }
+        let result = try await authorizedRequest(path: "sync/history/remove", body: payload)
+        return try deletedCount(result.data)
+    }
+
+    /// Sends the paused position so Trakt can offer the title under Continue Watching. Progress is a percentage, clamped to 0...100.
+    /// A 409 means Trakt just recorded the same item, which counts as saved.
+    public func savePlayback(_ item: TraktWatchedItem, progress: Double) async throws {
+        let percent = progress.isNaN ? 0 : min(max(progress, 0), 100)
+        guard let payload = Self.playbackPayload(item, progress: percent) else { return }
+        _ = try await authorizedRequest(path: "scrobble/pause", body: payload, accepting: [409])
+    }
+
+    /// Latest change date per kind of Trakt data. Throws `invalidResponse` when the answer is unreadable.
+    public func lastActivities() async throws -> TraktLastActivities {
+        let result = try await authorizedRequest(path: "sync/last_activities")
+        guard let activities = try? JSONDecoder().decode(TraktActivitiesResponse.self, from: result.data) else {
+            throw TraktAccountError.invalidResponse
+        }
+        return activities.activities
+    }
+
     private func credentials() async throws -> (String, String) {
         let clientID = (await settings.load().traktClientID ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let clientSecret = try await secrets.get(Keys.clientSecret) ?? ""
@@ -360,7 +444,7 @@ public actor TraktAccount {
         return token
     }
 
-    private func authorizedRequest(path: String, body: [String: Any]? = nil, method: String? = nil) async throws -> HTTPResult {
+    private func authorizedRequest(path: String, body: [String: Any]? = nil, method: String? = nil, accepting: Set<Int> = []) async throws -> HTTPResult {
         let (clientID, clientSecret) = try await credentials()
         guard var token = try await loadToken() else { throw TraktAccountError.needsSignIn }
         guard token.clientID == clientID else { throw TraktAccountError.credentialsChanged }
@@ -372,7 +456,7 @@ public actor TraktAccount {
             token = try await refreshed(token, clientID: clientID, clientSecret: clientSecret)
             result = try await request(path: path, clientID: clientID, accessToken: token.accessToken, body: body, method: method)
         }
-        try checkStatus(result)
+        try checkStatus(result, accepting: accepting)
         return result
     }
 
@@ -405,8 +489,8 @@ public actor TraktAccount {
         }
     }
 
-    private func checkStatus(_ result: HTTPResult) throws {
-        guard (200...299).contains(result.response.statusCode) else {
+    private func checkStatus(_ result: HTTPResult, accepting: Set<Int> = []) throws {
+        guard (200...299).contains(result.response.statusCode) || accepting.contains(result.response.statusCode) else {
             throw TraktAccountError.network(.http(status: result.response.statusCode))
         }
     }
@@ -423,6 +507,13 @@ public actor TraktAccount {
         return added.values.reduce(0, +)
     }
 
+    private func deletedCount(_ data: Data) throws -> Int {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let deleted = body["deleted"] as? [String: Int] else {
+            throw TraktAccountError.invalidResponse
+        }
+        return deleted.values.reduce(0, +)
+    }
+
     private static func watchlistPayload(_ items: [MetaPreview]) -> [String: Any] {
         let movies = items.filter { $0.type == "movie" && isIMDb($0.id) }.map { ["ids": ["imdb": $0.id]] }
         let shows = items.filter { $0.type == "series" && isIMDb($0.id) }.map { ["ids": ["imdb": $0.id]] }
@@ -432,15 +523,20 @@ public actor TraktAccount {
         return payload
     }
 
-    private static func historyPayload(_ items: [TraktWatchedItem]) -> [String: Any] {
+    /// Additions carry `watched_at`; removals pass `dated: false` and send the same titles and episodes without dates.
+    private static func historyPayload(_ items: [TraktWatchedItem], dated: Bool = true) -> [String: Any] {
         let formatter = ISO8601DateFormatter()
+        func stamped(_ item: TraktWatchedItem, _ fields: [String: Any]) -> [String: Any] {
+            guard dated else { return fields }
+            return fields.merging(["watched_at": formatter.string(from: item.watchedAt)]) { $1 }
+        }
         let movies: [[String: Any]] = items.filter { $0.preview.type == "movie" && isIMDb($0.preview.id) }.map {
-            ["ids": ["imdb": $0.preview.id], "watched_at": formatter.string(from: $0.watchedAt)]
+            stamped($0, ["ids": ["imdb": $0.preview.id]])
         }
         let episodes = items.filter { $0.preview.type == "series" && isIMDb($0.preview.id) && $0.season != nil && $0.episode != nil }
         let shows: [[String: Any]] = Dictionary(grouping: episodes, by: { $0.preview.id }).sorted { $0.key < $1.key }.map { id, records in
             let seasons: [[String: Any]] = Dictionary(grouping: records, by: { $0.season ?? 0 }).sorted { $0.key < $1.key }.map { season, records in
-                let episodes: [[String: Any]] = records.map { ["number": $0.episode ?? 0, "watched_at": formatter.string(from: $0.watchedAt)] }
+                let episodes: [[String: Any]] = records.map { stamped($0, ["number": $0.episode ?? 0]) }
                 return ["number": season, "episodes": episodes]
             }
             return ["ids": ["imdb": id], "seasons": seasons]
@@ -449,6 +545,15 @@ public actor TraktAccount {
         if !movies.isEmpty { payload["movies"] = movies }
         if !shows.isEmpty { payload["shows"] = shows }
         return payload
+    }
+
+    /// A movie, or an episode with its season and number. Nil for anything Trakt cannot match by IMDb id.
+    private static func playbackPayload(_ item: TraktWatchedItem, progress: Double) -> [String: Any]? {
+        if item.preview.type == "movie", isIMDb(item.preview.id) {
+            return ["movie": ["ids": ["imdb": item.preview.id]], "progress": progress]
+        }
+        guard item.preview.type == "series", isIMDb(item.preview.id), let season = item.season, let episode = item.episode else { return nil }
+        return ["show": ["ids": ["imdb": item.preview.id]], "episode": ["season": season, "number": episode], "progress": progress]
     }
 
     public static func isIMDb(_ id: String) -> Bool {
@@ -484,9 +589,25 @@ private struct TraktSyncEntry: Decodable {
     let show: Media?
     let lastWatchedAt: String?
     let seasons: [Season]?
-    enum CodingKeys: String, CodingKey { case movie, show, seasons, lastWatchedAt = "last_watched_at" }
+    let listedAt: String?
+    let collectedAt: String?
+    let lastCollectedAt: String?
+    enum CodingKeys: String, CodingKey {
+        case movie, show, seasons, lastWatchedAt = "last_watched_at", listedAt = "listed_at", collectedAt = "collected_at", lastCollectedAt = "last_collected_at"
+    }
 
     var watchlistPreview: MetaPreview? { movie?.preview(type: "movie") ?? show?.preview(type: "series") }
+
+    var watchlistItem: TraktSavedItem? {
+        guard let preview = watchlistPreview else { return nil }
+        return TraktSavedItem(preview: preview, addedAt: Self.date(listedAt))
+    }
+
+    var collectionItem: TraktSavedItem? {
+        if let preview = movie?.preview(type: "movie") { return TraktSavedItem(preview: preview, addedAt: Self.date(collectedAt)) }
+        guard let preview = show?.preview(type: "series") else { return nil }
+        return TraktSavedItem(preview: preview, addedAt: Self.date(lastCollectedAt))
+    }
 
     var watchedItems: [TraktWatchedItem] {
         if let preview = movie?.preview(type: "movie"), let date = Self.date(lastWatchedAt) {
@@ -501,10 +622,44 @@ private struct TraktSyncEntry: Decodable {
         }
     }
 
-    private static func date(_ text: String?) -> Date? {
+    fileprivate static func date(_ text: String?) -> Date? {
         guard let text else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+    }
+}
+
+/// The `sync/last_activities` answer. Every key is optional, so a partial or newer answer still decodes.
+private struct TraktActivitiesResponse: Decodable {
+    struct Section: Decodable {
+        let watchlistedAt: String?
+        let collectedAt: String?
+        let watchedAt: String?
+        let pausedAt: String?
+        enum CodingKeys: String, CodingKey {
+            case watchlistedAt = "watchlisted_at", collectedAt = "collected_at", watchedAt = "watched_at", pausedAt = "paused_at"
+        }
+    }
+
+    struct Watchlist: Decodable {
+        let updatedAt: String?
+        enum CodingKeys: String, CodingKey { case updatedAt = "updated_at" }
+    }
+
+    let movies: Section?
+    let episodes: Section?
+    let shows: Section?
+    let seasons: Section?
+    let watchlist: Watchlist?
+
+    /// The latest date in each group; a group with no dates stays nil.
+    var activities: TraktLastActivities {
+        func latest(_ texts: [String?]) -> Date? { texts.compactMap { TraktSyncEntry.date($0) }.max() }
+        return TraktLastActivities(
+            watchlist: latest([movies?.watchlistedAt, shows?.watchlistedAt, seasons?.watchlistedAt, episodes?.watchlistedAt, watchlist?.updatedAt]),
+            collection: latest([movies?.collectedAt, episodes?.collectedAt]),
+            watched: latest([movies?.watchedAt, episodes?.watchedAt]),
+            playback: latest([movies?.pausedAt, episodes?.pausedAt]))
     }
 }

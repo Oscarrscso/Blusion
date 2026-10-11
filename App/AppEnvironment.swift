@@ -137,6 +137,18 @@ final class AppEnvironment {
         }
         let traktAccount = TraktAccount(settings: settings, secrets: secrets)
         let trakt = TraktClient(client: client, account: traktAccount, cache: TraktBrowseCache())
+        // Trakt's sync state (queued changes, and what Trakt last held) is kept across launches. UI tests keep it in memory.
+        var traktSyncState: (any TraktSyncStateStore)?
+        if !uiTesting, let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            // A Mac app that is not sandboxed shares Application Support with every other such app, so on the Mac the file goes into a
+            // folder named after the bundle id, as the SwiftData store does (see `PersistenceContainer.defaultStoreURL`).
+            #if targetEnvironment(macCatalyst)
+            let folder = Bundle.main.bundleIdentifier.map { support.appendingPathComponent($0, isDirectory: true) } ?? support
+            #else
+            let folder = support
+            #endif
+            traktSyncState = FileTraktSyncStateStore(fileURL: folder.appendingPathComponent("trakt-sync.json"))
+        }
         let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt, account: traktAccount,
                                                  snapshots: snapshots)
         let ratingsCache: any RatingsCache
@@ -154,7 +166,11 @@ final class AppEnvironment {
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,
                                    posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount, trakt: trakt,
-                                   secretsInKeychain: secretsInKeychain)
+                                   secretsInKeychain: secretsInKeychain, traktSyncState: traktSyncState, syncSchedulesItself: !uiTesting)
+        if !uiTesting {
+            // The first report from the network monitor is also the launch sync.
+            Task { await services.traktSync.startMonitoringNetwork() }
+        }
         let seedsDefaults = !uiTesting || environment["BLUSION_SEED_DEFAULTS"] == "1"
         let seeder = seedsDefaults ? DefaultAddonSeeder(registry: registry, flags: DefaultsFlagStore(defaults: settingsDefaults)) : nil
         return AppEnvironment(services: services, isUITesting: uiTesting, launchRoute: LaunchRoute.parse(environment["BLUSION_ROUTE"]) ?? .home,

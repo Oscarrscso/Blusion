@@ -13,8 +13,12 @@ public struct AppServices: Sendable {
     public let streams: StreamService
     public let subtitles: SubtitleService
     public let settings: any SettingsStore
+    /// Watch progress. Every change made through it is reported to `traktSync`.
     public let progress: any ProgressStore
+    /// The saved titles. Every change made through it is reported to `traktSync`.
     public let library: any LibraryStore
+    /// Two-way Trakt sync: `progress` and `library` report every change to it, and it writes to the plain stores under them.
+    public let traktSync: TraktSync
     /// The user's Home layout (nil inside means "automatic").
     public let widgets: any WidgetStore
     /// Loads the items of Home widgets, with an in-memory cache.
@@ -40,7 +44,8 @@ public struct AppServices: Sendable {
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
-                trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil) {
+                trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil,
+                traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -48,11 +53,17 @@ public struct AppServices: Sendable {
         self.subtitles = subtitles ?? SubtitleService(registry: registry, client: client)
         let settings = settings ?? InMemorySettingsStore()
         self.settings = settings
-        self.progress = progress ?? InMemoryProgressStore()
-        self.library = library ?? InMemoryLibraryStore()
+        let plainProgress = progress ?? InMemoryProgressStore()
+        let plainLibrary = library ?? InMemoryLibraryStore()
         self.widgets = widgets ?? InMemoryWidgetStore()
         let traktAccount = traktAccount ?? TraktAccount(settings: settings, secrets: InMemorySecretStore())
         let trakt = trakt ?? TraktClient(client: client, account: traktAccount, cache: TraktBrowseCache())
+        // Sync gets the plain stores, so what it writes is never taken for a change the user made. The app gets the synced wrappers.
+        let traktSync = TraktSync(account: traktAccount, library: plainLibrary, progress: plainProgress,
+                                  store: traktSyncState ?? InMemoryTraktSyncStateStore(), schedulesItself: syncSchedulesItself)
+        self.progress = SyncedProgressStore(base: plainProgress, sync: traktSync)
+        self.library = SyncedLibraryStore(base: plainLibrary, sync: traktSync)
+        self.traktSync = traktSync
         self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt,
                                                                    account: traktAccount)
         self.posterRatings = posterRatings ?? PosterRatingsStore()

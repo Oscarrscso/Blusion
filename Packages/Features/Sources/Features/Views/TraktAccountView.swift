@@ -53,7 +53,7 @@ struct TraktAccountView: View {
             Text("Account")
         } footer: {
             if !model.isSignedIn {
-                Text("Connect to import your Trakt watchlist, collection and watched history. Playback positions stay on this device.")
+                Text("Connect to sync your saved titles, watched marks and paused positions with Trakt.")
             }
         }
     }
@@ -64,15 +64,22 @@ struct TraktAccountView: View {
                 .accessibilityIdentifier("trakt.sync")
             Button("Import collection") { Task { await model.importFromTrakt() } }
                 .accessibilityIdentifier("trakt.import")
+            if model.pendingCount > 0 {
+                Text(pendingText).foregroundStyle(.secondary).accessibilityIdentifier("trakt.pending")
+            }
         } header: {
             Text("Your Trakt library")
         } footer: {
             Text("""
-                Sync sends your saved titles and watched items to Trakt, then imports Trakt’s collection. \
-                Your watchlist and collection appear in Library → Saved; watched history appears in Library → Watched. \
-                Nothing is removed.
+                Saved titles, watched marks and paused positions sync both ways automatically. Removing a saved title or clearing a watched \
+                mark here does the same on Trakt, and what is removed on Trakt is removed here. Saved titles use your Trakt watchlist; \
+                your collection is only read. Sync reads everything from Trakt again.
                 """)
         }
+    }
+
+    private var pendingText: String {
+        model.pendingCount == 1 ? "1 change waiting to reach Trakt." : "\(model.pendingCount) changes waiting to reach Trakt."
     }
 
     private func signIn() async {

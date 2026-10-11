@@ -24,13 +24,9 @@ final class ContinueWatchingModel {
         newest = LibraryViewModel.continueWatching(from: records).first
     }
 
-    /// Takes the title off Continue Watching. Trakt's record is looked up here, since this model keeps no copy of Trakt's list.
-    func remove(_ item: WatchProgress) async throws {
-        var playbackID: Int?
-        if await services.traktAccount.isSignedIn() {
-            playbackID = try await services.traktAccount.playback().first { $0.id == item.id }?.playbackID
-        }
-        try await services.removeContinueWatching(identity: item.id, traktPlaybackID: playbackID)
+    /// Takes the title off Continue Watching. The removal is queued for Trakt, which sync sends, so this never waits on the network.
+    func remove(_ item: WatchProgress) async {
+        await services.removeContinueWatching(identity: item.id)
         await refresh()
     }
 }
@@ -44,7 +40,7 @@ struct ResumeAccessoryModifier: ViewModifier {
         #if targetEnvironment(macCatalyst)
         content.safeAreaInset(edge: .bottom) {
             if let newest = model.newest {
-                ContinueWatchingAccessory(item: newest, onRemove: { Task { try? await model.remove(newest) } })
+                ContinueWatchingAccessory(item: newest, onRemove: { Task { await model.remove(newest) } })
                     .padding(.vertical, Theme.Spacing.s)
                     .glassEffect(.regular, in: .capsule)
                     .padding(.horizontal, Theme.Spacing.l)
@@ -55,7 +51,7 @@ struct ResumeAccessoryModifier: ViewModifier {
         if #available(iOS 26.1, *) {
             content.tabViewBottomAccessory(isEnabled: model.newest != nil) {
                 if let newest = model.newest {
-                    ContinueWatchingAccessory(item: newest, onRemove: { Task { try? await model.remove(newest) } })
+                    ContinueWatchingAccessory(item: newest, onRemove: { Task { await model.remove(newest) } })
                 }
             }
         } else {

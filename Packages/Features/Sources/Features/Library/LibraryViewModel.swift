@@ -53,7 +53,7 @@ public final class LibraryViewModel {
         await load()
         guard isEmpty, await services.traktAccount.isSignedIn(), now.timeIntervalSince(lastTraktPull) >= 300 else { return }
         lastTraktPull = now
-        await TraktAccountViewModel(services: services).importFromTrakt()
+        _ = try? await services.traktSync.sync(force: true)
         await load()
     }
 

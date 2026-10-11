@@ -1,0 +1,212 @@
+#if canImport(UIKit)
+import SwiftUI
+import StremioKit
+import UIKit
+
+/// A series' seasons and episodes: the season picker and the episode-width toggle, then the episodes of the selected season, each a row
+/// with its still, progress and watched mark.
+struct DetailEpisodes: View {
+    let model: DetailViewModel
+    let pageWidth: CGFloat
+    let contentMargin: CGFloat
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(TitleActions.self) private var titleActions
+
+    /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
+    private static let secondaryControlHeight: CGFloat = 36
+
+    var body: some View {
+        let width = episodeWidth(pageWidth: pageWidth)
+        return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+            HStack(spacing: Theme.Spacing.m) {
+                seasonMenu
+                Spacer(minLength: 0)
+                episodeWidthToggle
+            }
+            .padding(.horizontal, contentMargin)
+            if model.isLoading && model.episodes.isEmpty {
+                SkeletonRow(aspect: .wide)
+            }
+            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
+                        resetKey: "\(model.selectedSeason ?? -1)|\(model.matchesEpisodeWidthToText)|\(Int(width))") {
+                ForEach(model.episodes) { episode in
+                    episodeRow(episode, width: width)
+                        .id(episode.id).reportsShelfEdge(id: episode.id)
+                }
+            }
+            .animation(.snappy, value: model.matchesEpisodeWidthToText)
+        }
+    }
+
+    /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
+    private var seasonMenu: some View {
+        Menu {
+            ForEach(model.seasons, id: \.self) { season in
+                Button(season == 0 ? "Specials" : "Season \(season)") { model.selectedSeason = season }
+            }
+            if let season = model.selectedSeason {
+                Divider()
+                let watched = model.isSeasonWatched(season)
+                let name = season == 0 ? "Specials" : "Season \(season)"
+                Button(watched ? "Mark \(name) as Not Watched" : "Mark \(name) as Watched",
+                       systemImage: watched ? "xmark.circle" : "checkmark.circle") {
+                    Task {
+                        await model.setSeasonWatched(!watched, season: season)
+                        await titleActions.refresh()
+                    }
+                }
+                .accessibilityIdentifier("detail.seasonWatched")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.glass)
+        .frame(height: Self.secondaryControlHeight)
+        .pointerFeedback()
+        .accessibilityIdentifier("detail.seasonPicker")
+    }
+
+    /// Switches the episode cards between their fixed width and the width of the text. The symbol shows the layout in use: a row of
+    /// cards, or one card across the page.
+    private var episodeWidthToggle: some View {
+        let isWide = model.matchesEpisodeWidthToText
+        return Button {
+            Task { await model.setMatchesEpisodeWidthToText(!isWide) }
+        } label: {
+            Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
+                .font(.body.weight(.semibold))
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .glassCircleButton(.regular)
+        .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
+        .titleTapHaptic()
+        .accessibilityLabel("Episode width")
+        .help("Episode width")
+        .accessibilityValue(isWide ? "Full width" : "Fixed width")
+        .accessibilityIdentifier("detail.episodeWidthToggle")
+    }
+
+    /// The text above the episodes runs from one page margin to the other. With the toggle on, each card is that wide, so the cards
+    /// line up with it; otherwise they keep their fixed width.
+    private func episodeWidth(pageWidth: CGFloat) -> CGFloat {
+        model.matchesEpisodeWidthToText ? pageWidth - contentMargin * 2 : metrics.episodeWidth
+    }
+
+    private func episodeRow(_ video: Video, width: CGFloat) -> some View {
+        NavigationLink(value: model.request(for: video)) {
+            EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
+                       artwork: model.backdropURL, score: model.score(for: video), width: width,
+                       showsWholeOverview: model.matchesEpisodeWidthToText)
+        }
+        .buttonStyle(PressableCardStyle())
+        .titleTapHaptic()
+        .contextMenu {
+            let watched = model.isWatched(video)
+            Button(watched ? "Mark as not watched" : "Mark as watched", systemImage: watched ? "xmark.circle" : "checkmark.circle") {
+                Task {
+                    await model.setWatched(!watched, for: model.request(for: video))
+                    await titleActions.refresh()
+                }
+            }
+        }
+        .accessibilityIdentifier("detail.episode.\(video.id)")
+        // IMDb's episode scores come from OMDb, a season at a time, asked for when its first card comes on screen (and again if the key changes).
+        .task(id: "\(video.id):\(model.reviewServicesRevision):\(model.isLoading):\(model.hasSettledHero)") {
+            guard model.hasSettledHero else { return }
+            await model.episodeAppeared(video)
+        }
+    }
+}
+
+/// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the
+/// overview: three lines in a fixed-width card, all of it in a full-width one.
+private struct EpisodeRow: View {
+    let video: Video
+    let fraction: Double?
+    let watched: Bool
+    let artwork: URL?
+    let score: DetailViewModel.EpisodeScore?
+    let width: CGFloat
+    /// Set for a full-width card: the whole overview shows at its own height, so the rating sits under this episode's own text.
+    var showsWholeOverview = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            still
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                if let episode = video.episode {
+                    Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(.secondary)
+                }
+                Text(video.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                if let overview = video.overview, !overview.isEmpty {
+                    JustifiedText(text: overview, textStyle: .footnote, color: .secondaryLabel,
+                                  lineLimit: showsWholeOverview ? 0 : 3)
+                }
+                dateAndScore
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: width, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The episode's own still, or the series' backdrop when the addon sent none.
+    private var still: some View {
+        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: width * 3)
+            .frame(width: width, height: width / CardAspect.wide.ratio)
+            .overlay {
+                if !watched, let fraction {
+                    PlaybackProgressOverlay(fraction: fraction, width: width)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if watched { checkmark }
+            }
+            .mediaArtwork(cornerRadius: Theme.Radius.small)
+    }
+
+    private var checkmark: some View {
+        Image(systemName: "checkmark")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: 20, height: 20)
+            .background(.black.opacity(0.6), in: Circle())
+            .padding(Theme.Spacing.xs)
+            .accessibilityHidden(true)
+    }
+
+    /// "Jan 20, 2008 · [IMDb] 8.9": the air date, then the score with the IMDb mark when it is IMDb's (a star when it is the addon's).
+    @ViewBuilder
+    private var dateAndScore: some View {
+        let date = video.airDate?.formatted(date: .abbreviated, time: .omitted)
+        if date != nil || score != nil {
+            HStack(spacing: 5) {
+                if let date { Text(date) }
+                if date != nil, score != nil { Text("·") }
+                if let score {
+                    if score.isIMDb {
+                        ReviewSiteIcon(site: .imdb, size: 13)
+                    } else {
+                        Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
+                    }
+                    Text(score.text).monospacedDigit()
+                    if !score.isIMDb, video.ratingSource == .tmdb { Text("TMDb") }
+                }
+            }
+            .font(Theme.Typography.metaLine)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([date, score.map {
+                "\($0.isIMDb ? "IMDb rating" : video.ratingSource == .tmdb ? "TMDb rating" : "Rating") \($0.text)"
+            }].compactMap { $0 }.joined(separator: ", "))
+        }
+    }
+}
+#endif

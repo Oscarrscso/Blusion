@@ -196,4 +196,180 @@ import StremioKitTestSupport
         #expect(try await account.addToHistory(items.map { TraktWatchedItem(preview: $0, watchedAt: Date(timeIntervalSince1970: 1700000000)) }) == 1)
         #expect(transport.callCount == 3)
     }
+
+    /// The recorded request body as sorted-key JSON, so tests can compare the exact payload.
+    private func canonicalBody(_ request: URLRequest) throws -> String {
+        let object = try JSONSerialization.jsonObject(with: request.httpBody ?? Data())
+        return String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self)
+    }
+
+    @Test func watchlistEntriesPageAndCarryListedDates() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.query?.contains("page=2") == true {
+                let json = #"[{"show":{"title":"Show","ids":{"imdb":"tt2"}},"listed_at":"2023-11-15T00:00:00Z"},{"movie":{"title":"Undated","ids":{"imdb":"tt3"}}}]"#
+                return StubTransport.response(Data(json.utf8), for: request)
+            }
+            let json = #"[{"movie":{"title":"Movie","year":2020,"ids":{"imdb":"tt1"}},"listed_at":"2023-11-14T22:13:20.000Z"}]"#
+            return StubTransport.response(Data(json.utf8), for: request, headers: ["x-pagination-page-count": "2"])
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let entries = try await account.watchlistEntries()
+        #expect(entries.map(\.identity) == ["movie/tt1", "series/tt2", "movie/tt3"])
+        #expect(entries.map(\.addedAt) == [Date(timeIntervalSince1970: 1700000000), Date(timeIntervalSince1970: 1700006400), nil])
+        #expect(transport.requests.dropFirst().map { $0.url?.path } == ["/sync/watchlist", "/sync/watchlist"])
+        #expect(transport.requests.dropFirst().map { $0.url?.query } == ["page=1&limit=100&extended=full", "page=2&limit=100&extended=full"])
+        #expect(try await account.watchlist() == entries.map(\.preview))
+    }
+
+    @Test func collectionEntriesDateMoviesByCollectedAtAndShowsByLastCollectedAt() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/collection/movies" {
+                let json = #"[{"movie":{"title":"Movie","ids":{"imdb":"tt1"}},"collected_at":"2023-11-14T22:13:20Z"}]"#
+                return StubTransport.response(Data(json.utf8), for: request)
+            }
+            let json = #"[{"show":{"title":"Show","ids":{"imdb":"tt2"}},"collected_at":"2020-01-01T00:00:00Z","last_collected_at":"2023-11-15T00:00:00.000Z"}]"#
+            return StubTransport.response(Data(json.utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let entries = try await account.collectionEntries()
+        #expect(entries.map(\.identity) == ["movie/tt1", "series/tt2"])
+        #expect(entries.map(\.addedAt) == [Date(timeIntervalSince1970: 1700000000), Date(timeIntervalSince1970: 1700006400)])
+        #expect(transport.requests.dropFirst().map { $0.url?.path } == ["/sync/collection/movies", "/sync/collection/shows"])
+        #expect(transport.requests.dropFirst().map { $0.url?.query } == ["page=1&limit=100&extended=full", "extended=full"])
+    }
+
+    @Test func removeFromWatchlistSendsIMDbIDsOnlyAndReportsDeletedCount() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            let payload = #"{"deleted":{"movies":1,"shows":1,"episodes":0},"not_found":{"movies":[],"shows":[]}}"#
+            return StubTransport.response(Data(payload.utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let items = [MetaPreview(id: "tt1", type: "movie", name: "Movie"), MetaPreview(id: "private-id", type: "movie", name: "Other"),
+                     MetaPreview(id: "tt2", type: "series", name: "Show")]
+        #expect(try await account.removeFromWatchlist(items) == 2)
+        let request = try #require(transport.requests.last)
+        #expect(request.httpMethod == "POST" && request.url?.path == "/sync/watchlist/remove")
+        #expect(try canonicalBody(request) == #"{"movies":[{"ids":{"imdb":"tt1"}}],"shows":[{"ids":{"imdb":"tt2"}}]}"#)
+
+        let before = transport.callCount
+        #expect(try await account.removeFromWatchlist([]) == 0)
+        #expect(try await account.removeFromWatchlist([MetaPreview(id: "private-id", type: "movie")]) == 0)
+        #expect(transport.callCount == before)
+    }
+
+    @Test func removeFromHistorySendsTitlesAndEpisodesWithoutWatchDates() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            let payload = #"{"deleted":{"movies":1,"episodes":3},"not_found":{"movies":[],"episodes":[]}}"#
+            return StubTransport.response(Data(payload.utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let watchedAt = Date(timeIntervalSince1970: 1700000000)
+        let items = [
+            TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series", name: "Show"), watchedAt: watchedAt, season: 2, episode: 1),
+            TraktWatchedItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Movie"), watchedAt: watchedAt),
+            TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series", name: "Show"), watchedAt: watchedAt, season: 1, episode: 1),
+            TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series", name: "Show"), watchedAt: watchedAt, season: 2, episode: 3),
+            TraktWatchedItem(preview: MetaPreview(id: "private-id", type: "series", name: "Other"), watchedAt: watchedAt, season: 1, episode: 1),
+            TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series", name: "Show"), watchedAt: watchedAt, season: 1),
+        ]
+        #expect(try await account.removeFromHistory(items) == 4)
+        let request = try #require(transport.requests.last)
+        #expect(request.httpMethod == "POST" && request.url?.path == "/sync/history/remove")
+        let expected = #"{"movies":[{"ids":{"imdb":"tt1"}}],"shows":[{"ids":{"imdb":"tt2"},"seasons":[{"episodes":[{"number":1}],"number":1},{"episodes":[{"number":1},{"number":3}],"number":2}]}]}"#
+        #expect(try canonicalBody(request) == expected)
+
+        let before = transport.callCount
+        #expect(try await account.removeFromHistory([]) == 0)
+        #expect(try await account.removeFromHistory([TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series"), watchedAt: watchedAt, season: 1)]) == 0)
+        #expect(transport.callCount == before)
+    }
+
+    @Test func savePlaybackSendsIMDbMoviesAndEpisodesWithClampedProgress() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            return StubTransport.response(Data("{}".utf8), status: 201, for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let watchedAt = Date(timeIntervalSince1970: 1700000000)
+        let movie = TraktWatchedItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Movie"), watchedAt: watchedAt)
+        let episode = TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series", name: "Show"), watchedAt: watchedAt, season: 2, episode: 3)
+        try await account.savePlayback(movie, progress: 40)
+        try await account.savePlayback(episode, progress: 150)
+        try await account.savePlayback(movie, progress: -5)
+        let scrobbles = Array(transport.requests.dropFirst())
+        #expect(scrobbles.allSatisfy { $0.httpMethod == "POST" && $0.url?.path == "/scrobble/pause" })
+        #expect(try scrobbles.map { try canonicalBody($0) } == [
+            #"{"movie":{"ids":{"imdb":"tt1"}},"progress":40}"#,
+            #"{"episode":{"number":3,"season":2},"progress":100,"show":{"ids":{"imdb":"tt2"}}}"#,
+            #"{"movie":{"ids":{"imdb":"tt1"}},"progress":0}"#,
+        ])
+
+        let before = transport.callCount
+        try await account.savePlayback(TraktWatchedItem(preview: MetaPreview(id: "private-id", type: "movie"), watchedAt: watchedAt), progress: 10)
+        try await account.savePlayback(TraktWatchedItem(preview: MetaPreview(id: "tt2", type: "series"), watchedAt: watchedAt, season: 2), progress: 10)
+        #expect(transport.callCount == before)
+    }
+
+    @Test func savePlaybackTreatsConflictAsSavedAndOtherFailuresAsErrors() async throws {
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            return StubTransport.response(Data(), status: call == 2 ? 409 : 500, for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        let movie = TraktWatchedItem(preview: MetaPreview(id: "tt1", type: "movie", name: "Movie"), watchedAt: Date(timeIntervalSince1970: 1700000000))
+        try await account.savePlayback(movie, progress: 10)
+        await #expect(throws: TraktAccountError.network(.http(status: 500))) { try await account.savePlayback(movie, progress: 10) }
+    }
+
+    @Test func lastActivitiesTakeTheLatestDatePerGroupAndTolerateMissingSections() async throws {
+        let full = #"""
+        {"movies":{"watchlisted_at":"2023-11-14T22:13:20.000Z","collected_at":"2023-11-14T22:13:20Z","watched_at":"2023-11-15T00:00:00.000Z","paused_at":"2023-11-16T00:00:00.000Z"},
+         "episodes":{"watchlisted_at":"2023-11-10T00:00:00Z","collected_at":"2023-12-01T00:00:00Z","watched_at":"2023-11-20T00:00:00Z","paused_at":"2023-11-01T00:00:00Z"},
+         "shows":{"watchlisted_at":"2024-01-01T00:00:00Z"},
+         "seasons":{"watchlisted_at":"2023-11-12T00:00:00Z"},
+         "watchlist":{"updated_at":"2023-11-11T00:00:00Z"}}
+        """#
+        let sparse = #"{"watchlist":{"updated_at":"2023-11-11T00:00:00Z"},"movies":{"watched_at":"2023-11-15T00:00:00.000Z"}}"#
+        let answers = [full, sparse, "{}", "not json"]
+        let transport = StubTransport { request, call in
+            if call == 1 { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            return StubTransport.response(Data(answers[call - 2].utf8), for: request)
+        }
+        let account = try await account(transport)
+        try await signIn(account)
+        #expect(try await account.lastActivities() == TraktLastActivities(watchlist: Date(timeIntervalSince1970: 1704067200),
+                                                                          collection: Date(timeIntervalSince1970: 1701388800),
+                                                                          watched: Date(timeIntervalSince1970: 1700438400),
+                                                                          playback: Date(timeIntervalSince1970: 1700092800)))
+        #expect(transport.requests.last?.url?.path == "/sync/last_activities")
+        #expect(try await account.lastActivities() == TraktLastActivities(watchlist: Date(timeIntervalSince1970: 1699660800),
+                                                                          watched: Date(timeIntervalSince1970: 1700006400)))
+        #expect(try await account.lastActivities() == TraktLastActivities())
+        await #expect(throws: TraktAccountError.invalidResponse) { try await account.lastActivities() }
+    }
+
+    @Test func onlyTimeoutsOfflineAndBusyOrFailingTraktAreTransient() {
+        let transient: [TraktAccountError] = [
+            .network(.timeout), .network(.offline), .network(.network("urlerror.-1005")), .network(.cancelled),
+            .network(.http(status: 408)), .network(.http(status: 429)), .network(.http(status: 500)), .network(.http(status: 503)),
+            .network(.http(status: 599)),
+        ]
+        let refused: [TraktAccountError] = [
+            .network(.http(status: 401)), .network(.http(status: 404)), .network(.http(status: 420)), .network(.http(status: 422)),
+            .network(.http(status: 499)), .network(.http(status: 600)), .network(.invalidURL), .network(.invalidJSON),
+            .needsCredentials, .needsSignIn, .credentialsChanged, .invalidResponse,
+        ]
+        for error in transient { #expect(error.isTransient, "\(error) should be transient") }
+        for error in refused { #expect(!error.isTransient, "\(error) should not be transient") }
+    }
 }

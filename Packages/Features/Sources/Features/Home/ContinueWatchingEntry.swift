@@ -36,12 +36,10 @@ public struct ContinueWatchingEntry: Identifiable, Equatable, Sendable {
 }
 
 extension AppServices {
-    /// Takes one title off Continue Watching everywhere it is kept. Trakt's paused record goes first, or the next refresh would bring
-    /// it back; when Trakt refuses, nothing is removed locally.
-    func removeContinueWatching(identity: String, traktPlaybackID: Int?) async throws {
-        if let traktPlaybackID, await traktAccount.isSignedIn() {
-            try await traktAccount.removePlayback(id: traktPlaybackID)
-        }
+    /// Takes one title off Continue Watching everywhere it is kept. Trakt's paused record is removed by sync, now or when Trakt can next
+    /// be reached, and stays hidden here until then.
+    func removeContinueWatching(identity: String) async {
+        await traktSync.playbackRemoved(identity)
         await progress.remove(identity)
     }
 }

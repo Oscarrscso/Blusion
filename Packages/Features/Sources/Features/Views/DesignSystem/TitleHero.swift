@@ -19,6 +19,8 @@ enum TitleHero {
     static let logoTextGap = Theme.Spacing.s
     /// The longest edge the picture is decoded to. Smaller than full screen, so the neighbouring pages keep it in the image cache.
     static let portraitPixelSize: CGFloat = 2048
+    /// The longest edge the landscape picture is decoded to: full screen.
+    static let landscapePixelSize: CGFloat = 4096
     /// The longest edge the stand-in poster is decoded to. `ArtworkImage` decodes its own stand-in at this size too, and Home preloads the
     /// poster at it, so the stand-in is ready at once.
     static let placeholderPixelSize: CGFloat = 600
@@ -52,8 +54,8 @@ enum TitleHero {
         300
         #endif
     }
-    /// The one gap between Play and every button beside it in landscape: the portrait gap.
-    static let actionGap = Theme.Spacing.s
+    /// The one gap in the action row: between Play and the round actions beside it, and between those actions. All gaps are equal.
+    static let actionGap: CGFloat = 6
 
     /// The height of the portrait picture on a screen `width` wide.
     static func height(width: CGFloat, metrics: LayoutMetrics) -> CGFloat {
@@ -79,6 +81,35 @@ enum TitleHero {
 
     /// The bottom fade's share of the visible picture, `fadeShare` of the hero height.
     static func fadeLength(height: CGFloat, visible: CGFloat) -> Double { fadeShare * Double(height / max(visible, 1)) }
+}
+
+/// The settle as a modifier, so its keyframes are built in a plain type rather than in a generic `View` extension (see `View.heroSettle`).
+private struct HeroSettle<Trigger: Equatable & Sendable>: ViewModifier {
+    let trigger: Trigger
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: 1.0, trigger: trigger) { view, scale in
+            view.scaleEffect(scale)
+        } keyframes: { _ in
+            KeyframeTrack {
+                // A move, not a keyframe of no length: that one has no speed to hand the spring, and the scale comes out
+                // infinite, which draws nothing and takes no touches.
+                MoveKeyframe(1.025)
+                SpringKeyframe(1, duration: 0.4, spring: .smooth)
+                // The spring is not quite at rest when its time is up. The spotlight ends at exactly its own size.
+                LinearKeyframe(1, duration: 0.1)
+            }
+        }
+    }
+}
+
+extension View {
+    /// The settle the spotlight makes when a title closes back to it, and the title page makes when it opens from the spotlight: a little
+    /// larger, then at rest. Scale only, so the picture and logo are never hidden or faded. Plays each time `trigger` changes, never on
+    /// first appearance.
+    func heroSettle(trigger: some Equatable & Sendable) -> some View {
+        modifier(HeroSettle(trigger: trigger))
+    }
 }
 
 /// What one hero image is doing: still loading, decoded and ready, or there is none (no URL once the lookup has finished, or it failed).

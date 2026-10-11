@@ -54,6 +54,20 @@ public final class AppRouter {
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
+    /// The one way back in a stack: the back swipe and the spotlight title's own back button both pop here, so one gesture never pops
+    /// twice. A title opened from Home's spotlight with no animation closes with none (see `instantDestination()`); every other screen
+    /// closes with its own transition.
+    func goBack(in path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) {
+        guard !self[keyPath: path].isEmpty else { return }
+        guard path == \AppRouter.homePath, spotlightDepth == homePath.count else {
+            self[keyPath: path].removeLast()
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { homePath.removeLast() }
+    }
+
     /// The Search tab on its category browser, as if the tab had been tapped from another tab.
     func showSearchBrowse() {
         searchPath = NavigationPath()
@@ -95,6 +109,7 @@ public struct RootTabView: View {
     @State private var resume: ContinueWatchingModel
     @State private var titleActions: TitleActions
     @State private var isLandscape = false
+    @State private var windowSafeArea = EdgeInsets()
 
     public init(services: AppServices, route: LaunchRoute = .home, addonLink: Binding<String?> = .constant(nil), userStateRevision: Int = 0) {
         self.services = services
@@ -122,7 +137,7 @@ public struct RootTabView: View {
             Tab(value: LaunchRoute.Tab.home) {
                 NavigationStack(path: $router.homePath) {
                     HomeView(services: services)
-                        .appDestinations(services: services)
+                        .appDestinations(services: services, path: \.homePath)
                         .navigationDestination(for: GalleryDestination.self) { DesignGalleryView(section: $0.section) }
                 }
                 .zoomTransitions()
@@ -142,7 +157,7 @@ public struct RootTabView: View {
             Tab(value: LaunchRoute.Tab.discover) {
                 NavigationStack(path: $router.discoverPath) {
                     DiscoverView(services: services) { router.showAddons() }
-                        .appDestinations(services: services)
+                        .appDestinations(services: services, path: \.discoverPath)
                 }
                 .zoomTransitions()
             } label: {
@@ -157,7 +172,7 @@ public struct RootTabView: View {
                 Tab(value: LaunchRoute.Tab.library) {
                     NavigationStack(path: $router.libraryPath) {
                         LibraryView(services: services) { router.open(.discover) }
-                            .appDestinations(services: services)
+                            .appDestinations(services: services, path: \.libraryPath)
                     }
                     .zoomTransitions()
                 } label: {
@@ -193,7 +208,7 @@ public struct RootTabView: View {
             Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView(services: services, initialQuery: initialQuery)
-                        .appDestinations(services: services)
+                        .appDestinations(services: services, path: \.searchPath)
                 }
                 .zoomTransitions()
             }
@@ -230,11 +245,15 @@ public struct RootTabView: View {
         .environment(services.posterRatings)
         .environment(titleActions)
         .environment(\.isLandscape, isLandscape)
+        .environment(\.windowSafeArea, windowSafeArea)
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .focusedSceneValue(router)
         .preferredColorScheme(.dark)
         // Screens run edge to edge, including the sides of a landscape iPhone. Only the navigation bar and tab bar keep their safe area.
         .ignoresSafeArea(.container, edges: .horizontal)
+        // Read outside the line above: inside it, the sides are no longer a safe area to report. Screens that run under the notch or the
+        // status bar take these from the environment (see `windowSafeArea`).
+        .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { windowSafeArea = $0 }
     }
 
     private func refreshUserState() async {
@@ -244,6 +263,14 @@ public struct RootTabView: View {
         let settings = await services.settings.load()
         services.posterRatings.isEnabled = settings.showsPosterRatings
         services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
+        // Trakt may hold newer saved titles and watched marks, from the other device or from the web. Whatever it changed here is read
+        // again, and Home is told.
+        if let summary = try? await services.traktSync.sync(), summary.changedLocalData {
+            let progress = await services.progress.all()
+            resume.update(from: progress)
+            await titleActions.refresh(progress: progress)
+            router.userStateRevision += 1
+        }
     }
 }
 

@@ -10,6 +10,8 @@ import StremioKitTestSupport
     private let when = Date(timeIntervalSince1970: 1700000000)
     private let codeJSON = #"{"device_code":"device","user_code":"ABCD1234","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}"#
     private let tokenJSON = #"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#
+    /// Trakt's change dates: everything changed on 2024-01-01, so a forced sync reads every list.
+    private let activitiesJSON = #"{"movies":{"watched_at":"2024-01-01T00:00:00.000Z","watchlisted_at":"2024-01-01T00:00:00.000Z","collected_at":"2024-01-01T00:00:00.000Z"}}"#
 
     private func services(transport: StubTransport, library: [LibraryItem] = [], progress: [WatchProgress] = [],
                           clientID: String = TraktAccount.defaultClientID) async throws -> AppServices {
@@ -47,8 +49,10 @@ import StremioKitTestSupport
 
     @Test func importAddsMissingItemsAndKeepsSavedTitlesAndPlaybackPositions() async throws {
         let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
                 let payload = #"[{"movie":{"title":"Remote","ids":{"imdb":"tt2"}}},{"movie":{"title":"Remote copy","ids":{"imdb":"tt1"}}}]"#
                 return StubTransport.response(Data(payload.utf8), for: request)
@@ -85,8 +89,10 @@ import StremioKitTestSupport
 
     @Test func exportSkipsExistingWatchesAndUnsupportedIDs() async throws {
         let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.httpMethod == "POST" {
                 let body = try #require(try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
                 let movies = try #require(body["movies"] as? [[String: Any]])
@@ -111,8 +117,10 @@ import StremioKitTestSupport
 
     @Test func collectionAndWatchlistMergeWithoutDuplicatesOrMarkingCollectedTitlesWatched() async throws {
         let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
                 return StubTransport.response(Data(#"[{"movie":{"title":"Watch later","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
@@ -139,8 +147,10 @@ import StremioKitTestSupport
 
     @Test func failedCollectionFetchDoesNotPartiallyImportTheWatchlist() async throws {
         let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
                 return StubTransport.response(Data(#"[{"movie":{"title":"Watch later","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
@@ -156,8 +166,10 @@ import StremioKitTestSupport
 
     @Test func emptyLibraryRefreshImportsTraktWithoutSigningOut() async throws {
         let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
         let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
                 return StubTransport.response(Data(#"[{"movie":{"title":"Remote","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
@@ -185,10 +197,14 @@ import StremioKitTestSupport
 
     @Test func emptyLibraryRetriesFailedTraktImportsAfterFiveMinutes() async throws {
         let tokenJSON = tokenJSON
-        let transport = StubTransport { request, call in
+        let activitiesJSON = activitiesJSON
+        let watchlistCalls = CallCounter()
+        let transport = StubTransport { request, _ in
             if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
             if request.url?.path == "/sync/watchlist" {
-                if call == 2 { return StubTransport.response(Data(), status: 503, for: request) }
+                // Only the first read of the watchlist fails: the import before the five minutes have passed.
+                if watchlistCalls.next() == 1 { return StubTransport.response(Data(), status: 503, for: request) }
                 return StubTransport.response(Data(#"[{"movie":{"title":"Recovered","ids":{"imdb":"tt1"}}}]"#.utf8), for: request)
             }
             return StubTransport.response(Data("[]".utf8), for: request)
@@ -224,5 +240,66 @@ import StremioKitTestSupport
         await model.signOut()
         #expect(!model.isSignedIn && model.errorMessage == nil)
         #expect(await services.library.all() == [saved])
+    }
+
+    @Test func aTitleThatLeftTraktIsRemovedHereAndSaidSo() async throws {
+        let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
+        let watchlistCalls = CallCounter()
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
+            if request.url?.path == "/sync/watchlist" {
+                // Two titles on the first read; by the second, Trakt has removed the second.
+                let payload = watchlistCalls.next() == 1
+                    ? #"[{"movie":{"title":"One","ids":{"imdb":"tt1"}}},{"movie":{"title":"Two","ids":{"imdb":"tt2"}}}]"#
+                    : #"[{"movie":{"title":"One","ids":{"imdb":"tt1"}}}]"#
+                return StubTransport.response(Data(payload.utf8), for: request)
+            }
+            return StubTransport.response(Data("[]".utf8), for: request)
+        }
+        let services = try await services(transport: transport)
+        let model = TraktAccountViewModel(services: services)
+        await model.importFromTrakt()
+        #expect(model.message == "Imported 2 saved titles and 0 watched items from Trakt.")
+        await model.importFromTrakt()
+        #expect(model.errorMessage == nil)
+        #expect(model.message == "Imported 0 saved titles and 0 watched items from Trakt. "
+                + "Removed 1 saved titles and 0 watched marks that were removed on Trakt.")
+        #expect(Set(await services.library.all().map(\.id)) == ["movie/tt1"])
+    }
+
+    @Test func aSendThatFailsStaysQueuedAndIsCounted() async throws {
+        let tokenJSON = tokenJSON
+        let activitiesJSON = activitiesJSON
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/oauth/device/token" { return StubTransport.response(Data(tokenJSON.utf8), for: request) }
+            if request.url?.path == "/sync/last_activities" { return StubTransport.response(Data(activitiesJSON.utf8), for: request) }
+            if request.httpMethod == "POST" { return StubTransport.response(Data(), status: 503, for: request) }
+            return StubTransport.response(Data("[]".utf8), for: request)
+        }
+        let saved = LibraryItem(preview: MetaPreview(id: "tt2", type: "movie", name: "Two"), addedAt: when)
+        let services = try await services(transport: transport, library: [saved])
+        let model = TraktAccountViewModel(services: services)
+        await model.load()
+        #expect(model.pendingCount == 0)
+        await model.sendToTrakt()
+        #expect(model.message == nil && model.errorMessage != nil)
+        #expect(model.pendingCount == 1, "the saved title is still waiting to reach Trakt")
+        #expect(await services.library.all() == [saved])
+    }
+}
+
+/// Counts calls, so a stub can answer the first call differently from the later ones.
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    /// Counts one more call and returns how many there have been, this one included.
+    func next() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
     }
 }

@@ -158,6 +158,36 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(model.continueEntries.isEmpty && model.continueWatching.isEmpty)
     }
 
+    @Test func removingAContinueWatchingTitleWhileSignedInQueuesTheTraktRemoval() async throws {
+        let progress = [WatchProgress(id: "movie/tt9", type: "movie", contentID: "tt9", title: "Nine", position: 40, duration: 100, isWatched: false,
+                                      updatedAt: Date())]
+        let transport = StubTransport { request, _ in
+            if request.url?.path == "/oauth/device/token" {
+                return StubTransport.response(Data(#"{"access_token":"access","refresh_token":"refresh","expires_in":604800,"created_at":1700000000}"#.utf8),
+                                              for: request)
+            }
+            return StubTransport.response(Data("[]".utf8), for: request)
+        }
+        let settings = InMemorySettingsStore(PlaybackSettings(traktClientID: TraktAccount.defaultClientID))
+        let account = TraktAccount(settings: settings, secrets: InMemorySecretStore(), transport: transport,
+                                   now: { Date(timeIntervalSince1970: 1700000001) })
+        try await account.saveClientSecret("secret")
+        let code = try JSONDecoder().decode(TraktDeviceCode.self, from: Data(
+            #"{"device_code":"device","user_code":"ABCD1234","verification_url":"https://trakt.tv/activate","expires_in":600,"interval":5}"#.utf8))
+        _ = try await account.checkAuthorization(code)
+        let client = makeClient(StubTransport(data: Data()))
+        let registry = AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client)
+        let services = AppServices(registry: registry, client: client, settings: settings, progress: InMemoryProgressStore(progress), traktAccount: account)
+        let model = HomeViewModel(services: services)
+        await model.load()
+        let entry = try #require(model.continueEntries.first)
+        await model.removeFromContinueWatching(entry)
+        #expect(model.continueEntries.isEmpty && model.continueWatching.isEmpty)
+        #expect(await services.progress.all().isEmpty)
+        #expect(await services.traktSync.pendingCount() == 1, "Trakt's paused record is removed by a queued change")
+        #expect(transport.callCount == 1, "nothing is sent to Trakt until a sync runs")
+    }
+
     // MARK: Rows that cannot load
 
     @Test func aRowWhoseAddonIsMissingSaysWhyWithoutAskingForAnything() async throws {

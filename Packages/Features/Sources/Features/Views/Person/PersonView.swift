@@ -38,7 +38,6 @@ struct PersonView: View {
         .screenBackground()
         .navigationTitle(model.destination.name)
         .navigationBarTitleDisplayMode(.inline)
-        .swipeBackPops()
         .task { await model.load() }
         .accessibilityIdentifier("person.scroll")
     }

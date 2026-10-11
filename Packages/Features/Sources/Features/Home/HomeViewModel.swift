@@ -137,16 +137,8 @@ public final class HomeViewModel {
                 continueEntries = ContinueWatchingEntry.merge(local: await services.progress.all(), remote: [])
                 return
             }
-            traktPlayback = playback
-            // Only a real runtime can turn Trakt's percentage into a resume position for Infuse.
-            for item in playback {
-                guard let duration = item.duration else { continue }
-                let previous = await services.progress.progress(for: item.id)
-                if let previous, previous.updatedAt >= item.pausedAt { continue }
-                await services.progress.save(WatchProgress(id: item.id, type: item.preview.type, contentID: item.contentID,
-                    title: item.request.title, poster: item.preview.poster, position: duration * item.progress / 100,
-                    duration: duration, isWatched: false, updatedAt: item.pausedAt, season: item.season, episode: item.episode))
-            }
+            traktPlayback = await services.traktSync.visiblePlayback(playback)
+            await services.traktSync.storeRemotePlayback(traktPlayback)
             continueState = .ready
         } catch {
             if Task.isCancelled {
@@ -161,15 +153,10 @@ public final class HomeViewModel {
         continueEntries = ContinueWatchingEntry.merge(local: updated, remote: traktPlayback)
     }
 
-    /// Takes a title off Continue Watching. If Trakt refuses, the card stays and the row shows the retry.
+    /// Takes a title off Continue Watching. The removal is queued for Trakt, which sync sends now or when Trakt can next be reached; Trakt's
+    /// paused record stays hidden until it is gone.
     public func removeFromContinueWatching(_ entry: ContinueWatchingEntry) async {
-        let playbackID = traktPlayback.first { $0.id == entry.id }?.playbackID
-        do {
-            try await services.removeContinueWatching(identity: entry.id, traktPlaybackID: playbackID)
-        } catch {
-            continueState = .failed((error as? TraktAccountError)?.message ?? "Couldn’t remove it from Trakt. Try again.")
-            return
-        }
+        await services.removeContinueWatching(identity: entry.id)
         traktPlayback.removeAll { $0.id == entry.id }
         let local = await services.progress.all()
         continueWatching = LibraryViewModel.continueWatching(from: local)

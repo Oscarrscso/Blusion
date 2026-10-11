@@ -123,11 +123,13 @@ struct EmptyAddonsView: View {
 /// Where each kind of value in a stack leads. Every tab's stack uses the same set.
 struct AppDestinations: ViewModifier {
     let services: AppServices
+    /// The stack's path in the router, which its back swipe pops.
+    let path: ReferenceWritableKeyPath<AppRouter, NavigationPath>
     @Environment(\.zoomNamespace) private var zoomNamespace
 
     func body(content: Content) -> some View {
         content
-            .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services).swipeBackPops() }
+            .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
             .navigationDestination(for: TitleDestination.self) { destination in
                 let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
                                         artworkChecked: destination.artworkChecked, handoff: destination.handoff)
@@ -139,14 +141,15 @@ struct AppDestinations: ViewModifier {
             }
             .navigationDestination(for: PersonDestination.self) { PersonView(destination: $0, services: services) }
             .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services) }
-            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services).swipeBackPops() }
-            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services).swipeBackPops() }
+            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
+            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }
+            .backSwipe(path: path)
     }
 }
 
 extension View {
-    func appDestinations(services: AppServices) -> some View {
-        modifier(AppDestinations(services: services))
+    func appDestinations(services: AppServices, path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) -> some View {
+        modifier(AppDestinations(services: services, path: path))
     }
 }
 #endif

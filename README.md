@@ -1,7 +1,7 @@
 # Blusion
 
 Blusion is an iPhone/iPad media browser and player for Stremio-protocol addons, with a Mac Catalyst app from the same target.
-It supports search, configurable Home rows, saved titles, resume, subtitles, manual Trakt sync, and playback in Blusion or Infuse.
+It supports search, configurable Home rows, saved titles, resume, subtitles, two-way Trakt sync, and playback in Blusion or Infuse.
 
 Cinemeta, Stremio's official metadata addon, is installed once on first launch for catalogs, search, and title details.
 It supplies **no streams**. You can disable or remove it in **Settings → Addons**; removal does not cause it to be installed again.
@@ -77,10 +77,14 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   The season menu marks one season, and a poster's long-press menu marks a whole show.
 - **Settings → Accounts → Trakt:** select **Connect**. The app uses its built-in public Client ID and PKCE sign-in with
   `blusion://trakt/callback`; no API configuration or Client Secret is needed.
-  Connecting imports watchlist (watch later) and collection into **Library → Saved**, and history into **Library → Watched**.
-  Use **Import collection** for later changes, or **Sync** to also send local saved titles and watched items to Trakt.
-  Import adds missing IMDb titles without deleting local items or sending data to Trakt.
-  Playback positions stay on the device. Tokens and connection settings use the Keychain.
+  Connecting reads the watchlist (watch later) and collection into **Library → Saved**, and history into **Library → Watched**.
+  After that, sync is two-way and automatic: saving or removing a title, marking or clearing a watched mark, and paused positions
+  go to Trakt, and what changes on Trakt (from the other device or the web) comes back, removals included. That is also how the
+  iPhone and the Mac stay in step. Changes made offline wait in a queue that survives a relaunch.
+  Saved titles use the Trakt watchlist; the collection is only read, and removing a collected title here leaves the collection alone.
+  A title removed here is not brought back by an older Trakt entry. **Import collection** reads everything again; **Sync** also sends
+  the saved titles and watched items Trakt never had. Only IMDb movies, shows and episodes sync.
+  Tokens and connection settings use the Keychain.
 
 ## Adding an addon
 
@@ -129,7 +133,7 @@ Snapshot builds carry the bundle id `app.blusion.player.snapshot`, so a run neve
 - Trakt sign-in/sync and optional OMDb/TMDb lookups have stub-based tests; live account checks require user credentials.
 - External-player progress depends on the player returning a callback. A canceled or missing callback cannot supply a new position.
 - SRT and WebVTT are supported by the built-in player; styled or bitmap subtitles need a player that supports them.
-- Trakt imports on connection; later refreshes are manual. It does not transfer playback positions or propagate removals. There is no automatic device sync or tvOS target.
+- Trakt sync runs while the app is open (on launch, when it comes to the front, after a change, and when the network returns), not in the background. Devices sync through Trakt, so both must be signed in to the same account. There is no tvOS target.
 - Addon manifest URLs containing query strings are rejected. English is the only completed localization.
 
 ## Project layout

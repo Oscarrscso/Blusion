@@ -21,6 +21,9 @@ import StremioKitTestSupport
             if request.url?.path == "/sync/collection/shows" {
                 return StubTransport.response(Data(#"[{"show":{"title":"Library show","ids":{"imdb":"tt2"}}}]"#.utf8), for: request)
             }
+            if request.url?.path == "/sync/last_activities" {
+                return StubTransport.response(Data(#"{"movies":{"watchlisted_at":"2024-01-01T00:00:00.000Z"}}"#.utf8), for: request)
+            }
             return StubTransport.response(Data("[]".utf8), for: request)
         }
         let settings = InMemorySettingsStore()

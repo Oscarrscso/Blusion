@@ -406,6 +406,12 @@ public final class DetailViewModel {
         return "\(verb) S\(season) · E\(episode)"
     }
 
+    /// What the main action plays: a movie itself, or a series' next episode. Nil while a series' episodes are still arriving.
+    public var primaryRequest: StreamRequest? {
+        guard isSeries else { return movieRequest }
+        return nextUp.map { request(for: $0) }
+    }
+
     /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.
     public func progressFraction(for request: StreamRequest) -> Double? { progressFractions[request.identity] }
 
@@ -428,10 +434,10 @@ public final class DetailViewModel {
     public var portraitHidesLogo: Bool { tmdbArtwork?.portraitHidesLogo ?? false }
 
     /// The metadata line both heroes show, for `MetaLine`: year, the first two genres, certification, runtime and the IMDb rating, in that
-    /// order ("2008", "Drama", "Crime", "PG-13", "152 min", "★ 9.0"). The spotlight has no certification, so it passes nil. Missing parts
-    /// stay nil and `MetaLine` leaves them out.
-    nonisolated public static func heroMetaParts(for preview: MetaPreview, certification: String?) -> [String?] {
-        let rating = preview.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
+    /// order ("2008", "Drama", "Crime", "PG-13", "152 min", "★ 9.0"). Missing parts
+    /// stay nil and `MetaLine` leaves them out. The score is IMDb's own when the caller has it (`imdbRating`), else the catalog's.
+    nonisolated public static func heroMetaParts(for preview: MetaPreview, certification: String?, imdbRating: Double? = nil) -> [String?] {
+        let rating = (imdbRating ?? preview.imdbRating).map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
         return [preview.releaseInfo] + preview.genres.prefix(2).map { Optional($0) } + [certification, preview.runtime, rating]
     }
 

@@ -56,12 +56,6 @@ struct HeroCarousel: View {
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
 
-    /// The size the spotlight settles from when Home comes back from a title opened from it: a little larger, then at rest. Scale only, so
-    /// the picture and logo are never hidden or faded.
-    private struct ReturnSettle {
-        var scale = 1.0
-    }
-
     /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
     /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
     /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
@@ -96,18 +90,7 @@ struct HeroCarousel: View {
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     // Plays once each time Home returns from a title (the revision changes), never on first appearance. It sits before the
                     // clip, so the slight growth stays inside the page.
-                    .keyframeAnimator(initialValue: ReturnSettle(), trigger: router.spotlightRevision) { view, settle in
-                        view.scaleEffect(settle.scale)
-                    } keyframes: { _ in
-                        KeyframeTrack(\.scale) {
-                            // A move, not a keyframe of no length: that one has no speed to hand the spring, and the scale comes out
-                            // infinite, which draws nothing and takes no touches.
-                            MoveKeyframe(1.025)
-                            SpringKeyframe(1, duration: 0.4, spring: .smooth)
-                            // The spring is not quite at rest when its time is up. The spotlight ends at exactly its own size.
-                            LinearKeyframe(1, duration: 0.1)
-                        }
-                    }
+                    .heroSettle(trigger: router.spotlightRevision)
                     .frame(width: geometry.size.width, height: height)
                     .clipped()
                     .offset(y: -pull)
@@ -231,13 +214,19 @@ private struct HeroPage: View {
         (isLandscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
             ?? (artworkChecked ? (item.background ?? MetahubArtwork.background(imdbID: item.id)) : nil)
     }
-    private var heroPixelSize: CGFloat { isLandscape ? 4096 : TitleHero.portraitPixelSize }
+    private var heroPixelSize: CGFloat { isLandscape ? TitleHero.landscapePixelSize : TitleHero.portraitPixelSize }
     /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
     private var hidesLogo: Bool { !isLandscape && heroArtwork?.portraitHidesLogo == true }
     private var logoURL: URL? { hidesLogo ? nil : (item.logo ?? heroArtwork?.logo) }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: artworkChecked) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
+
+    /// The metadata line. Its score is IMDb's own when the dataset on the device has the title, else the catalog's, as on the title page.
+    private var metaParts: [String?] {
+        DetailViewModel.heroMetaParts(for: item, certification: certification,
+                                      imdbRating: ratings.ratings(for: item, includeReviews: true, source: .imdb).imdb)
+    }
 
     /// The picture and logo this page shows now, for the title page it opens. A picture or logo still loading is left out.
     private var handoff: HeroHandoff {
@@ -331,7 +320,7 @@ private struct HeroPage: View {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
                 // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
-                MetaLine(DetailViewModel.heroMetaParts(for: item, certification: certification))
+                MetaLine(metaParts)
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
@@ -382,7 +371,7 @@ private struct HeroPage: View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
-            MetaLine(DetailViewModel.heroMetaParts(for: item, certification: certification))
+            MetaLine(metaParts)
                 .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }

@@ -3,7 +3,7 @@ import Observation
 import PlayerKit
 import StremioKit
 
-/// Explicit, add-only syncing. Local playback positions stay on this device.
+/// Two-way syncing that runs by itself. The buttons here force a full sync, which reads everything from Trakt and applies every removal.
 /// The Trakt app's client ID is built in (`TraktAccount.defaultClientID`); sign-in uses PKCE, so no secret is needed.
 @MainActor
 @Observable
@@ -16,6 +16,8 @@ public final class TraktAccountViewModel {
     public private(set) var authorizationURL: URL?
     public private(set) var message: String?
     public private(set) var errorMessage: String?
+    /// Changes still waiting to reach Trakt.
+    public private(set) var pendingCount = 0
 
     private let services: AppServices
 
@@ -29,6 +31,7 @@ public final class TraktAccountViewModel {
     public func load() async {
         await ensureClientID()
         isSignedIn = await services.traktAccount.isSignedIn()
+        pendingCount = await services.traktSync.pendingCount()
     }
 
     /// Stores the built-in client ID. A client ID from an earlier build differs from it, so its sign-in is cleared first.
@@ -37,7 +40,10 @@ public final class TraktAccountViewModel {
         let clientID = TraktAccount.defaultClientID
         let stored = await services.settings.load()
         guard stored.traktClientID != clientID else { return }
-        if stored.traktClientID != nil { await services.traktAccount.signOut() }
+        if stored.traktClientID != nil {
+            await services.traktAccount.signOut()
+            await services.traktSync.signedOut()
+        }
         var settings = await services.settings.load()
         settings.traktClientID = clientID
         await services.settings.save(settings)
@@ -80,59 +86,36 @@ public final class TraktAccountViewModel {
         authorizationURL = nil
         await perform {
             await self.services.traktAccount.signOut()
+            await self.services.traktSync.signedOut()
             self.isSignedIn = false
             self.message = "Disconnected from Trakt. Your local library and history are kept."
         }
     }
 
-    /// Adds the Trakt watchlist, collection and watched history to this device.
+    /// Forces a full sync: reads everything from Trakt and applies it here, removals included, so a title or mark that left Trakt leaves
+    /// this device too.
     public func importFromTrakt() async {
         await perform {
-            async let watchlist = self.services.traktAccount.watchlist()
-            async let collection = self.services.traktAccount.collection()
-            async let history = self.services.traktAccount.watched()
-            let (remoteWatchlist, remoteCollection, watched) = try await (watchlist, collection, history)
-            var savedIDs = Set(await self.services.library.all().map(\.id))
-            let additions = (remoteWatchlist + remoteCollection).map { LibraryItem(preview: $0) }.filter { savedIDs.insert($0.id).inserted }
-            await self.services.library.add(additions)
-            let existingRecords = await self.services.progress.progress(for: watched.map(\.identity))
-            var existingByID = Dictionary(existingRecords.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            var updates: [WatchProgress] = []
-            for item in watched {
-                let existing = existingByID[item.identity]
-                guard existing?.isWatched != true else { continue }
-                let record = WatchProgress(id: item.identity, type: item.preview.type, contentID: item.contentID,
-                    title: existing?.title ?? item.preview.name, poster: existing?.poster ?? item.preview.poster,
-                    position: existing?.position ?? 0, duration: existing?.duration ?? 0, isWatched: true,
-                    updatedAt: max(existing?.updatedAt ?? .distantPast, item.watchedAt), season: item.season, episode: item.episode)
-                updates.append(record)
-                existingByID[item.identity] = record
-            }
-            await self.services.progress.save(updates)
-            let savedCount = additions.count
-            let watchedCount = updates.count
-            self.message = "Imported \(savedCount) saved titles and \(watchedCount) watched items from Trakt."
+            let summary = try await self.services.traktSync.sync(force: true)
+            self.message = Self.importMessage(summary)
         }
     }
 
-    /// Adds local saved titles and watched items that Trakt does not have yet. Nothing is removed on either side.
+    /// Forces a full sync that also sends the saved titles and watched marks here that Trakt does not have yet. What Trakt removed is
+    /// removed here too, as in an import.
     public func sendToTrakt() async {
         await perform {
-            let remoteWatchlist = Set(try await self.services.traktAccount.watchlist().map { LibraryItem.identity(type: $0.type, contentID: $0.id) })
-            let localWatchlist = await self.services.library.all().filter { !remoteWatchlist.contains($0.id) }.map(\.preview)
-            let savedCount = try await self.services.traktAccount.addToWatchlist(localWatchlist)
-            let remoteHistory = Set(try await self.services.traktAccount.watched().map(\.identity))
-            let localHistory = await self.services.progress.all().filter { $0.isWatched && !remoteHistory.contains($0.id) }.compactMap(Self.traktItem)
-            let watchedCount = try await self.services.traktAccount.addToHistory(localHistory)
-            self.message = "Sent \(savedCount) saved titles and \(watchedCount) watched items to Trakt."
+            let summary = try await self.services.traktSync.sync(force: true, sendingLocalOnly: true)
+            self.message = "Sent \(summary.savedSent) saved titles and \(summary.watchedSent) watched items to Trakt."
         }
     }
 
-    /// Sends local items to Trakt, then imports Trakt's collection and history.
+    /// Forces a full sync that sends local items to Trakt and reads Trakt back, in one pass.
     public func sync() async {
-        await sendToTrakt()
-        guard errorMessage == nil else { return }
-        await importFromTrakt()
+        await perform {
+            let summary = try await self.services.traktSync.sync(force: true, sendingLocalOnly: true)
+            self.message = Self.importMessage(summary)
+        }
     }
 
     private func perform(_ operation: () async throws -> Void) async {
@@ -142,15 +125,16 @@ public final class TraktAccountViewModel {
         message = nil
         defer { isWorking = false }
         do { try await operation() } catch { errorMessage = Self.message(for: error) }
+        pendingCount = await services.traktSync.pendingCount()
     }
 
-    private static func traktItem(_ progress: WatchProgress) -> TraktWatchedItem? {
-        let id = progress.type == "series" ? ContentID(progress.contentID).baseID : progress.contentID
-        guard TraktAccount.isIMDb(id), progress.type == "movie" || (progress.type == "series" && progress.season != nil && progress.episode != nil) else {
-            return nil
+    /// The sentence after a sync: what came in, then what Trakt removed here, when it removed anything.
+    private static func importMessage(_ summary: TraktSync.Summary) -> String {
+        var text = "Imported \(summary.savedAdded) saved titles and \(summary.watchedAdded) watched items from Trakt."
+        if summary.savedRemoved + summary.watchedRemoved > 0 {
+            text += " Removed \(summary.savedRemoved) saved titles and \(summary.watchedRemoved) watched marks that were removed on Trakt."
         }
-        return TraktWatchedItem(preview: MetaPreview(id: id, type: progress.type, name: progress.title, poster: progress.poster),
-                                watchedAt: progress.updatedAt, season: progress.season, episode: progress.episode)
+        return text
     }
 
     private static func message(for error: Error) -> String {

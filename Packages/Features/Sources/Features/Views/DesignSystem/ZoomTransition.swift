@@ -53,50 +53,44 @@ extension View {
         }
     }
 
-    /// Makes a pushed screen zoom out of the artwork marked with the same id. A back swipe closes it at once (see `SwipeBackCloses`).
+    /// Makes a pushed screen zoom out of the artwork marked with the same id. A back swipe closes it at once (see `BackSwipe`).
     @ViewBuilder
     func zoomDestination(id: String, in namespace: Namespace.ID?) -> some View {
         if let namespace {
             navigationTransition(.zoom(sourceID: id, in: namespace))
-                .modifier(SwipeBackCloses())
         } else {
             self
         }
     }
 
-    /// A pushed screen that does not zoom still pops on a back swipe, whatever is under the finger. Needed where a zoomed screen sits
-    /// below it: that screen switches off the navigation stack's own back swipe, which only comes back when the zoomed screen goes.
-    func swipeBackPops() -> some View {
-        modifier(SwipeBackCloses())
-    }
-
-    /// A pushed title that opened with no animation (`TitleDestination.opensInstantly`) also closes with none: its back button and its
-    /// back swipe pop Home's path with animations off. Mac keeps the system back button, which animates its own pop.
+    /// A pushed title that opened with no animation (`TitleDestination.opensInstantly`) also closes with none: its back button and the
+    /// back swipe both pop through `AppRouter.goBack`, which closes it with animations off. Mac keeps the system back button, which
+    /// animates its own pop.
     func instantDestination() -> some View {
         modifier(InstantDestination())
+    }
+
+    /// Gives a navigation stack its one back swipe: a swipe towards the trailing edge, anywhere on a pushed screen, pops that screen
+    /// through the router. Apply to the stack's root screen, with the stack's path.
+    func backSwipe(path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) -> some View {
+        modifier(BackSwipeModifier(path: path))
     }
 }
 
 private struct InstantDestination: ViewModifier {
     @Environment(AppRouter.self) private var router
 
-    private func pop() {
-        guard !router.homePath.isEmpty else { return }
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { router.homePath.removeLast() }
-    }
-
     func body(content: Content) -> some View {
-        let screen = content.modifier(SwipeBackCloses(pop: pop))
         #if targetEnvironment(macCatalyst)
-        screen
+        content
         #else
-        screen
+        content
             .navigationBarBackButtonHidden()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: pop) {
+                    Button {
+                        router.goBack(in: \.homePath)
+                    } label: {
                         Image(systemName: "chevron.backward")
                             .fontWeight(.semibold)
                     }
@@ -108,73 +102,77 @@ private struct InstantDestination: ViewModifier {
     }
 }
 
-/// A zoomed screen closes on a back swipe the way it does from the back button: at once, without following the finger.
-///
-/// UIKit gives a zoomed screen a dismiss interaction of its own (edge swipe, swipe on the content, pinch), on the screen's view. It
-/// drags the screen and lets it settle after the finger lifts. Until that settle ends, about a second, the screen is still the one
-/// on top: its back button stays, the screen underneath takes no touches, and a new touch catches the closing screen again. Its
-/// recognizers also make every other pan wait for them, so nothing can be put in front of them. That interaction is switched off
-/// here, and one plain swipe pops the screen instead.
-private struct SwipeBackCloses: ViewModifier {
-    @Environment(\.dismiss) private var dismiss
-    /// What a swipe does instead of `dismiss()`, when the screen has its own way to pop.
-    var pop: (() -> Void)?
+private struct BackSwipeModifier: ViewModifier {
+    @Environment(AppRouter.self) private var router
+    let path: ReferenceWritableKeyPath<AppRouter, NavigationPath>
 
     func body(content: Content) -> some View {
         content.background {
-            SwipeBackCatcher { if let pop { pop() } else { dismiss() } }
+            BackSwipeInstaller { router.goBack(in: path) }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
     }
 }
 
-private struct SwipeBackCatcher: UIViewRepresentable {
+private struct BackSwipeInstaller: UIViewRepresentable {
     let onSwipe: () -> Void
 
-    func makeUIView(context: Context) -> SwipeBackProbe {
-        let probe = SwipeBackProbe()
+    func makeUIView(context: Context) -> BackSwipeProbe {
+        let probe = BackSwipeProbe()
         probe.isUserInteractionEnabled = false
         return probe
     }
 
-    func updateUIView(_ probe: SwipeBackProbe, context: Context) {
+    func updateUIView(_ probe: BackSwipeProbe, context: Context) {
         probe.swipe.onSwipe = onSwipe
+    }
+
+    static func dismantleUIView(_ probe: BackSwipeProbe, coordinator: ()) {
+        probe.swipe.attach(to: nil)
     }
 }
 
-/// Sits unseen in a pushed screen to find that screen's own view, which SwiftUI does not hand out.
-private final class SwipeBackProbe: UIView {
-    let swipe = SwipeBack()
+/// Sits unseen in a stack's root screen to find the stack's navigation controller, which SwiftUI does not hand out.
+private final class BackSwipeProbe: UIView {
+    let swipe = BackSwipe()
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        swipe.attach(to: window == nil ? nil : pageView)
-        guard window != nil, swipe.isDetached else { return }
+        // The root screen leaves the window while another screen covers it. The swipe stays on the stack until this view is taken apart.
+        guard window != nil else { return }
+        if let stack { swipe.attach(to: stack) }
+        guard swipe.isDetached else { return }
         // The screen may not be in its navigation controller yet on the first pass.
         Task { @MainActor [weak self] in
-            guard let self, self.window != nil, self.swipe.isDetached else { return }
-            self.swipe.attach(to: self.pageView)
+            guard let self, self.window != nil, self.swipe.isDetached, let stack = self.stack else { return }
+            self.swipe.attach(to: stack)
         }
     }
 
-    /// The view of the view controller the navigation controller pushed for the screen this view is in. UIKit puts the zoom's
-    /// dismiss interaction on that view, which also tells it apart.
-    private var pageView: UIView? {
-        var view = superview
-        while let current = view {
-            if let controller = current.next as? UIViewController, controller.parent is UINavigationController { return current }
-            if current.interactions.contains(where: { SwipeBack.isDismissal($0) }) { return current }
-            view = current.superview
+    /// The navigation controller the screen this view is in sits in, found up the responder chain.
+    private var stack: UINavigationController? {
+        var responder = next
+        while let current = responder {
+            if let stack = (current as? UIViewController)?.navigationController { return stack }
+            responder = current.next
         }
         return nil
     }
 }
 
-/// One pan recognizer on a pushed screen's view, with UIKit's own ways out of that screen switched off. A swipe towards the
-/// trailing edge pops the screen.
+/// A navigation stack's one back swipe: a pan recognizer on the stack's view that pops the screen on top through the router, at once,
+/// the way the back button does.
+///
+/// It is the only gesture that pops. The stack's own back swipes (from the edge, and from anywhere on the content) are switched off for
+/// as long as it is attached, so a swipe is never answered twice. A zoomed screen also has ways out of its own, on the screen's view:
+/// pans that drag the screen and let it settle after the finger lifts. Until that settle ends, about a second, the screen is still the
+/// one on top: its back button stays, the screen underneath takes no touches, and a new touch catches the closing screen again. Those
+/// pans are switched off too. SwiftUI's zoom has no setting for them (UIKit's own has `interactiveDismissShouldBegin`, which SwiftUI
+/// does not pass on), so they are found by what they are, with no private class named: pan recognizers on the screen's view whose
+/// delegate is an interaction installed on that same view. The zoom's pinch to close is not a pan and is left to UIKit.
 @MainActor
-private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
+private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     var onSwipe: () -> Void = {}
     private lazy var pan: UIPanGestureRecognizer = {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(swiped))
@@ -182,75 +180,62 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         pan.delegate = self
         return pan
     }()
-    /// Every screen with a `SwipeBack` attached. Screens on one stack share its back gestures, see `releaseSilenced()`.
-    private static let live = NSHashTable<SwipeBack>.weakObjects()
-    private weak var page: UIView?
-    private weak var touched: UIView?
-    /// The navigation controller this screen sits in, kept after `page` is cleared so a detach can still find the stack.
     private weak var stack: UINavigationController?
+    private weak var touched: UIView?
     private var startsAtEdge = false
-    /// The navigation controller's back gestures, off while this screen is the one showing.
-    private var silenced: [UIGestureRecognizer] = []
 
     /// A swipe that starts this close to the leading edge closes the screen even over a shelf that has been scrolled.
     private static let edgeWidth: CGFloat = 24
 
-    var isDetached: Bool { page == nil }
+    var isDetached: Bool { stack == nil }
 
-    func attach(to page: UIView?) {
+    func attach(to stack: UINavigationController?) {
+        guard stack !== self.stack else { return }
         pan.view?.removeGestureRecognizer(pan)
-        releaseSilenced()
-        Self.live.remove(self)
-        self.page = page
-        page?.addGestureRecognizer(pan)
-        if page != nil { Self.live.add(self) }
+        // The stack this swipe leaves gets its own back swipes again.
+        systemPops.forEach { $0.isEnabled = true }
+        self.stack = stack
+        stack?.view.addGestureRecognizer(pan)
         silenceSystemGestures()
     }
 
-    /// Passes this screen's silenced back gestures to another attached screen on the same stack, which keeps them off. They come back
-    /// on only when no such screen is left: switching them on while another screen is on top lets UIKit's pop win the next touch.
-    private func releaseSilenced() {
-        if let stack, let heir = Self.live.allObjects.first(where: { $0 !== self && $0.stack === stack }) {
-            for recognizer in silenced where !heir.silenced.contains(where: { $0 === recognizer }) {
-                heir.silenced.append(recognizer)
-            }
-        } else {
-            silenced.forEach { $0.isEnabled = true }
+    /// The stack's own back swipes: from the leading edge, and from anywhere on the content.
+    private var systemPops: [UIGestureRecognizer] {
+        [stack?.interactivePopGestureRecognizer, stack?.interactiveContentPopGestureRecognizer].compactMap { $0 }
+    }
+
+    /// The screen on top when it is a pushed one. The root screen has nothing to go back to.
+    private var pushed: UIViewController? {
+        guard let stack, stack.viewControllers.count > 1 else { return nil }
+        return stack.topViewController
+    }
+
+    private var isRightToLeft: Bool { stack?.view.effectiveUserInterfaceLayoutDirection == .rightToLeft }
+
+    /// A zoomed screen's own dismissal pans, see the type's comment.
+    private func dismissalPans(on page: UIView) -> [UIGestureRecognizer] {
+        (page.gestureRecognizers ?? []).filter { recognizer in
+            guard recognizer is UIPanGestureRecognizer, let delegate = recognizer.delegate else { return false }
+            return page.interactions.contains { ($0 as AnyObject) === (delegate as AnyObject) }
         }
-        silenced = []
     }
 
-    private var controller: UIViewController? { page?.next as? UIViewController }
-
-    private var isRightToLeft: Bool { page?.effectiveUserInterfaceLayoutDirection == .rightToLeft }
-
-    /// The zoom's dismiss interaction and its parts are private classes, known here by name.
-    nonisolated static func isDismissal(_ object: Any) -> Bool {
-        let name = NSStringFromClass(type(of: object as AnyObject))
-        return name.contains("Dismiss") && name.contains("Interaction")
-    }
-
-    /// Switches off UIKit's ways out of the screen: the zoom's dismiss interaction with its recognizers, on the screen's view, and
-    /// the navigation controller's edge and content swipes. UIKit can switch them back on, so every touch does this again.
+    /// Switches off UIKit's ways back: the stack's edge and content swipes, and the dismissal pans of the screen on top. UIKit can
+    /// switch them back on, so every touch does this again.
     private func silenceSystemGestures() {
-        guard let page else { return }
-        for interaction in page.interactions where Self.isDismissal(interaction) {
-            guard let interaction = interaction as? NSObject, interaction.responds(to: NSSelectorFromString("setIsEnabled:")) else { continue }
-            interaction.setValue(false, forKey: "isEnabled")
-        }
-        for recognizer in page.gestureRecognizers ?? [] where recognizer !== pan && recognizer.isEnabled {
-            if let delegate = recognizer.delegate, Self.isDismissal(delegate) { recognizer.isEnabled = false }
-        }
-        if let found = controller?.navigationController { stack = found }
-        for recognizer in [stack?.interactivePopGestureRecognizer, stack?.interactiveContentPopGestureRecognizer] {
-            guard let recognizer, recognizer.isEnabled else { continue }
-            recognizer.isEnabled = false
-            silenced.append(recognizer)
-        }
+        systemPops.forEach { $0.isEnabled = false }
+        guard let page = stack?.topViewController?.viewIfLoaded else { return }
+        dismissalPans(on: page).forEach { $0.isEnabled = false }
+    }
+
+    private func isSystemWayBack(_ recognizer: UIGestureRecognizer) -> Bool {
+        if systemPops.contains(where: { $0 === recognizer }) { return true }
+        guard let page = stack?.topViewController?.viewIfLoaded else { return false }
+        return dismissalPans(on: page).contains { $0 === recognizer }
     }
 
     @objc private func swiped() {
-        guard pan.state == .began, let page, controller?.transitionCoordinator == nil else { return }
+        guard pan.state == .began, let controller = pushed, controller.transitionCoordinator == nil, let page = controller.viewIfLoaded else { return }
         // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
         page.isUserInteractionEnabled = false
         // The same light tap as opening a title, once per swipe that closes a screen.
@@ -264,7 +249,7 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
     }
 
     /// A sideways shelf that has been scrolled keeps the swipe: it scrolls back to its start first.
-    private var isOverScrolledShelf: Bool {
+    private func isOverScrolledShelf(within page: UIView) -> Bool {
         var view = touched
         while let current = view, current !== page {
             if let shelf = current as? UIScrollView, shelf.isScrollEnabled, shelf.contentSize.width > shelf.bounds.width + 1 {
@@ -277,31 +262,31 @@ private final class SwipeBack: NSObject, UIGestureRecognizerDelegate {
         return false
     }
 
+    /// Only touches on the pushed screen itself count, as when the swipe sat on that screen's view: not the bars around it.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard let page else { return false }
         silenceSystemGestures()
-        touched = touch.view
+        guard let page = pushed?.viewIfLoaded, let view = touch.view, view.isDescendant(of: page) else { return false }
+        touched = view
         let x = touch.location(in: page).x
         startsAtEdge = isRightToLeft ? x > page.bounds.width - Self.edgeWidth : x < Self.edgeWidth
         return true
     }
 
-    /// Only a swipe that is more sideways than vertical, towards the trailing edge, on the top screen and with no transition running.
+    /// Only a swipe that is more sideways than vertical, towards the trailing edge, on a pushed screen and with no transition running.
     /// Anything else fails here, and the page's scrolling carries on as it would without this recognizer.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let page else { return false }
+        guard let controller = pushed, let page = controller.viewIfLoaded else { return false }
         let movement = pan.translation(in: page)
         let forward = isRightToLeft ? -movement.x : movement.x
-        let stack = controller?.navigationController
-        let isOnTop = stack == nil || stack?.topViewController === controller
-        guard isOnTop, controller?.transitionCoordinator == nil, forward > abs(movement.y) else { return false }
-        return startsAtEdge || !isOverScrolledShelf
+        guard controller.transitionCoordinator == nil, forward > abs(movement.y) else { return false }
+        return startsAtEdge || !isOverScrolledShelf(within: page)
     }
 
-    /// Scrolling and SwiftUI's own gestures are left alone: they track the same touch, so they start no later than before.
+    /// Scrolling and the screen's own gestures are left alone: they track the same touch, so they start no later than before. UIKit's
+    /// ways back are not: one that UIKit switched back on must not pop alongside this one.
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        otherGestureRecognizer.view is UIScrollView || NSStringFromClass(type(of: otherGestureRecognizer)).contains("SwiftUI")
+        !isSystemWayBack(otherGestureRecognizer)
     }
 }
 #endif

@@ -510,4 +510,12 @@ private struct NoITunesTransport: HTTPTransport {
         let rated = MetaPreview(id: "tt2", type: "movie", name: "Y", imdbRating: 7)
         #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 7.0", "a whole rating keeps one decimal")
     }
+
+    @Test func heroMetaPartsShowIMDbsOwnScoreWhenTheCallerHasOne() {
+        let preview = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008", imdbRating: 9.0)
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: 8.4).last == "★ 8.4",
+                "IMDb's own score replaces the catalog's")
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: nil).last == "★ 9.0",
+                "without one, the catalog's score")
+    }
 }

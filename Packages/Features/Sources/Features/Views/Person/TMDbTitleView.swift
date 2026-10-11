@@ -34,7 +34,6 @@ struct TMDbTitleView: View {
                     .accessibilityIdentifier("tmdbTitle.unavailable")
             }
         }
-        .swipeBackPops()
         .task { await resolve() }
     }
 
