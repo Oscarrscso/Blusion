@@ -296,9 +296,12 @@ private struct HeroPage: View {
             .background(alignment: .top) {
                 artwork
                     .frame(height: TitleHero.pictureHeight(artworkHeight))
+                    .frame(height: TitleHero.visibleHeight(artworkHeight), alignment: .top)
+                    .clipped()
                     .overlay(alignment: .bottom) {
                         // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
-                        BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                        BottomFade(length: TitleHero.fadeLength(height: artworkHeight, visible: TitleHero.visibleHeight(artworkHeight)),
+                                   strength: TitleHero.fadeStrength)
                             .padding(.bottom, -TitleHero.fadeOverscan)
                     }
                     .allowsHitTesting(false)

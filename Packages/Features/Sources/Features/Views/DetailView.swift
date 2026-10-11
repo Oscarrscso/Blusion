@@ -238,9 +238,11 @@ struct DetailView: View {
                 // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
                 HeroPicture(slot: pictureSlot, isRevealed: isHeroRevealed, contentMode: .fill, placeholderURL: placeholderURL)
                     .frame(width: size.width, height: TitleHero.pictureHeight(height) + scrollPull)
+                    .frame(height: TitleHero.visibleHeight(height) + scrollPull, alignment: .top)
                     .clipped()
                     .overlay(alignment: .bottom) {
-                        BottomFade(length: TitleHero.fadeLength, strength: TitleHero.fadeStrength)
+                        BottomFade(length: TitleHero.fadeLength(height: height, visible: TitleHero.visibleHeight(height) + scrollPull),
+                                   strength: TitleHero.fadeStrength)
                             .padding(.bottom, -TitleHero.fadeOverscan)
                     }
                     .offset(y: -scrollPull)

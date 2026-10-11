@@ -6,9 +6,8 @@ import SwiftUI
 enum TitleHero {
     /// The portrait picture is drawn this much larger than its frame (see `pictureHeight`).
     static let zoom: CGFloat = 1.15
-    /// The share of the picture's height that the bottom fade covers. Divided by `zoom` because the picture is zoomed, so the fade's length
-    /// stays 0.42 of the unzoomed height and ends at the zoomed picture's bottom.
-    static let fadeLength = 0.42 / Double(zoom)
+    /// The length of the bottom fade, as a share of the unzoomed hero height. The fade keeps that length however far the picture runs.
+    static let fadeShare = 0.42
     static let fadeStrength = 1.0
     /// How far the bottom fade runs past the picture's bottom edge, so no row of picture pixels shows under it while the page moves.
     static let fadeOverscan: CGFloat = 2
@@ -63,6 +62,15 @@ enum TitleHero {
     /// The height of the zoomed portrait picture on a hero `height` tall. The picture is zoomed, so it is taller than the hero and reaches
     /// below its bottom edge, behind the text.
     static func pictureHeight(_ height: CGFloat) -> CGFloat { height * zoom }
+
+    /// How much of the zoomed picture shows: it ends, fully faded to black, half way up the logo's space (the logo sits `logoTextGap`
+    /// above the hero's bottom edge and is up to `logoMaxHeight` tall).
+    static func visibleHeight(_ height: CGFloat) -> CGFloat {
+        min(pictureHeight(height), max(1, height - logoTextGap - logoMaxHeight / 2))
+    }
+
+    /// The bottom fade's share of the visible picture, `fadeShare` of the hero height.
+    static func fadeLength(height: CGFloat, visible: CGFloat) -> Double { fadeShare * Double(height / max(visible, 1)) }
 }
 
 /// What one hero image is doing: still loading, decoded and ready, or there is none (no URL once the lookup has finished, or it failed).
