@@ -31,14 +31,6 @@ public final class AppRouter {
     var spotlightRevision = 0
     /// Navigation values must wait until their stacks and destinations have appeared.
     private var pendingLaunchRoute: LaunchRoute?
-    /// Something a screen closes before the screen itself is left: the title page's streams. The back swipe and the back buttons
-    /// that go through `goBack` call the newest one registered on the tab on screen, instead of popping.
-    private struct BackHandler {
-        let id: UUID
-        let tab: LaunchRoute.Tab
-        let handle: @MainActor () -> Void
-    }
-    @ObservationIgnored private var backHandlers: [BackHandler] = []
 
     public init(route: LaunchRoute = .home) {
         tab = route.tab
@@ -62,28 +54,12 @@ public final class AppRouter {
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
-    /// Registers `handle` to be called by the next `goBack` on the tab on screen now. Registering an id again replaces its handler.
-    func addBackHandler(id: UUID, _ handle: @escaping @MainActor () -> Void) {
-        backHandlers.removeAll { $0.id == id }
-        backHandlers.append(BackHandler(id: id, tab: tab, handle: handle))
-    }
-
-    /// Takes a handler away. A screen does this when what it had open has closed, and whenever it leaves the screen.
-    func removeBackHandler(id: UUID) {
-        backHandlers.removeAll { $0.id == id }
-    }
-
-    /// The one way back in a stack: the back swipe and the spotlight title's own back button both come here, so one gesture never pops
-    /// twice. If a screen on the tab on screen has registered a back handler, the newest one runs and nothing is popped. Otherwise the
-    /// screen is popped. A title opened from Home's spotlight with no animation closes with none (see `instantDestination()`); every other
-    /// screen closes with its own transition. True when a screen was popped, so the caller knows that screen is on its way out; false
-    /// when a handler ran in its place or there was nothing to pop.
+    /// The one way back in a stack: the back swipe and the spotlight title's own back button both pop here, so one gesture never pops
+    /// twice. A title opened from Home's spotlight with no animation closes with none (see `instantDestination()`); every other screen
+    /// closes with its own transition. True when a screen was popped, so the caller knows that screen is on its way out; false when
+    /// there was nothing to pop.
     @discardableResult
     func goBack(in path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) -> Bool {
-        if let handler = backHandlers.last(where: { $0.tab == tab }) {
-            handler.handle()
-            return false
-        }
         guard !self[keyPath: path].isEmpty else { return false }
         guard path == \AppRouter.homePath, spotlightDepth == homePath.count else {
             self[keyPath: path].removeLast()

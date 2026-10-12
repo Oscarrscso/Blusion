@@ -14,8 +14,6 @@ struct DetailView: View {
     @State private var isHoldingEpisode = false
     /// The streams the page shows in place of its details after Play; nil shows the details.
     @State private var pickedRequest: StreamRequest?
-    /// Names this page's back handler on the router, so the back swipe and the back buttons close the streams before they leave the page.
-    @State private var backHandlerID = UUID()
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
@@ -43,7 +41,6 @@ struct DetailView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.windowSafeArea) private var windowSafeArea
-    @Environment(AppRouter.self) private var router
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
@@ -112,9 +109,12 @@ struct DetailView: View {
                         }
                         if let request = pickedRequest {
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
-                            StreamPickerView(request: request, services: services, isEmbedded: true)
+                            StreamPickerView(request: request, services: services, isEmbedded: true, onClose: closeStreams)
                                 .id(request.id)
                                 .padding(.top, metrics.titleRatingsGap)
+                                // At least a screen tall, so the page is never shorter than where it was scrolled to when Play was
+                                // tapped: a page that became too short would jump back to its top.
+                                .frame(minHeight: geometry.size.height, alignment: .top)
                                 .transition(.opacity)
                         } else {
                             Group {
@@ -193,23 +193,6 @@ struct DetailView: View {
         .scrollEdgeEffectHidden(true, for: .top)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
-        // While the streams show, back closes them rather than leaving the page. On iPhone a page from the spotlight hides the system
-        // back button already (see `instantDestination()`), so this stays hidden there too.
-        .navigationBarBackButtonHidden(!usesOwnBackButton || pickedRequest != nil)
-        .toolbar {
-            if pickedRequest != nil, usesOwnBackButton {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        closeStreams()
-                    } label: {
-                        Image(systemName: "chevron.backward")
-                            .fontWeight(.semibold)
-                    }
-                    .accessibilityLabel("Back")
-                    .accessibilityIdentifier("detail.back")
-                }
-            }
-        }
         .task { await model.load(afterHero: { await loadHero() }) }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(isLandscape)") {
             await loadHero()
@@ -222,12 +205,8 @@ struct DetailView: View {
         .onAppear {
             Task { await model.refreshUserState() }
             if opensFromSpotlight { hasSettled = true }
-            // A page that comes back with its streams open takes its back handler again.
-            if pickedRequest != nil { router.addBackHandler(id: backHandlerID) { closeStreams() } }
         }
         .onDisappear {
-            // A tab switch or a covering screen leaves the streams open; when the page returns, its handler is registered again.
-            router.removeBackHandler(id: backHandlerID)
             model.releaseStreamPrefetch()
             // A full-screen trailer covers the page without leaving it, so its player stays. Leaving the page stops the load and player.
             if !model.trailer.isFullScreen { model.trailer.cancel() }
@@ -238,28 +217,17 @@ struct DetailView: View {
 
     // MARK: - Streams
 
-    /// Play shows this title's streams in place of its details, and the trailer stops, since it would play behind them. Back then closes
-    /// them rather than the page. The page does not scroll.
+    /// Play shows this title's streams in place of its details, and the trailer stops, since it would play behind them. The page does
+    /// not scroll, and back still leaves the page, by the button or the swipe: the streams are part of the title's page, not a screen
+    /// of their own.
     private func showStreams(_ request: StreamRequest) {
         model.trailer.cancel()
         withAnimation(Self.swapAnimation) { pickedRequest = request }
-        router.addBackHandler(id: backHandlerID) { closeStreams() }
     }
 
-    /// Takes the streams away and shows the details again, and gives up the back handler so the next back leaves the page.
+    /// Takes the streams away and shows the details again: the streams' own close button.
     private func closeStreams() {
-        router.removeBackHandler(id: backHandlerID)
         withAnimation(Self.swapAnimation) { pickedRequest = nil }
-    }
-
-    /// Whether the page draws its own back button while the streams show. On Mac always. On iPhone not for a title opened from Home's
-    /// spotlight, which already has a back button that calls `goBack`.
-    private var usesOwnBackButton: Bool {
-        #if targetEnvironment(macCatalyst)
-        return true
-        #else
-        return !opensFromSpotlight
-        #endif
     }
 
     // MARK: - Header

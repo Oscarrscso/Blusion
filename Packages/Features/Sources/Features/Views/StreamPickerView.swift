@@ -27,6 +27,9 @@ struct StreamPickerView: View {
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
     private let isEmbedded: Bool
+    /// Embedded only: takes the streams away and shows the title's details again. Back leaves the title's page, so this is the way back
+    /// to the details.
+    private let onClose: (() -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -35,9 +38,10 @@ struct StreamPickerView: View {
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
-    init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false) {
+    init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, onClose: (() -> Void)? = nil) {
         self.services = services
         self.isEmbedded = isEmbedded
+        self.onClose = onClose
         _model = State(initialValue: StreamPickerViewModel(request: request, services: services))
     }
 
@@ -205,24 +209,34 @@ struct StreamPickerView: View {
     /// The header of a title page that shows these streams in place of its details: the episode's name, then the status. The page above
     /// already has the poster, the title and the picture, so there is no poster here.
     private var embeddedHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if model.request.season != nil {
-                if let eyebrow {
-                    Text(eyebrow)
-                        .font(Theme.Typography.eyebrow)
-                        .textCase(.uppercase)
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                if model.request.season != nil {
+                    if let eyebrow {
+                        Text(eyebrow)
+                            .font(Theme.Typography.eyebrow)
+                            .textCase(.uppercase)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(model.request.title)
+                        .font(.headline)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
                 }
-                Text(model.request.title)
-                    .font(.headline)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
+                status
             }
-            status
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .glassCircleButton(.small)
+                .accessibilityLabel("Back to details")
+                .accessibilityIdentifier("streams.close")
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, streamMargin)
     }
 

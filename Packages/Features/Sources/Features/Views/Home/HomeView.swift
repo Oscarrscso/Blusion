@@ -11,6 +11,10 @@ struct HomeView: View {
     @State private var heroPull: CGFloat = 0
     /// The status bar's height, the top safe area Home's content starts beneath. The navigation bar sits below it, not included.
     @State private var topInset: CGFloat = 0
+    /// The page's own side safe-area inset, as its geometry reports it: the notch's inset on a phone held in landscape, zero elsewhere.
+    /// In landscape the page runs under it, so the spotlight reaches the screen's edges, and it is added to the page margin, so the
+    /// headings and each shelf's first card stay clear of the notch where they were.
+    @State private var sideInset: CGFloat = 0
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
@@ -24,11 +28,14 @@ struct HomeView: View {
         GeometryReader { geometry in
             content
                 .environment(\.heroContainerHeight, geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom)
-                .environment(\.heroContainerWidth, geometry.size.width)
+                // In landscape the page runs under its side insets, so the spotlight is that much wider than the safe width.
+                .environment(\.heroContainerWidth, geometry.size.width
+                    + (isLandscape ? geometry.safeAreaInsets.leading + geometry.safeAreaInsets.trailing : 0))
                 .environment(\.isHomeScrolling, isScrolling)
                 .environment(\.layoutMetrics, homeMetrics)
         }
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
+            .onGeometryChange(for: CGFloat.self) { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) } action: { sideInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)
@@ -59,12 +66,22 @@ struct HomeView: View {
     }
 
     /// Home's page margin is the title page's content margin, so its headings, the Continue selector and the shelves line up with it.
-    /// Shelves still scroll edge to edge; only their first and last cards are inset.
+    /// Shelves still scroll edge to edge; only their first and last cards are inset. In landscape the page runs under its side insets
+    /// (see `ignoredEdges`), so the margin grows by that inset and everything but the spotlight's picture stays where it was.
     private var homeMetrics: LayoutMetrics {
         var homeMetrics = metrics
-        homeMetrics.pageMargin = metrics.contentMargin
+        homeMetrics.pageMargin = metrics.contentMargin + (isLandscape ? sideInset : 0)
         return homeMetrics
     }
+
+    /// The edges the page runs under: the top when the spotlight leads, and in landscape the sides, so the spotlight's picture reaches
+    /// the screen's edges instead of stopping at the notch's inset with a black bar beside it.
+    private var ignoredEdges: Edge.Set {
+        heroIsFirst ? sideEdges.union(.top) : sideEdges
+    }
+
+    /// The sides, in landscape: every state of Home runs under them, since the page margin already keeps its content clear of the notch.
+    private var sideEdges: Edge.Set { isLandscape ? .horizontal : [] }
 
     /// A spotlight without a heading extends beneath the navigation bar, which is then clear and has no title; a visible heading stays
     /// below it, under an ordinary bar. This used to follow the scroll position too (the bar took a background and a title once the
@@ -81,9 +98,11 @@ struct HomeView: View {
         case .loading:
             ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; ProgressView() }.padding(.top, Theme.Spacing.m) }
                 .screenBackground()
+                .ignoresSafeArea(.container, edges: sideEdges)
         case .noAddons:
             ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; EmptyAddonsView(onOpenAddons: { router.showAddons() }) } }
                 .screenBackground()
+                .ignoresSafeArea(.container, edges: sideEdges)
         case .noCatalogs:
             ScrollView { VStack(spacing: Theme.rowSpacing) {
                 continueRow
@@ -93,6 +112,7 @@ struct HomeView: View {
                 .accessibilityIdentifier("board.noCatalogs")
             } }
                 .screenBackground()
+                .ignoresSafeArea(.container, edges: sideEdges)
         case .ready:
             ready
         }
@@ -136,7 +156,7 @@ struct HomeView: View {
             .screenBackground()
             .scrollEdgeEffectStyle(.soft, for: .top)
             .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
-            .ignoresSafeArea(.container, edges: heroIsFirst ? .top : [])
+            .ignoresSafeArea(.container, edges: ignoredEdges)
             .onChange(of: router.spotlightRevision) { _, _ in
                 var transaction = Transaction(animation: nil)
                 transaction.disablesAnimations = true

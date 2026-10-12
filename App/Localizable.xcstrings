@@ -364,6 +364,17 @@
         }
       }
     },
+    "Back to details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to details"
+          }
+        }
+      }
+    },
     "Best Blu-ray": {
       "extractionState": "manual",
       "localizations": {

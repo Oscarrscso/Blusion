@@ -116,7 +116,7 @@ private struct BackSwipeModifier: ViewModifier {
 }
 
 private struct BackSwipeInstaller: UIViewRepresentable {
-    /// Goes back. True when the screen on top was popped; false when it stays (it closed something of its own instead).
+    /// Goes back. True when the screen on top was popped; false when it stays.
     let onSwipe: () -> Bool
 
     func makeUIView(context: Context) -> BackSwipeProbe {
@@ -177,7 +177,7 @@ private final class BackSwipeProbe: UIView {
 /// lets a pop turn such a push round, so the swipe only waits for a screen that is already leaving (see `isLeaving`).
 @MainActor
 private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
-    /// Goes back. True when the screen on top was popped; false when it stays (it closed something of its own instead).
+    /// Goes back. True when the screen on top was popped; false when it stays.
     var onSwipe: () -> Bool = { false }
     private lazy var pan: UIPanGestureRecognizer = {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(swiped))
@@ -253,7 +253,7 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
         guard pan.state == .began, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
         // The same light tap as opening a title, once per swipe that goes back.
         Haptics.tap()
-        // A screen that only closed something of its own (the title page's streams) stays, and keeps taking touches.
+        // A screen that was not popped stays, and keeps taking touches.
         guard onSwipe() else { return }
         // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
         page.isUserInteractionEnabled = false
