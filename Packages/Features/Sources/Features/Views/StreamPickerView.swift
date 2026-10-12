@@ -143,7 +143,12 @@ struct StreamPickerView: View {
             .focusable()
             .focused($listHasFocus)
             .focusEffectDisabled()
-            .onAppear { listHasFocus = true }
+            // A pushed picker takes the keyboard as it shows. An embedded one waits until its streams are shown, so the title page does not
+            // move while it is still an empty placeholder under Play.
+            .onAppear { if !isEmbedded || isRevealed { listHasFocus = true } }
+            .onChange(of: isRevealed) { _, revealed in
+                if revealed { listHasFocus = true }
+            }
             .onKeyPress(.downArrow) { moveKeyboardSelection(by: 1) }
             .onKeyPress(.upArrow) { moveKeyboardSelection(by: -1) }
             .onKeyPress(.return) { chooseKeyboardStream() }
