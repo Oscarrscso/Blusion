@@ -14,6 +14,9 @@ struct DetailView: View {
     @State private var isHoldingEpisode = false
     /// The streams the page shows in place of its details after Play; nil shows the details.
     @State private var pickedRequest: StreamRequest?
+    /// False while the picked streams are still on their way: the details stay and Play shows a spinner. True once the first streams
+    /// are in, or the addons have all answered, and the streams take the details' place.
+    @State private var streamsAreReady = false
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
@@ -98,9 +101,10 @@ struct DetailView: View {
                         DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
                                    topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
                                    logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo,
-                                   showsDetails: pickedRequest == nil) {
+                                   showsDetails: !showsStreams) {
                             DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
-                                          showsActions: pickedRequest == nil, play: showStreams)
+                                          showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
+                                          play: showStreams)
                         } trailer: {
                             DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size))
                         } synopsis: {
@@ -109,14 +113,18 @@ struct DetailView: View {
                         }
                         if let request = pickedRequest {
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
-                            StreamPickerView(request: request, services: services, isEmbedded: true, onClose: closeStreams)
+                            // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
+                            // streams are ready.
+                            StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streamsAreReady,
+                                             onClose: closeStreams, onReady: revealStreams)
                                 .id(request.id)
-                                .padding(.top, metrics.titleRatingsGap)
+                                .padding(.top, showsStreams ? metrics.titleRatingsGap : 0)
                                 // At least a screen tall, so the page is never shorter than where it was scrolled to when Play was
                                 // tapped: a page that became too short would jump back to its top.
-                                .frame(minHeight: geometry.size.height, alignment: .top)
+                                .frame(minHeight: showsStreams ? geometry.size.height : nil, alignment: .top)
                                 .transition(.opacity)
-                        } else {
+                        }
+                        if !showsStreams {
                             Group {
                                 Rectangle()
                                     .fill(Theme.separator)
@@ -217,17 +225,31 @@ struct DetailView: View {
 
     // MARK: - Streams
 
-    /// Play shows this title's streams in place of its details, and the trailer stops, since it would play behind them. The page does
+    /// True once the streams have taken the details' place.
+    private var showsStreams: Bool { pickedRequest != nil && streamsAreReady }
+
+    /// Play starts loading this title's streams, and the trailer stops, since it would play behind them. The details stay, with a
+    /// spinner in Play, until the streams are ready (`revealStreams`); a second tap while it spins calls the streams off. The page does
     /// not scroll, and back still leaves the page, by the button or the swipe: the streams are part of the title's page, not a screen
     /// of their own.
     private func showStreams(_ request: StreamRequest) {
         model.trailer.cancel()
-        withAnimation(Self.swapAnimation) { pickedRequest = request }
+        streamsAreReady = false
+        pickedRequest = pickedRequest == nil ? request : nil
+    }
+
+    /// The streams are ready: they take the place of the details.
+    private func revealStreams() {
+        guard pickedRequest != nil, !streamsAreReady else { return }
+        withAnimation(Self.swapAnimation) { streamsAreReady = true }
     }
 
     /// Takes the streams away and shows the details again: the streams' own close button.
     private func closeStreams() {
-        withAnimation(Self.swapAnimation) { pickedRequest = nil }
+        withAnimation(Self.swapAnimation) {
+            pickedRequest = nil
+            streamsAreReady = false
+        }
     }
 
     // MARK: - Header

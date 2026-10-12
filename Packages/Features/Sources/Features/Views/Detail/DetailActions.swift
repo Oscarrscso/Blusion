@@ -10,6 +10,8 @@ struct DetailActions: View {
     @Binding var isConfirmingUnmarkShow: Bool
     /// False leaves only the metadata line, while the page shows its streams in place of the actions.
     var showsActions = true
+    /// True while the streams Play asked for are on their way: Play shows a spinner in place of its label, as the trailer button does.
+    var isLoadingStreams = false
     /// The main action's tap: the page shows this title's streams.
     let play: (StreamRequest) -> Void
     @Environment(\.isLandscape) private var isLandscape
@@ -37,17 +39,29 @@ struct DetailActions: View {
     /// The metadata line, the same text as the spotlight's. It sits above the actions.
     private var metaParts: [String?] { model.heroMetaLine }
 
-    /// The one main action. A movie plays itself; a series plays its next episode. While a series' episodes are still arriving,
-    /// a placeholder holds the place.
+    /// The one main action. A movie plays itself; a series plays its next episode. While its streams load it shows a spinner, and a
+    /// tap then calls them off. While a series' episodes are still arriving, a placeholder holds the place.
     @ViewBuilder
     private var primaryAction: some View {
         if let request = model.primaryRequest {
             Button {
                 play(request)
             } label: {
+                // The label keeps its place under the spinner, so the button keeps its size.
                 Label(model.primaryActionTitle, systemImage: "play.fill")
+                    .opacity(isLoadingStreams ? 0 : 1)
+                    .overlay {
+                        if isLoadingStreams {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white.opacity(0.6))
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             }
             .buttonStyle(.primaryAction)
+            .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
         } else if model.isLoading {
             Capsule()

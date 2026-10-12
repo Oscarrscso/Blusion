@@ -29,9 +29,13 @@ struct StreamPickerView: View {
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
     private let isEmbedded: Bool
+    /// False draws nothing yet: the picker is on the page and loading, and the page shows it once `onReady` has been called.
+    private let isRevealed: Bool
     /// Embedded only: takes the streams away and shows the title's details again. Back leaves the title's page, so this is the way back
     /// to the details.
     private let onClose: (() -> Void)?
+    /// Called once there is something to show: the first streams are in, or every addon has answered.
+    private let onReady: (() -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -40,10 +44,13 @@ struct StreamPickerView: View {
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
-    init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, onClose: (() -> Void)? = nil) {
+    init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
+         onReady: (() -> Void)? = nil) {
         self.services = services
         self.isEmbedded = isEmbedded
+        self.isRevealed = isRevealed
         self.onClose = onClose
+        self.onReady = onReady
         _model = State(initialValue: StreamPickerViewModel(request: request, services: services))
     }
 
@@ -76,17 +83,19 @@ struct StreamPickerView: View {
     /// already has the poster and the title.
     private var content: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            if isEmbedded { embeddedHeader } else { header }
-            playBestButton
-            BestEditionView(model: model)
-                .padding(.horizontal, streamMargin)
-            resolutionChips
-            failures
-            emptyState
-            loadingRows
-            groups(recommended: model.recommendedStream)
-            links
-            hiddenHint
+            if isRevealed {
+                if isEmbedded { embeddedHeader } else { header }
+                playBestButton
+                BestEditionView(model: model)
+                    .padding(.horizontal, streamMargin)
+                resolutionChips
+                failures
+                emptyState
+                loadingRows
+                groups(recommended: model.recommendedStream)
+                links
+                hiddenHint
+            }
         }
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
@@ -114,6 +123,9 @@ struct StreamPickerView: View {
                         }
                     }
                 }
+            }
+            .onChange(of: isReady, initial: true) { _, ready in
+                if ready { onReady?() }
             }
             .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
             .onChange(of: scenePhase) { _, phase in
@@ -157,6 +169,9 @@ struct StreamPickerView: View {
                 Button("Cancel", role: .cancel) {}
             }
     }
+
+    /// There is something to show: the first streams are in, or every addon has answered (with streams, with nothing, or with a failure).
+    private var isReady: Bool { model.hasLoaded && (!model.listing.isEmpty || !model.listing.isLoading) }
 
     // MARK: header
 
