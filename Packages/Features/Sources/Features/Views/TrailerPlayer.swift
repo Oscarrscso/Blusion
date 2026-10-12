@@ -135,8 +135,8 @@ struct AVTrailerPreparer: TrailerPreparing {
     private static func sampleFrames(of asset: AVAsset, seconds: Double?) async -> [LumaFrame]? {
         guard let seconds, seconds.isFinite, seconds > 0 else { return nil }
         let times = Self.barSamples.map { CMTime(seconds: seconds * $0, preferredTimescale: 600) }
-        let generator = LetterboxSampler.generator(for: asset)
-        let sampling = Task { @MainActor in await LetterboxSampler.frames(from: generator, at: times) }
+        let reader = SampleGenerator(LetterboxSampler.generator(for: asset))
+        let sampling = Task { @MainActor in await LetterboxSampler.frames(from: reader, at: times) }
         let watchdog = Task { @MainActor in
             do {
                 try await Task.sleep(for: Self.barsTimeout)
@@ -144,7 +144,7 @@ struct AVTrailerPreparer: TrailerPreparing {
                 // The read finished first, and the watchdog was cancelled.
                 return
             }
-            generator.cancelAllCGImageGeneration()
+            reader.generator.cancelAllCGImageGeneration()
             sampling.cancel()
         }
         let frames = await withTaskCancellationHandler {
@@ -189,7 +189,6 @@ enum LetterboxSampler {
     static let sampleSize = CGSize(width: 320, height: 320)
 
     /// A generator for the trailer's frames, at the size the bars are read at.
-    @MainActor
     static func generator(for asset: AVAsset) -> AVAssetImageGenerator {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -200,15 +199,24 @@ enum LetterboxSampler {
     }
 
     /// The frames at `times` that can be read, in order. Stops early when the task is cancelled.
-    @MainActor
-    static func frames(from generator: AVAssetImageGenerator, at times: [CMTime]) async -> [LumaFrame] {
+    nonisolated static func frames(from reader: SampleGenerator, at times: [CMTime]) async -> [LumaFrame] {
         var frames: [LumaFrame] = []
         for time in times {
             guard !Task.isCancelled else { break }
-            guard let sample = try? await generator.image(at: time), let frame = LumaFrame(sample.image) else { continue }
+            guard let sample = try? await reader.generator.image(at: time), let frame = LumaFrame(sample.image) else { continue }
             frames.append(frame)
         }
         return frames
+    }
+}
+
+/// One measurement's image generator, held so the watchdog can cancel a read that runs past the timeout. Only the reading task calls
+/// `image(at:)`; the watchdog only cancels.
+final class SampleGenerator: @unchecked Sendable {
+    let generator: AVAssetImageGenerator
+
+    init(_ generator: AVAssetImageGenerator) {
+        self.generator = generator
     }
 }
 
