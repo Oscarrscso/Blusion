@@ -21,9 +21,6 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     /// False hides the trailer's panel, the synopsis and the ratings row, leaving the picture, the logo and the controls. The page then
     /// shows its streams under them.
     let showsDetails: Bool
-    /// How far the portrait logo, its fade and everything below them sit below their spotlight placement (see `TitleHero.detailDrop`). The page
-    /// passes none while a spotlight page is still arriving, and the full drop after.
-    let drop: CGFloat
     @ViewBuilder let controls: Controls
     @ViewBuilder let trailer: TrailerPanel
     @ViewBuilder let synopsis: Synopsis
@@ -94,14 +91,14 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     /// Portrait: the picture under the bar, with the logo low on it and the controls beneath.
     private var portraitTop: some View {
         let height = TitleHero.height(width: size.width, metrics: metrics)
-        let visible = TitleHero.visibleHeight(height, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: size.width - contentMargin * 2),
-                                              drop: drop)
+        let visible = TitleHero.visibleHeight(height,
+                                              logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: size.width - contentMargin * 2))
         return VStack(spacing: 0) {
             // Reserve artwork above the measured logo; all text and controls participate in normal vertical layout.
             Color.clear
                 // Never less than the top safe area, so a tall logo or title pushes the page down rather than up into the status bar. The drop
                 // is added after that floor, so the logo moves by the same amount in every case, and the fade with it.
-                .frame(height: max(topInset, height - renderedLogoHeight - TitleHero.logoTextGap) + drop)
+                .frame(height: max(topInset, height - renderedLogoHeight - TitleHero.logoTextGap) + TitleHero.portraitDrop)
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 titleArt(alignment: .center)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { renderedLogoHeight = $0 }

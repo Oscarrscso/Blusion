@@ -2,9 +2,8 @@
 import StremioKit
 import SwiftUI
 
-/// The portrait hero's numbers, shared by Home's spotlight and the title page so that opening a title from one looks the same on the
-/// other: the same picture size, fade, logo and placement when it opens. Both screens read them; change one here and both move together.
-/// The title page then lowers its logo and fade by `detailDrop`.
+/// The portrait hero's numbers, shared by Home's spotlight and the title page so that a title looks the same on both, and opening it from the
+/// spotlight does not jump. Both screens read them; change one here and both move together.
 enum TitleHero {
     /// The portrait picture is drawn this much larger than its frame (see `pictureHeight`).
     static let zoom: CGFloat = 1.15
@@ -16,12 +15,13 @@ enum TitleHero {
     /// The tallest logo, bottom-aligned above the gap to the text.
     static let logoMaxHeight: CGFloat = 150
     /// The gap between the bottom of the logo and the text under it (the metadata line), on the title page and on Home's spotlight alike.
-    /// The text starts at the picture's bottom edge, so the logo stops this far above that edge.
+    /// The text starts `portraitDrop` below the picture's bottom edge on both, so the logo stops this far above that.
     static let logoTextGap = Theme.Spacing.s
-    /// How far the title page's portrait hero lowers the logo, its bottom fade and everything below them, so more of the picture shows above
-    /// the logo. A title opened from Home's spotlight starts at the spotlight's placement and glides down to this once it has appeared (see
-    /// `DetailView.isDropped`). Home's spotlight does not use it: its metadata line sits in a fixed band under the picture, so its logo stays.
-    static let detailDrop = Theme.Spacing.xl
+    /// How far the portrait hero lowers its logo, its bottom fade and everything below them, so more of the picture shows above the logo. Home's
+    /// spotlight and the title page both use it, so a title sits in the same place on both. On Home the metadata line moves down with the logo,
+    /// and its band gives up the same height (see `captionBelow`). This is the portrait layout, so iPhone and iPad use it. The Mac keeps its own
+    /// layouts: the title page (`DesktopDetailHero`), and the spotlight's landscape caption, which sits over the picture.
+    static let portraitDrop = Theme.Spacing.xl
     /// The longest edge the picture is decoded to. Smaller than full screen, so the neighbouring pages keep it in the image cache.
     static let portraitPixelSize: CGFloat = 2048
     /// The longest edge the landscape picture is decoded to: full screen.
@@ -32,7 +32,9 @@ enum TitleHero {
     static let imageAlignment = Alignment.top
     /// The blur on the stand-in poster while the picture loads, kept opaque at the edges (see `HeroPicture`).
     static let placeholderBlur: CGFloat = 2
-    /// The band under the picture on Home that holds the metadata line. The title page has no band; its picture is the same height.
+    /// The height of Home's portrait page below the picture at the default text size: the band that holds the metadata line. Each view that
+    /// lays the page out scales it with Dynamic Type (`@ScaledMetric`), so a larger line gets a taller band and stays clear of the page dots.
+    /// The line starts `portraitDrop` below the picture's edge, so its text sits in what is left of the band.
     static let captionBelow: CGFloat = 72
     /// The scale a title page starts from when it opens from the spotlight: a little larger, then it settles at rest (see `heroSettle`).
     static let settleLarger: Double = 1.025
@@ -83,10 +85,9 @@ enum TitleHero {
     }
 
     /// How much of the zoomed picture shows: it ends, fully faded to black, half way up the logo (which sits `logoTextGap` above the
-    /// hero's bottom edge and is `logoHeight` tall), so the fade never ends short of the logo or runs behind all of it. `drop` moves the
-    /// logo and the fade down by that much (see `detailDrop`).
-    static func visibleHeight(_ height: CGFloat, logoHeight: CGFloat, drop: CGFloat = 0) -> CGFloat {
-        min(pictureHeight(height), max(1, height + drop - logoTextGap - logoHeight / 2))
+    /// picture's edge, lowered by `portraitDrop`, and is `logoHeight` tall), so the fade never ends short of the logo or runs behind all of it.
+    static func visibleHeight(_ height: CGFloat, logoHeight: CGFloat) -> CGFloat {
+        min(pictureHeight(height), max(1, height + portraitDrop - logoTextGap - logoHeight / 2))
     }
 
     /// The bottom fade's share of the visible picture, `fadeShare` of the hero height.

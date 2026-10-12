@@ -41,9 +41,6 @@ struct DetailView: View {
     /// Turns true when the page first appears, so the settle plays once for a page opened from the spotlight and not again when the user
     /// returns to it from a deeper page.
     @State private var hasSettled = false
-    /// False while a page opened from the spotlight still has the spotlight's own logo and fade placement. It turns true as the page appears,
-    /// and the logo and fade glide down by `TitleHero.detailDrop`. A page opened any other way starts with it (see `init`).
-    @State private var isDropped: Bool
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.windowSafeArea) private var windowSafeArea
@@ -92,7 +89,6 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked,
                                                      trailerPreparer: AVTrailerPreparer()))
         _hero = State(initialValue: HeroLoader(seeding: handoff))
-        _isDropped = State(initialValue: handoff == nil)
         self.services = services
         opensFromSpotlight = handoff != nil
     }
@@ -120,7 +116,7 @@ struct DetailView: View {
                         DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
                                    topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
                                    logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo,
-                                   showsDetails: !showsStreams, drop: heroDrop) {
+                                   showsDetails: !showsStreams) {
                             DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
                                           showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
                                           play: showStreams)
@@ -237,14 +233,7 @@ struct DetailView: View {
         }
         .onAppear {
             Task { await model.refreshUserState() }
-            if opensFromSpotlight {
-                hasSettled = true
-                // The spotlight pushes this page with animations off, and that can carry into this callback. The glide sets its own
-                // transaction with them back on, so the drop animates whichever way the page was opened.
-                var glide = Transaction(animation: .smooth(duration: 0.4))
-                glide.disablesAnimations = false
-                withTransaction(glide) { isDropped = true }
-            }
+            if opensFromSpotlight { hasSettled = true }
         }
         .onDisappear {
             model.releaseStreamPrefetch()
@@ -318,8 +307,6 @@ struct DetailView: View {
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: !model.isLoadingArtwork) }
     /// The picture and the logo are revealed together, once neither is still pending.
     private var isHeroRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
-    /// The portrait hero's drop: none until a page opened from the spotlight has appeared (see `isDropped`).
-    private var heroDrop: CGFloat { isDropped ? TitleHero.detailDrop : 0 }
 
     /// The title page's own picture and logo are urgent: they skip the queue behind Home's posters, since the user is waiting on them.
     private func loadHero() async {

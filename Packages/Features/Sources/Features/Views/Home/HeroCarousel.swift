@@ -52,6 +52,8 @@ struct HeroCarousel: View {
     @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isHomeScrolling) private var isHomeScrolling
+    /// The portrait page's band under the picture, scaled with Dynamic Type so a larger metadata line keeps its room (see `TitleHero.captionBelow`).
+    @ScaledMetric(relativeTo: .footnote) private var captionBelow: CGFloat = TitleHero.captionBelow
     @Environment(\.heroPull) private var heroPull
     @Environment(PosterRatingsStore.self) private var ratings
     @Environment(AppRouter.self) private var router
@@ -118,7 +120,7 @@ struct HeroCarousel: View {
 
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
-        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + TitleHero.captionBelow
+        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + captionBelow
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: isLandscape ? min(containerHeight, preferred) : portrait)
@@ -129,7 +131,7 @@ struct HeroCarousel: View {
                     let height = geometry.size.height + pull
                     TabView(selection: $pageID) {
                         ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
-                            HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - TitleHero.captionBelow,
+                            HeroPage(item: item, isScrolling: isHomeScrolling, artworkHeight: height - captionBelow,
                                      cachedArtwork: ratings.cachedHeroArtwork(for: item),
                                      cachedCertification: ratings.cachedCertification(for: item), distance: abs(index - currentIndex))
                                 .frame(width: geometry.size.width, height: height)
@@ -155,7 +157,7 @@ struct HeroCarousel: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                if items.count > 1 { pageDots }
+                if items.count > 1 { pageDots(bottom: isLandscape ? Theme.Spacing.m : 0) }
             }
             #if targetEnvironment(macCatalyst)
             .onHover { isHoveringSpotlight = $0 }
@@ -195,7 +197,9 @@ struct HeroCarousel: View {
         }
     }
 
-    private var pageDots: some View {
+    /// The page dots. In portrait they sit at the page's bottom edge, under the metadata line, which now runs lower (see `HeroPage.pageContent`),
+    /// so a line that wraps to two lines still clears them.
+    private func pageDots(bottom: CGFloat) -> some View {
         HStack(spacing: 6) {
             ForEach(items, id: \.identity) { item in
                 let isCurrent = item.identity == (pageID ?? items.first?.identity)
@@ -205,7 +209,7 @@ struct HeroCarousel: View {
             }
         }
         .animation(.snappy(duration: 0.25), value: pageID)
-        .padding(.bottom, Theme.Spacing.m)
+        .padding(.bottom, bottom)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -219,9 +223,11 @@ struct HeroPlaceholder: View {
     private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
     @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.heroContainerWidth) private var containerWidth
+    /// Scaled with Dynamic Type like the spotlight's band, so the placeholder is the same height as the page it stands for.
+    @ScaledMetric(relativeTo: .footnote) private var captionBelow: CGFloat = TitleHero.captionBelow
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
-        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + TitleHero.captionBelow
+        let portrait = TitleHero.height(width: containerWidth, metrics: metrics) + captionBelow
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: isLandscape ? min(containerHeight, preferred) : portrait)
@@ -246,6 +252,8 @@ private struct HeroPage: View {
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     /// The landscape form: a phone turned sideways, or any Mac window.
     private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
+    /// The portrait band under the picture, scaled with Dynamic Type the same way as the spotlight's (see `TitleHero.captionBelow`).
+    @ScaledMetric(relativeTo: .footnote) private var captionBelow: CGFloat = TitleHero.captionBelow
     @Environment(PosterRatingsStore.self) private var ratings
     /// The titles' fuller details, shared with the title page. Optional, so a preview without it still draws the item's own line.
     @Environment(HeroMetaStore.self) private var heroMeta: HeroMetaStore?
@@ -368,8 +376,8 @@ private struct HeroPage: View {
         }
     }
 
-    /// Landscape keeps the caption over the picture. Portrait stops the picture above a band that holds the metadata, and the title sits
-    /// low on the picture as it does on the title page when that page opens (the title page then drops its logo, see `TitleHero.detailDrop`).
+    /// Landscape keeps the caption over the picture. Portrait stops the picture above a band that holds the metadata, and the title sits low
+    /// on the picture, where the title page puts it too (see `TitleHero.portraitDrop`).
     @ViewBuilder
     private var pageContent: some View {
         if isLandscape {
@@ -386,15 +394,17 @@ private struct HeroPage: View {
             let visibleHeight = TitleHero.visibleHeight(
                 artworkHeight, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: containerWidth - metrics.contentMargin * 2))
             VStack(spacing: 0) {
+                // The title sits `portraitDrop` below the picture's edge, and the metadata line under it starts there too. The band gives up
+                // the same height, so the page keeps its size.
                 portraitTitle
-                    .frame(height: artworkHeight, alignment: .bottom)
-                // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
+                    .frame(height: artworkHeight + TitleHero.portraitDrop, alignment: .bottom)
+                // The metadata line is centred within the page's margins.
                 MetaLine(metaParts, identifier: "hero.metaLine", spreads: true)
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, metrics.contentMargin)
-                    .frame(height: TitleHero.captionBelow, alignment: .top)
+                    .frame(height: captionBelow - TitleHero.portraitDrop, alignment: .top)
             }
             .foregroundStyle(.white)
             // The picture is zoomed, so it is taller than the hero and runs behind the metadata line. The page clips what passes its bottom.
