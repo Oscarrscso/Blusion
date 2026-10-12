@@ -114,7 +114,7 @@ public enum FusionWidgetCodec {
 
         /// A row or hero needs a readable data source; everything else falls back to a default.
         mutating func rowConfiguration(_ object: [String: Any], numbered: Bool = false) -> RowConfiguration? {
-            guard let source = source(object["dataSource"]) else { return nil }
+            guard let source = source(object["dataSource"], label: Read.text(object["title"]) ?? "") else { return nil }
             var presentation = Read.presentation(object["presentation"])
             presentation.showsRank = numbered
             return RowConfiguration(source: source, presentation: presentation,
@@ -146,17 +146,19 @@ public enum FusionWidgetCodec {
 
         mutating func tile(_ value: Any) -> CollectionItem? {
             guard let object = value as? [String: Any] else { return nil }
-            let sources = ((object["dataSources"] as? [Any]) ?? []).compactMap { source($0) }
+            let title = Read.text(object["title"]) ?? Read.text(object["name"]) ?? ""
+            let sources = ((object["dataSources"] as? [Any]) ?? []).compactMap { source($0, label: title) }
             return CollectionItem(id: Read.text(object["id"]) ?? UUID().uuidString,
-                                  title: Read.text(object["title"]) ?? Read.text(object["name"]) ?? "",
+                                  title: title,
                                   hideTitle: Read.flag(object["hideTitle"]) ?? false,
                                   imageAspect: Read.aspectRatio(object["imageAspect"] ?? object["layout"]) ?? .wide,
                                   imageURL: Read.httpURL(object["imageURL"]) ?? Read.httpURL(object["backgroundImageURL"]),
                                   sources: sources)
         }
 
-        /// A data source, or nil when it is unreadable (no kind, or an addon catalog without a catalog id).
-        mutating func source(_ value: Any?) -> WidgetSource? {
+        /// A data source, or nil when it is unreadable (no kind, or an addon catalog without a catalog id). `label` is the title of the
+        /// widget or tile that holds the source, which a Fusion TMDb list names its filters by.
+        mutating func source(_ value: Any?, label: String) -> WidgetSource? {
             guard let object = value as? [String: Any], let kind = Read.text(object["kind"]) else { return nil }
             let payload = object["payload"] as? [String: Any] ?? [:]
             switch kind {
@@ -164,6 +166,8 @@ public enum FusionWidgetCodec {
             case "traktList": return traktList(payload) ?? .unsupported(kind: kind)
             case "blusion.traktFeed": return traktFeed(payload) ?? .unsupported(kind: kind)
             case "blusion.tmdbDiscover": return tmdbDiscover(payload) ?? .unsupported(kind: kind)
+            // Fusion's own TMDb kind. Its exports carry no filters, so the list is read from its title; a `query` written by Blusion wins.
+            case "tmdbDiscover": return tmdbDiscover(payload) ?? .tmdbDiscover(TMDbDiscoverQuery.inferred(fromTitle: label))
             default: return .unsupported(kind: kind)
             }
         }

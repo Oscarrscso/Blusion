@@ -405,6 +405,31 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         #expect(WidgetsManagerViewModel.traktTitle(source) == "Trakt", "a discover list is not a Trakt list")
     }
 
+    @Test func detailsRevealEverySettingOfAWidget() async throws {
+        let model = await loaded(try await services())
+        let popular = try choice(model)
+        let row = HomeWidget(id: "r", title: "Popular", hideTitle: true,
+                             content: .row(RowConfiguration(source: .addonCatalog(popular.reference),
+                                                            presentation: WidgetPresentation(aspectRatio: .wide, cardStyle: .large, showsRatings: false,
+                                                                                             showsRank: true),
+                                                            limit: 12, cacheTTL: 0)))
+        let details = model.details(of: row)
+        #expect(details.map(\.label) == ["Type", "Source", "Items", "Card shape", "Card size", "Ratings", "Providers", "Numbered", "Better Posters",
+                                         "Saved for", "Title"])
+        #expect(details.map(\.value) == ["Numbered row", "Popular Movies · Cinemeta", "12", "Wide", "Large", "No", "No", "Yes", "No", "Not saved",
+                                         "Hidden"])
+        #expect(details.map(\.id) == Array(0..<details.count))
+
+        let tiles = [CollectionItem(title: "Action", sources: [.addonCatalog(popular.reference)]), CollectionItem(title: "", sources: [])]
+        let collection = model.details(of: HomeWidget(title: "Genres", content: .collection(tiles)))
+        #expect(collection.map(\.label) == ["Type", "Tiles", "Action", "Untitled tile", "Title"])
+        #expect(collection.map(\.value) == ["Collection", "2 tiles", "Popular Movies · Cinemeta", "No source", "Shown"])
+
+        let hero = model.details(of: WidgetsManagerViewModel.makeHero(choice: popular))
+        #expect(hero.first?.value == "Spotlight")
+        #expect(hero.first { $0.label == "Saved for" }?.value == "1 hour")
+    }
+
     @Test func catalogChoicesListEnabledBrowsableCatalogsOnce() async throws {
         let needsSearch = Manifest(id: "test.search", name: "Search", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
                                    catalogs: [CatalogDescriptor(type: "movie", id: "search", name: "Search",

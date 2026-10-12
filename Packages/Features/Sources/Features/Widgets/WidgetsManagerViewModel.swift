@@ -41,6 +41,13 @@ public final class WidgetsManagerViewModel {
         public let missingAddonHosts: [String]
     }
 
+    /// One setting of a widget, such as "Card shape: Poster", as the Widgets list reveals it under the widget's row.
+    public struct WidgetDetail: Identifiable, Equatable, Sendable {
+        public let id: Int
+        public let label: String
+        public let value: String
+    }
+
     public private(set) var widgets: [HomeWidget] = []
     public private(set) var isCustomised = false
     public private(set) var catalogChoices: [CatalogChoice] = []
@@ -280,6 +287,78 @@ public final class WidgetsManagerViewModel {
         case .continueWatching: return "Continue"
         case .unsupported(let type): return "Can't show yet · \(type)"
         }
+    }
+
+    /// Every setting of a widget, in the order the editor shows them, for the Widgets list to reveal under its row. A collection lists each
+    /// tile with its sources.
+    public func details(of widget: HomeWidget) -> [WidgetDetail] {
+        var lines: [(label: String, value: String)] = [("Type", WidgetsManagerViewModel.kindName(of: widget))]
+        switch widget.content {
+        case .row(let row), .hero(let row), .banner(let row):
+            let presentation = row.presentation
+            lines += [
+                ("Source", describe(row.source)),
+                ("Items", "\(row.limit)"),
+                ("Card shape", WidgetsManagerViewModel.name(of: presentation.aspectRatio)),
+                ("Card size", WidgetsManagerViewModel.name(of: presentation.cardStyle)),
+                ("Ratings", WidgetsManagerViewModel.yesNo(presentation.showsRatings)),
+                ("Providers", WidgetsManagerViewModel.yesNo(presentation.showsProviders)),
+                ("Numbered", WidgetsManagerViewModel.yesNo(presentation.showsRank)),
+                ("Better Posters", WidgetsManagerViewModel.yesNo(presentation.usesBetterPosters)),
+                ("Saved for", WidgetsManagerViewModel.savedText(seconds: row.cacheTTL)),
+            ]
+        case .collection(let tiles):
+            lines.append(("Tiles", WidgetsManagerViewModel.plural(tiles.count, "tile")))
+            for tile in tiles {
+                let sources = tile.sources.map { describe($0) }.joined(separator: " + ")
+                lines.append((tile.title.isEmpty ? "Untitled tile" : tile.title, sources.isEmpty ? "No source" : sources))
+            }
+        case .continueWatching:
+            lines.append(("Shows", "Titles in progress, from Trakt and this device"))
+        case .unsupported:
+            lines.append(("Status", "Blusion can't show this kind of row yet."))
+        }
+        lines.append(("Title", widget.hideTitle ? "Hidden" : "Shown"))
+        return lines.enumerated().map { WidgetDetail(id: $0.offset, label: $0.element.label, value: $0.element.value) }
+    }
+
+    private static func kindName(of widget: HomeWidget) -> String {
+        switch widget.content {
+        case .row(let row): return row.presentation.showsRank ? "Numbered row" : "Row"
+        case .hero: return "Spotlight"
+        case .banner: return "Banner"
+        case .collection: return "Collection"
+        case .continueWatching: return "Continue Watching"
+        case .unsupported(let type): return "Not supported (\(type))"
+        }
+    }
+
+    private static func name(of ratio: WidgetPresentation.AspectRatio) -> String {
+        switch ratio {
+        case .poster: return "Poster"
+        case .wide: return "Wide"
+        case .square: return "Square"
+        }
+    }
+
+    private static func name(of style: WidgetPresentation.CardStyle) -> String {
+        switch style {
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        }
+    }
+
+    private static func yesNo(_ value: Bool) -> String {
+        value ? "Yes" : "No"
+    }
+
+    /// How long a loaded page is kept: "1 hour", "5 minutes", or "Not saved" when it is always asked again.
+    private static func savedText(seconds: Int) -> String {
+        if seconds == 0 { return "Not saved" }
+        if seconds % 3600 == 0 { return plural(seconds / 3600, "hour") }
+        if seconds % 60 == 0 { return plural(seconds / 60, "minute") }
+        return plural(seconds, "second")
     }
 
     /// The name a source gives a widget unless the user types another: the genre or catalog title, the Trakt list or feed name.

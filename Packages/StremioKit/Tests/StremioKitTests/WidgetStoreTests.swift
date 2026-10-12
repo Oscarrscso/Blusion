@@ -128,6 +128,28 @@ import StremioKitTestSupport
         #expect(try savedIDs(in: defaults) == ["future", "added", "row"], "with the widget before it gone, it moves to the front")
     }
 
+    /// Layouts saved before Fusion's TMDb lists read their filters from the title hold them as unsupported. Loading reads them now.
+    @Test func aSavedFusionTMDbListReadsItsFiltersFromItsTitleOnLoad() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let stale = HomeWidget(id: "old", title: "Hidden Gems", content: .row(RowConfiguration(source: .unsupported(kind: "tmdbDiscover"))))
+        let unknown = HomeWidget(id: "blusion", title: "Horror", content: .row(RowConfiguration(source: .unsupported(kind: "blusion.tmdbDiscover"))))
+        let decades = HomeWidget(id: "tiles", title: "Decades", content: .collection([
+            CollectionItem(id: "d", title: "1980s TV", sources: [.unsupported(kind: "tmdbDiscover")]),
+        ]))
+        let store = DefaultsWidgetStore(defaults: defaults)
+        await store.save([stale, unknown, decades])
+        let loaded = try #require(await DefaultsWidgetStore(defaults: defaults).load())
+        #expect(loaded.count == 3)
+        #expect(loaded[0] == HomeWidget(id: "old", title: "Hidden Gems", content: .row(RowConfiguration(source: .tmdbDiscover(.inferred(fromTitle: "Hidden Gems"))))))
+        #expect(loaded[1] == unknown, "only the exact Fusion kind is read from its title")
+        if case .collection(let tiles) = loaded[2].content {
+            #expect(tiles.first?.sources == [.tmdbDiscover(.inferred(fromTitle: "1980s TV"))])
+        } else {
+            Issue.record("the collection should load as a collection")
+        }
+    }
+
     private func savedIDs(in defaults: UserDefaults) throws -> [String] {
         let data = try #require(defaults.data(forKey: DefaultsWidgetStore.key))
         let envelope = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])

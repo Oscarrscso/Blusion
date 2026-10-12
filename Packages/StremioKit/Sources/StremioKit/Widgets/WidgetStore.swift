@@ -110,7 +110,7 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
         guard let envelope = readEnvelope() else { return nil }
         return envelope.widgets.compactMap { entry -> HomeWidget? in
             guard case .widget(let widget) = entry else { return nil }
-            return widget
+            return widget.readingSavedTMDbFilters()
         }
     }
 

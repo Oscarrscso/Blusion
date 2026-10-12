@@ -53,7 +53,24 @@ struct WidgetsManagerView: View {
         List {
             Section {
                 ForEach(model.widgets) { widget in
-                    NavigationLink(value: widget) {
+                    // A row drops down in place to show every setting of its widget, and its Edit Widget link sits at the foot of them.
+                    DisclosureGroup {
+                        ForEach(model.details(of: widget)) { detail in
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(detail.label)
+                                Spacer(minLength: 8)
+                                Text(detail.value)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                            .font(.subheadline)
+                            .accessibilityIdentifier("widgets.detail.\(widget.id).\(detail.id)")
+                        }
+                        NavigationLink(value: widget) {
+                            Label("Edit Widget", systemImage: "slider.horizontal.3")
+                        }
+                        .accessibilityIdentifier("widgets.edit.\(widget.id)")
+                    } label: {
                         Label {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(widget.title.isEmpty ? "Untitled" : widget.title)

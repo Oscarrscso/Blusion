@@ -121,6 +121,6 @@ The checkpoint archive, original sources/briefs, screenshots, and current iPhone
 
 - Letterboxd ratings depend on its public page format and can be absent.
 - Infuse progress requires its callback; the app cannot infer a new stop position without one.
-- Supported Fusion imports retain supported sources; unsupported sources remain visible for replacement rather than being silently invented.
+- Supported Fusion imports retain supported sources; unsupported sources remain visible for replacement rather than being silently invented. The one exception: Fusion's `tmdbDiscover` lists come with no filters in their exports, so their filters are read from the widget's title (`TMDbTitleInference.swift`). The filters that were read show in the widget's details and stay editable in its editor.
 - Detail's Information block remains below the synopsis/episodes instead of a custom side-by-side Mac layout.
 - The streaming-server route, optional fallback engine, simulator UI journey, and real-device checklist need their own validation.
