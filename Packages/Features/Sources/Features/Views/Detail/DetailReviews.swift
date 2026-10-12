@@ -88,27 +88,45 @@ struct DetailReviews: View {
     }
 
     /// Choosing a sort, the current one included, folds the open review first: its card would otherwise be moved while it is open. The
-    /// haptic comes when that fold has finished, and only when a review was open to fold.
+    /// fold has the same run of ticks as a fold by tap.
     private func chooseSort(_ sort: ReviewSort) {
-        if expandedReviewID != nil {
-            withAnimation(.snappy(duration: 0.35)) {
-                expandedReviewID = nil
-            } completion: {
-                Haptics.settle()
-            }
+        if let open = expandedReviewID {
+            tickLines(ofReview: open)
+            withAnimation(.snappy(duration: Self.foldDuration)) { expandedReviewID = nil }
         }
         reviewSort = sort
     }
 
     /// Opening a review widens its card and unfolds its text together. Closing one folds the text and narrows the card in the same motion,
-    /// as it opened: one animation for the state, the card's width and the text. The haptic comes when the card has finished moving,
-    /// opened or closed.
+    /// as it opened: one animation for the state, the card's width and the text. While it moves, a light tick comes for each line of
+    /// text that is revealed or put away.
     private func toggleReview(_ id: String) {
-        withAnimation(.snappy(duration: 0.35)) {
+        tickLines(ofReview: id)
+        withAnimation(.snappy(duration: Self.foldDuration)) {
             expandedReviewID = expandedReviewID == id ? nil : id
-        } completion: {
-            Haptics.settle()
         }
+    }
+
+    /// How long a review takes to open or fold, in seconds. Its run of ticks lasts as long.
+    private static let foldDuration = 0.35
+
+    /// Starts the run of ticks for a review that is about to open or fold: one for each line that will come into view or leave it.
+    private func tickLines(ofReview id: String) {
+        guard let review = reviews.first(where: { $0.id == id }) else { return }
+        Haptics.lines(unfoldingLines(of: review), over: .seconds(Self.foldDuration))
+    }
+
+    /// About how many lines of a review come into view when it opens, and leave when it folds: its lines at the open card's width, less
+    /// the lines a folded card already shows. It is an estimate from the length of the text, since the text is laid out inside its own
+    /// view; the ticks only need to be about right.
+    private func unfoldingLines(of review: TMDbReview) -> Int {
+        let textWidth = max(0, width - contentMargin * 2) - ReviewCard.padding * 2
+        // A character of the review's text is about seven points wide on average.
+        let perLine = max(20, Int(textWidth / 7))
+        let lines = review.content.split(whereSeparator: \.isNewline).reduce(0) { total, paragraph in
+            total + max(1, (paragraph.count + perLine - 1) / perLine)
+        }
+        return max(0, lines - ReviewCard.foldedLines)
     }
 }
 
@@ -166,7 +184,7 @@ private struct ReviewCard: View {
                             .frame(width: max(0, expandedWidth - Self.padding * 2), alignment: .leading)
                             .transition(.opacity)
                     } else {
-                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: 6,
+                        JustifiedText(text: review.content, textStyle: .subheadline, isMarkdown: true, lineLimit: Self.foldedLines,
                                       reservesSpace: true, isTruncated: $isTruncated, showsLinks: true, onTap: tapText)
                             .frame(width: max(0, foldedWidth - Self.padding * 2), alignment: .leading)
                             .transition(.opacity)
@@ -191,6 +209,8 @@ private struct ReviewCard: View {
         }
     }
 
-    private static let padding: CGFloat = 16
+    static let padding: CGFloat = 16
+    /// The lines of text a folded card shows.
+    static let foldedLines = 6
 }
 #endif

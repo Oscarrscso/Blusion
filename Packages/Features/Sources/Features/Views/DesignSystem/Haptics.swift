@@ -26,9 +26,28 @@ enum Haptics {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
     }
 
-    /// A soft thud for something that has just finished moving into place: a review card that has opened or closed.
-    static func settle() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
+    /// The most ticks one run of `lines` gives. More than this in the time a text takes to unfold runs together into a buzz.
+    private static let maximumLineTicks = 12
+    /// The run of ticks that is going, so a new one takes its place.
+    private static var lineRun: Task<Void, Never>?
+
+    /// A run of light ticks under text that is unfolding or folding: one for each line that comes into view or leaves it, spread over
+    /// the time the text takes to move, the first at once. At least two, so a short text still reads as a run, and never more than
+    /// `maximumLineTicks`. A new run stops one that is still going. Nothing for no lines.
+    static func lines(_ count: Int, over duration: Duration) {
+        lineRun?.cancel()
+        guard count > 0 else { return }
+        let ticks = min(max(count, 2), maximumLineTicks)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        lineRun = Task { @MainActor in
+            let gap = duration / ticks
+            for tick in 0..<ticks {
+                generator.impactOccurred(intensity: 0.5)
+                guard tick < ticks - 1 else { return }
+                do { try await Task.sleep(for: gap) } catch { return }
+            }
+        }
     }
 }
 
