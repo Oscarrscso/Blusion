@@ -84,39 +84,59 @@ public final class WidgetsManagerViewModel {
         isCustomised = saved != nil
     }
 
+    /// The list as it is saved now. Another manager or an editor may have saved since this one loaded, and a change from an older copy
+    /// would save over those edits, so every change starts here. With nothing saved (the automatic layout), this list stands.
+    private func savedList() async -> [HomeWidget] {
+        guard let saved = await services.widgets.load() else { return widgets }
+        widgets = saved
+        return saved
+    }
+
+    /// Positions a screen gave name widgets from an older list. Nothing changes, and the list now shows the saved one.
+    private func positionsChangedElsewhere() {
+        report("These widgets changed elsewhere. Try again.", isError: true)
+    }
+
     /// Appended at the end. A widget whose id the list already uses gets a new one.
     public func add(_ widget: HomeWidget) async {
-        let current = widgets
+        let current = await savedList()
         await commit(current + WidgetsManagerViewModel.withFreshIDs([widget], existing: current))
         saveRevision += 1
     }
 
     /// Replaces the widget with the same id. An unknown id changes nothing.
     public func update(_ widget: HomeWidget) async {
-        guard let index = widgets.firstIndex(where: { $0.id == widget.id }) else { return }
-        var list = widgets
+        var list = await savedList()
+        guard let index = list.firstIndex(where: { $0.id == widget.id }) else { return }
         list[index] = widget
         await commit(list)
         saveRevision += 1
     }
 
     public func remove(id: String) async {
-        guard widgets.contains(where: { $0.id == id }) else { return }
-        await commit(widgets.filter { $0.id != id })
+        let current = await savedList()
+        guard current.contains(where: { $0.id == id }) else { return }
+        await commit(current.filter { $0.id != id })
     }
 
     public func remove(atOffsets offsets: IndexSet) async {
-        let kept = widgets.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
-        guard kept.count < widgets.count else { return }
+        let shown = widgets.map(\.id)
+        let current = await savedList()
+        guard current.map(\.id) == shown else { positionsChangedElsewhere(); return }
+        let kept = current.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        guard kept.count < current.count else { return }
         await commit(kept)
     }
 
     /// SwiftUI `onMove` shape: the widgets at `offsets` end up before `destination`, an index into the list as it is now.
     public func move(fromOffsets offsets: IndexSet, toOffset destination: Int) async {
-        let moved = offsets.filter { widgets.indices.contains($0) }
+        let shown = widgets.map(\.id)
+        let current = await savedList()
+        guard current.map(\.id) == shown else { positionsChangedElsewhere(); return }
+        let moved = offsets.filter { current.indices.contains($0) }
         guard !moved.isEmpty else { return }
-        let moving = moved.map { widgets[$0] }
-        var list = widgets.enumerated().filter { !moved.contains($0.offset) }.map(\.element)
+        let moving = moved.map { current[$0] }
+        var list = current.enumerated().filter { !moved.contains($0.offset) }.map(\.element)
         let insertion = destination - moved.filter { $0 < destination }.count
         list.insert(contentsOf: moving, at: min(max(insertion, 0), list.count))
         await commit(list)
@@ -245,8 +265,9 @@ public final class WidgetsManagerViewModel {
 
     /// Saves what an import read, and returns how many widgets it brought in.
     private func store(_ result: FusionWidgetCodec.ImportResult, mode: ImportMode) async -> Int {
-        let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: mode == .append ? widgets : [])
-        await commit(mode == .append ? widgets + imported : imported)
+        let current = await savedList()
+        let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: mode == .append ? current : [])
+        await commit(mode == .append ? current + imported : imported)
         return imported.count
     }
 
