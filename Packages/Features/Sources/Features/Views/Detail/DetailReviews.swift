@@ -18,6 +18,10 @@ struct DetailReviews: View {
     @State private var reviewSort = ReviewSort.highestRated
     /// The review whose card is open: full width, with its whole text. Opening and closing animate the text and the width together.
     @State private var expandedReviewID: String?
+    /// The wait before the open card is centred, so a tap in the meantime can cancel it.
+    @State private var centering: Task<Void, Never>?
+    /// True while an opened card is moving into place, until it is centred. Only a swipe made after that folds the card.
+    @State private var settling = false
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
@@ -56,17 +60,28 @@ struct DetailReviews: View {
                             .modifier(FoldingWidth(isExpanded: expandedReviewID == review.id, folded: foldedWidth, expanded: expandedWidth))
                             .id(review.id)
                             .reportsShelfEdge(id: review.id)
-                            .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
-                                expandedReviewID == review.id &&
-                                abs(geometry.size.width - (width - contentMargin * 2)) < 0.5
-                            } action: { isFullWidth in
-                                if isFullWidth {
-                                    withAnimation(.snappy(duration: 0.35)) {
-                                        proxy.scrollTo(review.id, anchor: .center)
-                                    }
-                                }
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reviewsShelfSpace)) } action: { frame in
+                                foldIfSwipedAway(review.id, frame)
                             }
                         }
+                }
+                .coordinateSpace(name: reviewsShelfSpace)
+                // The open card is centred once its open has finished, so the row is at its final width when the scroll aims at it. Every
+                // tap that opens or folds a card first cancels the centring still waiting, so only the latest open is centred.
+                .onChange(of: expandedReviewID) { _, id in
+                    centering?.cancel()
+                    guard let id else {
+                        settling = false
+                        return
+                    }
+                    centering = Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(Self.foldDuration))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.snappy(duration: Self.foldDuration)) { proxy.scrollTo(id, anchor: .center) }
+                        try? await Task.sleep(for: .seconds(Self.foldDuration))
+                        guard !Task.isCancelled else { return }
+                        settling = false
+                    }
                 }
             }
         }
@@ -102,13 +117,26 @@ struct DetailReviews: View {
     /// text that is revealed or put away.
     private func toggleReview(_ id: String) {
         tickLines(ofReview: id)
+        let opening = expandedReviewID != id
+        // Set in the same step as the open, so a layout pass that reads the card's new width already finds it settling.
+        settling = opening
         withAnimation(.snappy(duration: Self.foldDuration)) {
-            expandedReviewID = expandedReviewID == id ? nil : id
+            expandedReviewID = opening ? id : nil
         }
     }
 
     /// How long a review takes to open or fold, in seconds. Its run of ticks lasts as long.
     private static let foldDuration = 0.35
+
+    /// A swipe that leaves the open review less than half on the shelf folds it, as a tap on it would. Nothing folds while the review is
+    /// still opening or being centred, since both move it.
+    private func foldIfSwipedAway(_ id: String, _ frame: CGRect) {
+        guard expandedReviewID == id, !settling else { return }
+        let shown = min(frame.maxX, width) - max(frame.minX, 0)
+        guard shown < frame.width / 2 else { return }
+        tickLines(ofReview: id)
+        withAnimation(.snappy(duration: Self.foldDuration)) { expandedReviewID = nil }
+    }
 
     /// Starts the run of ticks for a review that is about to open or fold: one for each line that will come into view or leave it.
     private func tickLines(ofReview id: String) {
@@ -130,8 +158,11 @@ struct DetailReviews: View {
     }
 }
 
-/// A review card's width. Opening, the card takes its full width in the layout at once and the animation draws the growth, so the shelf
-/// can scroll to the open card straight away. Folding, the width shrinks in the layout frame by frame. A width that dropped at once made
+/// The shelf's own coordinate space, so a card's frame says where it sits on screen.
+private let reviewsShelfSpace = "detail.reviews.shelf"
+
+/// A review card's width. Opening, the card takes its full width in the layout at once and the animation draws the growth, so the card
+/// is at its full width when the shelf centres it. Folding, the width shrinks in the layout frame by frame. A width that dropped at once made
 /// the shelf suddenly shorter than where it was scrolled to when the last card folded, so the row jumped before it moved; shrinking in
 /// step lets the row follow the card.
 private struct FoldingWidth: ViewModifier, Animatable {
