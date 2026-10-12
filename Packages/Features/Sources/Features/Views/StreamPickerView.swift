@@ -196,7 +196,7 @@ struct StreamPickerView: View {
             if isRevealed {
                 if isEmbedded { embeddedHeader } else { header }
                 playBestButton
-                BestEditionView(model: model)
+                BestEditionView(model: model, rowHeight: autoPickButtonHeight)
                     .padding(.horizontal, streamMargin)
                 resolutionChips
                 failures

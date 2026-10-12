@@ -6,10 +6,12 @@ import SwiftUI
 /// it reads as a single line until someone opens it.
 struct BestEditionView: View {
     let model: StreamPickerViewModel
+    /// The Auto Pick button's height beside it, so the header row is as tall as that button. Zero until the button is measured.
+    var rowHeight: CGFloat = 0
     @State private var isExpanded = false
-    /// The corner radius in both states, so the row keeps its shape when it opens. The folded row is about 40 points tall, and a corner
-    /// radius is clamped to half the shorter side, so that draws a capsule, as the Auto Pick button beside it does. Open, it is the card's.
-    private static let panelRadius: CGFloat = Theme.Radius.surface
+    /// The corner radius in both states, so the row keeps its shape when it opens: half the Auto Pick button's height, so the folded row is a
+    /// capsule at any text size, as that button is. Until the button is measured, the surface radius.
+    private var panelRadius: CGFloat { rowHeight > 0 ? rowHeight / 2 : Theme.Radius.surface }
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -33,11 +35,13 @@ struct BestEditionView: View {
                     }
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.vertical, Theme.Spacing.s + 2)
+                    // The header is as tall as the Auto Pick button beside it, its text centred in it.
+                    .frame(height: rowHeight > 0 ? rowHeight : nil)
                     // Folded, the whole row is the capsule, so its tap area is too. Open, the header is the card's top edge, and its
                     // tap area stays square, as it was.
                     .contentShape(isExpanded
                                   ? AnyShape(Rectangle())
-                                  : AnyShape(RoundedRectangle(cornerRadius: Self.panelRadius, style: .continuous)))
+                                  : AnyShape(RoundedRectangle(cornerRadius: panelRadius, style: .continuous)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -51,7 +55,7 @@ struct BestEditionView: View {
                         .transition(.opacity)
                 }
             }
-            .glassCardSurface(cornerRadius: Self.panelRadius)
+            .glassCardSurface(cornerRadius: panelRadius)
         }
     }
 
