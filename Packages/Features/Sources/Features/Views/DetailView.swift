@@ -276,7 +276,7 @@ struct DetailView: View {
         withAnimation(Self.swapAnimation) { streamsAreReady = true }
     }
 
-    /// Takes the streams away and shows the details again. On Mac, Escape in the picker does this; on iPhone the streams are left by leaving
+    /// Takes the streams away and shows the details again. On Mac, Escape in the picker does this; on iPhone and iPad the streams are left by leaving
     /// the page.
     private func closeStreams() {
         withAnimation(Self.swapAnimation) {
