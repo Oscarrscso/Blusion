@@ -36,6 +36,8 @@ struct StreamPickerView: View {
     private let onClose: (() -> Void)?
     /// Called once every addon has answered.
     private let onReady: (() -> Void)?
+    /// Embedded on Mac: scrolls the title page to a row the keyboard is on. The page's scroll view holds the rows, not the picker.
+    private let scrollToRow: ((AnyHashable) -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -46,50 +48,63 @@ struct StreamPickerView: View {
     @Environment(\.dismiss) private var dismiss
     /// The row the arrow keys are on. Nil until the list takes the keyboard.
     @State private var keyboardRow: KeyboardRow?
+    /// The list holds the keyboard from the moment it shows, so the arrow keys work without a click first.
+    @FocusState private var listHasFocus = false
     #endif
     @Environment(\.scenePhase) private var scenePhase
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
-         onReady: (() -> Void)? = nil) {
+         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil) {
         self.services = services
         self.isEmbedded = isEmbedded
         self.isRevealed = isRevealed
         self.onClose = onClose
         self.onReady = onReady
+        self.scrollToRow = scrollToRow
         _model = State(initialValue: StreamPickerViewModel(request: request, services: services))
     }
 
     var body: some View {
         if isEmbedded {
-            behaviour(list.accessibilityIdentifier("streams.list"))
+            behaviour(list(scrollTo: scrollToRow).accessibilityIdentifier("streams.list"))
         } else {
-            behaviour(
-                ScrollView {
-                    list
-                }
-                // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding
-                // inside it.
-                .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
-                // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
-                .background(alignment: .top) { ambientBackdrop }
-                .screenBackground()
-                .scrollEdgeEffectStyle(.soft, for: .top)
-                .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
-                // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
-                .navigationTitle(model.request.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(removing: .title)
-                .accessibilityIdentifier("streams.list")
-            )
+            #if targetEnvironment(macCatalyst)
+            // The reader wraps the picker's own scroll view, which holds the rows, so the keyboard can scroll them.
+            ScrollViewReader { proxy in
+                behaviour(page(scrollTo: { proxy.scrollTo($0, anchor: .center) }))
+            }
+            #else
+            behaviour(page(scrollTo: nil))
+            #endif
         }
     }
 
+    /// The pushed picker's page: its own scroll view, with the list in it.
+    private func page(scrollTo: ((AnyHashable) -> Void)?) -> some View {
+        ScrollView {
+            list(scrollTo: scrollTo)
+        }
+        // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding
+        // inside it.
+        .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
+        // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
+        .background(alignment: .top) { ambientBackdrop }
+        .screenBackground()
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
+        // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
+        .navigationTitle(model.request.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
+        .accessibilityIdentifier("streams.list")
+    }
+
     /// The list the page shows. On Mac it also takes the keyboard (see `keyboardNavigated`); on iPhone it is the rows alone.
-    private var list: some View {
+    private func list(scrollTo: ((AnyHashable) -> Void)?) -> some View {
         #if targetEnvironment(macCatalyst)
-        return keyboardNavigated(content)
+        return keyboardNavigated(content, scrollTo: scrollTo)
         #else
         return content
         #endif
@@ -123,20 +138,20 @@ struct StreamPickerView: View {
     #if targetEnvironment(macCatalyst)
     /// Mac: the list takes the keyboard. Down and up move a highlight through the streams and scroll it into view, Return chooses the
     /// highlighted stream, and Escape closes the picker. Only the highlight changes, so a click works as it did.
-    private func keyboardNavigated<Rows: View>(_ rows: Rows) -> some View {
-        ScrollViewReader { proxy in
-            rows
-                .focusable()
-                .focusEffectDisabled()
-                .onKeyPress(.downArrow) { moveKeyboardSelection(by: 1) }
-                .onKeyPress(.upArrow) { moveKeyboardSelection(by: -1) }
-                .onKeyPress(.return) { chooseKeyboardStream() }
-                .onKeyPress(.escape) { closeFromKeyboard() }
-                .onChange(of: keyboardRow) { _, row in
-                    guard let row else { return }
-                    withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(row, anchor: .center) }
-                }
-        }
+    private func keyboardNavigated<Rows: View>(_ rows: Rows, scrollTo: ((AnyHashable) -> Void)?) -> some View {
+        rows
+            .focusable()
+            .focused($listHasFocus)
+            .focusEffectDisabled()
+            .onAppear { listHasFocus = true }
+            .onKeyPress(.downArrow) { moveKeyboardSelection(by: 1) }
+            .onKeyPress(.upArrow) { moveKeyboardSelection(by: -1) }
+            .onKeyPress(.return) { chooseKeyboardStream() }
+            .onKeyPress(.escape) { closeFromKeyboard() }
+            .onChange(of: keyboardRow) { _, row in
+                guard let row, let scrollTo else { return }
+                withAnimation(.snappy(duration: 0.25)) { scrollTo(AnyHashable(row)) }
+            }
     }
 
     /// The rows in the order the list shows them, each with its stream.

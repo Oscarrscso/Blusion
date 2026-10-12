@@ -136,7 +136,8 @@ struct DetailView: View {
                             // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
                             // streams are ready.
                             StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streamsAreReady,
-                                             onClose: closeStreams, onReady: revealStreams)
+                                             onClose: closeStreams, onReady: revealStreams,
+                                             scrollToRow: { proxy.scrollTo($0, anchor: .center) })
                                 .id(request.id)
                                 #if targetEnvironment(macCatalyst)
                                 // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.
