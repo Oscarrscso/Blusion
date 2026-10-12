@@ -10,7 +10,10 @@ struct LibraryView: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var actions: TitleActions?
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
+    @Environment(AppRouter.self) private var router
     let onOpenAddons: () -> Void
+    /// The id of the page's content, which its scroll goes back to when its tab's item is tapped.
+    private static let topID = "library.top"
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
         _model = State(initialValue: LibraryViewModel(services: services))
@@ -18,61 +21,68 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                pageTitle
-                filters
-                VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                    if !model.hasLoaded {
-                        SkeletonRow()
-                    } else if model.isEmpty {
-                        EmptyStateLayout(title: "Your library is empty", systemImage: "books.vertical",
-                                         message: "Titles you save, and anything you start watching, show up here.") {
-                            Button("Find something to watch", action: onOpenAddons)
-                                .buttonStyle(.primaryActionCompact)
-                                .accessibilityIdentifier("library.empty.action")
-                        }
-                        .accessibilityIdentifier("library.empty")
-                    } else {
-                        if !model.hasMatches {
-                            EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
-                                             message: "Try removing a filter.") {
-                                Button("Clear Filters") { model.clearFilters() }
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    pageTitle
+                    filters
+                    VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                        if !model.hasLoaded {
+                            SkeletonRow()
+                        } else if model.isEmpty {
+                            EmptyStateLayout(title: "Your library is empty", systemImage: "books.vertical",
+                                             message: "Titles you save, and anything you start watching, show up here.") {
+                                Button("Find something to watch", action: onOpenAddons)
                                     .buttonStyle(.primaryActionCompact)
-                                    .accessibilityIdentifier("library.noMatches.clear")
+                                    .accessibilityIdentifier("library.empty.action")
                             }
-                            .accessibilityIdentifier("library.noMatches")
+                            .accessibilityIdentifier("library.empty")
                         } else {
-                            if !model.saved.isEmpty { savedSection }
-                            if !model.watched.isEmpty { watchedSection }
+                            if !model.hasMatches {
+                                EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
+                                                 message: "Try removing a filter.") {
+                                    Button("Clear Filters") { model.clearFilters() }
+                                        .buttonStyle(.primaryActionCompact)
+                                        .accessibilityIdentifier("library.noMatches.clear")
+                                }
+                                .accessibilityIdentifier("library.noMatches")
+                            } else {
+                                if !model.saved.isEmpty { savedSection }
+                                if !model.watched.isEmpty { watchedSection }
+                            }
                         }
                     }
                 }
+                .padding(.vertical, Theme.Spacing.l)
+                .id(Self.topID)
             }
-            .padding(.vertical, Theme.Spacing.l)
-        }
-        .screenBackground()
-        .navigationTitle("")
-        #if !targetEnvironment(macCatalyst)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(removing: .title)
-        #endif
-        .task { model.attachRatings(ratings) }
-        .task(id: scenePhase) {
-            guard scenePhase == .active else { return }
-            while !Task.isCancelled {
-                await model.refresh()
-                await actions?.refresh()
-                do {
-                    try await Task.sleep(for: .seconds(300))
-                } catch {
-                    return
+            .screenBackground()
+            .navigationTitle("")
+            #if !targetEnvironment(macCatalyst)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
+            #endif
+            .task { model.attachRatings(ratings) }
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                while !Task.isCancelled {
+                    await model.refresh()
+                    await actions?.refresh()
+                    do {
+                        try await Task.sleep(for: .seconds(300))
+                    } catch {
+                        return
+                    }
                 }
             }
+            .onChange(of: actions?.savedIdentities) { Task { await model.load() } }
+            .onChange(of: actions?.watchedIdentities) { Task { await model.load() } }
+            .accessibilityIdentifier("library.list")
+            // A tap on Library's tab item goes back to its first page, and scrolls it to the top.
+            .onChange(of: router.tabTapRevisions[.library, default: 0]) { _, _ in
+                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
-        .onChange(of: actions?.savedIdentities) { Task { await model.load() } }
-        .onChange(of: actions?.watchedIdentities) { Task { await model.load() } }
-        .accessibilityIdentifier("library.list")
     }
 
     /// The page's title, drawn in the content so the navigation bar stays free of text.

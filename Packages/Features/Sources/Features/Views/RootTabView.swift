@@ -29,6 +29,8 @@ public final class AppRouter {
     var spotlightDepth: Int?
     /// Counts the returns to Home from a spotlight title. The spotlight and Home's scroll reset to their first page and top on each.
     var spotlightRevision = 0
+    /// Counts the taps on each tab's item, the selected tab's included. The tab's first page scrolls to its top on each, see `tapTab(_:)`.
+    private(set) var tabTapRevisions: [LaunchRoute.Tab: Int] = [:]
     /// Navigation values must wait until their stacks and destinations have appeared.
     private var pendingLaunchRoute: LaunchRoute?
 
@@ -53,6 +55,36 @@ public final class AppRouter {
     }
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
+
+    /// A tap on a tab's item. Every tap scrolls that tab's first page to its top (see `tabTapRevisions`). Tapping the tab that is showing
+    /// also takes it back to its first page; switching to another tab keeps its stack, so a title or a draft on it is still there when
+    /// it returns. Search starts afresh on every tap: its browse page, or with its field focused when it was already showing.
+    func tapTab(_ tab: LaunchRoute.Tab) {
+        let isShowing = self.tab == tab
+        switch tab {
+        // A title opened from the spotlight closes with no animation, as its own back button closes it (see `goBack`).
+        case .home: if isShowing { popToRoot(\.homePath, instantly: spotlightDepth != nil) }
+        case .discover: if isShowing { popToRoot(\.discoverPath) }
+        case .library: if isShowing { popToRoot(\.libraryPath) }
+        case .settings: if isShowing { popToRoot(\.settingsPath) }
+        case .search:
+            popToRoot(\.searchPath)
+            if isShowing { searchFocusRevision += 1 } else { searchBrowseRevision += 1 }
+        }
+        tabTapRevisions[tab, default: 0] += 1
+        self.tab = tab
+    }
+
+    private func popToRoot(_ path: ReferenceWritableKeyPath<AppRouter, NavigationPath>, instantly: Bool = false) {
+        guard !self[keyPath: path].isEmpty else { return }
+        guard instantly else {
+            self[keyPath: path] = NavigationPath()
+            return
+        }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { self[keyPath: path] = NavigationPath() }
+    }
 
     /// The one way back in a stack: the back swipe and the spotlight title's own back button both pop here, so one gesture never pops
     /// twice. A title opened from Home's spotlight with no animation closes with none (see `instantDestination()`); every other screen
@@ -126,17 +158,7 @@ public struct RootTabView: View {
 
     public var body: some View {
         @Bindable var router = router
-        TabView(selection: Binding(get: { router.tab }, set: { tab in
-            if tab == .search {
-                router.searchPath = NavigationPath()
-                if router.tab == .search {
-                    router.searchFocusRevision += 1
-                } else {
-                    router.searchBrowseRevision += 1
-                }
-            }
-            router.tab = tab
-        })) {
+        TabView(selection: Binding(get: { router.tab }, set: { router.tapTab($0) })) {
             Tab(value: LaunchRoute.Tab.home) {
                 NavigationStack(path: $router.homePath) {
                     HomeView(services: services)

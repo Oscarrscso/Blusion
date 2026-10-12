@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
     private let services: AppServices
     let fallbackEngineLinked: Bool
+    @Environment(AppRouter.self) private var router
+    /// The id of the first section, which the list's scroll goes back to when the Settings tab's item is tapped.
+    private static let topID = "settings.top"
 
     init(services: AppServices) {
         _model = State(initialValue: SettingsViewModel(services: services))
@@ -19,90 +22,97 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        List {
-            Section("Content") {
-                NavigationLink(value: SettingsDestination.addons) {
-                    SettingsRow(title: "Addons", summary: "\(model.installedAddonCount) installed", systemImage: "puzzlepiece.extension")
-                }
-                .accessibilityIdentifier("settings.addons")
-                NavigationLink(value: SettingsDestination.widgets) {
-                    SettingsRow(title: "Widgets", summary: "Home rows and layout", systemImage: "rectangle.3.group")
-                }
-                .accessibilityIdentifier("settings.widgets")
-            }
-            Section("Playback & appearance") {
-                NavigationLink { PlaybackSettingsPage(model: model) } label: {
-                    SettingsRow(title: "Playback", summary: playbackSummary, systemImage: "play.rectangle")
-                }
-                .accessibilityIdentifier("settings.section.playback")
-                NavigationLink { AppearanceSettingsPage(model: model) } label: {
-                    SettingsRow(title: "Appearance", summary: appearanceSummary, systemImage: "paintpalette")
-                }
-                .accessibilityIdentifier("settings.section.appearance")
-                NavigationLink { LazyLoadSettingsPage() } label: {
-                    SettingsRow(title: "Lazy load", summary: lazyLoadLabel(lookaheadLevel), systemImage: "arrow.down.to.line")
-                }
-                .accessibilityIdentifier("settings.section.lazyLoad")
-            }
-            Section("Ratings") {
-                NavigationLink { ReviewServicesPage(model: model, services: services) } label: {
-                    SettingsRow(title: "Review services", summary: reviewServicesSummary, systemImage: "star.bubble")
-                }
-                .accessibilityIdentifier("settings.section.reviews")
-                NavigationLink { IMDbRatingsPage(status: datasetStatus) } label: {
-                    SettingsRow(title: "IMDb ratings", summary: IMDbDatasetSummary.text(datasetStatus), systemImage: "arrow.down.circle")
-                }
-                .accessibilityIdentifier("settings.section.imdb")
-            }
-            Section("Accounts & server") {
-                NavigationLink { TraktAccountView(services: services) } label: {
-                    SettingsRow(title: "Trakt", summary: "Sync and lists", systemImage: "person.crop.circle")
-                }
-                .accessibilityIdentifier("settings.trakt")
-                NavigationLink { AccountsSettingsPage(model: model) } label: {
-                    SettingsRow(title: "Continue refresh", summary: continueRefreshSummary, systemImage: "arrow.clockwise")
-                }
-                .accessibilityIdentifier("settings.section.accounts")
-                NavigationLink { ServerSettingsPage(model: model) } label: {
-                    SettingsRow(title: "Streaming server", summary: model.settings.streamingServerURL ?? "Not set", systemImage: "server.rack")
-                }
-                .accessibilityIdentifier("settings.section.server")
-                if fallbackEngineLinked {
-                    NavigationLink { FallbackSettingsPage(model: model) } label: {
-                        SettingsRow(title: "Fallback player", summary: model.settings.fallbackEngineEnabled ? "On" : "Off",
-                                    systemImage: "film")
+        ScrollViewReader { proxy in
+            List {
+                Section("Content") {
+                    NavigationLink(value: SettingsDestination.addons) {
+                        SettingsRow(title: "Addons", summary: "\(model.installedAddonCount) installed", systemImage: "puzzlepiece.extension")
                     }
-                    .accessibilityIdentifier("settings.section.fallback")
+                    .accessibilityIdentifier("settings.addons")
+                    NavigationLink(value: SettingsDestination.widgets) {
+                        SettingsRow(title: "Widgets", summary: "Home rows and layout", systemImage: "rectangle.3.group")
+                    }
+                    .accessibilityIdentifier("settings.widgets")
+                }
+                .id(Self.topID)
+                Section("Playback & appearance") {
+                    NavigationLink { PlaybackSettingsPage(model: model) } label: {
+                        SettingsRow(title: "Playback", summary: playbackSummary, systemImage: "play.rectangle")
+                    }
+                    .accessibilityIdentifier("settings.section.playback")
+                    NavigationLink { AppearanceSettingsPage(model: model) } label: {
+                        SettingsRow(title: "Appearance", summary: appearanceSummary, systemImage: "paintpalette")
+                    }
+                    .accessibilityIdentifier("settings.section.appearance")
+                    NavigationLink { LazyLoadSettingsPage() } label: {
+                        SettingsRow(title: "Lazy load", summary: lazyLoadLabel(lookaheadLevel), systemImage: "arrow.down.to.line")
+                    }
+                    .accessibilityIdentifier("settings.section.lazyLoad")
+                }
+                Section("Ratings") {
+                    NavigationLink { ReviewServicesPage(model: model, services: services) } label: {
+                        SettingsRow(title: "Review services", summary: reviewServicesSummary, systemImage: "star.bubble")
+                    }
+                    .accessibilityIdentifier("settings.section.reviews")
+                    NavigationLink { IMDbRatingsPage(status: datasetStatus) } label: {
+                        SettingsRow(title: "IMDb ratings", summary: IMDbDatasetSummary.text(datasetStatus), systemImage: "arrow.down.circle")
+                    }
+                    .accessibilityIdentifier("settings.section.imdb")
+                }
+                Section("Accounts & server") {
+                    NavigationLink { TraktAccountView(services: services) } label: {
+                        SettingsRow(title: "Trakt", summary: "Sync and lists", systemImage: "person.crop.circle")
+                    }
+                    .accessibilityIdentifier("settings.trakt")
+                    NavigationLink { AccountsSettingsPage(model: model) } label: {
+                        SettingsRow(title: "Continue refresh", summary: continueRefreshSummary, systemImage: "arrow.clockwise")
+                    }
+                    .accessibilityIdentifier("settings.section.accounts")
+                    NavigationLink { ServerSettingsPage(model: model) } label: {
+                        SettingsRow(title: "Streaming server", summary: model.settings.streamingServerURL ?? "Not set", systemImage: "server.rack")
+                    }
+                    .accessibilityIdentifier("settings.section.server")
+                    if fallbackEngineLinked {
+                        NavigationLink { FallbackSettingsPage(model: model) } label: {
+                            SettingsRow(title: "Fallback player", summary: model.settings.fallbackEngineEnabled ? "On" : "Off",
+                                        systemImage: "film")
+                        }
+                        .accessibilityIdentifier("settings.section.fallback")
+                    }
+                }
+                Section("Data") {
+                    NavigationLink { DataSettingsPage(model: model, services: services) } label: {
+                        SettingsRow(title: "Clear data", summary: "History, library, settings", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("settings.section.data")
+                }
+                Section("About") {
+                    NavigationLink { AboutSettingsPage(fallbackEngineLinked: fallbackEngineLinked) } label: {
+                        SettingsRow(title: "About", summary: "Version \(SettingsViewModel.appVersion)", systemImage: "info.circle")
+                    }
+                    .accessibilityIdentifier("settings.section.about")
                 }
             }
-            Section("Data") {
-                NavigationLink { DataSettingsPage(model: model, services: services) } label: {
-                    SettingsRow(title: "Clear data", summary: "History, library, settings", systemImage: "trash")
-                }
-                .accessibilityIdentifier("settings.section.data")
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .screenBackground()
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await model.load()
+                datasetStatus = await services.posterRatings.imdbDatasetStatus()
             }
-            Section("About") {
-                NavigationLink { AboutSettingsPage(fallbackEngineLinked: fallbackEngineLinked) } label: {
-                    SettingsRow(title: "About", summary: "Version \(SettingsViewModel.appVersion)", systemImage: "info.circle")
-                }
-                .accessibilityIdentifier("settings.section.about")
+            // A new copy of the IMDb data arrived while Settings was open, or the review services changed.
+            .onChange(of: services.posterRatings.reviewServicesRevision) {
+                model.refreshOMDbUsage()
+                Task { datasetStatus = await services.posterRatings.imdbDatasetStatus() }
+            }
+            .accessibilityIdentifier("settings.form")
+            // A tap on Settings' tab item goes back to its first page, and scrolls it to the top.
+            .onChange(of: router.tabTapRevisions[.settings, default: 0]) { _, _ in
+                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .screenBackground()
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await model.load()
-            datasetStatus = await services.posterRatings.imdbDatasetStatus()
-        }
-        // A new copy of the IMDb data arrived while Settings was open, or the review services changed.
-        .onChange(of: services.posterRatings.reviewServicesRevision) {
-            model.refreshOMDbUsage()
-            Task { datasetStatus = await services.posterRatings.imdbDatasetStatus() }
-        }
-        .accessibilityIdentifier("settings.form")
     }
 
     private var playbackSummary: String {

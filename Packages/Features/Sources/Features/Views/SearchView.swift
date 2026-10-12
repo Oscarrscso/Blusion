@@ -10,6 +10,8 @@ struct SearchView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     private let initialQuery: String?
+    /// The id of the page's content, which its scroll goes back to when its tab's item is tapped.
+    private static let topID = "search.top"
 
     init(services: AppServices, initialQuery: String? = nil) {
         _model = State(initialValue: SearchViewModel(services: services, history: services.searchHistory))
@@ -18,65 +20,72 @@ struct SearchView: View {
 
     var body: some View {
         @Bindable var model = model
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                if model.isOffline {
-                    OfflineBanner()
-                } else if !model.failures.isEmpty {
-                    WrappingStack { ForEach(model.failures) { ErrorChip(text: $0.text) } }
-                        .padding(.horizontal, metrics.pageMargin)
-                        .accessibilityIdentifier("search.failures")
-                }
-                if model.showsNoSearchableAddons {
-                    EmptyStateView("No addon can search", systemImage: "magnifyingglass",
-                                   message: "Add a catalog addon, such as Cinemeta, in Settings.",
-                                   actionTitle: "Open Addons", action: { router.showAddons() })
-                        .accessibilityIdentifier("search.noSearchableAddons")
-                } else if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    browse
-                } else {
-                    results
-                    if model.phase == .searching {
-                        Text("Searching…").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, metrics.pageMargin)
-                        SkeletonRow()
-                    } else if model.showsNoResults {
-                        ContentUnavailableView.search(text: model.query)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                    if model.isOffline {
+                        OfflineBanner()
+                    } else if !model.failures.isEmpty {
+                        WrappingStack { ForEach(model.failures) { ErrorChip(text: $0.text) } }
+                            .padding(.horizontal, metrics.pageMargin)
+                            .accessibilityIdentifier("search.failures")
+                    }
+                    if model.showsNoSearchableAddons {
+                        EmptyStateView("No addon can search", systemImage: "magnifyingglass",
+                                       message: "Add a catalog addon, such as Cinemeta, in Settings.",
+                                       actionTitle: "Open Addons", action: { router.showAddons() })
+                            .accessibilityIdentifier("search.noSearchableAddons")
+                    } else if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        browse
+                    } else {
+                        results
+                        if model.phase == .searching {
+                            Text("Searching…").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, metrics.pageMargin)
+                            SkeletonRow()
+                        } else if model.showsNoResults {
+                            ContentUnavailableView.search(text: model.query)
+                        }
                     }
                 }
+                .padding(.vertical, Theme.Spacing.l)
+                .id(Self.topID)
             }
-            .padding(.vertical, Theme.Spacing.l)
+            // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results.
+            .scrollDismissesKeyboard(.immediately)
+            .screenBackground()
+            .navigationTitle("Search")
+            .searchable(text: $model.query, isPresented: $isSearchPresented,
+                        placement: .navigationBarDrawer(displayMode: .always), prompt: "Shows, Movies, and More")
+            .searchFocused($isSearchFocused)
+            .onChange(of: router.searchBrowseRevision) {
+                model.query = ""
+                isSearchPresented = false
+                isSearchFocused = false
+            }
+            .onChange(of: router.searchFocusRevision) {
+                isSearchPresented = true
+                isSearchFocused = true
+            }
+            .onChange(of: model.query) {
+                selectedGroup = nil
+                model.queryDidChange()
+            }
+            .onSubmit(of: .search) { Task { await model.submit() } }
+            .task { await model.refreshAvailability() }
+            .onChange(of: router.tab) { old, _ in
+                if old == .settings { Task { await model.refreshAvailability() } }
+            }
+            .task {
+                guard let initialQuery, model.query.isEmpty else { return }
+                model.query = initialQuery
+                await model.submit()
+            }
+            .accessibilityIdentifier("search.results")
+            // A tap on Search's tab item goes back to its first page, and scrolls it to the top.
+            .onChange(of: router.tabTapRevisions[.search, default: 0]) { _, _ in
+                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
-        // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results.
-        .scrollDismissesKeyboard(.immediately)
-        .screenBackground()
-        .navigationTitle("Search")
-        .searchable(text: $model.query, isPresented: $isSearchPresented,
-                    placement: .navigationBarDrawer(displayMode: .always), prompt: "Shows, Movies, and More")
-        .searchFocused($isSearchFocused)
-        .onChange(of: router.searchBrowseRevision) {
-            model.query = ""
-            isSearchPresented = false
-            isSearchFocused = false
-        }
-        .onChange(of: router.searchFocusRevision) {
-            isSearchPresented = true
-            isSearchFocused = true
-        }
-        .onChange(of: model.query) {
-            selectedGroup = nil
-            model.queryDidChange()
-        }
-        .onSubmit(of: .search) { Task { await model.submit() } }
-        .task { await model.refreshAvailability() }
-        .onChange(of: router.tab) { old, _ in
-            if old == .settings { Task { await model.refreshAvailability() } }
-        }
-        .task {
-            guard let initialQuery, model.query.isEmpty else { return }
-            model.query = initialQuery
-            await model.submit()
-        }
-        .accessibilityIdentifier("search.results")
     }
 
     private var browse: some View {

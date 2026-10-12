@@ -6,7 +6,10 @@ struct DiscoverView: View {
     @State private var model: DiscoverViewModel
     @Environment(\.layoutMetrics) private var metrics
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
+    @Environment(AppRouter.self) private var router
     let onOpenAddons: () -> Void
+    /// The id of the page's content, which its scroll goes back to when its tab's item is tapped.
+    private static let topID = "discover.top"
 
     init(services: AppServices, onOpenAddons: @escaping () -> Void) {
         _model = State(initialValue: DiscoverViewModel(services: services))
@@ -14,28 +17,35 @@ struct DiscoverView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                pageTitle
-                if model.hasSources {
-                    filters
-                    VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                        results
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    pageTitle
+                    if model.hasSources {
+                        filters
+                        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                            results
+                        }
+                    } else {
+                        EmptyAddonsView(onOpenAddons: onOpenAddons)
                     }
-                } else {
-                    EmptyAddonsView(onOpenAddons: onOpenAddons)
                 }
+                .padding(.vertical, Theme.Spacing.l)
+                .id(Self.topID)
             }
-            .padding(.vertical, Theme.Spacing.l)
+            .screenBackground()
+            .navigationTitle("")
+            #if !targetEnvironment(macCatalyst)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
+            #endif
+            .task { await model.loadSources() }
+            .accessibilityIdentifier("discover.scroll")
+            // A tap on Discover's tab item goes back to its first page, and scrolls it to the top.
+            .onChange(of: router.tabTapRevisions[.discover, default: 0]) { _, _ in
+                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
-        .screenBackground()
-        .navigationTitle("")
-        #if !targetEnvironment(macCatalyst)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(removing: .title)
-        #endif
-        .task { await model.loadSources() }
-        .accessibilityIdentifier("discover.scroll")
     }
 
     /// The page's title, drawn in the content so the navigation bar stays free of text.

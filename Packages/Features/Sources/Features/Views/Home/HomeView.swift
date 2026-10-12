@@ -162,6 +162,10 @@ struct HomeView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
+            // A tap on Home's tab item goes back to its first page, and scrolls it to the top.
+            .onChange(of: router.tabTapRevisions[.home, default: 0]) { _, _ in
+                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+            }
         }
     }
 
