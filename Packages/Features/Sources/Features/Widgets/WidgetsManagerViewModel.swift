@@ -84,45 +84,57 @@ public final class WidgetsManagerViewModel {
         isCustomised = saved != nil
     }
 
-    /// The list as it is saved now. Another manager or an editor may have saved since this one loaded, and a change from an older copy
-    /// would save over those edits, so every change starts here. With nothing saved (the automatic layout), this list stands.
-    private func savedList() async -> [HomeWidget] {
-        guard let saved = await services.widgets.load() else { return widgets }
+    /// The list as it is saved now, or nil when the change must not be made. Another manager or an editor may have saved since this one
+    /// loaded, and a change from an older copy would save over those edits, so every change starts here. Nothing saved while this list
+    /// was customised means the layout was reset elsewhere: this list becomes the automatic one, and the change is refused.
+    private func savedList() async -> [HomeWidget]? {
+        guard let saved = await services.widgets.load() else {
+            guard isCustomised else { return widgets }
+            let addons = await readAddons()
+            widgets = DefaultWidgets.make(for: addons)
+            isCustomised = false
+            changedElsewhere()
+            return nil
+        }
         widgets = saved
+        isCustomised = true
         return saved
     }
 
-    /// Positions a screen gave name widgets from an older list. Nothing changes, and the list now shows the saved one.
-    private func positionsChangedElsewhere() {
+    /// The change was made from a list that has since changed elsewhere. Nothing is saved, and the list now shows the saved one.
+    private func changedElsewhere() {
         report("These widgets changed elsewhere. Try again.", isError: true)
     }
 
     /// Appended at the end. A widget whose id the list already uses gets a new one.
     public func add(_ widget: HomeWidget) async {
-        let current = await savedList()
+        guard let current = await savedList() else { return }
         await commit(current + WidgetsManagerViewModel.withFreshIDs([widget], existing: current))
         saveRevision += 1
     }
 
-    /// Replaces the widget with the same id. An unknown id changes nothing.
+    /// Replaces the widget with the same id. An unknown id changes nothing, and says why.
     public func update(_ widget: HomeWidget) async {
-        var list = await savedList()
-        guard let index = list.firstIndex(where: { $0.id == widget.id }) else { return }
+        guard var list = await savedList() else { return }
+        guard let index = list.firstIndex(where: { $0.id == widget.id }) else {
+            report("This widget was removed elsewhere, so the change was not saved.", isError: true)
+            return
+        }
         list[index] = widget
         await commit(list)
         saveRevision += 1
     }
 
     public func remove(id: String) async {
-        let current = await savedList()
+        guard let current = await savedList() else { return }
         guard current.contains(where: { $0.id == id }) else { return }
         await commit(current.filter { $0.id != id })
     }
 
     public func remove(atOffsets offsets: IndexSet) async {
         let shown = widgets.map(\.id)
-        let current = await savedList()
-        guard current.map(\.id) == shown else { positionsChangedElsewhere(); return }
+        guard let current = await savedList() else { return }
+        guard current.map(\.id) == shown else { changedElsewhere(); return }
         let kept = current.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
         guard kept.count < current.count else { return }
         await commit(kept)
@@ -131,8 +143,8 @@ public final class WidgetsManagerViewModel {
     /// SwiftUI `onMove` shape: the widgets at `offsets` end up before `destination`, an index into the list as it is now.
     public func move(fromOffsets offsets: IndexSet, toOffset destination: Int) async {
         let shown = widgets.map(\.id)
-        let current = await savedList()
-        guard current.map(\.id) == shown else { positionsChangedElsewhere(); return }
+        guard let current = await savedList() else { return }
+        guard current.map(\.id) == shown else { changedElsewhere(); return }
         let moved = offsets.filter { current.indices.contains($0) }
         guard !moved.isEmpty else { return }
         let moving = moved.map { current[$0] }
@@ -246,7 +258,7 @@ public final class WidgetsManagerViewModel {
             clearMessage()
             return
         }
-        let added = await store(result, mode: mode)
+        guard let added = await store(result, mode: mode) else { return }
         report(WidgetsManagerViewModel.importSummary(count: added, skipped: result.skipped), isError: false)
     }
 
@@ -256,7 +268,7 @@ public final class WidgetsManagerViewModel {
         let addons = await readAddons()
         do {
             let result = try await Task.detached { try FusionWidgetCodec.decode(data, installed: addons) }.value
-            let added = await store(result, mode: mode)
+            guard let added = await store(result, mode: mode) else { return }
             report(WidgetsManagerViewModel.importSummary(count: added, skipped: result.skipped, installed: installed, failed: failed), isError: false)
         } catch {
             report(WidgetsManagerViewModel.refusal(error), isError: true)
@@ -264,8 +276,8 @@ public final class WidgetsManagerViewModel {
     }
 
     /// Saves what an import read, and returns how many widgets it brought in.
-    private func store(_ result: FusionWidgetCodec.ImportResult, mode: ImportMode) async -> Int {
-        let current = await savedList()
+    private func store(_ result: FusionWidgetCodec.ImportResult, mode: ImportMode) async -> Int? {
+        guard let current = await savedList() else { return nil }
         let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: mode == .append ? current : [])
         await commit(mode == .append ? current + imported : imported)
         return imported.count

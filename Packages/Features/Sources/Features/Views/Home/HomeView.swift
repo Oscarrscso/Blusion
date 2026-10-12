@@ -55,9 +55,9 @@ struct HomeView: View {
             .onChange(of: router.userStateRevision) { _, _ in Task { await model.refreshContinueWatching() } }
             // Command-R on Mac reloads everything Home shows (see `HomeViewModel.refresh()`).
             .onChange(of: router.homeRefreshRevision) { _, _ in Task { await model.refresh() } }
-            // Coming back from Settings: addons or widgets may have changed.
+            // Coming back from Settings or the Widgets tab: addons or widgets may have changed, and Home's own copy of them with them.
             .onChange(of: router.tab) { old, _ in
-                if old == .settings { Task { await model.load() } }
+                if old == .settings || old == .widgets { Task { await model.load() } }
             }
             // The path shrinks when a title opened from the spotlight pops. Such a title opens and closes with no animation (see
             // `instantDestination()`), so the pop starts and ends together, and nothing is left to finish before Home resets. Resetting
