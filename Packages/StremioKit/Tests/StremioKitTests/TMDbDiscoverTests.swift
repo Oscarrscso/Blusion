@@ -115,6 +115,16 @@ private func externalIDRequests(_ transport: StubTransport, tmdbID: Int? = nil) 
         #expect(plain.items == ["include_adult=false", "page=1", "sort_by=popularity.desc"])
     }
 
+    @Test func anAdultQueryAsksTMDbForItsAdultTitles() {
+        let animation = [TMDbDiscoverQuery.Named(id: 16, name: "Animation")]
+        let adult = request(TMDbDiscoverQuery(genres: animation, includesAdult: true))
+        #expect(adult.path == ["discover", "movie"])
+        #expect(adult.items == ["include_adult=true", "page=1", "sort_by=popularity.desc", "with_genres=16"])
+        #expect(request(TMDbDiscoverQuery(genres: animation)).items.contains("include_adult=false"), "a list without the flag still leaves them out")
+        #expect(request(TMDbDiscoverQuery(ordering: .trendingToday, includesAdult: true)).items == ["page=1"],
+                "TMDb's trending lists take no adult flag")
+    }
+
     @Test func aFullMovieQueryHasEveryItemWithItsSeparator() {
         let query = TMDbDiscoverQuery(
             kind: .movie, ordering: .newest, period: .thisYear,

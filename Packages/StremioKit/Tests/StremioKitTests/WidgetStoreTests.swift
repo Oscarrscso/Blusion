@@ -150,6 +150,19 @@ import StremioKitTestSupport
         }
     }
 
+    /// A list saved before its title's "adult" was read has no adult flag. Loading reads the title again, as an import would.
+    @Test func aSavedListTitledAdultGainsTheAdultFlagOnLoad() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let animation = [TMDbDiscoverQuery.Named(id: 16, name: "Animation")]
+        let adult = HomeWidget(id: "adult", title: "Adult Animation", content: .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation)))))
+        let plain = HomeWidget(id: "plain", title: "Animation", content: .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation)))))
+        await DefaultsWidgetStore(defaults: defaults).save([adult, plain])
+        let loaded = try #require(await DefaultsWidgetStore(defaults: defaults).load())
+        #expect(loaded[0].content == .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation, includesAdult: true)))))
+        #expect(loaded[1] == plain, "a title that does not say adult is unchanged")
+    }
+
     private func savedIDs(in defaults: UserDefaults) throws -> [String] {
         let data = try #require(defaults.data(forKey: DefaultsWidgetStore.key))
         let envelope = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])

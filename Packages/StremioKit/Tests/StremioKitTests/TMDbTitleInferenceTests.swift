@@ -73,6 +73,22 @@ import Testing
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Warriors") == TMDbDiscoverQuery())
     }
 
+    @Test func anAdultTitleKeepsTheTitlesTMDbFlagsAsAdult() {
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation")
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], includesAdult: true))
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation TV")
+            == TMDbDiscoverQuery(kind: .series, genres: [.init(id: 16, name: "Animation")], includesAdult: true))
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Popular Animation Movies").includesAdult == false)
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adults Only").includesAdult == false, "only the word adult is read")
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation, not for kids").includesAdult)
+    }
+
+    @Test func aNegatedAdultWordKeepsAdultTitlesOut() {
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Family movies, no adult titles").includesAdult == false)
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Non-adult Comedy").includesAdult == false)
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation without adult").includesAdult == false)
+    }
+
     @Test func aTitleReadFromFusionWritesBackAsBlusionsQuery() throws {
         let widget = HomeWidget(title: "Horror", content: .row(RowConfiguration(source: .tmdbDiscover(.inferred(fromTitle: "Horror")))))
         let data = try FusionWidgetCodec.encode([widget])

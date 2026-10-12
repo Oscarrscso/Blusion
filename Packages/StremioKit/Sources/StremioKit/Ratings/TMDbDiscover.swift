@@ -113,7 +113,7 @@ extension TMDbRatings {
             return (["trending", kind, window], [URLQueryItem(name: "page", value: String(page))])
         }
         let active: (TMDbDiscoverQuery.Filter) -> Bool = { query.isSet($0) && query.supports($0) }
-        var items = [URLQueryItem(name: "include_adult", value: "false"), URLQueryItem(name: "page", value: String(page)),
+        var items = [URLQueryItem(name: "include_adult", value: query.includesAdult ? "true" : "false"), URLQueryItem(name: "page", value: String(page)),
                      URLQueryItem(name: "sort_by", value: sortKey(query.ordering, isMovie: isMovie))]
         func add(_ name: String, _ value: String?) {
             if let value { items.append(URLQueryItem(name: name, value: value)) }

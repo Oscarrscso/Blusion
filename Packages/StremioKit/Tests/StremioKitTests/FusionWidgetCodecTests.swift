@@ -504,6 +504,26 @@ private let bigSample = #"""
         #expect(row.source == .tmdbDiscover(TMDbDiscoverQuery(kind: .series)))
     }
 
+    @Test func aFusionAdultAnimationRowReadsItsAdultTitlesFromItsTitle() throws {
+        // Fusion's export carries no filters for a TMDb list, so the title is all there is to read.
+        let text = #"""
+        { "widgets": [
+          { "id": "adult", "title": "Adult Animation", "type": "row.classic",
+            "dataSource": { "kind": "tmdbDiscover", "payload": {} } },
+          { "id": "plain", "title": "Animation", "type": "row.classic",
+            "dataSource": { "kind": "tmdbDiscover", "payload": {} } } ] }
+        """#
+        let result = try decode(text)
+        #expect(result.skipped == 0)
+        let animation = TMDbDiscoverQuery.Named(id: 16, name: "Animation")
+        guard case .row(let adult) = result.widgets.first?.content, case .row(let plain) = result.widgets.last?.content else {
+            Issue.record("both rows should be kept")
+            return
+        }
+        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], includesAdult: true)))
+        #expect(plain.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation])))
+    }
+
     @Test func aBrokenDiscoverQueryReadsAsUnsupported() throws {
         let text = #"""
         { "widgets": [

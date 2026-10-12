@@ -94,12 +94,15 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     public var cast: [Named]
     public var crew: [Named]
     public var companies: [Named]
+    /// Whether titles TMDb flags as adult are kept. Off unless a Fusion title names adult titles (see `inferred(fromTitle:)`). The app's
+    /// trending lists do not send it, so they leave adult titles out.
+    public var includesAdult: Bool
 
     public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],
                 excludedKeywords: [Named] = [], minimumScore: Double? = nil, maximumScore: Double? = nil, minimumVotes: Int? = nil,
                 language: String? = nil, minimumRuntime: Int? = nil, maximumRuntime: Int? = nil, releasedFrom: String? = nil,
                 releasedTo: String? = nil, providers: [Named] = [], region: String? = nil, cast: [Named] = [], crew: [Named] = [],
-                companies: [Named] = []) {
+                companies: [Named] = [], includesAdult: Bool = false) {
         self.kind = kind
         self.ordering = ordering
         self.period = period
@@ -119,11 +122,12 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
         self.cast = cast
         self.crew = crew
         self.companies = companies
+        self.includesAdult = includesAdult
     }
 
     private enum CodingKeys: String, CodingKey {
         case kind, ordering, period, genres, keywords, excludedKeywords, minimumScore, maximumScore, minimumVotes, language
-        case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies
+        case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies, includesAdult
     }
 
     /// Every key is optional. An unknown `kind`, `ordering` or `period` falls back to its default, so a file from another version still
@@ -149,7 +153,34 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
             region: try container.decodeIfPresent(String.self, forKey: .region),
             cast: try container.decodeIfPresent([Named].self, forKey: .cast) ?? [],
             crew: try container.decodeIfPresent([Named].self, forKey: .crew) ?? [],
-            companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [])
+            companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [],
+            includesAdult: try container.decodeIfPresent(Bool.self, forKey: .includesAdult) ?? false)
+    }
+
+    /// Writes the keys the synthesized encoding wrote. `includesAdult` is written only when set, so a list that does not ask for adult
+    /// titles encodes as it did before the flag existed: its saved snapshot file name and its Fusion export stay the same.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(ordering, forKey: .ordering)
+        try container.encodeIfPresent(period, forKey: .period)
+        try container.encode(genres, forKey: .genres)
+        try container.encode(keywords, forKey: .keywords)
+        try container.encode(excludedKeywords, forKey: .excludedKeywords)
+        try container.encodeIfPresent(minimumScore, forKey: .minimumScore)
+        try container.encodeIfPresent(maximumScore, forKey: .maximumScore)
+        try container.encodeIfPresent(minimumVotes, forKey: .minimumVotes)
+        try container.encodeIfPresent(language, forKey: .language)
+        try container.encodeIfPresent(minimumRuntime, forKey: .minimumRuntime)
+        try container.encodeIfPresent(maximumRuntime, forKey: .maximumRuntime)
+        try container.encodeIfPresent(releasedFrom, forKey: .releasedFrom)
+        try container.encodeIfPresent(releasedTo, forKey: .releasedTo)
+        try container.encode(providers, forKey: .providers)
+        try container.encodeIfPresent(region, forKey: .region)
+        try container.encode(cast, forKey: .cast)
+        try container.encode(crew, forKey: .crew)
+        try container.encode(companies, forKey: .companies)
+        if includesAdult { try container.encode(true, forKey: .includesAdult) }
     }
 
     /// True when the ordering is one of TMDb's trending lists, which take no filters of their own.
