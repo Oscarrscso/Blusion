@@ -28,6 +28,7 @@ struct AddonsView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle("Addons")
         .navigationBarTitleDisplayMode(.inline)
@@ -232,6 +233,7 @@ struct AddonDetailView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle(details.name)
         .navigationBarTitleDisplayMode(.inline)

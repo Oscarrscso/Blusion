@@ -110,6 +110,22 @@ struct LayoutMetrics: Equatable, Sendable {
     }
 }
 
+/// Lists and forms keep to a readable column on a wide window, centred, as the widget builder does. A phone keeps the full width.
+struct ReadableColumn: ViewModifier {
+    @Environment(\.layoutMetrics) private var metrics
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: metrics.isRegular ? 680 : CGFloat.infinity)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+extension View {
+    /// Keeps a list or form to the readable column (see `ReadableColumn`). Apply it to the list or form itself, before its background.
+    func readableColumn() -> some View { modifier(ReadableColumn()) }
+}
+
 extension EnvironmentValues {
     @Entry var isLandscape = false
     /// True only for a phone turned sideways. A Mac window is never a phone, so its bar and spotlight keep the portrait rules there.

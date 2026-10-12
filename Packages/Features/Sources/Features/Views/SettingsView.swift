@@ -95,6 +95,7 @@ struct SettingsView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .readableColumn()
             .screenBackground()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -171,6 +172,7 @@ private extension View {
     func settingsPage(_ title: String) -> some View {
         listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
+            .readableColumn()
             .screenBackground()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -545,6 +547,7 @@ struct AcknowledgementsView: View {
             .accessibilityElement(children: .contain)
         }
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle("Acknowledgements")
         .navigationBarTitleDisplayMode(.inline)

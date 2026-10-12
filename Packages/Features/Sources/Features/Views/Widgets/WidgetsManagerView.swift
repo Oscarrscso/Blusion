@@ -107,6 +107,12 @@ struct WidgetsManagerView: View {
                         }
                     }
                     .accessibilityIdentifier("widgets.row.\(widget.id)")
+                    #if targetEnvironment(macCatalyst)
+                    .contextMenu {
+                        Button(role: .destructive) { Task { await model.remove(id: widget.id) } } label: { Label("Delete", systemImage: "trash") }
+                            .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
+                    }
+                    #endif
                 }
                 .onDelete { offsets in Task { await model.remove(atOffsets: offsets) } }
                 .onMove { offsets, destination in Task { await model.move(fromOffsets: offsets, toOffset: destination) } }
@@ -143,6 +149,7 @@ struct WidgetsManagerView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle("Widgets")
         .navigationBarTitleDisplayMode(.inline)

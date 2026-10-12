@@ -78,6 +78,7 @@ struct WidgetEditorView: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle(mode == .create ? "New Widget" : "Edit Widget")
         .navigationBarTitleDisplayMode(.inline)
@@ -163,6 +164,13 @@ struct WidgetEditorView: View {
                         }
                     }
                 }
+                #if targetEnvironment(macCatalyst)
+                .contextMenu {
+                    Button(role: .destructive) {
+                        widget.content = .collection(tiles.filter { $0.id != tile.id })
+                    } label: { Label("Delete", systemImage: "trash") }
+                }
+                #endif
             }
             .onDelete { offsets in widget.content = .collection(tiles.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)) }
             .onMove { offsets, destination in
@@ -197,6 +205,7 @@ private struct CollectionTileEditor: View {
             TextField("Image URL (optional)", text: $imageURL).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
         }
         .scrollContentBackground(.hidden)
+        .readableColumn()
         .screenBackground()
         .navigationTitle("Edit Tile")
         .toolbar {
