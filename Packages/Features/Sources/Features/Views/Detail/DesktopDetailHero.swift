@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import SwiftUI
 import StremioKit
+import UIKit
 
 #if targetEnvironment(macCatalyst)
 /// The title page's hero on a Mac. The picture runs the full width of the window, darker on its left, and the title, the actions and the
@@ -84,20 +85,38 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         }
     }
 
-    /// The title, the controls and, once the details show, the ratings, in one column over the picture's lower left edge.
+    /// The title, the metadata line and, once the details show, the overview and the ratings, then the actions: one column over the
+    /// picture's lower left edge, in the order the Mac's title page sets them.
     private var textColumn: some View {
         VStack(alignment: .leading, spacing: TitleHero.logoTextGap) {
             titleArt
-            controls
+            metaLine
             if showsDetails {
+                overview
                 RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
-                    .padding(.top, Theme.Spacing.s)
+                    .padding(.bottom, Theme.Spacing.s)
             }
+            controls
         }
         .frame(maxWidth: Self.textWidth, alignment: .leading)
         .padding(.leading, contentMargin)
         .padding(.bottom, Theme.Spacing.xl)
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
+    }
+
+    /// The metadata line, the same text as iPhone's, set over the picture's left edge.
+    private var metaLine: some View {
+        MetaLine(model.heroMetaLine, identifier: "detail.metaLine", spreads: true)
+    }
+
+    /// The overview, cut to three lines and not expandable: its full text, and More, are in the details below the hero.
+    @ViewBuilder
+    private var overview: some View {
+        if let description = model.detail.preview.description, !description.isEmpty {
+            JustifiedText(text: description, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("detail.overview")
+        }
     }
 
     private var titleArt: some View {

@@ -107,7 +107,7 @@ struct DetailView: View {
                                           logoSlot: logoSlot, isRevealed: isHeroRevealed, showsDetails: !showsStreams) {
                             DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
                                           showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
-                                          play: showStreams)
+                                          showsMetaLine: false, play: showStreams)
                         } trailer: { width in
                             DetailTrailerPanel(model: model, width: width)
                         } synopsis: {

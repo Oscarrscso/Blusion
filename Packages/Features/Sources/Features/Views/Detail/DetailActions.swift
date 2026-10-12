@@ -12,6 +12,8 @@ struct DetailActions: View {
     var showsActions = true
     /// True while the streams Play asked for are on their way: Play shows a spinner in place of its label, as the trailer button does.
     var isLoadingStreams = false
+    /// False leaves the metadata line out, for a page that sets the line itself, above its overview and ratings.
+    var showsMetaLine = true
     /// The main action's tap: the page shows this title's streams.
     let play: (StreamRequest) -> Void
     @Environment(\.isLandscape) private var isLandscape
@@ -29,9 +31,11 @@ struct DetailActions: View {
         VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
             // In portrait the line sits under the hero's picture, so it stays one line: a long run of genres is cut short. Beside the
             // artwork in landscape, or over the picture on a Mac, it may wrap.
-            MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
-                .lineLimit(leadsText ? nil : 1)
-                .multilineTextAlignment(leadsText ? .leading : .center)
+            if showsMetaLine {
+                MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
+                    .lineLimit(leadsText ? nil : 1)
+                    .multilineTextAlignment(leadsText ? .leading : .center)
+            }
             if showsActions {
                 VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
                     actionRow
