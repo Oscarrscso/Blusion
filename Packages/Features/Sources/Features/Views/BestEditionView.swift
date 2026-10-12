@@ -7,14 +7,11 @@ import SwiftUI
 struct BestEditionView: View {
     let model: StreamPickerViewModel
     @State private var isExpanded = false
-    /// Past any row's height, so the folded row's ends are round, as the Auto Pick button beside it is. A corner radius is clamped to half
-    /// the shorter side, so this draws a capsule.
-    private static let foldedRadius: CGFloat = 1_000
+    /// The corner radius in both states, so the row keeps its shape when it opens. The folded row is about 40 points tall, and a corner
+    /// radius is clamped to half the shorter side, so that draws a capsule, as the Auto Pick button beside it does. Open, it is the card's.
+    private static let panelRadius: CGFloat = Theme.Radius.surface
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// Round ends while folded, the card's corners once open.
-    private var rowRadius: CGFloat { isExpanded ? Theme.Radius.card : Self.foldedRadius }
 
     var body: some View {
         if model.canFindBestEdition {
@@ -40,7 +37,7 @@ struct BestEditionView: View {
                     // tap area stays square, as it was.
                     .contentShape(isExpanded
                                   ? AnyShape(Rectangle())
-                                  : AnyShape(RoundedRectangle(cornerRadius: Self.foldedRadius, style: .continuous)))
+                                  : AnyShape(RoundedRectangle(cornerRadius: Self.panelRadius, style: .continuous)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -54,7 +51,7 @@ struct BestEditionView: View {
                         .transition(.opacity)
                 }
             }
-            .glassCardSurface(cornerRadius: rowRadius)
+            .glassCardSurface(cornerRadius: Self.panelRadius)
         }
     }
 

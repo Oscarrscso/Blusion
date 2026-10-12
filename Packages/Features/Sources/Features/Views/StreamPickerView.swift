@@ -31,8 +31,8 @@ struct StreamPickerView: View {
     private let isEmbedded: Bool
     /// False draws nothing yet: the picker is on the page and loading, and the page shows it once `onReady` has been called.
     private let isRevealed: Bool
-    /// Embedded only: takes the streams away and shows the title's details again. Back leaves the title's page, so this is the way back
-    /// to the details.
+    /// Embedded only: takes the streams away and shows the title's details again, as Escape does on Mac. Back leaves the title's page, so
+    /// it is not a way back to the details.
     private let onClose: (() -> Void)?
     /// Called once every addon has answered.
     private let onReady: (() -> Void)?
@@ -364,14 +364,6 @@ struct StreamPickerView: View {
                 status
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                }
-                .glassCircleButton(.small)
-                .accessibilityLabel("Back to details")
-                .accessibilityIdentifier("streams.close")
-            }
         }
         .padding(.horizontal, streamMargin)
     }
