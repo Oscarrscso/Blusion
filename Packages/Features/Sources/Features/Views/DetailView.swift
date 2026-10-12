@@ -151,7 +151,7 @@ struct DetailView: View {
                                 #if targetEnvironment(macCatalyst)
                                 .padding(.top, showsStreams ? metrics.titleRatingsGap : 0)
                                 #else
-                                .padding(.top, showsStreams ? Theme.Spacing.s : 0)
+                                .padding(.top, showsStreams ? (isLandscape ? Theme.Spacing.s : TitleHero.playRowGap) : 0)
                                 #endif
                                 // At least a screen tall, so the page is never shorter than where it was scrolled to when Play was
                                 // tapped: a page that became too short would jump back to its top.

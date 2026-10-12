@@ -533,6 +533,11 @@ public final class PosterRatingsStore {
         case .tmdb:
             if let rating = cached.reviews?.tmdb { entry.tmdb = rating }
             if let url = cached.reviews?.tmdbURL { entry.tmdbURL = url }
+            // The answer names the title's TMDb id, also when it was read from the cache: its page then asks only for its artwork.
+            if let tmdb, let reviews = cached.reviews {
+                let item = lookup.item
+                Task { await tmdb.rememberID(from: reviews, imdbID: item.id, type: item.type) }
+            }
         }
     }
 

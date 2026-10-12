@@ -17,7 +17,7 @@ struct DetailEpisodes: View {
     /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
     private static let secondaryControlHeight: CGFloat = 36
     /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
-    private static let previewPadding: CGFloat = Theme.Spacing.xl
+    private static let previewPadding: CGFloat = Theme.Spacing.m
 
     var body: some View {
         let width = episodeWidth(pageWidth: pageWidth)

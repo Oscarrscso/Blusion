@@ -37,7 +37,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
             trailer
                 .padding(.horizontal, contentMargin)
                 // The same gap as the synopsis keeps from what is above it, in each orientation.
-                .padding(.top, isLandscape ? Theme.Spacing.s : metrics.titleRatingsGap)
+                .padding(.top, isLandscape ? Theme.Spacing.s : TitleHero.playRowGap)
                 .transition(Self.trailerTransition)
         }
         if showsDetails {
@@ -123,13 +123,13 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
         }
     }
 
-    /// Portrait: the synopsis, then the ratings row. The gaps are the ones these had as rows of one stack with the controls: the stack's
-    /// spacing, here the padding above the block, is part of the gap above the synopsis.
+    /// Portrait: the synopsis, then the ratings row. The stack's spacing, here the padding above the block, is part of the gap above the
+    /// synopsis.
     private var portraitBottom: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            // The same gap as between the ratings and the line under them.
+            // The same gap as the Play row keeps from the line above it, so the row sits evenly between the two.
             synopsis
-                .padding(.top, metrics.titleRatingsGap - Theme.Spacing.m)
+                .padding(.top, TitleHero.playRowGap - Theme.Spacing.m)
             RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
         }
         .padding(.top, Theme.Spacing.m)

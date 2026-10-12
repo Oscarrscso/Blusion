@@ -28,7 +28,8 @@ struct DetailActions: View {
     #endif
 
     var body: some View {
-        VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
+        // In portrait the Play row keeps the same gap from the line above it as from the overview below it (see `TitleHero.playRowGap`).
+        VStack(alignment: leadsText ? .leading : .center, spacing: leadsText ? Theme.Spacing.s : TitleHero.playRowGap) {
             // The line stays on one line wherever it sits: when it is too long, genres go before the rating does.
             if showsMetaLine {
                 MetaLine(metaParts, genres: metaGenres, identifier: "detail.metaLine", spreads: true)

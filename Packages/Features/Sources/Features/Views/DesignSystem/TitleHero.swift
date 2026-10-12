@@ -17,6 +17,10 @@ enum TitleHero {
     /// The gap between the bottom of the logo and the text under it (the metadata line), on the title page and on Home's spotlight alike.
     /// The text starts `portraitDrop` below the picture's bottom edge on both, so the logo stops this far above that.
     static let logoTextGap = Theme.Spacing.s
+    /// The gap above and below the title page's Play row in portrait: from the metadata line down to the row, and from the row down to
+    /// the overview or the trailer's panel, so the row sits evenly between them. The streams that take the row's place start this far
+    /// under the line too, where Play sat. Landscape and the Mac keep their own, tighter gaps.
+    static let playRowGap = Theme.Spacing.l
     /// How far the portrait hero lowers its logo, its bottom fade and everything below them, so more of the picture shows above the logo. Home's
     /// spotlight and the title page both use it, so a title sits in the same place on both. On Home the metadata line moves down with the logo,
     /// and its band gives up the same height (see `captionBelow`). This is the portrait layout, so iPhone and iPad use it. The Mac keeps its own

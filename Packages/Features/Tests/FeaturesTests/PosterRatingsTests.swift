@@ -471,6 +471,25 @@ import StremioKitTestSupport
         #expect(transport.requests.filter { $0.url?.path.contains("/find/") == true }.count == 1, "one lookup, not one per caller")
     }
 
+    @Test func aTitleWhoseScoreIsKnownAsksTMDbOnlyForItsArtwork() async throws {
+        let transport = tmdbHeroTransport()
+        let tmdb = TMDbRatings(client: makeClient(transport, retries: 0), readAccessToken: jwt, titleIDs: TMDbTitleIDCache())
+        _ = try await tmdb.ratings(imdbID: movie.id, type: movie.type)
+        let artwork = try await tmdb.artwork(imdbID: movie.id, type: movie.type)
+        #expect(artwork?.portrait == URL(string: "https://image.tmdb.org/t/p/original/p.jpg"))
+        #expect(transport.requests.filter { $0.url?.path.contains("/find/") == true }.count == 1, "the score's answer named the id")
+    }
+
+    @Test func aScoreReadFromTheCacheNamesTheTitleToo() async throws {
+        let transport = tmdbHeroTransport()
+        let tmdb = TMDbRatings(client: makeClient(transport, retries: 0), readAccessToken: jwt, titleIDs: TMDbTitleIDCache())
+        let cached = ReviewRatings(tmdb: 7.1, tmdbURL: URL(string: "https://www.themoviedb.org/movie/155"))
+        await tmdb.rememberID(from: cached, imdbID: movie.id, type: movie.type)
+        _ = try await tmdb.artwork(imdbID: movie.id, type: movie.type)
+        #expect(!transport.requests.contains { $0.url?.path.contains("/find/") == true }, "no id lookup")
+        #expect(transport.requests.contains { $0.url?.path.hasSuffix("/movie/155/images") == true })
+    }
+
     @Test func theSpotlightsAgeRatingIsAskedOnceAndKeptForTheSession() async throws {
         let transport = StubTransport { request, _ in
             if request.url?.path.hasSuffix("/release_dates") == true {

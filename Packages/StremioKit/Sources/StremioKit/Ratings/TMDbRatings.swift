@@ -60,6 +60,11 @@ public actor TMDbTitleIDCache {
         if let id { ids[key] = id }
         return id
     }
+
+    /// Keeps an id that was learned another way: a ratings answer carries it, so a title whose score is known needs no id lookup.
+    func store(_ id: Int, for key: String) {
+        ids[key] = id
+    }
 }
 
 /// Resolves an IMDb ID to the matching movie or show, its community score and its direct TMDB page.
@@ -103,8 +108,26 @@ public struct TMDbRatings: Sendable {
     public func ratings(imdbID: String, type: String) async throws -> ReviewRatings {
         guard LetterboxdRatings.isIMDbID(imdbID), ["movie", "series"].contains(type), credential != nil else { return ReviewRatings() }
         let data = try await findData(imdbID: imdbID)
-        return try Self.parse(data, type: type)
+        let ratings = try Self.parse(data, type: type)
+        await rememberID(from: ratings, imdbID: imdbID, type: type)
+        return ratings
     }
+
+    /// Keeps the TMDb id a ratings answer carries, so the title's artwork, reviews and cast skip the id lookup. A card's score is looked
+    /// up while it is on screen, so the page it opens then asks TMDb once for its picture, not twice. An answer read back from the
+    /// ratings cache carries the id too.
+    public func rememberID(from ratings: ReviewRatings, imdbID: String, type: String) async {
+        guard let id = Self.titleID(in: ratings) else { return }
+        await titleIDs.store(id, for: Self.titleKey(imdbID: imdbID, type: type))
+    }
+
+    /// The id at the end of the title's TMDb page address.
+    private static func titleID(in ratings: ReviewRatings) -> Int? {
+        guard let last = ratings.tmdbURL?.lastPathComponent, let id = Int(last), id > 0 else { return nil }
+        return id
+    }
+
+    private static func titleKey(imdbID: String, type: String) -> String { "\(type)|\(imdbID)" }
 
     /// Per-episode TMDb scores for one season, keyed by episode number. Empty when the series is unknown to TMDb, the season does
     /// not exist, or no episode has votes. Throws `AddonError` for refusals and transport failures.
@@ -137,10 +160,8 @@ public struct TMDbRatings: Sendable {
 
     /// The TMDb id for an IMDb title, looked up once per session (see `TMDbTitleIDCache`). Nil when TMDb does not know the title.
     public func tmdbID(imdbID: String, type: String) async throws -> Int? {
-        try await titleIDs.id(for: "\(type)|\(imdbID)") {
-            let resolved = try await self.ratings(imdbID: imdbID, type: type)
-            guard let id = resolved.tmdbURL?.lastPathComponent else { return nil }
-            return Int(id)
+        try await titleIDs.id(for: Self.titleKey(imdbID: imdbID, type: type)) {
+            Self.titleID(in: try await self.ratings(imdbID: imdbID, type: type))
         }
     }
 
