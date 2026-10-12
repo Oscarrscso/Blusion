@@ -193,6 +193,8 @@ struct RatingBadge: View {
 struct MetaLine: View {
     /// The space kept on each side of a dot when the parts are spread, so a dot never touches the text beside it.
     private static let minimumGap: CGFloat = 4
+    /// The fewest parts that are spread across the width. Fewer would leave wide gaps between them, so they are joined as usual.
+    private static let minimumSpreadParts = 5
 
     private let parts: [String]
     /// The accessibility identifier of the line, for UI tests. Nil leaves it unset.
@@ -224,13 +226,13 @@ struct MetaLine: View {
         }
     }
 
-    /// The parts as drawn: spread across the width when `spreads` is set and there are two or more parts, otherwise joined by dots
+    /// The parts as drawn: spread across the width when `spreads` is set and there are at least `minimumSpreadParts`, otherwise joined by dots
     /// on one wrapped line.
     @ViewBuilder
     private var partsLine: some View {
         let joinedLine = Text(parts.joined(separator: " · "))
             .fixedSize(horizontal: false, vertical: true)
-        if spreads && parts.count > 1 {
+        if spreads && parts.count >= Self.minimumSpreadParts {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 0) {
                     ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
