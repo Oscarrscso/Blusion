@@ -59,8 +59,8 @@ private let cases: [QualityCase] = [
     }
 
     @Test func sizesParseInBothUnitsAndSeparators() {
-        #expect(StreamQuality.parse(from: ["💾 2.3 GB"]).sizeBytes == Int64(2.3 * 1_073_741_824))
-        #expect(StreamQuality.parse(from: ["size 700 MB"]).sizeBytes == Int64(700) * 1_048_576)
+        #expect(StreamQuality.parse(from: ["💾 2.3 GB"]).sizeBytes == 2_300_000_000, "GB is decimal")
+        #expect(StreamQuality.parse(from: ["size 700 MB"]).sizeBytes == 700_000_000)
         #expect(StreamQuality.parse(from: ["1,5 GiB"]).sizeBytes == Int64(1.5 * 1_073_741_824))
         #expect(StreamQuality.parse(from: ["no size here"]).sizeBytes == nil)
     }
@@ -97,9 +97,12 @@ private let cases: [QualityCase] = [
                                  behaviorHints: StreamBehaviorHints(videoSize: 5_000_000, filename: "Movie.x264.mkv"))
         let quality = StreamQuality.parse(stream)
         #expect(quality.resolution == 1080 && quality.source == .webDL && quality.videoCodec == .h264 && quality.audioCodecs == [.aac])
-        #expect(quality.sizeBytes == 5_000_000, "falls back to the addon's videoSize")
-        let withText = AddonStream(name: "x", description: "1 GB", source: .direct(url), behaviorHints: StreamBehaviorHints(videoSize: 5))
-        #expect(StreamQuality.parse(withText).sizeBytes == 1_073_741_824, "text wins over the hint")
+        #expect(quality.sizeBytes == 5_000_000, "uses the addon's videoSize")
+        let withText = AddonStream(name: "x", description: "💾 82.8 GB", source: .direct(url),
+                                   behaviorHints: StreamBehaviorHints(videoSize: 82_773_153_030))
+        #expect(StreamQuality.parse(withText).sizeBytes == 82_773_153_030, "the exact byte count wins over the rounded text")
+        let textOnly = AddonStream(name: "x", description: "💾 82.8 GB", source: .direct(url))
+        #expect(StreamQuality.parse(textOnly).sizeBytes == 82_800_000_000, "text alone reads back as written")
     }
 
     @Test func seedersAndPeersReadFromTheFormatsAddonsUse() {

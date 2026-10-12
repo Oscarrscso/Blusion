@@ -140,7 +140,8 @@ public struct StreamQuality: Sendable, Equatable {
 
     public static func parse(_ stream: AddonStream) -> StreamQuality {
         var quality = parse(from: [stream.name, stream.description, stream.behaviorHints.filename])
-        if quality.sizeBytes == nil, let size = stream.behaviorHints.videoSize { quality.sizeBytes = size }
+        // The addon's exact byte count is the one authority; the size written in its text is rounded, and only a fallback.
+        if let size = stream.behaviorHints.videoSize, size > 0 { quality.sizeBytes = size }
         return quality
     }
 
@@ -214,7 +215,10 @@ public struct StreamQuality: Sendable, Equatable {
     private static func size(in text: String) -> Int64? {
         guard let match = firstMatch(#"(\d+(?:[.,]\d+)?)\s?(gb|gib|mb|mib)\b"#, in: text), match.count == 3,
               let value = Double(match[1].replacingOccurrences(of: ",", with: ".")) else { return nil }
-        let multiplier: Double = match[2].hasPrefix("g") ? 1_073_741_824 : 1_048_576
+        // "GB"/"MB" are decimal, as the size is shown (ByteCountFormatter's file style), so "82.8 GB" reads back as 82.8 GB.
+        // Only "GiB"/"MiB" are binary.
+        let isBinary = match[2].hasSuffix("ib")
+        let multiplier: Double = match[2].hasPrefix("g") ? (isBinary ? 1_073_741_824 : 1_000_000_000) : (isBinary ? 1_048_576 : 1_000_000)
         return Int64(value * multiplier)
     }
 

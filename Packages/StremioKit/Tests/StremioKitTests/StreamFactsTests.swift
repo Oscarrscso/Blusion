@@ -52,7 +52,7 @@ import Testing
         #expect(value("File index", in: ranked) == "2")
         #expect(value("Trackers", in: ranked) == nil, "no trackers listed, so no row")
         #expect(value("Video hash", in: ranked) == "video-hash")
-        #expect(value("Video size", in: ranked) == "1000 bytes")
+        #expect(value("Video size", in: ranked) == "1,000 bytes")
         #expect(value("Subtitles", in: ranked) == "2")
         #expect(value("Regions", in: ranked) == "US, GB")
     }

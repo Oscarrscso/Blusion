@@ -45,7 +45,7 @@ public struct StreamFacts: Sendable, Equatable {
         }
         add("Binge group", stream.behaviorHints.bingeGroup)
         add("Video hash", stream.behaviorHints.videoHash, isIdentifier: true)
-        add("Video size", stream.behaviorHints.videoSize.map { "\($0) bytes" })
+        add("Video size", stream.behaviorHints.videoSize.map { "\($0.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US_POSIX")))) bytes" })
         add("Subtitles", stream.subtitles.isEmpty ? nil : String(stream.subtitles.count))
         add("Regions", stream.behaviorHints.countryWhitelist.isEmpty ? nil : stream.behaviorHints.countryWhitelist.joined(separator: ", "))
         if stream.behaviorHints.proxyHeaders.map({ !$0.isEmpty }) == true { add("Custom request headers", "Yes") }
