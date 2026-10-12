@@ -231,7 +231,12 @@ struct DetailView: View {
         // The settle scales the whole visible page about the screen's centre; the background behind it stays put.
         .heroSettle(trigger: hasSettled)
         .screenBackground()
+        #if targetEnvironment(macCatalyst)
+        // The artwork runs under the top bar, so the bar's material blurs the picture rather than sitting over a strip of its own.
+        .ignoresSafeArea(.container, edges: .top)
+        #else
         .ignoresSafeArea(.container, edges: showsBackdrop ? [] : .top)
+        #endif
         .scrollEdgeEffectHidden(true, for: .top)
         .pageTopBar(hidden: true)
         .navigationBarTitleDisplayMode(.inline)

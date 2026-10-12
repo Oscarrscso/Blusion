@@ -78,7 +78,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             BottomFade(length: 0.6)
             textColumn
         }
-        .frame(width: size.width, height: heroHeight)
+        // The full width of the page, from the sidebar's edge to the window's.
+        .frame(maxWidth: .infinity)
+        .frame(height: heroHeight)
         .clipped()
         .overlay(alignment: .bottomTrailing) {
             PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
@@ -106,7 +108,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
 
     /// The metadata line, the same text as iPhone's, set over the picture's left edge. Like iPhone's, it drops genres before the rating.
     private var metaLine: some View {
-        MetaLine(model.heroMetaLine, genres: model.heroMetaGenres, identifier: "detail.metaLine", spreads: true)
+        // Compact and left aligned, joined by dots: the spread line put its parts across the whole hero width.
+        MetaLine(model.heroMetaLine, genres: model.heroMetaGenres, identifier: "detail.metaLine")
     }
 
     /// The overview, cut to three lines and not expandable: its full text, and More, are in the details below the hero.
