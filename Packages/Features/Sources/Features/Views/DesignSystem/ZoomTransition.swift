@@ -162,19 +162,30 @@ private final class BackSwipeProbe: UIView {
     }
 }
 
-/// When the latest back swipe began, on any stack. A tap that a swipe ends on is not a choice, so a card asks this before it plays.
+/// When the latest back swipe began and lifted, on any stack. A tap that a swipe ends on is not a choice, so a card asks this before it plays.
 @MainActor
 enum BackSwipeRecord {
+    /// When the back swipe under the finger began, or nil once that finger has lifted.
     private static var began: ContinuousClock.Instant?
+    /// When the latest back swipe lifted.
+    private static var lifted: ContinuousClock.Instant?
 
-    /// True for a moment after a back swipe began, while the finger that made it is still lifting.
+    /// True while a back swipe is under the finger, and for a moment after it lifts: the touch that ends a swipe is then not a choice.
     static var isFresh: Bool {
-        guard let began else { return false }
-        return ContinuousClock.now - began < .milliseconds(400)
+        let now = ContinuousClock.now
+        // A swipe still under the finger after this long has lost its end, so it no longer blocks a tap.
+        if let began, now - began < .seconds(5) { return true }
+        guard let lifted else { return false }
+        return now - lifted < .milliseconds(400)
     }
 
     static func noteBegan() {
         began = ContinuousClock.now
+    }
+
+    static func noteLifted() {
+        began = nil
+        lifted = ContinuousClock.now
     }
 }
 
@@ -266,6 +277,11 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func swiped() {
+        // The finger lifting ends the swipe whether or not it went back, so a tap from here on is a new one.
+        if pan.state == .ended || pan.state == .cancelled {
+            BackSwipeRecord.noteLifted()
+            return
+        }
         guard pan.state == .began else { return }
         BackSwipeRecord.noteBegan()
         guard let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
