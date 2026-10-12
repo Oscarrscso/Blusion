@@ -54,4 +54,44 @@ import StremioKitTestSupport
         #expect(url.absoluteString == expected, "the address is exactly the documented oEmbed form")
         #expect(YouTubeEmbedCheck.url(videoID: "a b") == nil)
     }
+
+    /// A check whose answer is a 200 with `body`.
+    private func check(body: String) -> YouTubeEmbedCheck {
+        YouTubeEmbedCheck(client: makeClient(StubTransport(data: Data(body.utf8)), retries: 0))
+    }
+
+    @Test func theAnswerGivesThePicturesShape() async throws {
+        let wide = await check(body: #"{"width":200,"height":113}"#).check(videoID: "abc123")
+        #expect(wide.allowsEmbedding)
+        let widescreen = try #require(wide.aspectRatio)
+        #expect(abs(widescreen - 200.0 / 113.0) < 0.0001)
+        let standard = try #require(await check(body: #"{"width":200,"height":150}"#).check(videoID: "abc123").aspectRatio)
+        #expect(abs(standard - 4.0 / 3.0) < 0.0001)
+    }
+
+    @Test func numericTextIsReadAsASize() {
+        #expect(YouTubeEmbedCheck.aspectRatio(from: Data(#"{"width":"200","height":"100"}"#.utf8)) == 2.0)
+    }
+
+    @Test func aBodyWithoutAUsableSizeGivesNoShapeButStillAllowsTheVideo() async {
+        let bodies = [#"{"title":"No size"}"#, #"{"width":0,"height":113}"#, #"{"width":200,"height":-3}"#,
+                      #"{"width":200,"height":"tall"}"#, #"[200,113]"#, "not json", ""]
+        for body in bodies {
+            let answer = await check(body: body).check(videoID: "abc123")
+            #expect(answer.aspectRatio == nil, "\(body)")
+            #expect(answer.allowsEmbedding, "no size is not a refusal: \(body)")
+        }
+    }
+
+    @Test func aRefusedVideoGivesNoShape() async {
+        let (embed, _) = check(status: 401)
+        let answer = await embed.check(videoID: "abc123")
+        #expect(answer == YouTubeEmbedCheck.Answer(allowsEmbedding: false))
+    }
+
+    @Test func aMalformedIDGivesNoShapeAndNoRequest() async {
+        let (embed, transport) = check(status: 200)
+        #expect(await embed.check(videoID: "a b") == YouTubeEmbedCheck.Answer(allowsEmbedding: false))
+        #expect(transport.callCount == 0)
+    }
 }

@@ -472,9 +472,9 @@ public final class DetailViewModel {
                 guard let self else { return TrailerPlan(trailers: []) }
                 return await self.trailerPlan()
             },
-            allowsEmbedding: { [weak self] videoID in
-                guard let self else { return false }
-                return await YouTubeEmbedCheck(client: self.services.client).allowsEmbedding(videoID: videoID)
+            embedCheck: { [weak self] videoID in
+                guard let self else { return YouTubeEmbedCheck.Answer(allowsEmbedding: false) }
+                return await YouTubeEmbedCheck(client: self.services.client).check(videoID: videoID)
             }))
     }
 

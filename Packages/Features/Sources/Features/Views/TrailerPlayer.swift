@@ -42,13 +42,15 @@ private struct YouTubeTrailerModifier: ViewModifier {
 final class AVTrailerPlayback: TrailerPlayback {
     let player: AVPlayer
     let duration: TimeInterval?
+    let aspectRatio: Double?
     /// Never called: AVKit shows its own state once a trailer has started, including when it fails or ends.
     var onFinish: (@MainActor (TrailerPlaybackError?) -> Void)?
     private var hasActivatedSession = false
 
-    init(player: AVPlayer, duration: TimeInterval?) {
+    init(player: AVPlayer, duration: TimeInterval?, aspectRatio: Double?) {
         self.player = player
         self.duration = duration
+        self.aspectRatio = aspectRatio
     }
 
     func play() {
@@ -97,7 +99,9 @@ struct AVTrailerPreparer: TrailerPreparing {
         }
         let assetDuration = try? await item.asset.load(.duration)
         let seconds = assetDuration?.seconds
-        return AVTrailerPlayback(player: player, duration: seconds.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
+        let size = item.presentationSize
+        let shape = size.width > 0 && size.height > 0 ? Double(size.width / size.height) : nil
+        return AVTrailerPlayback(player: player, duration: seconds.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }, aspectRatio: shape)
     }
 
     /// Polls until the item is ready or has failed. A poll keeps this simple and cancellable.

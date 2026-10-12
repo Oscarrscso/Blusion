@@ -2,13 +2,14 @@
 import SwiftUI
 import UIKit
 
-/// The trailer's place on the title page, under the actions and above the synopsis: the player in a 16:9 panel while a trailer
-/// plays (AVKit's for a direct file, YouTube's embedded player for a YouTube video), or one line saying it could not be played
-/// with a button that tries again. Nothing is shown in the other phases.
+/// The trailer's place on the title page, under the actions and above the synopsis: the player in a panel shaped like the trailer's
+/// picture while a trailer plays (16:9 when the shape is not known; AVKit's player for a direct file, YouTube's embedded player for a
+/// YouTube video), or one line saying it could not be played with a button that tries again. Nothing is shown in the other phases.
 struct DetailTrailerPanel: View {
     let model: DetailViewModel
-    /// The panel's width; its height follows at 16:9.
+    /// The panel's width. Its height follows the picture's shape, and in landscape it is never taller than 16:9 at this width.
     let width: CGFloat
+    @Environment(\.isLandscape) private var isLandscape
     /// The id the page scrolls to when the panel appears.
     static let scrollID = "detail.trailerPanel"
 
@@ -19,17 +20,20 @@ struct DetailTrailerPanel: View {
 
     @ViewBuilder
     private var content: some View {
+        // Portrait: never taller than the panel is wide. Landscape: never taller than the 16:9 panel the page allowed at this width.
+        let size = TrailerPanelLayout.size(aspectRatio: model.trailer.aspectRatio, width: Double(width),
+                                           maxHeight: Double(isLandscape ? width * 9 / 16 : width))
         switch model.trailer.phase {
         case .playing:
             if let playback = model.trailer.playback as? AVTrailerPlayback {
                 TrailerPlayerView(player: playback.player, loader: model.trailer)
-                    .frame(width: width, height: width * 9 / 16)
+                    .frame(width: size.width, height: size.height)
                     .mediaArtwork()
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("detail.trailerPlayer")
             } else if let playback = model.trailer.playback as? YouTubeTrailerPlayback {
                 YouTubeTrailerView(playback: playback)
-                    .frame(width: width, height: width * 9 / 16)
+                    .frame(width: size.width, height: size.height)
                     .mediaArtwork()
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("detail.trailerPlayer")

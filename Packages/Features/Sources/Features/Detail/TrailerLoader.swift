@@ -17,6 +17,8 @@ public enum TrailerPlaybackError: Error, Equatable {
 public protocol TrailerPlayback: AnyObject {
     /// The trailer's length in seconds, when the player knows it.
     var duration: TimeInterval? { get }
+    /// The picture's width over its height, when the player knows it.
+    var aspectRatio: Double? { get }
     /// Called when a trailer that had started stops by itself: with nil when it played to its end, or with the reason it could not go
     /// on. The loader sets it.
     var onFinish: (@MainActor (TrailerPlaybackError?) -> Void)? { get set }
@@ -82,14 +84,13 @@ public final class TrailerLoader {
     /// Where a page's trailers and their checks come from.
     public struct Source: Sendable {
         public var plan: @MainActor () async -> TrailerPlan
-        /// Asks YouTube whether the video (its id) may be tried in the embedded player. True when it may, and also when no answer
-        /// could be had.
-        public var allowsEmbedding: @MainActor (String) async -> Bool
+        /// Asks YouTube about the video (its id): whether it may be tried in the embedded player, and the shape of its picture.
+        public var embedCheck: @MainActor (String) async -> YouTubeEmbedCheck.Answer
 
         public init(plan: @escaping @MainActor () async -> TrailerPlan,
-                    allowsEmbedding: @escaping @MainActor (String) async -> Bool) {
+                    embedCheck: @escaping @MainActor (String) async -> YouTubeEmbedCheck.Answer) {
             self.plan = plan
-            self.allowsEmbedding = allowsEmbedding
+            self.embedCheck = embedCheck
         }
     }
 
@@ -100,6 +101,8 @@ public final class TrailerLoader {
     /// played: the YouTube app is the fallback for a video the embedded player cannot play. The page opens it and sets this back
     /// to nil.
     public var youTubeHandoff: Trailer?
+    /// The shape of the trailer that is playing, width over height. Nil when it is not known, and the panel is then 16:9.
+    public private(set) var aspectRatio: Double?
     /// True while the player is full screen: the page is covered then, not left, so it must not close the player.
     @ObservationIgnored public var isFullScreen = false
 
@@ -151,6 +154,7 @@ public final class TrailerLoader {
     public func close() {
         playback?.stop()
         playback = nil
+        aspectRatio = nil
         isFullScreen = false
         if isPlaying { phase = .idle }
     }
@@ -205,14 +209,17 @@ public final class TrailerLoader {
         var tried = 0
         for trailer in plan.trailers {
             let player: any TrailerPlayback
+            /// The shape YouTube gave the video, when it did. A direct file has none.
+            var shape: Double?
             do {
                 if let videoID = trailer.youtubeID {
-                    let allowed = await source.allowsEmbedding(videoID)
+                    let answer = await source.embedCheck(videoID)
                     guard run == generation else { return }
-                    guard allowed else {
+                    guard answer.allowsEmbedding else {
                         refused = refused ?? trailer
                         continue
                     }
+                    shape = answer.aspectRatio
                     tried += 1
                     player = try await preparer.prepareYouTube(videoID)
                 } else if let url = trailer.directURL {
@@ -235,6 +242,7 @@ public final class TrailerLoader {
             deadlineTask = nil
             if let seconds = player.duration { durations.record(seconds, for: trailer.id) }
             player.onFinish = { [weak self] reason in self?.playbackFinished(reason, trailer: trailer, run: run) }
+            aspectRatio = player.aspectRatio ?? shape
             playback = player
             phase = .playing(trailer)
             player.play()

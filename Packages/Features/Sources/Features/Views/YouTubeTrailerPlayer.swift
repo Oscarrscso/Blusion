@@ -23,6 +23,8 @@ final class YouTubeTrailerPlayback: NSObject, TrailerPlayback {
     /// The web view that shows the player. The panel puts it on screen.
     let webView: WKWebView
     private(set) var duration: TimeInterval?
+    /// YouTube's player does not report the picture's size, so this is nil. The loader then uses the shape from the embed check's answer.
+    var aspectRatio: Double? { nil }
     var onFinish: (@MainActor (TrailerPlaybackError?) -> Void)?
     private var playerState = Load.waiting
     /// The address the page was loaded under. Its own navigation is the only one that stays in the panel.

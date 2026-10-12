@@ -7,12 +7,14 @@ import Testing
 @MainActor
 private final class FakePlayback: TrailerPlayback {
     let duration: TimeInterval?
+    var aspectRatio: Double?
     var onFinish: (@MainActor (TrailerPlaybackError?) -> Void)?
     private(set) var playCount = 0
     private(set) var stopCount = 0
 
-    init(duration: TimeInterval? = 90) {
+    init(duration: TimeInterval? = 90, aspectRatio: Double? = nil) {
         self.duration = duration
+        self.aspectRatio = aspectRatio
     }
 
     func play() { playCount += 1 }
@@ -40,6 +42,8 @@ private final class FakePreparer: TrailerPreparing {
     private(set) var prepared: [URL] = []
     private(set) var preparedYouTube: [String] = []
     private(set) var players: [FakePlayback] = []
+    /// The shape every player this preparer makes reports. Nil for a player that reports none.
+    var playerAspectRatio: Double?
 
     func prepare(_ url: URL) async throws -> any TrailerPlayback {
         prepared.append(url)
@@ -69,7 +73,7 @@ private final class FakePreparer: TrailerPreparing {
     }
 
     private func makePlayer() -> FakePlayback {
-        let player = FakePlayback()
+        let player = FakePlayback(aspectRatio: playerAspectRatio)
         players.append(player)
         return player
     }
@@ -95,14 +99,16 @@ private final class Calls {
         Trailer(source: .youtube(id), isOfficial: true)
     }
 
-    /// A source whose plan is `plan`. The YouTube videos in `refusedVideos` may not be embedded.
-    private func makeSource(_ plan: TrailerPlan, calls: Calls, refusedVideos: Set<String> = []) -> TrailerLoader.Source {
+    /// A source whose plan is `plan`. The YouTube videos in `refusedVideos` may not be embedded, and `shapes` gives the shape YouTube
+    /// reports for a video.
+    private func makeSource(_ plan: TrailerPlan, calls: Calls, refusedVideos: Set<String> = [],
+                            shapes: [String: Double] = [:]) -> TrailerLoader.Source {
         TrailerLoader.Source(plan: {
             calls.planCount += 1
             return plan
-        }, allowsEmbedding: { videoID in
+        }, embedCheck: { videoID in
             calls.embeddingChecks.append(videoID)
-            return !refusedVideos.contains(videoID)
+            return YouTubeEmbedCheck.Answer(allowsEmbedding: !refusedVideos.contains(videoID), aspectRatio: shapes[videoID])
         })
     }
 
@@ -366,7 +372,7 @@ private final class Calls {
         let source = TrailerLoader.Source(plan: {
             try? await Task.sleep(for: .milliseconds(100))
             return TrailerPlan(trailers: [planned])
-        }, allowsEmbedding: { _ in true })
+        }, embedCheck: { _ in YouTubeEmbedCheck.Answer(allowsEmbedding: true) })
         loader.toggle(source)
         #expect(loader.phase == .loading)
         loader.cancel()
@@ -385,5 +391,51 @@ private final class Calls {
         try await waitUntil { preparer.players.first?.stopCount == 1 }
         #expect(preparer.players.first?.playCount == 0, "never played")
         #expect(loader.phase == .idle && loader.playback == nil, "never shown")
+    }
+
+    // MARK: shape
+
+    @Test func thePlayersShapeIsTheLoadersWhenThePlayerHasOne() async throws {
+        let preparer = FakePreparer()
+        preparer.playerAspectRatio = 1.0
+        let loader = try makeLoader(preparer)
+        loader.toggle(makeSource(TrailerPlan(trailers: [youTube("abc123")]), calls: Calls(), shapes: ["abc123": 1.7]))
+        try await waitUntil { loader.isPlaying }
+        #expect(loader.aspectRatio == 1.0, "the player's own shape is used over YouTube's answer")
+    }
+
+    @Test func aYouTubeTrailerWithoutAPlayersShapeUsesTheCheckAnswer() async throws {
+        let loader = try makeLoader(FakePreparer())
+        loader.toggle(makeSource(TrailerPlan(trailers: [youTube("abc123")]), calls: Calls(), shapes: ["abc123": 1.7]))
+        try await waitUntil { loader.isPlaying }
+        #expect(loader.aspectRatio == 1.7)
+    }
+
+    @Test func aDirectFileWithoutAPlayersShapeHasNoShape() async throws {
+        let loader = try makeLoader(FakePreparer())
+        loader.toggle(makeSource(TrailerPlan(trailers: [direct("a")]), calls: Calls(), shapes: ["abc123": 1.7]))
+        try await waitUntil { loader.isPlaying }
+        #expect(loader.aspectRatio == nil, "a file has no answer from YouTube, so the panel is 16:9")
+    }
+
+    @Test func theShapeIsForgottenWhenThePlayerCloses() async throws {
+        let preparer = FakePreparer()
+        preparer.playerAspectRatio = 0.5625
+        let loader = try makeLoader(preparer)
+        let source = makeSource(TrailerPlan(trailers: [direct("a")]), calls: Calls())
+        loader.toggle(source)
+        try await waitUntil { loader.isPlaying }
+        #expect(loader.aspectRatio == 0.5625)
+        loader.toggle(source)
+        #expect(loader.aspectRatio == nil, "closing sets the shape back to nil")
+    }
+
+    @Test func theShapeIsForgottenWhenThePageIsLeft() async throws {
+        let loader = try makeLoader(FakePreparer())
+        loader.toggle(makeSource(TrailerPlan(trailers: [youTube("abc123")]), calls: Calls(), shapes: ["abc123": 1.3]))
+        try await waitUntil { loader.isPlaying }
+        #expect(loader.aspectRatio == 1.3)
+        loader.cancel()
+        #expect(loader.aspectRatio == nil)
     }
 }
