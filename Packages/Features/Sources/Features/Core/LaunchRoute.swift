@@ -8,9 +8,9 @@ import StremioKit
 /// `home`, `discover`, `library`, `search`, `search:<query>`, `detail:<type>:<id>`, `streams:<type>:<id>`,
 /// `settings`, `addons`, `widgets`, `gallery`, `gallery:<section>`, `player`.
 public struct LaunchRoute: Sendable, Equatable {
-    /// The tab bar, in order: Home, Discover, Library, Settings, Search.
+    /// The tab bar, in order: Home, Discover, Library, Settings, Search. Widgets is a tab on Mac only, at the bottom of its sidebar.
     public enum Tab: String, Sendable, Hashable, CaseIterable {
-        case home, discover, library, settings, search
+        case home, discover, library, settings, search, widgets
     }
 
     /// Settings, or one of the screens inside it. They open on the Settings tab.

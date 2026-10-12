@@ -8,7 +8,7 @@ import Testing
         #expect(LaunchRoute.parse("library") == LaunchRoute(tab: .library))
         #expect(LaunchRoute.parse(" Discover ") == LaunchRoute(tab: .discover))
         #expect(LaunchRoute.parse("home") == .home)
-        #expect(LaunchRoute.Tab.allCases == [.home, .discover, .library, .settings, .search])
+        #expect(LaunchRoute.Tab.allCases == [.home, .discover, .library, .settings, .search, .widgets])
     }
 
     @Test func searchCarriesItsQuery() {

@@ -21,6 +21,8 @@ public final class AppRouter {
     var searchFocusRevision = 0
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
     var settingsPath = NavigationPath()
+    /// The Mac Widgets tab's stack. The widgets manager registers its own editor destinations, so the stack holds nothing else.
+    var widgetsPath = NavigationPath()
     var demoPlan: PlaybackPlan?
     var addonInstallText: String?
     var userStateRevision = 0
@@ -67,6 +69,7 @@ public final class AppRouter {
         case .discover: if isShowing { popToRoot(\.discoverPath) }
         case .library: if isShowing { popToRoot(\.libraryPath) }
         case .settings: if isShowing { popToRoot(\.settingsPath) }
+        case .widgets: if isShowing { popToRoot(\.widgetsPath) }
         case .search:
             popToRoot(\.searchPath)
             if isShowing { searchFocusRevision += 1 } else { searchBrowseRevision += 1 }
@@ -111,6 +114,7 @@ public final class AppRouter {
         case .discover: return goBack(in: \.discoverPath)
         case .library: return goBack(in: \.libraryPath)
         case .settings: return goBack(in: \.settingsPath)
+        case .widgets: return goBack(in: \.widgetsPath)
         case .search: return goBack(in: \.searchPath)
         }
     }
@@ -256,6 +260,22 @@ public struct RootTabView: View {
                         .environment(\.symbolVariants, .none)
                 }
             }
+            #if targetEnvironment(macCatalyst)
+            // The Mac sidebar's Widgets item, at its bottom. On iPhone the widgets manager stays in Settings and behind Home's button.
+            Tab(value: LaunchRoute.Tab.widgets) {
+                NavigationStack(path: $router.widgetsPath) {
+                    WidgetsManagerView(services: services)
+                }
+                .zoomTransitions()
+            } label: {
+                Label {
+                    Text("Widgets")
+                } icon: {
+                    Image(systemName: router.tab == .widgets ? "rectangle.3.group.fill" : "rectangle.3.group")
+                        .environment(\.symbolVariants, .none)
+                }
+            }
+            #endif
             Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView(services: services, initialQuery: initialQuery)
