@@ -99,6 +99,34 @@ import StremioKitTestSupport
         #expect(!StreamQuality.parse(from: ["Movie 1920x1080 WEB-DL"]).hasConflictingResolution)
     }
 
+    @Test func aCodecWordIsNotAPixelSize() {
+        // The 264 in "1080 x264" is a codec, never a width or a height. The 1080 beside it is the resolution.
+        #expect(StreamQuality.parse(from: ["Movie 1080 x264"]).resolution == 1080, "a bare height beside a codec word is the resolution")
+        #expect(StreamQuality.parse(from: ["Movie 1080 x264 WEB-DL"]).resolution == 1080)
+        #expect(StreamQuality.parse(from: ["Movie 1080 x264 WEB-DL"]).videoCodec == .h264)
+        #expect(!StreamQuality.parse(from: ["Movie 1080 x264"]).hasConflictingResolution)
+        #expect(StreamQuality.parse(from: ["Movie 1080p x264"]).resolution == 1080)
+        #expect(StreamQuality.parse(from: ["Movie 1920x1080 x264"]).resolution == 1080, "a real pixel size still reads past the codec word")
+        #expect(StreamQuality.parse(from: ["Movie h.264 x 1080"]).resolution == 1080, "a codec word that is the width keeps the height after it")
+    }
+
+    @Test func aBareHeightBesideACodecWordIsTheResolution() {
+        #expect(StreamQuality.parse(from: ["Movie x265 2160"]).resolution == 2160, "a height after the codec word counts too")
+        #expect(StreamQuality.parse(from: ["Movie 1080x264"]).resolution == 1080, "no space between the height and the codec word")
+        #expect(StreamQuality.parse(from: ["Movie x264 720 MB"]).resolution == nil, "a size in MB is not a height")
+        #expect(StreamQuality.parse(from: ["Movie x264 720 subs"]).resolution == nil, "a count of subtitles is not a height")
+        // A bare height beside a codec word is weaker than a named resolution: the named one wins, and the pair is not a contradiction.
+        #expect(StreamQuality.parse(from: ["Movie 1080 x264 2160p"]).resolution == 2160)
+        #expect(!StreamQuality.parse(from: ["Movie 1080 x264 2160p"]).hasConflictingResolution)
+        #expect(!StreamQuality.parse(from: ["Movie 1080p x264 720 subs"]).hasConflictingResolution)
+    }
+
+    @Test func explicitPixelDimensionsWinOverTheSDWord() {
+        #expect(StreamQuality.parse(from: ["Movie 1920x1080 SD"]).resolution == 1080)
+        #expect(StreamQuality.parse(from: ["Movie 360p SD"]).resolution == 360, "a stated height beats the SD word too")
+        #expect(StreamQuality.parse(from: ["Movie SD"]).resolution == 480, "SD alone still reads as 480")
+    }
+
     @Test func aDeclaredBitrateThatContradictsTheSizeIsNotTrusted() {
         let contradicted = AutoStreamRanking.assess(release("c", "Movie 1080p 2 Mbps 40 GB"), duration: runtime)
         #expect(contradicted.bitrateMbps == nil, "2 Mbps against 40 GB over two hours is not one release")

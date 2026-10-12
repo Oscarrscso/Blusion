@@ -188,28 +188,49 @@ public struct StreamQuality: Sendable, Equatable {
         (#"\b(720p|hd720)\b"#, 720),
         (#"\b576p\b"#, 576),
         (#"\b480p\b"#, 480),
-        (StreamQuality.bareSDPattern, 480),
         (#"\b360p\b"#, 360),
     ]
 
+    /// "SD" as a word. Too common in release text to contradict a resolution, so it sets one only when nothing else does.
     private static let bareSDPattern = #"\bsd\b"#
+
+    /// Codec words. Their digits read as a width in "1080 x264", so they are taken out before a WIDTHxHEIGHT is read. A codec word that is
+    /// the width of a size ("h.264 x 1080") stays, so the height after it still reads.
+    private static let codecWordPattern = #"(?<![a-z])(x26[45]|h[ .]?26[45]|hevc|avc|av1)(?![a-z0-9])(?!\s?x\s?\d)"#
+
+    /// A WIDTHxHEIGHT pair such as 1920x1080.
+    private static let dimensionPattern = #"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#
+
+    /// A bare standard height beside a codec word, before or after it ("1080 x264", "x265 2160"). It is a weaker signal than "1080p": it sets
+    /// the resolution only when nothing else does, and it never counts as a contradiction. A height followed by a unit ("x264 720 MB",
+    /// "x264 720 fps") is left out. Group 1 holds the height before the codec word, group 2 the one after.
+    private static let codecAdjacentHeightPattern = #"(?<![\d.])(2160|1440|1080|720|576|480)(?=\s?(?:x26[45]|h[ .]?26[45]|hevc|avc|av1)(?![a-z0-9]))|\b(?:x26[45]|h[ .]?26[45]|hevc|avc|av1)\s(2160|1440|1080|720|576|480)(?!\d)(?!\s?(?:[kmg]i?b(?:ps|it)?|fps|subs?)\b)"#
 
     private static func resolution(in text: String) -> Int? {
         if let rule = resolutionRules.first(where: { matches($0.pattern, in: text) }) { return rule.value }
-        return dimensionHeight(in: text)
+        // Explicit pixel dimensions win over the bare SD word, and so does a standard height beside a codec word.
+        if let height = dimensionHeight(in: text) ?? codecAdjacentHeight(in: text) { return height }
+        return matches(bareSDPattern, in: text) ? 480 : nil
     }
 
-    /// The height in a WIDTHxHEIGHT pair such as 1920x1080.
+    /// The bare standard height beside a codec word, or nil.
+    private static func codecAdjacentHeight(in text: String) -> Int? {
+        guard let match = firstMatch(codecAdjacentHeightPattern, in: text), match.count == 3 else { return nil }
+        return Int(match[1].isEmpty ? match[2] : match[1])
+    }
+
+    /// The height in a WIDTHxHEIGHT pair such as 1920x1080. Codec words come out first, so "1080 x264" is not a 1080 by 264 size.
     private static func dimensionHeight(in text: String) -> Int? {
-        guard let match = firstMatch(#"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#, in: text), match.count == 3, let height = Int(match[2]),
+        let unpaired = expressions[codecWordPattern]?
+            .stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: " ") ?? text
+        guard let match = firstMatch(dimensionPattern, in: unpaired), match.count == 3, let height = Int(match[2]),
               (240...4320).contains(height) else { return nil }
         return height
     }
 
-    /// The heights the text names, for the contradiction check. A bare "sd" is left out: it is too common in release text to contradict a
-    /// 1080p, though it still sets the resolution when nothing else does.
+    /// The heights the text names, for the contradiction check. A bare "sd" is left out, as it is for the resolution.
     private static func namedHeights(in text: String) -> Set<Int> {
-        var heights = namedValues(resolutionRules.filter { $0.pattern != StreamQuality.bareSDPattern }, in: text)
+        var heights = namedValues(resolutionRules, in: text)
         if let height = dimensionHeight(in: text) { heights.insert(height) }
         return heights
     }
@@ -322,7 +343,10 @@ public struct StreamQuality: Sendable, Equatable {
             StreamQuality.highBitDepthPattern,
             StreamQuality.bitratePattern,
             StreamQuality.channelLayoutPattern,
-            #"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#,
+            StreamQuality.dimensionPattern,
+            StreamQuality.codecWordPattern,
+            StreamQuality.codecAdjacentHeightPattern,
+            StreamQuality.bareSDPattern,
             #"\b(dts[ .\-]?hd([ .\-]?ma)?|dts[ .\-]?x)\b"#,
             #"\bdts\b"#,
             #"\btrue[ .\-]?hd\b"#,
