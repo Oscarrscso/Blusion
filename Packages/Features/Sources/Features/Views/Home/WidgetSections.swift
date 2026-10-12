@@ -225,86 +225,85 @@ struct ContinueWatchingRow: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @State private var kind = ContinueKind.all
-    /// The width of the page the row sits in, read once the page has laid out, so each card can span it between the margins.
-    @State private var rowWidth: CGFloat = 0
 
     var body: some View {
         let shown = items.filter { kind.includes($0.request) }
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            if !hideTitle {
-                HStack(spacing: Theme.Spacing.s) {
-                    Text(title)
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                if !hideTitle {
+                    HStack(spacing: Theme.Spacing.s) {
+                        Button {
+                            if let first = shown.first {
+                                withAnimation(.snappy(duration: 0.28)) { proxy.scrollTo(first.id, anchor: .leading) }
+                            }
+                        } label: {
+                            Text(title)
+                        }
+                        .buttonStyle(.plain)
                         .font(Theme.Typography.shelfTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .layoutPriority(1)
                         .accessibilityAddTraits(.isHeader)
-                    // The kind selector sits right beside the title, as the chevron does after a row title.
-                    if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(.gray)
-                        .scaleEffect(0.75)
-                        .opacity(state == .loading ? 1 : 0)
-                        .accessibilityLabel("Refreshing Continue")
-                        .accessibilityHidden(state != .loading)
-                    if !items.isEmpty {
-                        if case .failed(let message) = state {
-                            Button(action: retry) { Image(systemName: "arrow.clockwise") }
-                                .glassCircleButton(.small)
-                                .accessibilityLabel(message + " Retry")
-                                .help(message)
-                        } else if state == .disconnected {
-                            Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
-                                .glassCircleButton(.small)
-                                .accessibilityLabel("Sign in to Trakt")
+                        // The kind selector sits right beside the title, as the chevron does after a row title.
+                        if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.gray)
+                            .scaleEffect(0.75)
+                            .opacity(state == .loading ? 1 : 0)
+                            .accessibilityLabel("Refreshing Continue")
+                            .accessibilityHidden(state != .loading)
+                        if !items.isEmpty {
+                            if case .failed(let message) = state {
+                                Button(action: retry) { Image(systemName: "arrow.clockwise") }
+                                    .glassCircleButton(.small)
+                                    .accessibilityLabel(message + " Retry")
+                                    .help(message)
+                            } else if state == .disconnected {
+                                Button { router.showSettings() } label: { Image(systemName: "person.crop.circle.badge.exclamationmark") }
+                                    .glassCircleButton(.small)
+                                    .accessibilityLabel("Sign in to Trakt")
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, metrics.pageMargin)
+                }
+                if !shown.isEmpty {
+                    MediaRow(title, hideTitle: true) {
+                        ForEach(shown) { item in
+                            let artworkID = ContentID(item.request.id).baseID
+                            ProgressCard(title: item.request.title, subtitle: item.subtitle,
+                                         artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
+                                         logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
+                                         duration: item.request.expectedDuration)
+                            .continueWatchingHold(preview: MetaPreview(id: artworkID, type: item.request.type,
+                                                                      name: item.request.seriesName ?? item.request.title,
+                                                                      poster: item.request.poster, releaseInfo: item.request.year),
+                                                  request: item.request, onRemove: { onRemove(item) })
+                            .id(item.id)
+                            .accessibilityIdentifier("board.continue.\(item.id)")
                         }
                     }
-                    Spacer(minLength: 0)
+                } else if !items.isEmpty {
+                    // Hold the rail's height, so switching to an empty kind does not move the page below.
+                    Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
+                        .padding(.horizontal, metrics.pageMargin)
+                } else {
+                    emptyState
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, metrics.pageMargin)
                 }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, metrics.pageMargin)
             }
-            if !shown.isEmpty {
-                // One card under another, each spanning the page between its margins.
-                LazyVStack(alignment: .leading, spacing: metrics.cardSpacing) {
-                    ForEach(shown) { item in
-                        let artworkID = ContentID(item.request.id).baseID
-                        ProgressCard(title: item.request.title, subtitle: item.subtitle,
-                                     artwork: MetahubArtwork.background(imdbID: artworkID) ?? item.request.poster,
-                                     logo: MetahubArtwork.logo(imdbID: artworkID), fraction: item.fraction,
-                                     duration: item.request.expectedDuration, width: cardWidth)
-                        .continueWatchingHold(preview: MetaPreview(id: artworkID, type: item.request.type,
-                                                                  name: item.request.seriesName ?? item.request.title,
-                                                                  poster: item.request.poster, releaseInfo: item.request.year),
-                                              request: item.request, onRemove: { onRemove(item) })
-                        .id(item.id)
-                        .accessibilityIdentifier("board.continue.\(item.id)")
-                    }
-                }
-                .padding(.horizontal, metrics.pageMargin)
-            } else if !items.isEmpty {
-                // Hold the list's height, so switching to an empty kind does not move the page below.
-                Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
-                    .padding(.horizontal, metrics.pageMargin)
-            } else {
-                emptyState
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, metrics.pageMargin)
-            }
+            .animation(.snappy(duration: 0.28), value: kind)
+            .accessibilityIdentifier("board.continueWatching")
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
-        .animation(.snappy(duration: 0.28), value: kind)
-        .accessibilityIdentifier("board.continueWatching")
-    }
-
-    /// A card's width: the page's width between its margins. Until the page has been measured, a card keeps the phone's Continue width.
-    private var cardWidth: CGFloat? {
-        rowWidth > 0 ? rowWidth - 2 * metrics.pageMargin : nil
     }
 
     @ViewBuilder private var emptyState: some View {
