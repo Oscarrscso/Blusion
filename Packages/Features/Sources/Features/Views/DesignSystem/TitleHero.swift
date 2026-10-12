@@ -244,6 +244,8 @@ final class HeroLoader {
         }
         if let image = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
             remember(image, url: url, size: maxPixelSize)
+            // A logo is shown as remembered (trimmed and centred), never as the raw decode.
+            if maxPixelSize == Self.logoPixelSize, let logo = heldLogo, logo.key == key { return .ready(logo.image) }
             return .ready(image)
         }
         return failed.contains(key) ? .none : .pending
