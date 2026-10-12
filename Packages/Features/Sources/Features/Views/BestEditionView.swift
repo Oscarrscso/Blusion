@@ -13,6 +13,9 @@ struct BestEditionView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Round ends while folded, the card's corners once open.
+    private var cornerRadius: CGFloat { isExpanded ? Theme.Radius.card : Self.foldedRadius }
+
     var body: some View {
         if model.canFindBestEdition {
             VStack(alignment: .leading, spacing: 0) {
@@ -33,7 +36,7 @@ struct BestEditionView: View {
                     }
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.vertical, Theme.Spacing.s + 2)
-                    .contentShape(Rectangle())
+                    .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -47,7 +50,7 @@ struct BestEditionView: View {
                         .transition(.opacity)
                 }
             }
-            .glassCardSurface(cornerRadius: isExpanded ? Theme.Radius.card : Self.foldedRadius)
+            .glassCardSurface(cornerRadius: cornerRadius)
         }
     }
 

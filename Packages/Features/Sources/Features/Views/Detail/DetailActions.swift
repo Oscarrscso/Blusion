@@ -27,9 +27,10 @@ struct DetailActions: View {
 
     var body: some View {
         VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
-            // Under the hero's picture, so one line: a long run of genres is cut short rather than wrapped.
+            // In portrait the line sits under the hero's picture, so it stays one line: a long run of genres is cut short. Beside the
+            // artwork in landscape, or over the picture on a Mac, it may wrap.
             MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
-                .lineLimit(1)
+                .lineLimit(leadsText ? nil : 1)
                 .multilineTextAlignment(leadsText ? .leading : .center)
             if showsActions {
                 VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
@@ -38,6 +39,7 @@ struct DetailActions: View {
                         Label("Only basic details are available for this title.", systemImage: "info.circle")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .lineLimit(leadsText ? nil : 1)
                             .accessibilityIdentifier("detail.fallbackNote")
                     }
                 }

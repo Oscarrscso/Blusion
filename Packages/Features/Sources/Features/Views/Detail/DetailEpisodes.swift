@@ -143,7 +143,7 @@ struct DetailEpisodes: View {
 }
 
 /// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the
-/// overview: three lines in a fixed-width card, all of it in a full-width one.
+/// overview: three lines in a fixed-width card, all of it when the list is set to full width.
 private struct EpisodeRow: View {
     let video: Video
     let fraction: Double?

@@ -3,9 +3,9 @@ import StremioKit
 import SwiftUI
 import UIKit
 
-/// One title's streams. The header says what is being picked and how far along it is, the best stream is the one main action, and each
-/// addon's streams follow as rows of their own. Links to web pages come last. A stream plays in Blusion or, when the viewer chose that
-/// player, opens in another app.
+/// One title's streams. The header says what is being picked and, while the addons are still answering, that they are. The best stream is
+/// the one main action, and each addon's streams follow as rows of their own. Links to web pages come last. A stream plays in Blusion or,
+/// when the viewer chose that player, opens in another app.
 struct StreamPickerView: View {
     @State private var model: StreamPickerViewModel
     @State private var plan: PlaybackPlan?
@@ -346,13 +346,14 @@ struct StreamPickerView: View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: 2) {
                 if model.request.season != nil {
+                    // Under the title page's hero, so each of these lines is one line: a longer text is cut short rather than wrapped.
                     if let eyebrow {
                         Text(eyebrow)
                             .font(Theme.Typography.eyebrow)
                             .textCase(.uppercase)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    // Under the title page's hero, so one line: a longer name is cut short rather than wrapped.
                     Text(model.request.title)
                         .font(.headline)
                         .multilineTextAlignment(.leading)
@@ -391,6 +392,7 @@ struct StreamPickerView: View {
                 Text(waitingText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("streams.loading")
