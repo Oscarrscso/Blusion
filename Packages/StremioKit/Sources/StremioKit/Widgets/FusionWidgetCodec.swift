@@ -131,9 +131,15 @@ public enum FusionWidgetCodec {
         /// without any readable tile is skipped as a whole by the caller.
         mutating func tiles(_ entries: [Any]) -> [CollectionItem]? {
             var tiles: [CollectionItem] = []
+            var seen = Set<String>()
             var dropped = 0
             for entry in entries {
-                if let item = tile(entry) {
+                if var item = tile(entry) {
+                    // A tile whose id an earlier tile already has gets a fresh one: SwiftUI and the tile editor key tiles by id.
+                    if !seen.insert(item.id).inserted {
+                        item.id = UUID().uuidString
+                        seen.insert(item.id)
+                    }
                     tiles.append(item)
                 } else {
                     dropped += 1

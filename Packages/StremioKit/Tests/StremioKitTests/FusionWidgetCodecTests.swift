@@ -320,6 +320,17 @@ private let bigSample = #"""
         #expect(tiles[1].imageAspect == .wide, "landscape means wide")
     }
 
+    @Test func aRepeatedTileIDGetsAFreshOne() throws {
+        let result = try decode(#"""
+        [ { "id": "1", "name": "Alpha" }, { "id": "1", "name": "Beta" }, { "id": "2", "name": "Gamma" }, { "id": "1", "name": "Delta" } ]
+        """#)
+        let tiles = try #require(self.tiles(result.widgets[0]))
+        #expect(tiles.map(\.title) == ["Alpha", "Beta", "Gamma", "Delta"])
+        #expect(tiles[0].id == "1" && tiles[2].id == "2", "the first tile with an id keeps it")
+        #expect(tiles[1].id != "1" && tiles[3].id != "1", "a repeat gets a fresh id")
+        #expect(Set(tiles.map(\.id)).count == 4, "every tile has its own id")
+    }
+
     @Test func tileAspectsAndImagesAreReadLeniently() throws {
         let result = try decode(#"""
         [ { "id": "p", "title": "Poster", "imageAspect": "POSTER", "imageURL": "https://example.com/p.png" },
