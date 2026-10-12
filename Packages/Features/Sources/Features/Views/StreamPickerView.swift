@@ -316,7 +316,7 @@ struct StreamPickerView: View {
         }
     }
 
-    /// Poster, then what is being picked: for an episode "S1 · E3" over its name, for a film its year. On a phone it is centred, as
+    /// Poster, then what is being picked: for an episode "Time · S1E3", for a film its year over its name. On a phone it is centred, as
     /// the title page is; in a wide window it reads from the left.
     private var header: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
@@ -325,13 +325,13 @@ struct StreamPickerView: View {
                     .frame(width: 44, height: 66)
             }
             VStack(alignment: .leading, spacing: 2) {
-                if let eyebrow {
-                    Text(eyebrow)
+                if episodeHeading == nil, let year = model.request.year {
+                    Text(year)
                         .font(Theme.Typography.eyebrow)
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
                 }
-                Text(model.request.title)
+                Text(episodeHeading ?? model.request.title)
                     .font(.headline)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
@@ -345,24 +345,17 @@ struct StreamPickerView: View {
         .padding(.top, Theme.Spacing.xs)
     }
 
-    /// Whether the embedded header has anything to show: an episode's name, or the status while the streams load. A film's is empty.
-    private var embeddedHeaderShowsText: Bool { model.request.season != nil || model.isLoading }
+    /// Whether the embedded header has anything to show: which episode, or the status while the streams load. A film's is empty.
+    private var embeddedHeaderShowsText: Bool { episodeHeading != nil || model.isLoading }
 
-    /// The header of a title page that shows these streams in place of its details: the episode's name, then the status. The page above
+    /// The header of a title page that shows these streams in place of its details: which episode, then the status. The page above
     /// already has the poster, the title and the picture, so there is no poster here.
     private var embeddedHeader: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: 2) {
-                if model.request.season != nil {
-                    // Under the title page's hero, so each of these lines is one line: a longer text is cut short rather than wrapped.
-                    if let eyebrow {
-                        Text(eyebrow)
-                            .font(Theme.Typography.eyebrow)
-                            .textCase(.uppercase)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Text(model.request.title)
+                if let episodeHeading {
+                    // Under the title page's hero, so this is one line: a longer text is cut short rather than wrapped.
+                    Text(episodeHeading)
                         .font(.headline)
                         .multilineTextAlignment(.leading)
                         .lineLimit(1)
@@ -376,10 +369,12 @@ struct StreamPickerView: View {
         .padding(.horizontal, streamMargin)
     }
 
-    /// "S1 · E3" for an episode, the release year for a film.
-    private var eyebrow: String? {
-        if let season = model.request.season, let episode = model.request.episode { return "S\(season) · E\(episode)" }
-        return model.request.year
+    /// "Time · S1E3" for an episode: the series and which episode, on one line. Nothing for a film.
+    private var episodeHeading: String? {
+        guard let season = model.request.season, let episode = model.request.episode else { return nil }
+        // A request without the series' name has it at the front of its title, which is "Series · Episode".
+        let series = model.request.seriesName ?? model.request.title.components(separatedBy: " · ").first ?? model.request.title
+        return "\(series) · S\(season)E\(episode)"
     }
 
     /// Only while the addons are still answering: the stream count is not shown once they have.

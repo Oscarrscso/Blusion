@@ -35,7 +35,7 @@ struct StreamRow: View {
                     }
                 }
                 Text(Self.headline(for: item))
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
