@@ -163,6 +163,36 @@ import StremioKitTestSupport
         #expect(loaded[1] == plain, "a title that does not say adult is unchanged")
     }
 
+    /// A collection saved with repeated tile ids (before the import fix) loads with every id unique, the same way on each load. A collection
+    /// with unique ids loads unchanged.
+    @Test func aSavedCollectionWithRepeatedTileIDsLoadsWithUniqueOnes() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let repeated = HomeWidget(id: "tiles", title: "Tiles", content: .collection([
+            CollectionItem(id: "1", title: "Alpha"),
+            CollectionItem(id: "1", title: "Beta"),
+            CollectionItem(id: "1-2", title: "Gamma"),
+            CollectionItem(id: "1", title: "Delta"),
+        ]))
+        let clean = HomeWidget(id: "clean", title: "Clean", content: .collection([
+            CollectionItem(id: "a", title: "A"),
+            CollectionItem(id: "b", title: "B"),
+        ]))
+        await DefaultsWidgetStore(defaults: defaults).save([repeated, clean])
+        let loaded = try #require(await DefaultsWidgetStore(defaults: defaults).load())
+        let again = try #require(await DefaultsWidgetStore(defaults: defaults).load())
+        let tiles = try #require(self.tiles(of: loaded[0]))
+        #expect(tiles.map(\.title) == ["Alpha", "Beta", "Gamma", "Delta"])
+        #expect(tiles.map(\.id) == ["1", "1-3", "1-2", "1-4"], "a repeat takes the first number no tile has")
+        #expect(loaded == again, "the same saved layout loads the same way every time")
+        #expect(loaded[1] == clean, "a collection with unique ids is unchanged")
+    }
+
+    private func tiles(of widget: HomeWidget) -> [CollectionItem]? {
+        if case .collection(let tiles) = widget.content { return tiles }
+        return nil
+    }
+
     private func savedIDs(in defaults: UserDefaults) throws -> [String] {
         let data = try #require(defaults.data(forKey: DefaultsWidgetStore.key))
         let envelope = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
