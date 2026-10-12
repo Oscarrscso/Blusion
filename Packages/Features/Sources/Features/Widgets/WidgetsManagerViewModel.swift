@@ -277,8 +277,13 @@ public final class WidgetsManagerViewModel {
 
     /// Saves what an import read, and returns how many widgets it brought in.
     private func store(_ result: FusionWidgetCodec.ImportResult, mode: ImportMode) async -> Int? {
-        guard let current = await savedList() else { return nil }
-        let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: mode == .append ? current : [])
+        // Only an append builds on the saved list, so a replace is not held back by a list reset elsewhere.
+        var current: [HomeWidget] = []
+        if mode == .append {
+            guard let saved = await savedList() else { return nil }
+            current = saved
+        }
+        let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: current)
         await commit(mode == .append ? current + imported : imported)
         return imported.count
     }
