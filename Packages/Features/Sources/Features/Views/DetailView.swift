@@ -50,21 +50,20 @@ struct DetailView: View {
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
-    /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
-    private static let backButtonColumn: CGFloat = 72
+    /// The Mac title page's margin from the sidebar. The rows below follow it.
+    private static let desktopMargin: CGFloat = 60
     /// How far the page blurs while an episode's menu is open.
     private static let heldBlur: CGFloat = 4
     /// The streams replace the details, or the details come back, in this swap.
     private static let swapAnimation = Animation.easeInOut(duration: 0.22)
 
-    /// In portrait the artwork runs under the bar, so the page margin is enough. In landscape on iPhone the page keeps the portrait margin
-    /// plus only the device's side safe-area inset, with no back-button column. On Mac the back button floats over the page's top
-    /// leading corner with nothing behind it, so the page starts beside it rather than under it: the content keeps clear of the
-    /// button's column, on both sides so it stays centred, and nothing scrolls beneath the button.
+    /// In portrait the artwork runs under the bar, so the page margin is enough. In landscape on iPhone the page keeps the device's side
+    /// safe-area inset plus a small gap, never less than a slim margin. On Mac the back button floats above the picture's top leading
+    /// corner, clear of the text, so the text sits a fixed distance from the sidebar and the rows below line up with it.
     private var contentMargin: CGFloat {
         guard showsBackdrop else { return metrics.contentMargin }
         #if targetEnvironment(macCatalyst)
-        return max(sideInset, windowSideInset) + Self.backButtonColumn
+        return Self.desktopMargin
         #else
         // Just clear of the notch and rounded corners: the side inset plus a small gap, never less than a slim margin.
         return max(max(sideInset, windowSideInset) + Theme.Spacing.xs, Theme.Spacing.m)
