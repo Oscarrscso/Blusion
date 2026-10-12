@@ -162,6 +162,22 @@ private final class BackSwipeProbe: UIView {
     }
 }
 
+/// When the latest back swipe began, on any stack. A tap that a swipe ends on is not a choice, so a card asks this before it plays.
+@MainActor
+enum BackSwipeRecord {
+    private static var began: ContinuousClock.Instant?
+
+    /// True for a moment after a back swipe began, while the finger that made it is still lifting.
+    static var isFresh: Bool {
+        guard let began else { return false }
+        return ContinuousClock.now - began < .milliseconds(400)
+    }
+
+    static func noteBegan() {
+        began = ContinuousClock.now
+    }
+}
+
 /// A navigation stack's one back swipe: a pan recognizer on the stack's view that pops the screen on top through the router, at once,
 /// the way the back button does.
 ///
@@ -250,7 +266,9 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func swiped() {
-        guard pan.state == .began, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
+        guard pan.state == .began else { return }
+        BackSwipeRecord.noteBegan()
+        guard let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
         // The same light tap as opening a title, once per swipe that goes back.
         Haptics.tap()
         // A screen that was not popped stays, and keeps taking touches.

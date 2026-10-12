@@ -25,10 +25,6 @@ struct StreamPickerView: View {
     @State private var missing: MissingPlayer?
     /// The stream cards that have already come in, so a card scrolled away and back does not animate again.
     @State private var entranceLog = StreamCardEntranceLog()
-    /// How far the current touch on a stream card has moved. One finger touches one card at a time, so one value serves every card.
-    @State private var touchTravel: CGFloat = 0
-    /// Points a touch on a card may move and still count as a tap. Past it the touch is a swipe, and a swipe plays nothing.
-    private static let tapSlop: CGFloat = 10
     private let services: AppServices
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
@@ -516,15 +512,13 @@ struct StreamPickerView: View {
     private func streamButton(_ item: RankedStream, isRecommended: Bool, order: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                // A swipe that started on the card (a back swipe, or a sideways drag) also ends as a touch-up here. It plays nothing.
-                guard touchTravel < Self.tapSlop else { return }
+                // A back swipe that began on the card ends as a touch-up here too. It plays nothing.
+                guard !BackSwipeRecord.isFresh else { return }
                 select(item)
             } label: {
                 StreamRow(item: item, isBest: isRecommended, isRemux: AutoStreamRanking.assess(item, duration: nil).isRemux)
             }
             .buttonStyle(PressableCardStyle())
-            // Watches the touch without taking it from the button or the screen's scrolling.
-            .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { trackTouch($0) })
             .contextMenu { contextActions(for: item) }
             .accessibilityIdentifier("stream.row.\(item.title)")
             .accessibilityHint(hint(for: item))
@@ -540,12 +534,6 @@ struct StreamPickerView: View {
             }
         }
         .streamCardEntrance(id: AnyHashable(item.id), order: order, log: entranceLog)
-    }
-
-    /// Records how far the touch has moved from where it began. A touch begins with no movement, which starts it again from zero.
-    private func trackTouch(_ value: DragGesture.Value) {
-        guard value.translation != .zero else { touchTravel = 0; return }
-        touchTravel = max(touchTravel, hypot(value.translation.width, value.translation.height))
     }
 
     @ViewBuilder
