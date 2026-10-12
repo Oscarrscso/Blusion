@@ -34,7 +34,7 @@ struct StreamPickerView: View {
     /// Embedded only: takes the streams away and shows the title's details again. Back leaves the title's page, so this is the way back
     /// to the details.
     private let onClose: (() -> Void)?
-    /// Called once every addon has answered.
+    /// Called once four streams are in, or every addon has answered.
     private let onReady: (() -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
@@ -170,8 +170,12 @@ struct StreamPickerView: View {
             }
     }
 
-    /// Every addon has answered (with streams, with nothing, or with a failure). Until then the title page keeps its details and Play spins.
-    private var isReady: Bool { model.hasLoaded && !model.listing.isLoading }
+    /// The first `readyStreamCount` streams are in, or every addon has answered (with streams, with nothing, or with a failure). Until
+    /// then the title page keeps its details and Play spins.
+    private var isReady: Bool {
+        model.hasLoaded && (model.listing.items.count >= Self.readyStreamCount || !model.listing.isLoading)
+    }
+    private static let readyStreamCount = 4
 
     // MARK: header
 

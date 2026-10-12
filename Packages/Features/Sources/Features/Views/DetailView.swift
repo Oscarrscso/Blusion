@@ -14,8 +14,8 @@ struct DetailView: View {
     @State private var isHoldingEpisode = false
     /// The streams the page shows in place of its details after Play; nil shows the details.
     @State private var pickedRequest: StreamRequest?
-    /// False while the picked streams are still on their way: the details stay and Play shows a spinner. True once the addons have
-    /// all answered, and the streams take the details' place.
+    /// False while the picked streams are still on their way: the details stay and Play shows a spinner. True once four streams are
+    /// in, or the addons have all answered, and the streams take the details' place.
     @State private var streamsAreReady = false
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
