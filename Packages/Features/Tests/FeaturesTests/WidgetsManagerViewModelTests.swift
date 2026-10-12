@@ -392,6 +392,19 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         #expect(model.summary(of: HomeWidget(title: "Continue", content: .continueWatching)) == "Continue")
     }
 
+    @Test func aDiscoverSourceIsNamedByItsQuery() async throws {
+        let model = await loaded(try await services())
+        let query = TMDbDiscoverQuery(kind: .series, ordering: .trendingThisWeek, genres: [.init(id: 16, name: "Animation")],
+            minimumVotes: 50)
+        let source = WidgetSource.tmdbDiscover(query)
+        #expect(model.describe(source) == "TMDB · Trending Animation Series This Week · 1 filter")
+        #expect(model.autoTitle(for: source) == "Trending Animation Series This Week")
+        let row = HomeWidget(title: "Discover", content: .row(RowConfiguration(source: source)))
+        #expect(model.summary(of: row) == "Row · TMDB · Trending Animation Series This Week · 1 filter")
+        #expect(model.autoTitle(for: .tmdbDiscover(TMDbDiscoverQuery())) == "Popular Movies")
+        #expect(WidgetsManagerViewModel.traktTitle(source) == "Trakt", "a discover list is not a Trakt list")
+    }
+
     @Test func catalogChoicesListEnabledBrowsableCatalogsOnce() async throws {
         let needsSearch = Manifest(id: "test.search", name: "Search", version: "1", resources: [ResourceDescriptor(name: "catalog")], types: ["movie"],
                                    catalogs: [CatalogDescriptor(type: "movie", id: "search", name: "Search",

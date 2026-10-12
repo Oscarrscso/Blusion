@@ -362,6 +362,67 @@ private func catalogResponse(for request: URLRequest) -> HTTPResult {
         #expect(WidgetSourceError.unsupported(kind: "x").message.hasSuffix("."))
     }
 
+    // MARK: TMDb discover lists
+
+    private let discover = WidgetSource.tmdbDiscover(TMDbDiscoverQuery(providers: [.init(id: 8, name: "Netflix")]))
+    private let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ0ZXN0In0.signature"
+
+    /// TMDb's answers for a two-title discover list (ids 880001 and 880002) and their IMDb ids; other hosts get the catalog answers.
+    private func tmdbOrCatalog(for request: URLRequest) -> HTTPResult {
+        guard request.url?.host == "api.themoviedb.org" else { return catalogResponse(for: request) }
+        let path = request.url?.path ?? ""
+        if path.hasPrefix("/3/discover/") {
+            let body = #"""
+                {"page":1,"total_pages":1,"results":[{"id":880001,"title":"First","overview":"A film.","poster_path":"/a.jpg",
+                "backdrop_path":null,
+                "release_date":"2024-01-01","genre_ids":[16],"vote_average":7.1,"vote_count":300,"original_language":"en"},
+                {"id":880002,"title":"Second","overview":"","poster_path":null,"backdrop_path":null,"release_date":"","genre_ids":[],
+                "vote_average":6,"vote_count":10,"original_language":"en"}]}
+                """#
+            return StubTransport.response(Data(body.utf8), for: request)
+        }
+        let imdb = path.contains("880001") ? "tt8800001" : "tt8800002"
+        return StubTransport.response(Data(#"{"imdb_id":"\#(imdb)"}"#.utf8), for: request)
+    }
+
+    @Test func aDiscoverListWithoutATokenNeedsOneAndSendsNothing() async throws {
+        let transport = StubTransport { request, _ in catalogResponse(for: request) }
+        let (registry, client) = try await makeStubbedRegistry(manifests: [catalog], transport: transport)
+        let service = WidgetContentService(registry: registry, client: client,
+            settings: InMemorySettingsStore(PlaybackSettings(tmdbReadToken: "  ")))
+        #expect(await service.issue(with: discover) == .needsTMDbToken)
+        await #expect(throws: WidgetSourceError.needsTMDbToken) { try await service.items(for: discover, cacheTTL: 0) }
+        #expect(transport.callCount == 0)
+    }
+
+    @Test func aDiscoverListLoadsWithTheSavedTokenAndTheRegion() async throws {
+        let transport = StubTransport { request, _ in tmdbOrCatalog(for: request) }
+        let (registry, client) = try await makeStubbedRegistry(manifests: [catalog], transport: transport)
+        let settings = InMemorySettingsStore(PlaybackSettings(tmdbReadToken: " \(jwt) "))
+        let service = WidgetContentService(registry: registry, client: client, settings: settings, region: { "IE" })
+        #expect(await service.issue(with: discover) == nil)
+        let items = try await service.items(for: discover, limit: 5, cacheTTL: 0)
+        #expect(items.map(\.id) == ["tt8800001", "tt8800002"] && items.map(\.type) == ["movie", "movie"])
+        let list = try #require(transport.requests.first { $0.url?.path == "/3/discover/movie" })
+        #expect(list.value(forHTTPHeaderField: "Authorization") == "Bearer \(jwt)")
+        #expect(list.url?.absoluteString.contains("watch_region=IE") == true, "the device region the service was given")
+    }
+
+    @Test func aDiscoverListTurnsATMDbRefusalIntoAnAddonError() async throws {
+        let transport = StubTransport { request, _ in
+            if request.url?.host == "api.themoviedb.org" { return StubTransport.response(Data(), status: 401, for: request) }
+                return catalogResponse(for: request)
+        }
+        let (registry, client) = try await makeStubbedRegistry(manifests: [catalog], transport: transport)
+        let service = WidgetContentService(registry: registry, client: client,
+            settings: InMemorySettingsStore(PlaybackSettings(tmdbReadToken: jwt)))
+        await #expect(throws: WidgetSourceError.addon(.http(status: 401))) { try await service.items(for: discover, cacheTTL: 0) }
+    }
+
+    @Test func theNeedsTMDbTokenMessageNamesTheSetting() {
+        #expect(WidgetSourceError.needsTMDbToken.message == "Add a TMDB Read Access Token in Settings to show this row.")
+    }
+
     // MARK: Several sources
 
     @Test func severalSourcesInterleaveRoundRobinAndDropDuplicates() async throws {

@@ -332,7 +332,8 @@ struct HeroPicture: View {
     /// the first frame, and nothing is loaded again for it.
     private static func standInURL(for preview: MetaPreview) -> URL? {
         let poster = PosterQuality.poster(for: preview)
-        let shown = [poster, preview.background, MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
+        let shown = [poster, BetterPosters.posterURL(id: preview.id, type: preview.type), preview.background,
+                     MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
         return shown.first { ImagePipeline.shared.cachedImageAtAnySize(for: $0) != nil } ?? poster
     }
 

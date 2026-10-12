@@ -163,6 +163,7 @@ public enum FusionWidgetCodec {
             case "addonCatalog": return addonCatalog(payload)
             case "traktList": return traktList(payload) ?? .unsupported(kind: kind)
             case "blusion.traktFeed": return traktFeed(payload) ?? .unsupported(kind: kind)
+            case "blusion.tmdbDiscover": return tmdbDiscover(payload) ?? .unsupported(kind: kind)
             default: return .unsupported(kind: kind)
             }
         }
@@ -195,6 +196,13 @@ public enum FusionWidgetCodec {
         func traktFeed(_ payload: [String: Any]) -> WidgetSource? {
             guard let name = Read.text(payload["feed"]), let feed = TraktFeed(rawValue: name) else { return nil }
             return .traktFeed(feed)
+        }
+
+        /// A TMDb discover list: the query as a JSON object under `query`. Anything else reads as unsupported.
+        func tmdbDiscover(_ payload: [String: Any]) -> WidgetSource? {
+            guard let object = payload["query"] as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: object),
+                  let query = try? JSONDecoder().decode(TMDbDiscoverQuery.self, from: data) else { return nil }
+            return .tmdbDiscover(query)
         }
 
         /// The manifest id and display host of an imported `addonId`; the widget keeps nothing else. A link to an addon that is not
@@ -287,7 +295,8 @@ public enum FusionWidgetCodec {
             return WidgetPresentation(aspectRatio: aspectRatio(object["aspectRatio"]) ?? .poster,
                                       cardStyle: cardStyle(object["cardStyle"]) ?? .medium,
                                       showsRatings: flag(badges["ratings"]) ?? true,
-                                      showsProviders: flag(badges["providers"]) ?? false)
+                                      showsProviders: flag(badges["providers"]) ?? false,
+                                      usesBetterPosters: flag(object["blusionBetterPosters"]) ?? false)
         }
 
         static func httpURL(_ value: Any?) -> URL? {
@@ -328,11 +337,13 @@ public enum FusionWidgetCodec {
 
     private static func encodeRow(_ row: RowConfiguration, into object: inout [String: Any]) {
         let badges: [String: Any] = ["providers": row.presentation.showsProviders, "ratings": row.presentation.showsRatings]
-        let presentation: [String: Any] = [
+        var presentation: [String: Any] = [
             "aspectRatio": row.presentation.aspectRatio.rawValue,
             "cardStyle": row.presentation.cardStyle.rawValue,
             "badges": badges,
         ]
+        // Blusion's own key, written only when it is on: Fusion ignores it, and a file without it reads as off.
+        if row.presentation.usesBetterPosters { presentation["blusionBetterPosters"] = true }
         object["limit"] = row.limit
         object["cacheTTL"] = row.cacheTTL
         object["presentation"] = presentation
@@ -375,8 +386,18 @@ public enum FusionWidgetCodec {
             return ["kind": "traktList", "payload": payload]
         case .traktFeed(let feed):
             return ["kind": "blusion.traktFeed", "payload": ["feed": feed.rawValue]]
+        case .tmdbDiscover(let query):
+            var payload: [String: Any] = [:]
+            if let object = queryObject(query) { payload["query"] = object }
+            return ["kind": "blusion.tmdbDiscover", "payload": payload]
         case .unsupported(let kind):
             return ["kind": kind, "payload": [String: Any]()]
         }
+    }
+
+    /// The query as a JSON object, or nil when it cannot be encoded.
+    private static func queryObject(_ query: TMDbDiscoverQuery) -> [String: Any]? {
+        guard let data = try? JSONEncoder().encode(query) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 }

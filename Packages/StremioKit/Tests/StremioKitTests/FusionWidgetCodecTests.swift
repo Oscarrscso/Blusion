@@ -473,4 +473,56 @@ private let bigSample = #"""
         #expect(result.widgets.map(\.id) == ["ok"])
         #expect(result.skipped == 1)
     }
+
+    @Test func aDiscoverWidgetAndBetterPostersSurviveEncodeThenDecode() throws {
+        let query = TMDbDiscoverQuery(kind: .series, ordering: .trendingThisWeek, genres: [.init(id: 16, name: "Animation")],
+                                      minimumScore: 7, releasedFrom: "2020-01-01")
+        let widget = HomeWidget(id: "discover", title: "Animation Series", content: .row(RowConfiguration(
+            source: .tmdbDiscover(query), presentation: WidgetPresentation(usesBetterPosters: true))))
+        let data = try FusionWidgetCodec.encode([widget])
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(text.contains("\"blusion.tmdbDiscover\"") && text.contains("\"blusionBetterPosters\""))
+        let result = try FusionWidgetCodec.decode(data, installed: [])
+        #expect(result.widgets == [widget])
+        #expect(result.skipped == 0)
+    }
+
+    @Test func aPresentationWithoutBetterPostersWritesNoKeyAndReadsAsOff() throws {
+        let plain = HomeWidget(id: "plain", title: "Plain", content: .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery()))))
+        let text = String(decoding: try FusionWidgetCodec.encode([plain]), as: UTF8.self)
+        #expect(!text.contains("blusionBetterPosters"))
+        let result = try FusionWidgetCodec.decode(Data(text.utf8), installed: [])
+        #expect(result.widgets == [plain])
+        let missing = try decode(#"{"widgets": [{"id": "x", "title": "X", "type": "row.classic","#
+            + #""presentation": {"aspectRatio": "poster"},"#
+            + #""dataSource": {"kind": "blusion.tmdbDiscover", "payload": {"query": {"kind": "series"}}}}]}"#)
+        guard case .row(let row) = missing.widgets.first?.content else {
+            Issue.record("the row should be kept")
+            return
+        }
+        #expect(row.presentation.usesBetterPosters == false)
+        #expect(row.source == .tmdbDiscover(TMDbDiscoverQuery(kind: .series)))
+    }
+
+    @Test func aBrokenDiscoverQueryReadsAsUnsupported() throws {
+        let text = #"""
+        { "widgets": [
+          { "id": "a", "title": "A", "type": "row.classic",
+            "dataSource": { "kind": "blusion.tmdbDiscover", "payload": { "query": "not an object" } } },
+          { "id": "b", "title": "B", "type": "row.classic",
+            "dataSource": { "kind": "blusion.tmdbDiscover", "payload": {} } },
+          { "id": "c", "title": "C", "type": "row.classic",
+            "dataSource": { "kind": "blusion.tmdbDiscover", "payload": { "query": { "genres": "animation" } } } } ] }
+        """#
+        let result = try decode(text)
+        #expect(result.skipped == 0, "the rows are kept, with their source unsupported")
+        for widget in result.widgets {
+            guard case .row(let row) = widget.content else {
+                Issue.record("each row should be kept")
+                continue
+            }
+            #expect(row.source == .unsupported(kind: "blusion.tmdbDiscover"))
+        }
+        #expect(result.widgets.count == 3)
+    }
 }

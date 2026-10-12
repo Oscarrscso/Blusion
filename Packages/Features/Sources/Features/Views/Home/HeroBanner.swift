@@ -71,7 +71,8 @@ struct HeroBanner: View {
                 MediaRow("", hideTitle: true) {
                     ForEach(Array(items.dropFirst()), id: \.identity) { item in
                         MediaCardLink(item: item, aspect: .wide, size: row.presentation.cardStyle.cardSize,
-                                      showsRating: row.presentation.showsRatings, width: cardWidth, subtitle: item.releaseInfo ?? " ")
+                                      showsRating: row.presentation.showsRatings, width: cardWidth, subtitle: item.releaseInfo ?? " ",
+                                      usesBetterPosters: row.presentation.usesBetterPosters)
                     }
                 }
                 .padding(.top, Theme.Spacing.m)

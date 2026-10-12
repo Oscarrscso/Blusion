@@ -44,7 +44,7 @@ struct WidgetRow: View {
             MediaRow(widget.title, hideTitle: widget.hideTitle, onSeeAll: { router.homePath.append(seeAllRequest) }) {
                 ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                     MediaCardLink(item: item, aspect: presentation.aspectRatio.cardAspect, size: presentation.cardStyle.cardSize,
-                                  showsRating: presentation.showsRatings)
+                                  showsRating: presentation.showsRatings, usesBetterPosters: presentation.usesBetterPosters)
                         .overlay(alignment: .topLeading) {
                             if presentation.showsRank { RankBadge(position: index + 1) }
                         }

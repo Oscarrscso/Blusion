@@ -56,6 +56,8 @@ enum CardSize: String, CaseIterable, Sendable {
 /// The card is `width` wide, or `size`'s width when `width` is nil. `stretched()` lets a grid give it a column's width instead.
 /// `showsTitle` nil means the aspect's default (no caption under a poster, a caption under wide and square cards); pass a Bool to
 /// force either. With `showsRating`, posters carry the IMDb and Letterboxd ratings from the environment's `PosterRatingsStore`.
+/// With `usesBetterPosters`, a poster takes its picture from the BetterPosters addon, which carries the rating itself; the app's own
+/// rating is drawn only when the usual poster stands in.
 struct MediaCard: View {
     let item: MetaPreview
     let aspect: CardAspect
@@ -64,15 +66,18 @@ struct MediaCard: View {
     let showsRating: Bool
     let width: CGFloat?
     let subtitle: String?
+    let usesBetterPosters: Bool
     private var stretches = false
     private var zoomID: String?
+    /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that did not load.
+    @State private var posterFellBack = false
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
     @Environment(\.isLandscape) private var isLandscape
 
     init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
-         width: CGFloat? = nil, subtitle: String? = nil) {
+         width: CGFloat? = nil, subtitle: String? = nil, usesBetterPosters: Bool = false) {
         self.item = item
         self.aspect = aspect
         self.size = size
@@ -80,6 +85,7 @@ struct MediaCard: View {
         self.showsRating = showsRating
         self.width = width
         self.subtitle = subtitle
+        self.usesBetterPosters = usesBetterPosters
     }
 
     var body: some View {
@@ -121,9 +127,10 @@ struct MediaCard: View {
 
     /// The pictures a card for `item` asks `ImagePipeline` for, with the URLs and pixel sizes it uses. The card draws from this, and so does
     /// the grid's artwork buffer, so what the buffer loads is exactly what the card finds in the cache. A landscape poster also shows the
-    /// title's logo.
+    /// title's logo. A poster that uses Better Posters asks for its BetterPosters picture, which the card shows first.
     static func artworkRequests(for item: MetaPreview, aspect: CardAspect, size: CardSize = .medium, width: CGFloat? = nil,
-                                metrics: LayoutMetrics, isLandscape: Bool, displayScale: CGFloat) -> [ArtworkPrefetcher.Request] {
+                                metrics: LayoutMetrics, isLandscape: Bool, displayScale: CGFloat,
+                                usesBetterPosters: Bool = false) -> [ArtworkPrefetcher.Request] {
         let landscape = isLandscape && aspect == .poster
         let fixed = resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
         let pixels = pixelSize(width: fixed, artwork: landscape ? .wide : aspect, displayScale: displayScale)
@@ -131,10 +138,18 @@ struct MediaCard: View {
         if landscape {
             if let url = landscapeArtworkURL(for: item) { requests.append(.init(url: url, maxPixelSize: pixels)) }
             if let logo = landscapeLogoURL(for: item) { requests.append(.init(url: logo, maxPixelSize: logoPixelSize)) }
-        } else if let url = artworkURL(for: item, aspect: aspect) {
+        } else if let url = betterPosterURL(for: item, aspect: aspect, usesBetterPosters: usesBetterPosters)
+                    ?? artworkURL(for: item, aspect: aspect) {
             requests.append(.init(url: url, maxPixelSize: pixels))
         }
         return requests
+    }
+
+    /// The BetterPosters picture a card of this shape shows first: only for a poster that uses the addon, and only for a title the addon
+    /// has an id for (see `BetterPosters.posterURL`). Nil otherwise.
+    private static func betterPosterURL(for item: MetaPreview, aspect: CardAspect, usesBetterPosters: Bool) -> URL? {
+        guard usesBetterPosters, aspect == .poster else { return nil }
+        return BetterPosters.posterURL(id: item.id, type: item.type)
     }
 
     /// Decoded no larger than the card is drawn, so a long shelf stays light in memory.
@@ -166,18 +181,26 @@ struct MediaCard: View {
         !usesLandscapeArtwork && (showsTitle ?? aspect.showsCaptionByDefault)
     }
 
+    /// The BetterPosters picture this card shows first, or nil when it shows the usual artwork.
+    private var betterPosterURL: URL? {
+        Self.betterPosterURL(for: item, aspect: artworkAspect, usesBetterPosters: usesBetterPosters)
+    }
+
     private var artwork: some View {
         artworkSpace
             .overlay {
                 if usesLandscapeArtwork {
                     LandscapeArtwork(title: item.name, artwork: Self.landscapeArtworkURL(for: item), logo: Self.landscapeLogoURL(for: item),
                                      maxPixelSize: pixelSize)
+                } else if let betterPosterURL {
+                    ArtworkImage(url: betterPosterURL, title: item.name, maxPixelSize: pixelSize, fallbackURL: artworkURL,
+                                 usesFallback: $posterFellBack)
                 } else {
                     ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize)
                 }
             }
             .overlay(alignment: .bottom) {
-                if showsRating && (aspect != .wide || isLandscape) {
+                if showsRating && (aspect != .wide || isLandscape) && (betterPosterURL == nil || posterFellBack) {
                     PosterRatingsOverlay(item: item, isLandscape: isLandscape)
                 }
             }
@@ -241,12 +264,13 @@ struct MediaCardLink: View {
     let showsRating: Bool
     let width: CGFloat?
     let subtitle: String?
+    let usesBetterPosters: Bool
     private var stretches = false
     @Environment(\.zoomScope) private var zoomScope
     @Environment(TitleActions.self) private var actions: TitleActions?
 
     init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
-         width: CGFloat? = nil, subtitle: String? = nil) {
+         width: CGFloat? = nil, subtitle: String? = nil, usesBetterPosters: Bool = false) {
         self.item = item
         self.aspect = aspect
         self.size = size
@@ -254,13 +278,14 @@ struct MediaCardLink: View {
         self.showsRating = showsRating
         self.width = width
         self.subtitle = subtitle
+        self.usesBetterPosters = usesBetterPosters
     }
 
     var body: some View {
         // The row's scope makes the id unique on screen, so the title's screen zooms out of this card and not a twin in another row.
         let sourceID = "\(zoomScope)/\(item.identity)"
         let card = MediaCard(item: item, aspect: aspect, size: size, showsTitle: showsTitle, showsRating: showsRating, width: width,
-                             subtitle: subtitle)
+                             subtitle: subtitle, usesBetterPosters: usesBetterPosters)
             .zoomSource(sourceID)
         NavigationLink(value: TitleDestination(preview: item, sourceID: sourceID)) {
             stretches ? card.stretched() : card

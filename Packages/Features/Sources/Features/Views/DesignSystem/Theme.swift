@@ -91,6 +91,14 @@ extension View {
             .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
     }
 
+    /// A translucent rounded surface for a panel that holds glass controls, with the same hairline as `glassCardSurface`. It is the
+    /// system's material and not glass: glass chips and buttons inside a glass panel would be glass on glass.
+    func translucentPanelSurface(cornerRadius: CGFloat = Theme.Radius.surface) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return background(.regularMaterial, in: shape)
+            .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
+    }
+
     /// The same inset, one-pixel hairline for posters, cards and tiles. Full-screen hero artwork does not use it.
     func mediaArtwork(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         modifier(MediaArtworkModifier(cornerRadius: cornerRadius))

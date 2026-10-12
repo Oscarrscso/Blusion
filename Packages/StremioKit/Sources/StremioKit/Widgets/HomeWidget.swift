@@ -70,26 +70,30 @@ public struct WidgetPresentation: Sendable, Codable, Equatable, Hashable {
     public var showsProviders: Bool
     /// A numbered (top-N) row: each card carries its position, 1 first. Fusion's `row.classic.numbered`.
     public var showsRank: Bool
+    /// Poster cards take their artwork from the BetterPosters addon, falling back to the title's own poster.
+    public var usesBetterPosters: Bool
 
     public init(aspectRatio: AspectRatio = .poster, cardStyle: CardStyle = .medium, showsRatings: Bool = true, showsProviders: Bool = false,
-                showsRank: Bool = false) {
+                showsRank: Bool = false, usesBetterPosters: Bool = false) {
         self.aspectRatio = aspectRatio
         self.cardStyle = cardStyle
         self.showsRatings = showsRatings
         self.showsProviders = showsProviders
         self.showsRank = showsRank
+        self.usesBetterPosters = usesBetterPosters
     }
 
-    private enum CodingKeys: String, CodingKey { case aspectRatio, cardStyle, showsRatings, showsProviders, showsRank }
+    private enum CodingKeys: String, CodingKey { case aspectRatio, cardStyle, showsRatings, showsProviders, showsRank, usesBetterPosters }
 
-    /// `showsRank` is missing from files written before numbered rows existed, so it defaults to off.
+    /// `showsRank` and `usesBetterPosters` are missing from files written before they existed, so they default to off.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(aspectRatio: try container.decode(AspectRatio.self, forKey: .aspectRatio),
                   cardStyle: try container.decode(CardStyle.self, forKey: .cardStyle),
                   showsRatings: try container.decode(Bool.self, forKey: .showsRatings),
                   showsProviders: try container.decode(Bool.self, forKey: .showsProviders),
-                  showsRank: try container.decodeIfPresent(Bool.self, forKey: .showsRank) ?? false)
+                  showsRank: try container.decodeIfPresent(Bool.self, forKey: .showsRank) ?? false,
+                  usesBetterPosters: try container.decodeIfPresent(Bool.self, forKey: .usesBetterPosters) ?? false)
     }
 }
 
@@ -120,6 +124,8 @@ public enum WidgetSource: Sendable, Codable, Equatable, Hashable {
     case traktList(TraktListReference)
     /// A Trakt feed (trending or popular movies or shows). Public, so only the client ID is needed. Blusion-only in Fusion files.
     case traktFeed(TraktFeed)
+    /// A list TMDb builds from filters, read with the TMDB Read Access Token the user set in Settings. Blusion-only in Fusion files.
+    case tmdbDiscover(TMDbDiscoverQuery)
     /// A kind this version cannot load (for example `anilistCatalog`). Kept so an imported widget survives; the UI says so.
     case unsupported(kind: String)
 }
@@ -189,7 +195,7 @@ extension WidgetSource {
     public var usesTrakt: Bool {
         switch self {
         case .traktList, .traktFeed: return true
-        case .addonCatalog, .unsupported: return false
+        case .addonCatalog, .tmdbDiscover, .unsupported: return false
         }
     }
 }

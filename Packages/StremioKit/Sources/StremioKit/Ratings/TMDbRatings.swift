@@ -69,6 +69,8 @@ public struct TMDbRatings: Sendable {
     let credential: Credential?
     private let baseURL: URL
     let titleIDs: TMDbTitleIDCache
+    /// The IMDb id of each TMDb title, shared by discover widgets (see `TMDbIMDbIDCache`).
+    let imdbIDs: TMDbIMDbIDCache
 
     /// The credential as TMDb expects it. `nil` for an empty token: no request is sent.
     enum Credential: Sendable, Equatable {
@@ -77,11 +79,12 @@ public struct TMDbRatings: Sendable {
     }
 
     public init(client: AddonClient, readAccessToken: String, baseURL: URL = TMDbRatings.defaultBaseURL,
-                titleIDs: TMDbTitleIDCache = .shared) {
+                titleIDs: TMDbTitleIDCache = .shared, imdbIDs: TMDbIMDbIDCache = .shared) {
         self.client = client
         self.credential = Self.credential(for: readAccessToken)
         self.baseURL = baseURL
         self.titleIDs = titleIDs
+        self.imdbIDs = imdbIDs
     }
 
     /// Trims the text, drops a pasted `Bearer ` prefix, and picks the header for a JWT or the query for anything else.

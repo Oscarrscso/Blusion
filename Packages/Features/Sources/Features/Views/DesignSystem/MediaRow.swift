@@ -135,11 +135,13 @@ struct MediaRow<Content: View>: View {
 /// they scroll on screen, and unloads them from memory once they are further away. `onLastAppear` makes it paged: it fires while the
 /// viewer is within the buffer of the end, so a caller can load the next page. A paged grid also draws a blank card of the same size for
 /// titles outside the buffer. What is visible comes from the grid's own geometry against its scroll view, not from its cells.
+/// `usesBetterPosters` makes the posters of a poster grid take their pictures from the BetterPosters addon (see `MediaCard`).
 struct MediaGrid: View {
     let items: [MetaPreview]
     let aspect: CardAspect
     let showsRating: Bool
     let onLastAppear: (() -> Void)?
+    let usesBetterPosters: Bool
     @State private var zoomScope = UUID().uuidString
     /// The titles whose rows are on screen; nil before the first reading.
     @State private var visible: ClosedRange<Int>?
@@ -150,11 +152,13 @@ struct MediaGrid: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.displayScale) private var displayScale
 
-    init(items: [MetaPreview], aspect: CardAspect = .poster, showsRating: Bool = true, onLastAppear: (() -> Void)? = nil) {
+    init(items: [MetaPreview], aspect: CardAspect = .poster, showsRating: Bool = true, onLastAppear: (() -> Void)? = nil,
+         usesBetterPosters: Bool = false) {
         self.items = items
         self.aspect = aspect
         self.showsRating = showsRating
         self.onLastAppear = onLastAppear
+        self.usesBetterPosters = usesBetterPosters
     }
 
     /// Titles kept ready on each side of the visible ones.
@@ -179,7 +183,7 @@ struct MediaGrid: View {
                     if let kept, !kept.contains(index) {
                         UnloadedCard(artwork: landscapePoster ? .wide : aspect, showsCaption: aspect.showsCaptionByDefault)
                     } else {
-                        MediaCardLink(item: item, aspect: aspect, showsRating: showsRating)
+                        MediaCardLink(item: item, aspect: aspect, showsRating: showsRating, usesBetterPosters: usesBetterPosters)
                             .stretched()
                     }
                 }
@@ -225,7 +229,8 @@ struct MediaGrid: View {
 
     private func requests(_ range: ClosedRange<Int>, skipping skipped: ClosedRange<Int>? = nil) -> [ArtworkPrefetcher.Request] {
         range.filter { !(skipped?.contains($0) ?? false) && items.indices.contains($0) }.flatMap {
-            MediaCard.artworkRequests(for: items[$0], aspect: aspect, metrics: metrics, isLandscape: isLandscape, displayScale: displayScale)
+            MediaCard.artworkRequests(for: items[$0], aspect: aspect, metrics: metrics, isLandscape: isLandscape, displayScale: displayScale,
+                                      usesBetterPosters: usesBetterPosters)
         }
     }
 

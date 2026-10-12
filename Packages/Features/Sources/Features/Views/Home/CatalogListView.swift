@@ -41,7 +41,8 @@ struct CatalogListView: View {
                         .padding(.horizontal, Theme.screenPadding)
                 }
                 MediaGrid(items: model.items, aspect: request.presentation.aspectRatio.cardAspect,
-                          showsRating: request.presentation.showsRatings, onLastAppear: { Task { await model.loadMore() } })
+                          showsRating: request.presentation.showsRatings, onLastAppear: { Task { await model.loadMore() } },
+                          usesBetterPosters: request.presentation.usesBetterPosters)
                     .accessibilityIdentifier("catalogList.grid")
                 if model.state == .loadingMore {
                     ProgressView()

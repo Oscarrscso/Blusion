@@ -88,4 +88,24 @@ import Testing
         #expect(AddonCatalogReference(catalogType: "movie", catalogID: "nothing").resolve(in: [shows, movies]) == nil)
         #expect(AddonCatalogReference(catalogType: "movie", catalogID: "top").resolve(in: []) == nil)
     }
+
+    @Test func aPresentationWrittenBeforeBetterPostersDecodesWithItOff() throws {
+        let old = Data(#"{"aspectRatio":"wide","cardStyle":"large","showsRatings":false,"showsProviders":true,"showsRank":true}"#.utf8)
+        let presentation = try JSONDecoder().decode(WidgetPresentation.self, from: old)
+        #expect(presentation == WidgetPresentation(aspectRatio: .wide, cardStyle: .large, showsRatings: false, showsProviders: true,
+            showsRank: true))
+        #expect(presentation.usesBetterPosters == false)
+        let json = #"{"aspectRatio":"poster","cardStyle":"medium","showsRatings":true,"showsProviders":false,"usesBetterPosters":true}"#
+        let on = try JSONDecoder().decode(WidgetPresentation.self, from: Data(json.utf8))
+        #expect(on.usesBetterPosters)
+    }
+
+    @Test func aTMDbDiscoverSourceRoundTripsAndIsNotTrakt() throws {
+        let query = TMDbDiscoverQuery(kind: .series, ordering: .trendingToday, genres: [.init(id: 16, name: "Animation")], minimumVotes: 50)
+        let widget = HomeWidget(id: "d", title: "Discover", content: .hero(RowConfiguration(
+            source: .tmdbDiscover(query), presentation: WidgetPresentation(usesBetterPosters: true), limit: 8)))
+        let decoded = try JSONDecoder().decode(HomeWidget.self, from: JSONEncoder().encode(widget))
+        #expect(decoded == widget)
+        #expect(WidgetSource.tmdbDiscover(query).usesTrakt == false)
+    }
 }

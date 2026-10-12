@@ -263,6 +263,8 @@ public final class WidgetsManagerViewModel {
             return "Trakt list · \(list.listName) by \(list.username)\(sort)"
         case .traktFeed(let feed):
             return "Trakt · \(feed.title)"
+        case .tmdbDiscover(let query):
+            return query.summary
         case .unsupported(let kind):
             return "Not supported (\(kind))"
         }
@@ -289,6 +291,8 @@ public final class WidgetsManagerViewModel {
             return DefaultWidgets.rowTitle(catalogName: match.catalog.name, type: match.catalog.type)
         case .traktList, .traktFeed:
             return WidgetsManagerViewModel.traktTitle(source)
+        case .tmdbDiscover(let query):
+            return query.title
         case .unsupported:
             return ""
         }
@@ -329,7 +333,7 @@ public final class WidgetsManagerViewModel {
         switch source {
         case .traktList(let list): return list.listName
         case .traktFeed(let feed): return feed.title
-        case .addonCatalog, .unsupported: return "Trakt"
+        case .addonCatalog, .tmdbDiscover, .unsupported: return "Trakt"
         }
     }
 

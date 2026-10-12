@@ -51,6 +51,19 @@ import StremioKitTestSupport
         #expect((object["widgets"] as? [Any])?.count == 2)
     }
 
+    @Test func aDiscoverWidgetSurvivesTheDefaultsStore() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let query = TMDbDiscoverQuery(kind: .series, ordering: .newest, period: .last5Years, minimumScore: 6.5, language: "ja")
+        let discover = HomeWidget(id: "discover", title: "New Japanese Series", content: .row(RowConfiguration(
+            source: .tmdbDiscover(query), presentation: WidgetPresentation(usesBetterPosters: true))))
+        let widgets = layout + [discover]
+        let store = DefaultsWidgetStore(defaults: defaults)
+        await store.save(widgets)
+        #expect(await DefaultsWidgetStore(defaults: defaults).load() == widgets)
+        #expect(await InMemoryWidgetStore(widgets).load() == widgets)
+    }
+
     @Test func savingNilRemovesTheStoredLayout() async throws {
         let (defaults, name) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }

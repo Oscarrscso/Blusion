@@ -111,6 +111,17 @@
         }
       }
     },
+    "Add Date": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Date"
+          }
+        }
+      }
+    },
     "Add List": {
       "extractionState": "manual",
       "localizations": {
@@ -558,6 +569,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear data"
+          }
+        }
+      }
+    },
+    "Clear search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear search"
           }
         }
       }
@@ -1849,6 +1871,17 @@
         }
       }
     },
+    "Nothing found.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing found."
+          }
+        }
+      }
+    },
     "Nothing here": {
       "extractionState": "manual",
       "localizations": {
@@ -2208,6 +2241,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Position"
+          }
+        }
+      }
+    },
+    "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed."
           }
         }
       }
@@ -2674,6 +2718,17 @@
         }
       }
     },
+    "Setting a date replaces the period.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting a date replaces the period."
+          }
+        }
+      }
+    },
     "Settings": {
       "extractionState": "manual",
       "localizations": {
@@ -3037,6 +3092,17 @@
         }
       }
     },
+    "TMDB lists need a TMDB Read Access Token. Add one in Settings › Review services, or choose another source.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDB lists need a TMDB Read Access Token. Add one in Settings › Review services, or choose another source."
+          }
+        }
+      }
+    },
     "TMDB provides reviews, cast and artwork. It uses a Read Access Token.": {
       "extractionState": "manual",
       "localizations": {
@@ -3312,6 +3378,17 @@
         }
       }
     },
+    "Type to search TMDB.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type to search TMDB."
+          }
+        }
+      }
+    },
     "Types": {
       "extractionState": "manual",
       "localizations": {
@@ -3341,6 +3418,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use Automatic Layout"
+          }
+        }
+      }
+    },
+    "Use Better Posters addon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Better Posters addon"
           }
         }
       }
@@ -3418,6 +3506,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Watchlist"
+          }
+        }
+      }
+    },
+    "Widget title (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Widget title (optional)"
           }
         }
       }

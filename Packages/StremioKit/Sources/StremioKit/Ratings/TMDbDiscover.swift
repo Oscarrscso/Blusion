@@ -1,0 +1,346 @@
+import Foundation
+
+/// The IMDb id of each TMDb movie or series, kept for the session. A discover widget asks for many titles at once, and the same titles on
+/// every page, so each id is looked up once. A title TMDb has no IMDb id for is kept too; a failed lookup is not, so it is asked again.
+public actor TMDbIMDbIDCache {
+    public static let shared = TMDbIMDbIDCache()
+
+    private var ids: [String: String] = [:]
+    private var withoutID: Set<String> = []
+    private var lookups: [String: Task<String?, Error>] = [:]
+
+    public init() {}
+
+    /// The cached answer for `key`, or the answer of `lookup`. Callers that ask at the same time share one lookup.
+    func imdbID(for key: String, lookup: @escaping @Sendable () async throws -> String?) async throws -> String? {
+        if let id = ids[key] { return id }
+        if withoutID.contains(key) { return nil }
+        if let pending = lookups[key] { return try await pending.value }
+        let task = Task { try await lookup() }
+        lookups[key] = task
+        defer { lookups[key] = nil }
+        let id = try await task.value
+        if let id { ids[key] = id } else { withoutID.insert(key) }
+        return id
+    }
+}
+
+/// One title on a TMDb discover or trending page, with the fields a row needs. Internal: the public result is `MetaPreview`.
+struct TMDbDiscoverEntry: Sendable, Equatable {
+    let tmdbID: Int
+    let title: String
+    let overview: String
+    let posterPath: String?
+    let backdropPath: String?
+    /// The release date, or the first air date for a series, as TMDb sends it ("2024-03-01").
+    let date: String?
+    let genreIDs: [Int]
+    let voteAverage: Double?
+    let voteCount: Int?
+    let originalLanguage: String?
+
+    /// The entries of one page and TMDb's count of pages. Movies name the title `title` and the date `release_date`; series use `name` and
+    /// `first_air_date`. An entry without a title or with an id of 0 or less is skipped. Throws `invalidJSON` when the answer has no
+    /// `results` list.
+    static func parsePage(_ data: Data) throws -> (entries: [TMDbDiscoverEntry], totalPages: Int) {
+        let page: RawPage
+        do { page = try JSONDecoder().decode(RawPage.self, from: data) } catch { throw AddonError.invalidJSON }
+        guard let results = page.results else { throw AddonError.invalidJSON }
+        return (results.compactMap(\.entry), page.totalPages ?? 0)
+    }
+
+    private struct RawPage: Decodable {
+        let results: [RawEntry]?
+        let totalPages: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case results
+            case totalPages = "total_pages"
+        }
+    }
+
+    private struct RawEntry: Decodable {
+        let id: Int?
+        let title: String?
+        let name: String?
+        let overview: String?
+        let posterPath: String?
+        let backdropPath: String?
+        let releaseDate: String?
+        let firstAirDate: String?
+        let genreIDs: [Int]?
+        let voteAverage: Double?
+        let voteCount: Int?
+        let originalLanguage: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, name, overview
+            case posterPath = "poster_path"
+            case backdropPath = "backdrop_path"
+            case releaseDate = "release_date"
+            case firstAirDate = "first_air_date"
+            case genreIDs = "genre_ids"
+            case voteAverage = "vote_average"
+            case voteCount = "vote_count"
+            case originalLanguage = "original_language"
+        }
+
+        var entry: TMDbDiscoverEntry? {
+            guard let id, id > 0, let heading = Self.text(title) ?? Self.text(name) else { return nil }
+            return TMDbDiscoverEntry(tmdbID: id, title: heading, overview: Self.text(overview) ?? "", posterPath: posterPath,
+                                     backdropPath: backdropPath, date: Self.text(releaseDate) ?? Self.text(firstAirDate),
+                                     genreIDs: genreIDs ?? [], voteAverage: voteAverage, voteCount: voteCount,
+                                     originalLanguage: Self.text(originalLanguage))
+        }
+
+        /// The value trimmed, or nil when it is missing or blank.
+        private static func text(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }
+    }
+}
+
+extension TMDbRatings {
+    /// The path and query for one page of a discover widget. A trending query asks TMDb's trending list, which takes no filters. Any other
+    /// query asks `discover` with each filter it sets and supports, and a date range from `dateRange`. Pure: nothing is requested.
+    static func discoverRequest(_ query: TMDbDiscoverQuery, page: Int, defaultRegion: String, today: Date, calendar: Calendar)
+        -> (path: [String], query: [URLQueryItem]) {
+        let isMovie = query.kind == .movie
+        let kind = isMovie ? "movie" : "tv"
+        if query.isTrending {
+            let window = query.ordering == .trendingToday ? "day" : "week"
+            return (["trending", kind, window], [URLQueryItem(name: "page", value: String(page))])
+        }
+        let active: (TMDbDiscoverQuery.Filter) -> Bool = { query.isSet($0) && query.supports($0) }
+        var items = [URLQueryItem(name: "include_adult", value: "false"), URLQueryItem(name: "page", value: String(page)),
+                     URLQueryItem(name: "sort_by", value: sortKey(query.ordering, isMovie: isMovie))]
+        func add(_ name: String, _ value: String?) {
+            if let value { items.append(URLQueryItem(name: name, value: value)) }
+        }
+        add("with_genres", active(.genres) ? joinedIDs(query.genres, separator: ",") : nil)
+        add("with_keywords", active(.keywords) ? joinedIDs(query.keywords, separator: "|") : nil)
+        add("without_keywords", active(.excludedKeywords) ? joinedIDs(query.excludedKeywords, separator: ",") : nil)
+        add("vote_average.gte", active(.score) ? query.minimumScore.map(oneDecimal) : nil)
+        add("vote_average.lte", active(.score) ? query.maximumScore.map(oneDecimal) : nil)
+        add("vote_count.gte", active(.votes) ? query.minimumVotes.map { String($0) } : nil)
+        add("with_original_language", active(.language) ? query.language : nil)
+        add("with_runtime.gte", active(.runtime) ? query.minimumRuntime.map { String($0) } : nil)
+        add("with_runtime.lte", active(.runtime) ? query.maximumRuntime.map { String($0) } : nil)
+        let range = query.dateRange(today: today, calendar: calendar)
+        add(isMovie ? "primary_release_date.gte" : "first_air_date.gte", range.from)
+        add(isMovie ? "primary_release_date.lte" : "first_air_date.lte", range.to)
+        if active(.providers) {
+            add("with_watch_providers", joinedIDs(query.providers, separator: "|"))
+            add("watch_region", query.region ?? defaultRegion)
+        }
+        add("with_cast", active(.cast) ? joinedIDs(query.cast, separator: ",") : nil)
+        add("with_crew", active(.crew) ? joinedIDs(query.crew, separator: ",") : nil)
+        add("with_companies", active(.companies) ? joinedIDs(query.companies, separator: "|") : nil)
+        return (["discover", kind], items)
+    }
+
+    /// TMDb's sort for an ordering. Trending orderings never reach `discover`, so they sort by popularity.
+    private static func sortKey(_ ordering: TMDbDiscoverQuery.Ordering, isMovie: Bool) -> String {
+        switch ordering {
+        case .newest: return isMovie ? "primary_release_date.desc" : "first_air_date.desc"
+        case .oldest: return isMovie ? "primary_release_date.asc" : "first_air_date.asc"
+        case .popular, .trendingToday, .trendingThisWeek: return "popularity.desc"
+        }
+    }
+
+    private static func joinedIDs(_ named: [TMDbDiscoverQuery.Named], separator: String) -> String {
+        named.map { String($0.id) }.joined(separator: separator)
+    }
+
+    /// A score with one decimal place, always with a point: "7.0".
+    private static func oneDecimal(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
+    /// Whether a trending entry meets the filters a trending list can use, which TMDb does not apply itself: every selected genre, the
+    /// score and vote bounds, the language, and the release date range. An entry without a score, votes, language or date fails a bound it
+    /// is asked to meet.
+    static func matchesTrendingFilters(_ entry: TMDbDiscoverEntry, query: TMDbDiscoverQuery, today: Date, calendar: Calendar) -> Bool {
+        guard query.genres.allSatisfy({ entry.genreIDs.contains($0.id) }) else { return false }
+        if query.isSet(.score) {
+            guard let score = entry.voteAverage else { return false }
+            if let minimum = query.minimumScore, score < minimum { return false }
+            if let maximum = query.maximumScore, score > maximum { return false }
+        }
+        if let minimum = query.minimumVotes, (entry.voteCount ?? 0) < minimum { return false }
+        if let language = query.language, entry.originalLanguage?.lowercased() != language.lowercased() { return false }
+        let range = query.dateRange(today: today, calendar: calendar)
+        if range.from != nil || range.to != nil {
+            guard let date = entry.date else { return false }
+            if let from = range.from, date < from { return false }
+            if let to = range.to, date > to { return false }
+        }
+        return true
+    }
+}
+
+extension TMDbRatings {
+    /// One page of a discover or trending widget as `MetaPreview`s, from `skip` on, `limit` at most. Pages are read from TMDb until enough
+    /// titles are found or the pages run out. Entries without an IMDb id are left out, since the addon's links need one. Throws
+    /// `AddonError` for refusals and failures, and `CancellationError` when the caller is cancelled. Empty without a credential.
+    public func discoverItems(_ query: TMDbDiscoverQuery, limit: Int, skip: Int, defaultRegion: String, today: Date = Date(),
+                              calendar: Calendar = .current) async throws -> [MetaPreview] {
+        guard limit > 0, credential != nil else { return [] }
+        let offset = max(skip, 0)
+        let needed = offset + limit
+        let discoverPages = (needed + 19) / 20
+        let pageBudget = query.isTrending ? discoverPages + 5 : discoverPages
+        var entries: [TMDbDiscoverEntry] = []
+        var seen: Set<Int> = []
+        var page = 1
+        while entries.count < needed, page <= pageBudget {
+            try Task.checkCancellation()
+            let (path, items) = Self.discoverRequest(query, page: page, defaultRegion: defaultRegion, today: today, calendar: calendar)
+            let (url, headers) = try request(path: path, query: items)
+            let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
+            let answer = try TMDbDiscoverEntry.parsePage(result.data)
+            for entry in answer.entries where seen.insert(entry.tmdbID).inserted {
+                if query.isTrending, !Self.matchesTrendingFilters(entry, query: query, today: today, calendar: calendar) { continue }
+                entries.append(entry)
+            }
+            if page >= min(answer.totalPages, 500) { break }
+            page += 1
+        }
+        let mediaType = query.kind == .movie ? "movie" : "tv"
+        let window = Array(entries.dropFirst(offset).prefix(limit))
+        let resolved = try await resolveIMDbIDs(for: window, mediaType: mediaType)
+        return zip(window, resolved).compactMap { entry, imdbID in
+            guard let imdbID else { return nil }
+            return MetaPreview(id: imdbID, type: query.kind == .movie ? "movie" : "series", name: entry.title,
+                               poster: TMDbImage.url(entry.posterPath, size: "w500"),
+                                   background: TMDbImage.url(entry.backdropPath, size: "w1280"),
+                               description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date))
+        }
+    }
+
+    /// The IMDb id of each entry, in order, asked for at most six at a time. Nil for an entry TMDb has no IMDb id for, or whose lookup
+    /// failed. Throws `CancellationError` when the caller is cancelled.
+    private func resolveIMDbIDs(for entries: [TMDbDiscoverEntry], mediaType: String) async throws -> [String?] {
+        var resolved: [String?] = []
+        for start in stride(from: 0, to: entries.count, by: 6) {
+            let batch = Array(entries[start..<min(start + 6, entries.count)])
+            let found: [String?] = await withTaskGroup(of: (Int, String?).self, returning: [String?].self) { group in
+                for (offset, entry) in batch.enumerated() {
+                    group.addTask { (offset, try? await self.cachedIMDbID(tmdbID: entry.tmdbID, mediaType: mediaType)) }
+                }
+                var answers = [String?](repeating: nil, count: batch.count)
+                for await (offset, imdbID) in group { answers[offset] = imdbID }
+                return answers
+            }
+            try Task.checkCancellation()
+            resolved += found
+        }
+        return resolved
+    }
+
+    /// The IMDb id of a TMDb title, kept by `imdbIDs` for the session.
+    private func cachedIMDbID(tmdbID: Int, mediaType: String) async throws -> String? {
+        try await imdbIDs.imdbID(for: "\(mediaType)/\(tmdbID)") {
+            try await self.imdbID(tmdbID: tmdbID, mediaType: mediaType)
+        }
+    }
+
+    /// The first four characters of a date when they are a year, such as "2024" from "2024-03-01"; nil otherwise.
+    private static func releaseYear(_ date: String?) -> String? {
+        guard let year = date?.prefix(4), year.count == 4, year.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return String(year)
+    }
+}
+
+// MARK: - Editor lookups
+
+extension TMDbRatings {
+    /// The genres TMDb lists for movies or series. Empty without a credential. Throws `AddonError` for refusals and failures.
+    public func genres(kind: TMDbDiscoverQuery.Kind) async throws -> [TMDbDiscoverQuery.Named] {
+        guard credential != nil else { return [] }
+        let answer: RawGenreAnswer = try await lookup(["genre", kind == .movie ? "movie" : "tv", "list"])
+        return Self.named(answer.genres)
+    }
+
+    /// The keywords that match the text, in TMDb's order, at most 30. Empty for blank text, which sends no request.
+    public func searchKeywords(_ text: String) async throws -> [TMDbDiscoverQuery.Named] {
+        try await search(["search", "keyword"], text)
+    }
+
+    /// The people whose names match the text, in TMDb's order, at most 30. Empty for blank text, which sends no request.
+    public func searchPeople(_ text: String) async throws -> [TMDbDiscoverQuery.Named] {
+        try await search(["search", "person"], text, extra: [URLQueryItem(name: "include_adult", value: "false")])
+    }
+
+    /// The production companies that match the text, in TMDb's order, at most 30. Empty for blank text, which sends no request.
+    public func searchCompanies(_ text: String) async throws -> [TMDbDiscoverQuery.Named] {
+        try await search(["search", "company"], text)
+    }
+
+    /// The watch providers offered in a region, most prominent first, at most 30. `region` is an ISO 3166-1 code such as "IE". Empty for a
+    /// blank region, which sends no request.
+    public func watchProviders(kind: TMDbDiscoverQuery.Kind, region: String) async throws -> [TMDbDiscoverQuery.Named] {
+        let code = region.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty, credential != nil else { return [] }
+        let answer: RawProviderAnswer = try await lookup(["watch", "providers", kind == .movie ? "movie" : "tv"],
+                                                         query: [URLQueryItem(name: "watch_region", value: code)])
+        let byPriority = answer.results.enumerated()
+            .sorted { (($0.element.displayPriority ?? Int.max), $0.offset) < (($1.element.displayPriority ?? Int.max), $1.offset) }
+            .map(\.element)
+        let named = byPriority.compactMap { raw -> TMDbDiscoverQuery.Named? in
+            guard let id = raw.providerID, id > 0, let name = raw.providerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !name.isEmpty
+            else { return nil }
+            return TMDbDiscoverQuery.Named(id: id, name: name)
+        }
+        return Array(named.prefix(30))
+    }
+
+    /// The matches of a `search` path for trimmed text. Blank text sends nothing.
+    private func search(_ path: [String], _ text: String, extra: [URLQueryItem] = []) async throws -> [TMDbDiscoverQuery.Named] {
+        let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, credential != nil else { return [] }
+        let query = [URLQueryItem(name: "query", value: term), URLQueryItem(name: "page", value: "1")] + extra
+        let answer: RawSearchAnswer = try await lookup(path, query: query)
+        return Array(Self.named(answer.results).prefix(30))
+    }
+
+    /// Reads one lookup answer. Throws `AddonError` for refusals and failures, and `invalidJSON` for an answer of the wrong shape.
+    private func lookup<Answer: Decodable>(_ path: [String], query: [URLQueryItem] = []) async throws -> Answer {
+        let (url, headers) = try request(path: path, query: query)
+        let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 512 * 1024), timeout: 8)
+        do { return try JSONDecoder().decode(Answer.self, from: result.data) } catch { throw AddonError.invalidJSON }
+    }
+
+    /// The named entries with a positive id and a name, in order.
+    private static func named(_ raw: [RawNamed]) -> [TMDbDiscoverQuery.Named] {
+        raw.compactMap { entry in
+            guard let id = entry.id, id > 0, let name = entry.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty
+            else { return nil }
+            return TMDbDiscoverQuery.Named(id: id, name: name)
+        }
+    }
+
+    private struct RawNamed: Decodable {
+        let id: Int?
+        let name: String?
+    }
+
+    private struct RawGenreAnswer: Decodable { let genres: [RawNamed] }
+    private struct RawSearchAnswer: Decodable { let results: [RawNamed] }
+
+    private struct RawProviderAnswer: Decodable { let results: [RawProvider] }
+
+    private struct RawProvider: Decodable {
+        let providerID: Int?
+        let providerName: String?
+        let displayPriority: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case providerID = "provider_id"
+            case providerName = "provider_name"
+            case displayPriority = "display_priority"
+        }
+    }
+}

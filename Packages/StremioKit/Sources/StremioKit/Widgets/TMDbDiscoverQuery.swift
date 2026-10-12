@@ -1,0 +1,284 @@
+import Foundation
+
+/// A list TMDb builds from filters, such as "series, trending this week, animation": the source of a discover widget.
+public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
+    public enum Kind: String, Sendable, Codable, CaseIterable {
+        case movie, series
+
+        /// The plural name shown for the kind, such as "Movies".
+        public var title: String {
+            switch self {
+            case .movie: return "Movies"
+            case .series: return "Series"
+            }
+        }
+
+        /// The singular name used inside a title, such as "movie".
+        public var noun: String {
+            switch self {
+            case .movie: return "movie"
+            case .series: return "series"
+            }
+        }
+    }
+
+    public enum Ordering: String, Sendable, Codable, CaseIterable {
+        case popular, trendingToday, trendingThisWeek, newest, oldest
+
+        /// The name shown for the ordering, such as "Trending Today".
+        public var title: String {
+            switch self {
+            case .popular: return "Popular"
+            case .trendingToday: return "Trending Today"
+            case .trendingThisWeek: return "Trending This Week"
+            case .newest: return "Newest"
+            case .oldest: return "Oldest"
+            }
+        }
+    }
+
+    /// A window of release dates that moves with today's date.
+    public enum Period: String, Sendable, Codable, CaseIterable {
+        case lastMonth, last3Months, thisYear, lastYear, last5Years, last10Years
+
+        /// The name shown for the period, such as "Last 3 Months".
+        public var title: String {
+            switch self {
+            case .lastMonth: return "Last Month"
+            case .last3Months: return "Last 3 Months"
+            case .thisYear: return "This Year"
+            case .lastYear: return "Last Year"
+            case .last5Years: return "Last 5 Years"
+            case .last10Years: return "Last 10 Years"
+            }
+        }
+    }
+
+    /// Something TMDb names by a number: a genre, keyword, person, company or watch provider. The name is kept for display.
+    public struct Named: Sendable, Codable, Equatable, Hashable, Identifiable {
+        public var id: Int
+        public var name: String
+
+        public init(id: Int, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    /// One filter of a query, for asking whether the query can use it and whether it is set.
+    public enum Filter: String, Sendable, CaseIterable {
+        case period, genres, keywords, excludedKeywords, score, votes, language, runtime, release, providers, region, cast, crew, companies
+    }
+
+    public var kind: Kind
+    public var ordering: Ordering
+    public var period: Period?
+    public var genres: [Named]
+    public var keywords: [Named]
+    public var excludedKeywords: [Named]
+    /// TMDb's community score, 0 to 10.
+    public var minimumScore: Double?
+    public var maximumScore: Double?
+    public var minimumVotes: Int?
+    /// The original language as an ISO 639-1 code, such as "ja".
+    public var language: String?
+    /// Minutes.
+    public var minimumRuntime: Int?
+    public var maximumRuntime: Int?
+    /// Release dates as "yyyy-MM-dd". They take the place of `period` when either is set.
+    public var releasedFrom: String?
+    public var releasedTo: String?
+    public var providers: [Named]
+    /// The country the watch providers are looked up in, as an uppercase ISO 3166-1 code such as "IE". Nil uses the device's region.
+    public var region: String?
+    public var cast: [Named]
+    public var crew: [Named]
+    public var companies: [Named]
+
+    public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],
+                excludedKeywords: [Named] = [], minimumScore: Double? = nil, maximumScore: Double? = nil, minimumVotes: Int? = nil,
+                language: String? = nil, minimumRuntime: Int? = nil, maximumRuntime: Int? = nil, releasedFrom: String? = nil,
+                releasedTo: String? = nil, providers: [Named] = [], region: String? = nil, cast: [Named] = [], crew: [Named] = [],
+                companies: [Named] = []) {
+        self.kind = kind
+        self.ordering = ordering
+        self.period = period
+        self.genres = genres
+        self.keywords = keywords
+        self.excludedKeywords = excludedKeywords
+        self.minimumScore = minimumScore
+        self.maximumScore = maximumScore
+        self.minimumVotes = minimumVotes
+        self.language = language
+        self.minimumRuntime = minimumRuntime
+        self.maximumRuntime = maximumRuntime
+        self.releasedFrom = releasedFrom
+        self.releasedTo = releasedTo
+        self.providers = providers
+        self.region = region
+        self.cast = cast
+        self.crew = crew
+        self.companies = companies
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, ordering, period, genres, keywords, excludedKeywords, minimumScore, maximumScore, minimumVotes, language
+        case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies
+    }
+
+    /// Every key is optional. An unknown `kind`, `ordering` or `period` falls back to its default, so a file from another version still
+    /// decodes.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            kind: (try? container.decodeIfPresent(String.self, forKey: .kind)).flatMap { Kind(rawValue: $0) } ?? .movie,
+            ordering: (try? container.decodeIfPresent(String.self, forKey: .ordering)).flatMap { Ordering(rawValue: $0) } ?? .popular,
+            period: (try? container.decodeIfPresent(String.self, forKey: .period)).flatMap { Period(rawValue: $0) },
+            genres: try container.decodeIfPresent([Named].self, forKey: .genres) ?? [],
+            keywords: try container.decodeIfPresent([Named].self, forKey: .keywords) ?? [],
+            excludedKeywords: try container.decodeIfPresent([Named].self, forKey: .excludedKeywords) ?? [],
+            minimumScore: try container.decodeIfPresent(Double.self, forKey: .minimumScore),
+            maximumScore: try container.decodeIfPresent(Double.self, forKey: .maximumScore),
+            minimumVotes: try container.decodeIfPresent(Int.self, forKey: .minimumVotes),
+            language: try container.decodeIfPresent(String.self, forKey: .language),
+            minimumRuntime: try container.decodeIfPresent(Int.self, forKey: .minimumRuntime),
+            maximumRuntime: try container.decodeIfPresent(Int.self, forKey: .maximumRuntime),
+            releasedFrom: try container.decodeIfPresent(String.self, forKey: .releasedFrom),
+            releasedTo: try container.decodeIfPresent(String.self, forKey: .releasedTo),
+            providers: try container.decodeIfPresent([Named].self, forKey: .providers) ?? [],
+            region: try container.decodeIfPresent(String.self, forKey: .region),
+            cast: try container.decodeIfPresent([Named].self, forKey: .cast) ?? [],
+            crew: try container.decodeIfPresent([Named].self, forKey: .crew) ?? [],
+            companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [])
+    }
+
+    /// True when the ordering is one of TMDb's trending lists, which take no filters of their own.
+    public var isTrending: Bool {
+        ordering == .trendingToday || ordering == .trendingThisWeek
+    }
+
+    /// Whether the query can use a filter. A trending list takes only a few filters, which the app applies to TMDb's answer itself.
+    public func supports(_ filter: Filter) -> Bool {
+        if isTrending {
+            return [.period, .genres, .score, .votes, .language, .release].contains(filter)
+        }
+        switch filter {
+        case .cast, .crew: return kind == .movie
+        case .region: return supports(.providers)
+        default: return true
+        }
+    }
+
+    /// Whether a filter has a value: a period, a list with names, a score or vote bound, a language, a runtime or release bound, or a
+    /// region.
+    public func isSet(_ filter: Filter) -> Bool {
+        switch filter {
+        case .period: return period != nil
+        case .genres: return !genres.isEmpty
+        case .keywords: return !keywords.isEmpty
+        case .excludedKeywords: return !excludedKeywords.isEmpty
+        case .score: return minimumScore != nil || maximumScore != nil
+        case .votes: return minimumVotes != nil
+        case .language: return language != nil
+        case .runtime: return minimumRuntime != nil || maximumRuntime != nil
+        case .release: return releasedFrom != nil || releasedTo != nil
+        case .providers: return !providers.isEmpty
+        case .region: return region != nil
+        case .cast: return !cast.isEmpty
+        case .crew: return !crew.isEmpty
+        case .companies: return !companies.isEmpty
+        }
+    }
+
+    /// Sets a filter back to its default. The score, runtime and release filters each clear both of their bounds.
+    public mutating func clear(_ filter: Filter) {
+        switch filter {
+        case .period: period = nil
+        case .genres: genres = []
+        case .keywords: keywords = []
+        case .excludedKeywords: excludedKeywords = []
+        case .score:
+            minimumScore = nil
+            maximumScore = nil
+        case .votes: minimumVotes = nil
+        case .language: language = nil
+        case .runtime:
+            minimumRuntime = nil
+            maximumRuntime = nil
+        case .release:
+            releasedFrom = nil
+            releasedTo = nil
+        case .providers: providers = []
+        case .region: region = nil
+        case .cast: cast = []
+        case .crew: crew = []
+        case .companies: companies = []
+        }
+    }
+
+    /// A copy with every filter the query does not support cleared.
+    public func removingUnsupportedFilters() -> TMDbDiscoverQuery {
+        var copy = self
+        for filter in Filter.allCases where !supports(filter) {
+            copy.clear(filter)
+        }
+        return copy
+    }
+
+    /// The name a widget gets unless the user types one: the ordering, then the first genre, then the kind, such as "Newest Animation
+    /// Movies". A trending list reads the other way round: "Trending Animation Series This Week".
+    public var title: String {
+        let genre = genres.first?.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = [genre?.isEmpty == false ? genre : nil, kind.title].compactMap { $0 }.joined(separator: " ")
+        switch ordering {
+        case .trendingToday: return "Trending \(subject) Today"
+        case .trendingThisWeek: return "Trending \(subject) This Week"
+        case .popular, .newest, .oldest: return "\(ordering.title) \(subject)"
+        }
+    }
+
+    /// A line for lists of widgets: "TMDB · Popular Movies", with " · 2 filters" added when filters other than genres are set.
+    public var summary: String {
+        let others = Filter.allCases.filter { $0 != .genres && isSet($0) }.count
+        let filters = others == 0 ? "" : " · \(others) filter\(others == 1 ? "" : "s")"
+        return "TMDB · \(title)\(filters)"
+    }
+
+    /// The release dates as "yyyy-MM-dd" strings in the calendar's time zone, either bound nil when open. Explicit dates win over the
+    /// period; with neither, the newest ordering stops at today so titles not yet out are left out.
+    public func dateRange(today: Date, calendar: Calendar) -> (from: String?, to: String?) {
+        if releasedFrom != nil || releasedTo != nil { return (releasedFrom, releasedTo) }
+        let todayText = Self.isoDate(today, calendar: calendar)
+        guard let period else { return ordering == .newest ? (nil, todayText) : (nil, nil) }
+        let year = calendar.component(.year, from: today)
+        switch period {
+        case .lastMonth:
+            return (Self.isoDate(calendar.date(byAdding: .day, value: -30, to: today) ?? today, calendar: calendar), todayText)
+        case .last3Months:
+            return (Self.isoDate(calendar.date(byAdding: .day, value: -90, to: today) ?? today, calendar: calendar), todayText)
+        case .thisYear:
+            return (Self.yearStart(year), todayText)
+        case .lastYear:
+            return (Self.yearStart(year - 1), "\(Self.padded(year - 1, 4))-12-31")
+        case .last5Years:
+            return (Self.isoDate(calendar.date(byAdding: .year, value: -5, to: today) ?? today, calendar: calendar), todayText)
+        case .last10Years:
+            return (Self.isoDate(calendar.date(byAdding: .year, value: -10, to: today) ?? today, calendar: calendar), todayText)
+        }
+    }
+
+    /// The date as "yyyy-MM-dd", zero-padded, read from the calendar's components.
+    private static func isoDate(_ date: Date, calendar: Calendar) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(padded(parts.year ?? 0, 4))-\(padded(parts.month ?? 0, 2))-\(padded(parts.day ?? 0, 2))"
+    }
+
+    private static func yearStart(_ year: Int) -> String {
+        "\(padded(year, 4))-01-01"
+    }
+
+    private static func padded(_ value: Int, _ width: Int) -> String {
+        let digits = String(value)
+        return String(repeating: "0", count: max(width - digits.count, 0)) + digits
+    }
+}

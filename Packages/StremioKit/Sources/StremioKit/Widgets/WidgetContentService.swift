@@ -8,6 +8,8 @@ public enum WidgetSourceError: Error, Equatable, Sendable {
     case needsTraktClientID
     /// One of the user's private Trakt lists, but they are not signed in to Trakt.
     case needsTraktSignIn
+    /// A TMDb discover list, but no TMDb Read Access Token is set in Settings.
+    case needsTMDbToken
     case unsupported(kind: String)
     /// The request itself failed.
     case addon(AddonError)
@@ -18,6 +20,7 @@ public enum WidgetSourceError: Error, Equatable, Sendable {
         case .addonMissing(nil): return "The addon for this row isn't installed or is turned off."
         case .needsTraktClientID: return "Add a Trakt client ID in Settings to show Trakt lists."
         case .needsTraktSignIn: return "Sign in to Trakt to show this private list."
+        case .needsTMDbToken: return "Add a TMDB Read Access Token in Settings to show this row."
         case .unsupported: return "Blusion can't show this kind of row yet."
         case .addon(let error): return "The addon couldn't load this row: \(error.shortDescription.lowercased())."
         }
@@ -34,11 +37,14 @@ public final class WidgetContentService: Sendable {
     private let account: TraktAccount?
     private let snapshots: (any WidgetSnapshotStore)?
     private let now: @Sendable () -> Date
+    /// The country TMDb watch providers are looked up in when a discover list names none.
+    private let region: @Sendable () -> String
     private let cache = WidgetItemCache()
 
     public init(registry: AddonRegistry, client: AddonClient, settings: any SettingsStore,
                 trakt: TraktClient? = nil, account: TraktAccount? = nil, snapshots: (any WidgetSnapshotStore)? = nil,
-                now: @escaping @Sendable () -> Date = { Date() }) {
+                now: @escaping @Sendable () -> Date = { Date() },
+                region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }) {
         self.registry = registry
         self.client = client
         self.settings = settings
@@ -46,6 +52,7 @@ public final class WidgetContentService: Sendable {
         self.trakt = trakt ?? TraktClient(client: client, account: account)
         self.snapshots = snapshots
         self.now = now
+        self.region = region
     }
 
     /// Items of one source. Addon pages share display limits; Trakt pages keep their server limit.
@@ -121,6 +128,8 @@ public final class WidgetContentService: Sendable {
             return await account?.isSignedIn() == true ? nil : .needsTraktSignIn
         case .traktFeed:
             return nil
+        case .tmdbDiscover:
+            return await tmdbReadToken() == nil ? .needsTMDbToken : nil
         case .unsupported(let kind):
             return .unsupported(kind: kind)
         }
@@ -173,6 +182,14 @@ public final class WidgetContentService: Sendable {
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }
+        case .tmdbDiscover(let query):
+            guard let token = await tmdbReadToken() else { throw WidgetSourceError.needsTMDbToken }
+            do {
+                return try await TMDbRatings(client: client, readAccessToken: token)
+                    .discoverItems(query, limit: limit, skip: skip, defaultRegion: region(), today: now())
+            } catch {
+                throw WidgetSourceError.addon(AddonError.from(error))
+            }
         case .unsupported(let kind):
             throw WidgetSourceError.unsupported(kind: kind)
         }
@@ -181,6 +198,12 @@ public final class WidgetContentService: Sendable {
     /// The Trakt API key: the client ID in Settings, else Blusion's own.
     private func traktClientID() async -> String {
         await TraktClient.clientID(in: settings)
+    }
+
+    /// The TMDb Read Access Token in Settings, trimmed; nil when none is set.
+    private func tmdbReadToken() async -> String? {
+        let token = await settings.load().tmdbReadToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token?.isEmpty == false ? token : nil
     }
 
     private static func interleave(_ lists: [[MetaPreview]], limit: Int) -> [MetaPreview] {
