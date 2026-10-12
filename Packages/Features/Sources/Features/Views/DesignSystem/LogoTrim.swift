@@ -60,19 +60,27 @@ enum LogoTrim {
             return true
         }
         guard drawn else { return none }
-        return thresholds.map { threshold in
-            var minX = width, maxX = -1, minY = height, maxY = -1
-            for y in 0..<height {
-                let row = y * width
-                for x in 0..<width where pixels[row + x] > threshold {
-                    if x < minX { minX = x }
-                    if x > maxX { maxX = x }
-                    if y < minY { minY = y }
-                    maxY = y
+        // One pass over the pixels grows every threshold's box at once.
+        let count = thresholds.count
+        var minX = [Int](repeating: width, count: count), maxX = [Int](repeating: -1, count: count)
+        var minY = [Int](repeating: height, count: count), maxY = [Int](repeating: -1, count: count)
+        let lowest = thresholds.min() ?? 0
+        for y in 0..<height {
+            let row = y * width
+            for x in 0..<width {
+                let alpha = pixels[row + x]
+                guard alpha > lowest else { continue }
+                for i in 0..<count where alpha > thresholds[i] {
+                    if x < minX[i] { minX[i] = x }
+                    if x > maxX[i] { maxX[i] = x }
+                    if y < minY[i] { minY[i] = y }
+                    maxY[i] = y
                 }
             }
-            guard maxX >= minX, maxY >= minY else { return nil }
-            return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        }
+        return (0..<count).map { i in
+            guard maxX[i] >= minX[i], maxY[i] >= minY[i] else { return nil }
+            return CGRect(x: minX[i], y: minY[i], width: maxX[i] - minX[i] + 1, height: maxY[i] - minY[i] + 1)
         }
     }
 }
