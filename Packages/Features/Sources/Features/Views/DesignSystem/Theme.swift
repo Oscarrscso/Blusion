@@ -137,7 +137,16 @@ private struct ScreenBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.background { Theme.background.ignoresSafeArea() }
             .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
-            .toolbarBackgroundVisibility(isPhoneLandscape ? .hidden : .automatic, for: .navigationBar)
+            .toolbarBackgroundVisibility(isPhoneLandscape || Self.isMacCatalyst ? .hidden : .automatic, for: .navigationBar)
+    }
+
+    /// On Mac every page's top bar is clear, so its sidebar toggle and back button sit over the page the same way on each.
+    private static var isMacCatalyst: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return false
+        #endif
     }
 }
 
