@@ -19,13 +19,16 @@ struct ArtworkImage: View {
     let acceptsAnyCachedSize: Bool
     /// Told whether the picture on show is the fallback, so the caller can draw what the first choice would have carried itself.
     let usesFallback: Binding<Bool>?
-    /// True when `fallbackURL` is the picture the card already shows and `url` is its upgrade (a BetterPosters picture): a decoded copy of
-    /// the fallback, at any size, stands in from the first frame, so no placeholder shows between the two.
-    let standsInWhileLoading: Bool
+    /// True for a card's poster. The picture it replaces stays opaque under the new one while that fades in, so no placeholder shows
+    /// through. With `fallbackURL` (a BetterPosters picture over the usual poster), a decoded copy of the fallback, at any size, stands in
+    /// from the first frame.
+    let keepsPictureOnShow: Bool
 
     @State private var image: UIImage?
     /// The picture `image` replaced, held opaque under it while the new one fades in, so no placeholder shows through (see `show`).
     @State private var beneath: UIImage?
+    /// Counts the pictures shown, so a fade that a newer one has overtaken knows not to clear what it left beneath.
+    @State private var fadeCount = 0
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
     @State private var imageURL: URL?
     @State private var placeholderImage: UIImage?
@@ -34,7 +37,7 @@ struct ArtworkImage: View {
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
          placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, fallbackURL: URL? = nil, imageAlignment: Alignment = .center,
-         acceptsAnyCachedSize: Bool = false, usesFallback: Binding<Bool>? = nil, standsInWhileLoading: Bool = false) {
+         acceptsAnyCachedSize: Bool = false, usesFallback: Binding<Bool>? = nil, keepsPictureOnShow: Bool = false) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
@@ -45,7 +48,7 @@ struct ArtworkImage: View {
         self.imageAlignment = imageAlignment
         self.acceptsAnyCachedSize = acceptsAnyCachedSize
         self.usesFallback = usesFallback
-        self.standsInWhileLoading = standsInWhileLoading
+        self.keepsPictureOnShow = keepsPictureOnShow
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
         var cached = url.flatMap { Self.cachedPicture($0, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) }
         var fellBack = false
@@ -58,7 +61,7 @@ struct ArtworkImage: View {
                 fellBack = cached != nil
                 shownURL = cached == nil ? nil : url
             }
-            if cached == nil, standsInWhileLoading {
+            if cached == nil, keepsPictureOnShow {
                 cached = ImagePipeline.shared.cachedImageAtAnySize(for: fallbackURL)
                 fellBack = cached != nil
             }
@@ -129,13 +132,14 @@ struct ArtworkImage: View {
     private func load() async {
         guard let url else {
             image = nil
+            beneath = nil
             imageURL = nil
             showsFallback = false
             return
         }
         if imageURL == url, image != nil { return }
         // The picture on show is still the fallback while `url` loads over it, so the caller keeps drawing what the fallback lacks.
-        if standsInWhileLoading, image != nil, let fallbackURL, imageURL == fallbackURL { showsFallback = true }
+        if keepsPictureOnShow, image != nil, let fallbackURL, imageURL == fallbackURL { showsFallback = true }
         if let cached = Self.cachedPicture(url, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) {
             await show(cached, url: url, fellBack: false)
             return
@@ -145,20 +149,25 @@ struct ArtworkImage: View {
         await show(loaded.image, url: url, fellBack: loaded.isFallback)
     }
 
-    /// Fades `picture` in over the one on show. For a stand-in, the one on show stays opaque beneath until the fade is over, so the
-    /// placeholder never shows through: a BetterPosters picture replacing the usual poster goes straight from one poster to the other.
+    /// Fades `picture` in over the one on show. For a poster, the one on show stays opaque beneath until the fade is over, so the
+    /// placeholder never shows through: a BetterPosters picture replacing the usual poster, or the reverse, goes straight from one to the other.
     private func show(_ picture: UIImage, url: URL, fellBack: Bool) async {
         let duration = placeholderURL == nil ? 0.35 : 0.15
-        if standsInWhileLoading, image != nil { beneath = image }
+        let previous = image
+        fadeCount += 1
+        let fade = fadeCount
+        beneath = keepsPictureOnShow ? previous : nil
         withAnimation(.easeInOut(duration: duration)) {
             image = picture
             imageURL = url
             placeholderImage = nil
             showsFallback = fellBack
         }
-        guard beneath != nil else { return }
-        try? await Task.sleep(for: .seconds(duration + 0.05))
-        beneath = nil
+        guard keepsPictureOnShow, previous != nil else { return }
+        // A cancelled fade leaves `beneath` under an opaque picture until the next change replaces it.
+        do { try await Task.sleep(for: .seconds(duration + 0.05)) } catch { return }
+        // Only the latest fade clears `beneath`, so an older one cannot clear it while a newer one still fades.
+        if fadeCount == fade { beneath = nil }
     }
 
     /// The decoded picture of `url` at this view's size, or, for a stand-in, at any size.

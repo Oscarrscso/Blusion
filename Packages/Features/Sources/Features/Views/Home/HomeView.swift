@@ -203,8 +203,7 @@ struct HomeView: View {
         case .banner(let row):
             HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
         case .row(let row):
-            WidgetRow(section: section, row: row, onRetry: { retry(section) },
-                      onSetBetterPosters: { on in Task { await model.setBetterPosters(on, sectionID: section.id) } })
+            WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section))
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
@@ -217,6 +216,12 @@ struct HomeView: View {
 
     private var continueRow: some View {
         ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue)
+    }
+
+    /// The Better Posters menu of a row, offered only once the layout is saved: the automatic layout is not saved by a change.
+    private func betterPostersSetter(for section: HomeViewModel.Section) -> ((Bool) -> Void)? {
+        guard model.isCustomised else { return nil }
+        return { on in Task { await model.setBetterPosters(on, sectionID: section.id) } }
     }
 
     private func refreshPlayback() { Task { await model.refreshContinueWatching(force: true) } }

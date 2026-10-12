@@ -153,6 +153,19 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(saved?.first?.content == model.sections[0].widget.content, "the change is saved")
     }
 
+    @Test func betterPostersDoNotSaveTheAutomaticLayout() async throws {
+        let appServices = try await services([cinemeta], transport: answering())
+        let model = HomeViewModel(services: appServices)
+        await model.load()
+        let row = try #require(model.sections.first(where: { $0.id == "auto.row.test.cinemeta.movie.top" }))
+
+        await model.setBetterPosters(true, sectionID: row.id)
+
+        #expect(!model.isCustomised, "the automatic layout stays automatic")
+        let saved = await appServices.widgets.load()
+        #expect(saved == nil, "nothing is saved, so the layout keeps following the addons")
+    }
+
     @Test func aSavedListWithNothingInItIsReadyAndEmpty() async throws {
         let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: []))
         await model.load()

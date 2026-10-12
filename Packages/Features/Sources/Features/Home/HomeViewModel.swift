@@ -102,9 +102,10 @@ public final class HomeViewModel {
         apply(result)
     }
 
-    /// Turns Better Posters on or off for a poster row and saves the layout. The row keeps its items: only its cards change.
+    /// Turns Better Posters on or off for a poster row and saves the layout. The row keeps its items: only its cards change. Only a saved
+    /// layout can change this way. Saving the automatic layout would stop it following the addons, so nothing is saved for it.
     public func setBetterPosters(_ on: Bool, sectionID: String) async {
-        guard let index = sections.firstIndex(where: { $0.id == sectionID }),
+        guard isCustomised, let index = sections.firstIndex(where: { $0.id == sectionID }),
               case .row(var row) = sections[index].widget.content,
               row.presentation.aspectRatio == .poster, row.presentation.usesBetterPosters != on else { return }
         row.presentation.usesBetterPosters = on

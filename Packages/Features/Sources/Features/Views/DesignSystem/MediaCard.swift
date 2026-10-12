@@ -197,7 +197,7 @@ struct MediaCard: View {
                     // until the other one has loaded: the usual poster stays while the BetterPosters picture loads, and no placeholder shows.
                     ArtworkImage(url: betterPosterURL ?? artworkURL, title: item.name, maxPixelSize: pixelSize,
                                  fallbackURL: betterPosterURL == nil ? nil : artworkURL, usesFallback: $posterFellBack,
-                                 standsInWhileLoading: betterPosterURL != nil)
+                                 keepsPictureOnShow: aspect == .poster)
                 }
             }
             .overlay(alignment: .bottom) {

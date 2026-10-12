@@ -28,8 +28,8 @@ struct WidgetRow: View {
     let section: HomeViewModel.Section
     let row: RowConfiguration
     let onRetry: () -> Void
-    /// Turns Better Posters on or off for this row, from its menu.
-    let onSetBetterPosters: (Bool) -> Void
+    /// Turns Better Posters on or off for this row, from its menu. Nil when the layout is automatic, where the menu offers nothing.
+    let onSetBetterPosters: ((Bool) -> Void)?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
@@ -54,7 +54,7 @@ struct WidgetRow: View {
             }
             // Long-pressing a poster row's shelf (its title or the space around the cards) offers the row's posters setting. A card keeps its own menu.
             .contextMenu {
-                if presentation.aspectRatio == .poster {
+                if presentation.aspectRatio == .poster, let onSetBetterPosters {
                     Toggle("Better Posters", isOn: Binding(get: { presentation.usesBetterPosters }, set: onSetBetterPosters))
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
                 }
