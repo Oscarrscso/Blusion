@@ -43,6 +43,7 @@ public final class PlayerViewModel {
     private var timeline: SubtitleTimeline?
     private var lastInteraction: Date
     private var userChoseSubtitle = false
+    private var subtitleGeneration = 0
     private var subtitleTask: Task<Void, Never>?
 
     public init(plan: PlaybackPlan, services: AppServices, now: @escaping @Sendable () -> Date = Date.init) {
@@ -206,6 +207,9 @@ public final class PlayerViewModel {
     }
 
     private func apply(_ choice: SubtitleChoice) async {
+        // Each choice supersedes a subtitle load still in flight, so a load that returns late is dropped instead of overwriting the choice made since.
+        subtitleGeneration += 1
+        let generation = subtitleGeneration
         switch choice {
         case .off:
             timeline = nil
@@ -223,11 +227,12 @@ public final class PlayerViewModel {
             subtitleStatus = "Loading subtitles…"
             do {
                 let loaded = try await services.subtitles.load(option)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, generation == subtitleGeneration else { return }
                 timeline = loaded
                 subtitleStatus = nil
                 subtitleChoice = .external(id)
             } catch {
+                guard generation == subtitleGeneration else { return }
                 timeline = nil
                 subtitleStatus = "Couldn't load these subtitles."
                 subtitleChoice = .off
