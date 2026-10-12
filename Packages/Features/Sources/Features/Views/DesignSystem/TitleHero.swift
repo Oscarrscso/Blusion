@@ -323,22 +323,31 @@ struct HeroPicture: View {
     var alignment: Alignment = TitleHero.imageAlignment
     /// The title whose poster stands in until the picture is revealed. A title with no poster and no IMDb id draws no stand-in.
     let preview: MetaPreview
+    /// Whether the stand-in may only be a backdrop, never a poster, and no poster fallback is loaded for it (the Mac title page).
+    let standInFromBackdrop: Bool
     /// The stand-in's address, chosen once when the page opens (see `standInURL(for:)`).
     @State private var standIn: URL?
 
-    init(slot: HeroSlot, isRevealed: Bool, contentMode: ContentMode, alignment: Alignment = TitleHero.imageAlignment, preview: MetaPreview) {
+    init(slot: HeroSlot, isRevealed: Bool, contentMode: ContentMode, alignment: Alignment = TitleHero.imageAlignment, preview: MetaPreview,
+         standInFromBackdrop: Bool = false) {
         self.slot = slot
         self.isRevealed = isRevealed
         self.contentMode = contentMode
         self.alignment = alignment
         self.preview = preview
-        _standIn = State(initialValue: Self.standInURL(for: preview))
+        self.standInFromBackdrop = standInFromBackdrop
+        _standIn = State(initialValue: Self.standInURL(for: preview, backdropOnly: standInFromBackdrop))
     }
 
     /// The picture that stands in for `preview`: its card poster, or, when that is not decoded and another picture of the title is (the
     /// backdrop a wide card or a turned phone showed), that one. Whatever the card that opened this page was showing is then on screen in
-    /// the first frame, and nothing is loaded again for it.
-    private static func standInURL(for preview: MetaPreview) -> URL? {
+    /// the first frame, and nothing is loaded again for it. With `backdropOnly`, a page that lays out full width (the Mac title page) only
+    /// ever stands in with a backdrop, never a cropped poster.
+    private static func standInURL(for preview: MetaPreview, backdropOnly: Bool = false) -> URL? {
+        if backdropOnly {
+            let backdrops = [preview.background, MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
+            return backdrops.first { ImagePipeline.shared.cachedImageAtAnySize(for: $0) != nil } ?? backdrops.first
+        }
         let poster = PosterQuality.poster(for: preview)
         let shown = [poster, BetterPosters.posterURL(id: preview.id, type: preview.type), preview.background,
                      MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
@@ -356,7 +365,8 @@ struct HeroPicture: View {
                 // Stays fully opaque while the picture fades in over it (the reveal lasts 0.25 s), then goes unseen. With no picture to
                 // reveal it goes as it did, with a fade.
                 ArtworkImage(url: standIn, maxPixelSize: TitleHero.placeholderPixelSize, contentMode: contentMode,
-                             placeholderBlur: 0, fallbackURL: PosterQuality.smallest(MetahubArtwork.poster(imdbID: preview.id)),
+                             placeholderBlur: 0,
+                             fallbackURL: standInFromBackdrop ? nil : PosterQuality.smallest(MetahubArtwork.poster(imdbID: preview.id)),
                              imageAlignment: alignment, acceptsAnyCachedSize: true)
                     .blur(radius: TitleHero.placeholderBlur, opaque: true)
                     .overlay {
@@ -382,7 +392,7 @@ struct HeroPicture: View {
         .clipped()
         .accessibilityHidden(true)
         // A view that is kept for another title chooses again.
-        .onChange(of: preview.identity) { standIn = Self.standInURL(for: preview) }
+        .onChange(of: preview.identity) { standIn = Self.standInURL(for: preview, backdropOnly: standInFromBackdrop) }
     }
 }
 
@@ -397,9 +407,11 @@ struct HeroTitleArt: View {
     let compact: Bool
     /// Draws nothing, not even the name, but keeps the logo's space, for a portrait picture that already carries the title.
     var hidden = false
+    /// The box a logo is fitted into, when a page sizes its own title; nil uses the page's standard sizes.
+    var logoBox: CGSize? = nil
 
     /// The tallest a logo can be on this page.
-    private var logoHeight: CGFloat { compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight }
+    private var logoHeight: CGFloat { logoBox?.height ?? (compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight) }
     /// Whether the slot has no logo: no URL once the lookup has finished, or a failed load.
     private var isNone: Bool {
         if case .none = slot { return true }
@@ -413,7 +425,8 @@ struct HeroTitleArt: View {
             if hidden {
                 Color.clear.frame(height: 0)
             } else if case .ready(let image) = slot {
-                LogoLayout(imageSize: image.size, maxWidth: compact ? TitleHero.landscapeLogoMaxWidth : .infinity, maxHeight: logoHeight) {
+                LogoLayout(imageSize: image.size, maxWidth: logoBox?.width ?? (compact ? TitleHero.landscapeLogoMaxWidth : .infinity),
+                           maxHeight: logoHeight) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()

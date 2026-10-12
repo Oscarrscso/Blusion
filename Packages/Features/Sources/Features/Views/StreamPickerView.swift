@@ -98,7 +98,12 @@ struct StreamPickerView: View {
             }
         }
         .frame(maxWidth: 760)
+        #if targetEnvironment(macCatalyst)
+        // Embedded in a title page the picker keeps the page's leading edge, so its rows line up with the page's text. Pushed, it centres.
+        .frame(maxWidth: .infinity, alignment: isEmbedded ? .leading : .center)
+        #else
         .frame(maxWidth: .infinity)
+        #endif
     }
 
     /// What the picker does once it is on screen: loading, the sheets and the alerts, and cleaning up when it leaves. The same whether

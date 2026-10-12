@@ -17,12 +17,20 @@ struct DetailActions: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
 
+    /// Whether the text and the actions lead. Beside the artwork on iPhone in landscape; always on the Mac, whose title page sets them over
+    /// the picture's left edge.
+    #if targetEnvironment(macCatalyst)
+    private var leadsText: Bool { true }
+    #else
+    private var leadsText: Bool { isLandscape }
+    #endif
+
     var body: some View {
-        VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
+        VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
             MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
-                .multilineTextAlignment(isLandscape ? .leading : .center)
+                .multilineTextAlignment(leadsText ? .leading : .center)
             if showsActions {
-                VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
+                VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
                     actionRow
                     if model.isFallback && !model.isLoading {
                         Label("Only basic details are available for this title.", systemImage: "info.circle")
@@ -74,7 +82,12 @@ struct DetailActions: View {
         } else if model.isLoading {
             Capsule()
                 .fill(Theme.surfaceStrong)
+                #if targetEnvironment(macCatalyst)
+                // Play keeps its own width on the Mac, so the placeholder holds about the width a title's Play takes.
+                .frame(width: 200, height: CircleActionButton.diameter)
+                #else
                 .frame(height: CircleActionButton.diameter)
+                #endif
                 .shimmering()
                 .accessibilityHidden(true)
         }
@@ -115,11 +128,16 @@ struct DetailActions: View {
             primaryAction
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                #if targetEnvironment(macCatalyst)
+                // On the Mac, Play keeps its own width rather than stretching across the page.
+                .fixedSize()
+                #else
                 .frame(maxWidth: .infinity)
+                #endif
             secondaryActions
                 .layoutPriority(1)
         }
-        .frame(maxWidth: .infinity, alignment: isLandscape ? .leading : .center)
+        .frame(maxWidth: .infinity, alignment: leadsText ? .leading : .center)
     }
 
     private var secondaryActions: some View {

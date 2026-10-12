@@ -122,5 +122,5 @@ The checkpoint archive, original sources/briefs, screenshots, and current iPhone
 - Letterboxd ratings depend on its public page format and can be absent.
 - Infuse progress requires its callback; the app cannot infer a new stop position without one.
 - Supported Fusion imports retain supported sources; unsupported sources remain visible for replacement rather than being silently invented. The one exception: Fusion's `tmdbDiscover` lists come with no filters in their exports, so their filters are read from the widget's title (`TMDbTitleInference.swift`). The filters that were read show in the widget's details and stay editable in its editor.
-- Detail's Information block remains below the synopsis/episodes instead of a custom side-by-side Mac layout.
+- On Mac, Detail's Information block sits beside the synopsis at the top of the title page (`Detail/DesktopDetailHero.swift`) when the content width (the page less its margins) is at least 900 pt, and under the synopsis on a narrower one; on iPhone it stays below the cast. The Mac layout has not yet been built or run on a Catalyst build.
 - The streaming-server route, optional fallback engine, simulator UI journey, and real-device checklist need their own validation.

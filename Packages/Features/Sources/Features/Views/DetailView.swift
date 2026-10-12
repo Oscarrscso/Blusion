@@ -62,7 +62,7 @@ struct DetailView: View {
     /// leading corner with nothing behind it, so the page starts beside it rather than under it: the content keeps clear of the
     /// button's column, on both sides so it stays centred, and nothing scrolls beneath the button.
     private var contentMargin: CGFloat {
-        guard isLandscape else { return metrics.contentMargin }
+        guard showsBackdrop else { return metrics.contentMargin }
         #if targetEnvironment(macCatalyst)
         return max(sideInset, windowSideInset) + Self.backButtonColumn
         #else
@@ -102,6 +102,21 @@ struct DetailView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        #if targetEnvironment(macCatalyst)
+                        DesktopDetailHero(model: model, size: geometry.size, contentMargin: contentMargin, pictureSlot: pictureSlot,
+                                          logoSlot: logoSlot, isRevealed: isHeroRevealed, showsDetails: !showsStreams) {
+                            DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
+                                          showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
+                                          play: showStreams)
+                        } trailer: { width in
+                            DetailTrailerPanel(model: model, width: width)
+                        } synopsis: {
+                            DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
+                                           isTruncated: $isDescriptionTruncated, foldedLines: 5)
+                        } information: {
+                            DetailInformation(model: model)
+                        }
+                        #else
                         DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
                                    topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
                                    logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo,
@@ -115,6 +130,7 @@ struct DetailView: View {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated)
                         }
+                        #endif
                         if let request = pickedRequest {
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
                             // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
@@ -122,6 +138,10 @@ struct DetailView: View {
                             StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streamsAreReady,
                                              onClose: closeStreams, onReady: revealStreams)
                                 .id(request.id)
+                                #if targetEnvironment(macCatalyst)
+                                // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.
+                                .padding(.horizontal, max(0, contentMargin - Theme.Spacing.l))
+                                #endif
                                 .padding(.top, showsStreams ? metrics.titleRatingsGap : 0)
                                 // At least a screen tall, so the page is never shorter than where it was scrolled to when Play was
                                 // tapped: a page that became too short would jump back to its top.
@@ -201,12 +221,12 @@ struct DetailView: View {
         // The settle scales the whole visible page about the screen's centre; the background behind it stays put.
         .heroSettle(trigger: hasSettled)
         .screenBackground()
-        .ignoresSafeArea(.container, edges: isLandscape ? [] : .top)
+        .ignoresSafeArea(.container, edges: showsBackdrop ? [] : .top)
         .scrollEdgeEffectHidden(true, for: .top)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load(afterHero: { await loadHero() }) }
-        .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(isLandscape)") {
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(showsBackdrop)") {
             await loadHero()
         }
         // The Play button's stream lookup starts once the hero has settled, so it never delays the hero images.
@@ -273,14 +293,24 @@ struct DetailView: View {
         return min(fitting, max(160, size.height * 0.78) * 16 / 9)
     }
 
-    /// The main picture: the backdrop in landscape, the tall artwork in portrait. Nil until the artwork lookup answers; nothing is drawn for it until the picture and the logo are both ready.
-    private var heroURL: URL? { isLandscape ? model.backdropURL : model.portraitArtworkURL }
+    /// Whether the page shows the wide backdrop rather than the tall poster. The Mac page always lays out full width, so it always uses the
+    /// backdrop, whatever the window's shape; iPhone and iPad choose by orientation.
+    private var showsBackdrop: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return isLandscape
+        #endif
+    }
 
-    /// The longest edge the hero is decoded to: full screen in landscape, the smaller size shared with Home in portrait.
-    private var heroPixelSize: CGFloat { isLandscape ? TitleHero.landscapePixelSize : TitleHero.portraitPixelSize }
+    /// The main picture: the backdrop or the tall artwork, per `showsBackdrop`. Nil until the artwork lookup answers.
+    private var heroURL: URL? { showsBackdrop ? model.backdropURL : model.portraitArtworkURL }
+
+    /// The longest edge the hero is decoded to: full screen for the backdrop, the smaller size shared with Home in portrait.
+    private var heroPixelSize: CGFloat { showsBackdrop ? TitleHero.landscapePixelSize : TitleHero.portraitPixelSize }
 
     /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
-    private var hidesLogo: Bool { !isLandscape && model.portraitHidesLogo }
+    private var hidesLogo: Bool { !showsBackdrop && model.portraitHidesLogo }
     private var logoURL: URL? { hidesLogo ? nil : model.logoURL }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: !model.isLoadingArtwork) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: !model.isLoadingArtwork) }

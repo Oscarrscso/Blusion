@@ -3,8 +3,8 @@ import SwiftUI
 import StremioKit
 import UIKit
 
-/// The title's cast and crew, with photos from TMDb when it has them and the addon's plain names when it does not, then the information
-/// block.
+/// The title's cast and crew, with photos from TMDb when it has them and the addon's plain names when it does not. On iPhone the information
+/// block follows them; on Mac it sits at the top of the page instead.
 struct DetailCredits: View {
     let model: DetailViewModel
     let contentMargin: CGFloat
@@ -44,24 +44,12 @@ struct DetailCredits: View {
                     }
                 }
             }
-            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                SectionHeader("Information")
-                information("Released", model.detail.preview.releaseInfo)
-                information("Runtime", model.detail.preview.runtime)
-                information("Genres", model.detail.preview.genres.joined(separator: ", "))
-                information("Director", model.detail.director.joined(separator: ", "))
-                information("Writers", model.detail.writers.joined(separator: ", "))
-            }
-            .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-            .padding(.horizontal, contentMargin)
-        }
-    }
-
-    @ViewBuilder
-    private func information(_ title: String, _ value: String?) -> some View {
-        if let value, !value.isEmpty {
-            LabeledContent(title) { Text(value).foregroundStyle(.primary) }
-                .font(.footnote)
+            #if !targetEnvironment(macCatalyst)
+            // The Mac page shows its information beside the synopsis, at the top of the page (see DesktopDetailHero).
+            DetailInformation(model: model)
+                .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+                .padding(.horizontal, contentMargin)
+            #endif
         }
     }
 }
