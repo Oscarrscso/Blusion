@@ -19,6 +19,7 @@ struct HomeView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     @Environment(TitleActions.self) private var actions: TitleActions?
     init(services: AppServices) {
         _model = State(initialValue: HomeViewModel(services: services))
@@ -38,7 +39,7 @@ struct HomeView: View {
             .onGeometryChange(for: CGFloat.self) { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) } action: { sideInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackgroundVisibility(heroIsFirst || isLandscape ? .hidden : .automatic, for: .navigationBar)
+            .toolbarBackgroundVisibility(heroIsFirst || isPhoneLandscape ? .hidden : .automatic, for: .navigationBar)
             .task { await model.observeAddons() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
@@ -155,7 +156,7 @@ struct HomeView: View {
             .contentMargins(.top, 0, for: .scrollContent)
             .screenBackground()
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .scrollEdgeEffectHidden(heroIsFirst || isLandscape, for: .top)
+            .scrollEdgeEffectHidden(heroIsFirst || isPhoneLandscape, for: .top)
             .ignoresSafeArea(.container, edges: ignoredEdges)
             .onChange(of: router.spotlightRevision) { _, _ in
                 var transaction = Transaction(animation: nil)

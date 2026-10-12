@@ -112,6 +112,8 @@ struct LayoutMetrics: Equatable, Sendable {
 
 extension EnvironmentValues {
     @Entry var isLandscape = false
+    /// True only for a phone turned sideways. A Mac window is never a phone, so its bar and spotlight keep the portrait rules there.
+    @Entry var isPhoneLandscape = false
     /// Home supplies the full viewport height, including insets, so scrolling bars cannot resize the hero.
     @Entry var heroContainerHeight: CGFloat = 800
     /// Home supplies its width too, so the portrait spotlight is the same height as the title page's picture.

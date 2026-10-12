@@ -46,7 +46,9 @@ extension EnvironmentValues {
 struct HeroCarousel: View {
     let items: [MetaPreview]
     @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    /// The landscape form: a phone turned sideways, or any Mac window.
+    private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
     @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isHomeScrolling) private var isHomeScrolling
@@ -61,6 +63,15 @@ struct HeroCarousel: View {
     /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
     /// range.
     static func loadWindow(isLandscape: Bool) -> Int { isLandscape ? 2 : 4 }
+
+    /// True on a Mac build. The spotlight keeps its landscape form in every window shape there, rather than following the window's aspect.
+    static var isMacCatalyst: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return false
+        #endif
+    }
 
     private var currentIndex: Int {
         items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
@@ -158,7 +169,9 @@ struct HeroCarousel: View {
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
     @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    /// The landscape form: a phone turned sideways, or any Mac window.
+    private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
     @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.heroContainerWidth) private var containerWidth
     var body: some View {
@@ -185,7 +198,9 @@ private struct HeroPage: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.heroContainerWidth) private var containerWidth
-    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    /// The landscape form: a phone turned sideways, or any Mac window.
+    private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
     @Environment(PosterRatingsStore.self) private var ratings
     /// The titles' fuller details, shared with the title page. Optional, so a preview without it still draws the item's own line.
     @Environment(HeroMetaStore.self) private var heroMeta: HeroMetaStore?
@@ -373,7 +388,8 @@ private struct HeroPage: View {
     private var artwork: some View {
         Color.clear
             .overlay {
-                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, preview: item)
+                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, preview: item,
+                            standInFromBackdrop: HeroCarousel.isMacCatalyst)
             }
     }
 

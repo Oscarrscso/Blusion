@@ -145,6 +145,15 @@ public struct RootTabView: View {
     @State private var titleActions: TitleActions
     @State private var isLandscape = false
     @State private var windowSafeArea = EdgeInsets()
+    /// A phone turned sideways. A Mac window is never a phone, so its navigation bar follows the portrait rule at any window shape.
+    private var isPhoneLandscape: Bool { isLandscape && !Self.isMacCatalyst }
+    private static var isMacCatalyst: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return false
+        #endif
+    }
 
     public init(services: AppServices, route: LaunchRoute = .home, addonLink: Binding<String?> = .constant(nil), userStateRevision: Int = 0) {
         self.services = services
@@ -240,8 +249,8 @@ public struct RootTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSearchActivation(.automatic)
-        .scrollEdgeEffectHidden(isLandscape, for: .top)
-        .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
+        .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
+        .toolbarBackgroundVisibility(isPhoneLandscape ? .hidden : .automatic, for: .navigationBar)
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(ResumeAccessoryModifier(model: resume))
         .task(id: "\(router.tab)-\(userStateRevision)") {
@@ -271,6 +280,7 @@ public struct RootTabView: View {
         .environment(services.heroMeta)
         .environment(titleActions)
         .environment(\.isLandscape, isLandscape)
+        .environment(\.isPhoneLandscape, isPhoneLandscape)
         .environment(\.windowSafeArea, windowSafeArea)
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .focusedSceneValue(router)

@@ -132,12 +132,12 @@ private struct MediaArtworkModifier: ViewModifier {
 }
 
 private struct ScreenBackgroundModifier: ViewModifier {
-    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
     func body(content: Content) -> some View {
         content.background { Theme.background.ignoresSafeArea() }
-            .scrollEdgeEffectHidden(isLandscape, for: .top)
-            .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
+            .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
+            .toolbarBackgroundVisibility(isPhoneLandscape ? .hidden : .automatic, for: .navigationBar)
     }
 }
 
