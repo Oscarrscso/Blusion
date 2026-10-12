@@ -104,9 +104,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
     }
 
-    /// The metadata line, the same text as iPhone's, set over the picture's left edge.
+    /// The metadata line, the same text as iPhone's, set over the picture's left edge. Like iPhone's, it drops genres before the rating.
     private var metaLine: some View {
-        MetaLine(model.heroMetaLine, identifier: "detail.metaLine", spreads: true)
+        MetaLine(model.heroMetaLine, genres: model.heroMetaGenres, identifier: "detail.metaLine", spreads: true)
     }
 
     /// The overview, cut to three lines and not expandable: its full text, and More, are in the details below the hero.

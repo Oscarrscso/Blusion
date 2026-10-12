@@ -57,4 +57,9 @@ public final class HeroMetaStore {
         return DetailViewModel.heroMetaParts(for: shown, certification: certification,
                                              imdbRating: ratings.ratings(for: shown, includeReviews: true, source: .imdb).imdb)
     }
+
+    /// The genres of the metadata line for a title, the same ones `parts` shows, for `MetaLine` to drop first when the line is too long.
+    public func genres(for item: MetaPreview) -> [String] {
+        DetailViewModel.heroMetaGenres(for: preview(for: item))
+    }
 }

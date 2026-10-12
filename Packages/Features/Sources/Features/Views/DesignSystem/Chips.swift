@@ -189,26 +189,38 @@ struct RatingBadge: View {
 }
 
 /// Dot-separated metadata such as "Drama · 2008 · 2 hr 32 min". Nil and empty parts are skipped, and it renders nothing when every
-/// part is skipped.
+/// part is skipped. It stays on one line: when the parts are too long for the width, genres go first, the last one first, so the rest
+/// (the rating above all) stays. Only when no genre is left does the line shrink to fit.
 struct MetaLine: View {
     /// The space kept on each side of a dot when the parts are spread, so a dot never touches the text beside it.
     private static let minimumGap: CGFloat = 4
     /// The fewest parts that are spread across the width. Fewer would leave wide gaps between them, so they are joined as usual.
     private static let minimumSpreadParts = 5
+    /// The most genres the line drops. A hero's line has two (see `DetailViewModel.heroMetaGenres`), so three variants cover it.
+    private static let maximumDroppedGenres = 2
+    /// The smallest scale the line shrinks to once no genre is left to drop, so it still fits a narrow width on one line.
+    private static let minimumShrink: CGFloat = 0.5
 
     private let parts: [String]
+    /// The genres among the parts, in order. They are the parts the line drops when it is too long.
+    private let genres: [String]
     /// The accessibility identifier of the line, for UI tests. Nil leaves it unset.
     private let identifier: String?
     /// True spreads the parts across the whole width the line is given, with the dots between them, so the line is as wide as what sits
-    /// under it. When the parts do not fit on one line that way, the line is drawn as usual.
+    /// under it. When the parts do not fit on one line that way, the line is joined as usual.
     private let spreads: Bool
 
-    init(_ parts: [String?], identifier: String? = nil, spreads: Bool = false) {
-        self.parts = parts
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    init(_ parts: [String?], genres: [String] = [], identifier: String? = nil, spreads: Bool = false) {
+        self.parts = Self.cleaned(parts)
+        self.genres = Self.cleaned(genres)
         self.identifier = identifier
         self.spreads = spreads
+    }
+
+    private static func cleaned(_ texts: [String?]) -> [String] {
+        texts
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     var body: some View {
@@ -226,32 +238,69 @@ struct MetaLine: View {
         }
     }
 
-    /// The parts as drawn: spread across the width when `spreads` is set and there are at least `minimumSpreadParts`, otherwise joined by dots
-    /// on one wrapped line.
+    /// The line as drawn: the first variant that fits the width it is given. The variants keep every genre, then drop one more each time,
+    /// the last genre first. The last variant has no genre left to drop, so it shrinks to fit rather than wrapping.
     @ViewBuilder
     private var partsLine: some View {
-        let joinedLine = Text(parts.joined(separator: " · "))
-            .fixedSize(horizontal: false, vertical: true)
-        if spreads && parts.count >= Self.minimumSpreadParts {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                        if index > 0 {
-                            Spacer(minLength: Self.minimumGap)
-                            Text("·")
-                            Spacer(minLength: Self.minimumGap)
-                        }
-                        Text(part)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                joinedLine
+        let droppable = min(genres.count, Self.maximumDroppedGenres)
+        ViewThatFits(in: .horizontal) {
+            variant(dropping: 0, shrinks: droppable == 0)
+            if droppable >= 1 {
+                variant(dropping: 1, shrinks: droppable == 1)
             }
-        } else {
-            joinedLine
+            if droppable >= 2 {
+                variant(dropping: 2, shrinks: droppable == 2)
+            }
         }
+    }
+
+    /// One variant: the parts with the last `count` genres left out, spread across the width when `spreads` is set and there are enough of
+    /// them, otherwise joined by dots. A shrinking variant is always joined, as a spread line cannot shrink.
+    @ViewBuilder
+    private func variant(dropping count: Int, shrinks: Bool) -> some View {
+        let shown = partsDropping(count)
+        if spreads && !shrinks && shown.count >= Self.minimumSpreadParts {
+            spread(shown)
+        } else {
+            joined(shown, shrinks: shrinks)
+        }
+    }
+
+    /// The parts without the last `count` genres. Each genre goes by its last occurrence, so a repeated name leaves one copy at a time,
+    /// and the line never drops its last part, so it is never left empty.
+    private func partsDropping(_ count: Int) -> [String] {
+        var shown = parts
+        for genre in genres.suffix(count) where shown.count > 1 {
+            if let index = shown.lastIndex(of: genre) {
+                shown.remove(at: index)
+            }
+        }
+        return shown
+    }
+
+    /// The parts spread across the width, with the dots between them.
+    private func spread(_ shown: [String]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Spacer(minLength: Self.minimumGap)
+                    Text("·")
+                    Spacer(minLength: Self.minimumGap)
+                }
+                Text(part)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// The parts joined by dots on one line. Measured at full width, so a variant too wide for the space is passed over. A shrinking one
+    /// is drawn smaller to fit instead.
+    private func joined(_ shown: [String], shrinks: Bool) -> some View {
+        Text(shown.joined(separator: " · "))
+            .lineLimit(1)
+            .minimumScaleFactor(shrinks ? Self.minimumShrink : 1)
     }
 }
 #endif

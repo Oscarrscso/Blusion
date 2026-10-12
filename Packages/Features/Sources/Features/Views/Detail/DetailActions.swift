@@ -29,11 +29,9 @@ struct DetailActions: View {
 
     var body: some View {
         VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
-            // In portrait the line sits under the hero's picture, so it stays one line: a long run of genres is cut short. Beside the
-            // artwork in landscape, or over the picture on a Mac, it may wrap.
+            // The line stays on one line wherever it sits: when it is too long, genres go before the rating does.
             if showsMetaLine {
-                MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
-                    .lineLimit(leadsText ? nil : 1)
+                MetaLine(metaParts, genres: metaGenres, identifier: "detail.metaLine", spreads: true)
                     .multilineTextAlignment(leadsText ? .leading : .center)
             }
             if showsActions {
@@ -54,6 +52,9 @@ struct DetailActions: View {
 
     /// The metadata line, the same text as the spotlight's. It sits above the actions.
     private var metaParts: [String?] { model.heroMetaLine }
+
+    /// The genres in the metadata line, which `MetaLine` drops first when the line is too long.
+    private var metaGenres: [String] { model.heroMetaGenres }
 
     /// The one main action. A movie plays itself; a series plays its next episode. While its streams load it shows a spinner, and a
     /// tap then calls them off. While a series' episodes are still arriving, a placeholder holds the place.

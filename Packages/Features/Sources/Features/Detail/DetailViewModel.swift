@@ -456,12 +456,23 @@ public final class DetailViewModel {
     /// stay nil and `MetaLine` leaves them out. The score is IMDb's own when the caller has it (`imdbRating`), else the catalog's.
     nonisolated public static func heroMetaParts(for preview: MetaPreview, certification: String?, imdbRating: Double? = nil) -> [String?] {
         let rating = (imdbRating ?? preview.imdbRating).map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
-        return [preview.releaseInfo] + preview.genres.prefix(2).map { Optional($0) } + [certification, preview.runtime, rating]
+        let genres = DetailViewModel.heroMetaGenres(for: preview).map { Optional($0) }
+        return [preview.releaseInfo] + genres + [certification, preview.runtime, rating]
+    }
+
+    /// The genres the metadata line shows: the first two. `MetaLine` drops these first when the line is too long for one line.
+    nonisolated public static func heroMetaGenres(for preview: MetaPreview) -> [String] {
+        Array(preview.genres.prefix(2))
     }
 
     /// The metadata line under the hero, built by the shared store exactly as Home's spotlight builds it (see `HeroMetaStore.parts`).
     public var heroMetaLine: [String?] {
         services.heroMeta.parts(for: preview, certification: certification, ratings: services.posterRatings)
+    }
+
+    /// The genres in the metadata line, the same ones `heroMetaLine` shows, for `MetaLine` to drop first when the line is too long.
+    public var heroMetaGenres: [String] {
+        services.heroMeta.genres(for: preview)
     }
 
     /// The title's trailers known without a tap, merged and ordered (see `TrailerCatalog`): the iTunes preview first when there is one,

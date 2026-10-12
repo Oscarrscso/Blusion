@@ -300,6 +300,12 @@ private struct HeroPage: View {
                                              imdbRating: ratings.ratings(for: item, includeReviews: true, source: .imdb).imdb)
     }
 
+    /// The genres in the metadata line, the same ones `metaParts` shows. `MetaLine` drops them first when the line is too long.
+    private var metaGenres: [String] {
+        if let heroMeta { return heroMeta.genres(for: item) }
+        return DetailViewModel.heroMetaGenres(for: item)
+    }
+
     /// The picture and logo this page shows now, for the title page it opens. A picture or logo still loading is left out.
     private var handoff: HeroHandoff {
         var picture: HeroHandoff.Resolved?
@@ -399,7 +405,7 @@ private struct HeroPage: View {
                 portraitTitle
                     .frame(height: artworkHeight + TitleHero.portraitDrop, alignment: .bottom)
                 // The metadata line is centred within the page's margins.
-                MetaLine(metaParts, identifier: "hero.metaLine", spreads: true)
+                MetaLine(metaParts, genres: metaGenres, identifier: "hero.metaLine", spreads: true)
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
@@ -453,7 +459,7 @@ private struct HeroPage: View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
-            MetaLine(metaParts, identifier: "hero.metaLine")
+            MetaLine(metaParts, genres: metaGenres, identifier: "hero.metaLine")
                 .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }

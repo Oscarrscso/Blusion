@@ -511,6 +511,14 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 7.0", "a whole rating keeps one decimal")
     }
 
+    @Test func heroMetaGenresAreTheOnesTheLineShows() {
+        let preview = MetaPreview(id: "tt0111161", type: "movie", name: "The Shawshank Redemption", releaseInfo: "1994", imdbRating: 9.3,
+                                  genres: ["Drama", "Crime", "Thriller"], runtime: "142 min")
+        #expect(DetailViewModel.heroMetaGenres(for: preview) == ["Drama", "Crime"], "the first two, which the line drops first")
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: "R")
+                == ["1994", "Drama", "Crime", "R", "142 min", "★ 9.3"], "the same genres sit in the line")
+    }
+
     @Test func theMetaLineIsBuiltFromTheDetailsTheSpotlightKeeps() async throws {
         let services = try await installedServices()
         let preview = MetaPreview(id: "mock:movie3", type: "movie", name: "Preview Title")
