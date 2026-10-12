@@ -43,13 +43,10 @@ struct WidgetRow: View {
         let widget = section.widget
         let presentation = row.presentation
         if case .loaded(let items) = section.state, !items.isEmpty {
-            WidgetGrid(widget.title, hideTitle: widget.hideTitle, aspect: presentation.aspectRatio.cardAspect,
-                       size: presentation.cardStyle.cardSize, onSeeAll: { router.homePath.append(seeAllRequest) }) {
+            MediaRow(widget.title, hideTitle: widget.hideTitle, onSeeAll: { router.homePath.append(seeAllRequest) }) {
                 ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                     MediaCardLink(item: item, aspect: presentation.aspectRatio.cardAspect, size: presentation.cardStyle.cardSize,
                                   showsRating: presentation.showsRatings, usesBetterPosters: presentation.usesBetterPosters)
-                        .stretched()
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .overlay(alignment: .topLeading) {
                             if presentation.showsRank { RankBadge(position: index + 1) }
                         }
@@ -66,7 +63,7 @@ struct WidgetRow: View {
             switch section.state {
             case .idle, .loading:
                 RowPlaceholder(header: widget.hideTitle ? .none : .title(widget.title), aspect: presentation.aspectRatio.cardAspect,
-                               size: presentation.cardStyle.cardSize, count: row.limit)
+                               size: presentation.cardStyle.cardSize)
             case .failed(let error):
                 RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
                     InlineErrorView(error.shortDescription, retry: onRetry)
@@ -96,65 +93,6 @@ struct WidgetRow: View {
         if case .addonCatalog(let reference) = row.source { return "board.row.\(reference.catalogID)" }
         return "board.row.\(section.widget.id)"
     }
-}
-
-/// A widget's cards as a vertical grid under its header, so Home reads as one list going down the page rather than shelves to swipe
-/// across. The card size sets how many fit across: a phone shows four small, three medium or two large posters a row (one large wide
-/// card), and a Mac window as many of that size as its width allows.
-struct WidgetGrid<Content: View>: View {
-    let title: String
-    let hideTitle: Bool
-    let aspect: CardAspect
-    let size: CardSize
-    let onSeeAll: (() -> Void)?
-    let content: () -> Content
-    /// Keeps the cards' zoom sources unique to this widget, so a title that two widgets share zooms out of the one tapped.
-    @State private var zoomScope = UUID().uuidString
-    @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.isLandscape) private var isLandscape
-
-    init(_ title: String, hideTitle: Bool = false, aspect: CardAspect, size: CardSize, onSeeAll: (() -> Void)? = nil,
-         @ViewBuilder content: @escaping () -> Content) {
-        self.title = title
-        self.hideTitle = hideTitle
-        self.aspect = aspect
-        self.size = size
-        self.onSeeAll = onSeeAll
-        self.content = content
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            if !hideTitle {
-                SectionHeader(title, onSeeAll: onSeeAll)
-                    .padding(.horizontal, metrics.pageMargin)
-            }
-            LazyVGrid(columns: homeGridColumns(for: aspect, size: size, metrics: metrics, isLandscape: isLandscape),
-                      alignment: .leading, spacing: metrics.cardSpacing) {
-                content()
-            }
-            .padding(.horizontal, metrics.pageMargin)
-            .environment(\.zoomScope, zoomScope)
-        }
-    }
-}
-
-/// The columns of a Home widget's grid. A phone fits four small, three medium or two large posters across (one fewer of each wide card),
-/// and a Mac window fits as many cards of the chosen size as its width allows. A poster in landscape is drawn wide, so it takes the
-/// landscape columns.
-private func homeGridColumns(for aspect: CardAspect, size: CardSize, metrics: LayoutMetrics, isLandscape: Bool) -> [GridItem] {
-    if isLandscape && aspect == .poster { return metrics.gridColumns(for: aspect, inLandscape: true) }
-    if metrics.isRegular {
-        let width = size.width(for: aspect, metrics: metrics)
-        return [GridItem(.adaptive(minimum: width, maximum: width * 1.25), spacing: metrics.cardSpacing, alignment: .top)]
-    }
-    let wide = aspect == .wide
-    let across = switch size {
-    case .small: wide ? 3 : 4
-    case .medium: wide ? 2 : 3
-    case .large: wide ? 1 : 2
-    }
-    return Array(repeating: GridItem(.flexible(), spacing: metrics.cardSpacing, alignment: .top), count: across)
 }
 
 /// The position of a card in a numbered row, drawn over the card's top-left corner.
@@ -199,12 +137,11 @@ struct CollectionRow: View {
     var body: some View {
         if !items.isEmpty {
             // The genre shelf's header opens the Search tab's category browser, which lists the same genres.
-            WidgetGrid(widget.title, hideTitle: widget.hideTitle, aspect: items.first?.imageAspect.cardAspect ?? .wide, size: .medium,
-                       onSeeAll: widget.id == "auto.genres" ? { router.showSearchBrowse() } : nil) {
+            MediaRow(widget.title, hideTitle: widget.hideTitle,
+                     onSeeAll: widget.id == "auto.genres" ? { router.showSearchBrowse() } : nil) {
                 ForEach(items) { item in
                     NavigationLink(value: CatalogListRequest(title: item.title, sources: item.sources, presentation: WidgetPresentation())) {
                         CollectionTile(title: item.title, imageURL: item.imageURL, aspect: item.imageAspect.cardAspect, hideTitle: item.hideTitle)
-                            .stretched()
                     }
                     .buttonStyle(PressableCardStyle())
                 }
@@ -324,8 +261,8 @@ struct ContinueWatchingRow: View {
     }
 }
 
-/// The grey stand-in for a row while its items load: the header (or a bar where the title will be), then a grid of card shapes in the
-/// columns a loaded widget uses, one for each card it will show (`count`), so the page keeps its height when the row fills in.
+/// The grey stand-in for a row while its items load: the header (or a bar where the title will be), then card shapes of the
+/// size and height a real card has, so the rows below do not move when the row fills in.
 struct RowPlaceholder: View {
     enum Header {
         case title(String)
@@ -337,13 +274,13 @@ struct RowPlaceholder: View {
     let header: Header
     let aspect: CardAspect
     let size: CardSize
-    let count: Int
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
 
     var body: some View {
         let landscape = isLandscape && aspect == .poster
         let displayedAspect: CardAspect = landscape ? .wide : aspect
+        let width = landscape ? (metrics.landscapePosterWidth * size.scale).rounded() : size.width(for: aspect, metrics: metrics)
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             switch header {
             case .title(let title):
@@ -356,27 +293,30 @@ struct RowPlaceholder: View {
             case .none:
                 EmptyView()
             }
-            LazyVGrid(columns: homeGridColumns(for: aspect, size: size, metrics: metrics, isLandscape: isLandscape),
-                      alignment: .leading, spacing: metrics.cardSpacing) {
-                ForEach(0..<count, id: \.self) { _ in
-                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                        RoundedRectangle(cornerRadius: displayedAspect.cornerRadius, style: .continuous)
-                            .fill(Theme.surfaceStrong)
-                            .aspectRatio(displayedAspect.ratio, contentMode: .fit)
-                            .mediaArtwork(cornerRadius: displayedAspect.cornerRadius)
-                        if !landscape {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Capsule().fill(Theme.surfaceStrong).frame(height: 10).padding(.trailing, 40)
-                                Capsule().fill(Theme.surfaceStrong).frame(height: 8).padding(.trailing, 90)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: Theme.cardSpacing) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            RoundedRectangle(cornerRadius: displayedAspect.cornerRadius, style: .continuous)
+                                .fill(Theme.surfaceStrong)
+                                .frame(width: width, height: width / displayedAspect.ratio)
+                                .mediaArtwork(cornerRadius: displayedAspect.cornerRadius)
+                            if !landscape {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.75, height: 10)
+                                    Capsule().fill(Theme.surfaceStrong).frame(width: width * 0.4, height: 8)
+                                }
+                                .frame(height: 34, alignment: .top)
                             }
-                            .frame(height: 34, alignment: .top)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .shimmering()
             }
-            .padding(.horizontal, metrics.pageMargin)
-            .shimmering()
+            .shelfIndicators()
+            .scrollDisabled(true)
+            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .scrollClipDisabled()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading")
