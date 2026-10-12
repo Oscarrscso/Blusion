@@ -134,8 +134,11 @@ private struct MediaArtworkModifier: ViewModifier {
 private struct ScreenBackgroundModifier: ViewModifier {
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
+    /// Every page's top edge gets the system's soft scroll-edge blur, on iPhone and Mac alike. Hero pages (Home's spotlight, Detail)
+    /// hide it instead, so it never shows over their artwork at rest.
     func body(content: Content) -> some View {
         content.background { Theme.background.ignoresSafeArea() }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
             .toolbarBackgroundVisibility(isPhoneLandscape || Self.isMacCatalyst ? .hidden : .automatic, for: .navigationBar)
     }
