@@ -19,7 +19,7 @@ struct BestEditionView: View {
         if model.canFindBestEdition {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { isExpanded.toggle() }
+                    toggle()
                 } label: {
                     HStack(spacing: Theme.Spacing.s) {
                         Image(systemName: "opticaldisc")
@@ -52,11 +52,19 @@ struct BestEditionView: View {
                         .padding(.bottom, Theme.Spacing.m)
                         .padding(.top, Theme.Spacing.xs)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Anywhere on the open panel folds it, except a link: a link is a button of its own, so it takes its own tap.
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggle() }
                         .transition(.opacity)
                 }
             }
             .glassCardSurface(cornerRadius: panelRadius)
         }
+    }
+
+    /// Opens or folds the panel, with the same motion either way.
+    private func toggle() {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.28)) { isExpanded.toggle() }
     }
 
     /// The one line the row shows while it is folded: the release it names, or where the lookup stands.

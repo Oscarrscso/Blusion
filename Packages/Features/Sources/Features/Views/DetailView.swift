@@ -147,7 +147,13 @@ struct DetailView: View {
                                 // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.
                                 .padding(.horizontal, max(0, contentMargin - Theme.Spacing.l))
                                 #endif
+                                // Under the meta line the streams start one Play-button step down, where Play sits. Mac's meta line sits
+                                // apart from its Play button, so Mac keeps its own gap.
+                                #if targetEnvironment(macCatalyst)
                                 .padding(.top, showsStreams ? metrics.titleRatingsGap : 0)
+                                #else
+                                .padding(.top, showsStreams ? Theme.Spacing.s : 0)
+                                #endif
                                 // At least a screen tall, so the page is never shorter than where it was scrolled to when Play was
                                 // tapped: a page that became too short would jump back to its top.
                                 .frame(minHeight: showsStreams ? geometry.size.height : nil, alignment: .top)

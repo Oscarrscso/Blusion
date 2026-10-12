@@ -193,7 +193,12 @@ struct StreamPickerView: View {
             if isRevealed {
                 // The text and Auto Pick sit one step apart, as the title's text and its Play button do, not a stack gap apart.
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    if isEmbedded { embeddedHeader } else { header }
+                    // A film's embedded header is empty until the streams load, so it takes no step above Auto Pick.
+                    if isEmbedded {
+                        if embeddedHeaderShowsText { embeddedHeader }
+                    } else {
+                        header
+                    }
                     playBestButton
                 }
                 BestEditionView(model: model, rowHeight: autoPickButtonHeight)
@@ -339,6 +344,9 @@ struct StreamPickerView: View {
         .padding(.horizontal, streamMargin)
         .padding(.top, Theme.Spacing.xs)
     }
+
+    /// Whether the embedded header has anything to show: an episode's name, or the status while the streams load. A film's is empty.
+    private var embeddedHeaderShowsText: Bool { model.request.season != nil || model.isLoading }
 
     /// The header of a title page that shows these streams in place of its details: the episode's name, then the status. The page above
     /// already has the poster, the title and the picture, so there is no poster here.
