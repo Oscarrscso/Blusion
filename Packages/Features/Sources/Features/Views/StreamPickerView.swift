@@ -49,7 +49,7 @@ struct StreamPickerView: View {
     /// The row the arrow keys are on. Nil until the list takes the keyboard.
     @State private var keyboardRow: KeyboardRow?
     /// The list holds the keyboard from the moment it shows, so the arrow keys work without a click first.
-    @FocusState private var listHasFocus = false
+    @FocusState private var listHasFocus: Bool
     #endif
     @Environment(\.scenePhase) private var scenePhase
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
