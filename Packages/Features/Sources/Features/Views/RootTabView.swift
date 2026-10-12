@@ -291,8 +291,8 @@ public struct RootTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSearchActivation(.automatic)
-        .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
-        .toolbarBackgroundVisibility(isPhoneLandscape || Self.isMacCatalyst ? .hidden : .automatic, for: .navigationBar)
+        .scrollEdgeEffectHidden(isPhoneLandscape || Self.isMacCatalyst, for: .top)
+        .pageTopBar(hidden: isPhoneLandscape)
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(ResumeAccessoryModifier(model: resume))
         .task(id: "\(router.tab)-\(userStateRevision)") {

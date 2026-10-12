@@ -39,8 +39,7 @@ struct HomeView: View {
             .onGeometryChange(for: CGFloat.self) { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) } action: { sideInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackgroundVisibility(heroIsFirst || isPhoneLandscape || HeroCarousel.isMacCatalyst ? .hidden : .automatic,
-                                         for: .navigationBar)
+            .pageTopBar(hidden: heroIsFirst || isPhoneLandscape)
             .task { await model.observeAddons() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
@@ -159,7 +158,7 @@ struct HomeView: View {
             .contentMargins(.top, 0, for: .scrollContent)
             .screenBackground()
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .scrollEdgeEffectHidden(heroIsFirst || isPhoneLandscape, for: .top)
+            .scrollEdgeEffectHidden(heroIsFirst || isPhoneLandscape || HeroCarousel.isMacCatalyst, for: .top)
             .ignoresSafeArea(.container, edges: ignoredEdges)
             .onChange(of: router.spotlightRevision) { _, _ in
                 var transaction = Transaction(animation: nil)

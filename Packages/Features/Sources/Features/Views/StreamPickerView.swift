@@ -42,7 +42,6 @@ struct StreamPickerView: View {
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
-    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     #if targetEnvironment(macCatalyst)
     /// Closes a pushed picker, for Escape: the same as its back button.
     @Environment(\.dismiss) private var dismiss
@@ -92,8 +91,6 @@ struct StreamPickerView: View {
         // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
         .background(alignment: .top) { ambientBackdrop }
         .screenBackground()
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
         // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
         .navigationTitle(model.request.title)
         .navigationBarTitleDisplayMode(.inline)

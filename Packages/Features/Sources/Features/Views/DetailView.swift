@@ -228,7 +228,7 @@ struct DetailView: View {
         .screenBackground()
         .ignoresSafeArea(.container, edges: showsBackdrop ? [] : .top)
         .scrollEdgeEffectHidden(true, for: .top)
-        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .pageTopBar(hidden: true)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load(afterHero: { await loadHero() }) }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(showsBackdrop)") {

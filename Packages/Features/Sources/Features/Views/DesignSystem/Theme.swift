@@ -134,21 +134,44 @@ private struct MediaArtworkModifier: ViewModifier {
 private struct ScreenBackgroundModifier: ViewModifier {
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
-    /// Every page's top edge gets the system's soft scroll-edge blur, on iPhone and Mac alike. Hero pages (Home's spotlight, Detail)
-    /// hide it instead, so it never shows over their artwork at rest.
+    /// On iPhone every page's top edge gets the system's soft scroll-edge blur, and hero pages (Home's spotlight, Detail) hide it so it never
+    /// shows over their artwork at rest. Mac has no soft edge: over black it reads as a black band, so its top bar is a material blur instead.
     func body(content: Content) -> some View {
         content.background { Theme.background.ignoresSafeArea() }
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .scrollEdgeEffectHidden(isPhoneLandscape, for: .top)
-            .toolbarBackgroundVisibility(isPhoneLandscape || Self.isMacCatalyst ? .hidden : .automatic, for: .navigationBar)
+            .scrollEdgeEffectHidden(isPhoneLandscape || Self.isMacCatalyst, for: .top)
+            .pageTopBar(hidden: isPhoneLandscape)
     }
 
-    /// On Mac every page's top bar is clear, so its sidebar toggle and back button sit over the page the same way on each.
+    /// Mac builds take the top bar's material blur (see `pageTopBar`), with no soft edge.
     private static var isMacCatalyst: Bool {
         #if targetEnvironment(macCatalyst)
         return true
         #else
         return false
+        #endif
+    }
+}
+
+extension View {
+    /// A page's navigation bar. On iPhone it is hidden when `hidden` (the page runs under it), and the system's own otherwise. On Mac it is
+    /// always visible, with the system's regular material, so the page beneath blurs and the bar never reads as a black band. `hidden` does
+    /// not apply on Mac.
+    func pageTopBar(hidden: Bool) -> some View {
+        modifier(PageTopBarModifier(hidden: hidden))
+    }
+}
+
+private struct PageTopBarModifier: ViewModifier {
+    let hidden: Bool
+
+    func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            .toolbarBackground(.regularMaterial, for: .navigationBar)
+        #else
+        content.toolbarBackgroundVisibility(hidden ? .hidden : .automatic, for: .navigationBar)
         #endif
     }
 }
