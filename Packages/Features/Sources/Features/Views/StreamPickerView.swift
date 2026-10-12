@@ -194,8 +194,11 @@ struct StreamPickerView: View {
     private var content: some View {
         LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
             if isRevealed {
-                if isEmbedded { embeddedHeader } else { header }
-                playBestButton
+                // The text and Auto Pick sit one step apart, as the title's text and its Play button do, not a stack gap apart.
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    if isEmbedded { embeddedHeader } else { header }
+                    playBestButton
+                }
                 BestEditionView(model: model, rowHeight: autoPickButtonHeight)
                     .padding(.horizontal, streamMargin)
                 resolutionChips
