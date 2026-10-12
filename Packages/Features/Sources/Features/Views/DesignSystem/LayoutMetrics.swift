@@ -110,13 +110,15 @@ struct LayoutMetrics: Equatable, Sendable {
     }
 }
 
-/// Lists and forms keep to a readable column on a wide window, centred, as the widget builder does. A phone keeps the full width.
+/// Lists and forms keep to a readable column on a wide window, centred, as the widget builder does. A phone keeps the full width,
+/// including a large one turned sideways, whose size class is regular.
 struct ReadableColumn: ViewModifier {
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
     func body(content: Content) -> some View {
         content
-            .frame(maxWidth: metrics.isRegular ? 680 : CGFloat.infinity)
+            .frame(maxWidth: (metrics.isRegular && !isPhoneLandscape) ? 680 : CGFloat.infinity)
             .frame(maxWidth: .infinity)
     }
 }
