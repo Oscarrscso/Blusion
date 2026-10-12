@@ -95,6 +95,9 @@ public protocol PlaybackEngine: AnyObject {
     func pause()
     func seek(to position: TimeInterval) async
     func setRate(_ rate: Float)
+    /// 0 (silent) to 1 (full).
+    func setVolume(_ volume: Float)
+    func setMuted(_ muted: Bool)
     func selectAudioTrack(id: String?)
     func selectEmbeddedSubtitleTrack(id: String?)
     func stop()

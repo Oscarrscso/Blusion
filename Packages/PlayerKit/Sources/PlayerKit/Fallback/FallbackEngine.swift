@@ -31,6 +31,9 @@ public protocol FallbackBackend: AnyObject {
     func setPaused(_ paused: Bool)
     func seek(to position: TimeInterval) async
     func setRate(_ rate: Float)
+    /// 0 (silent) to 1 (full).
+    func setVolume(_ volume: Float)
+    func setMuted(_ muted: Bool)
     func selectAudio(id: String?)
     func selectSubtitle(id: String?)
     func shutdown()
@@ -107,6 +110,14 @@ public final class FallbackEngine: PlaybackEngine, VideoSurfaceProviding {
     public func setRate(_ rate: Float) {
         backend.setRate(rate)
         update { $0.rate = rate }
+    }
+
+    public func setVolume(_ volume: Float) {
+        backend.setVolume(volume)
+    }
+
+    public func setMuted(_ muted: Bool) {
+        backend.setMuted(muted)
     }
 
     public func selectAudioTrack(id: String?) {

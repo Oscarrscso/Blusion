@@ -44,6 +44,8 @@ public final class PlayerViewModel {
     private var lastInteraction: Date
     private var userChoseSubtitle = false
     private var subtitleGeneration = 0
+    /// The subtitle choice a load in flight is working towards, so presses during it, and a repeat of the same default, see it as chosen.
+    private var pendingChoice: SubtitleChoice?
     private var subtitleTask: Task<Void, Never>?
 
     public init(plan: PlaybackPlan, services: AppServices, now: @escaping @Sendable () -> Date = Date.init) {
@@ -93,6 +95,8 @@ public final class PlayerViewModel {
     public var hasNextStream: Bool { (coordinator?.candidateIndex ?? 0) + 1 < plan.candidates.count }
     public var hasNextEpisode: Bool { plan.request.nextRequest != nil }
     public var canPictureInPicture: Bool { coordinator?.current?.route.isNative == true }
+    public var volume: Float { coordinator?.volume ?? 1 }
+    public var isMuted: Bool { coordinator?.isMuted ?? false }
 
     /// Set once every stream failed.
     public var failureMessage: String? {
@@ -120,6 +124,17 @@ public final class PlayerViewModel {
 
     public func setRate(_ rate: Float) {
         coordinator?.setRate(rate)
+        showControls()
+    }
+
+    /// The Mac's ↑ and ↓ keys, in tenths of the full level.
+    public func adjustVolume(by delta: Float) {
+        coordinator?.setVolume(((volume + delta) * 10).rounded() / 10)
+        showControls()
+    }
+
+    public func toggleMute() {
+        coordinator?.setMuted(!isMuted)
         showControls()
     }
 
@@ -186,13 +201,13 @@ public final class PlayerViewModel {
     }
 
     /// The Mac's C key: the next subtitle choice in the menu's order, Off first, then the embedded tracks, then the external ones, and
-    /// back to Off.
+    /// back to Off. A load still in flight counts as the choice, so presses during it keep advancing.
     public func cycleSubtitles() async {
         let choices: [SubtitleChoice] = [.off]
             + embeddedSubtitleTracks.map { SubtitleChoice.embedded($0.id) }
             + subtitleOptions.map { SubtitleChoice.external($0.id) }
         guard choices.count > 1 else { return }
-        let current = choices.firstIndex(of: subtitleChoice) ?? 0
+        let current = choices.firstIndex(of: pendingChoice ?? subtitleChoice) ?? 0
         await selectSubtitle(choices[(current + 1) % choices.count])
     }
 
@@ -207,9 +222,12 @@ public final class PlayerViewModel {
     }
 
     private func apply(_ choice: SubtitleChoice) async {
+        // An option the list does not have is ignored, before it can supersede a load in flight.
+        if case .external(let id) = choice, !subtitleOptions.contains(where: { $0.id == id }) { return }
         // Each choice supersedes a subtitle load still in flight, so a load that returns late is dropped instead of overwriting the choice made since.
         subtitleGeneration += 1
         let generation = subtitleGeneration
+        pendingChoice = nil
         switch choice {
         case .off:
             timeline = nil
@@ -223,16 +241,20 @@ public final class PlayerViewModel {
             subtitleChoice = .embedded(id)
         case .external(let id):
             guard let option = subtitleOptions.first(where: { $0.id == id }) else { return }
+            pendingChoice = choice
             coordinator?.selectEmbeddedSubtitleTrack(id: nil)
             subtitleStatus = "Loading subtitles…"
             do {
                 let loaded = try await services.subtitles.load(option)
-                guard !Task.isCancelled, generation == subtitleGeneration else { return }
+                guard generation == subtitleGeneration else { return }
+                pendingChoice = nil
+                guard !Task.isCancelled else { return }
                 timeline = loaded
                 subtitleStatus = nil
                 subtitleChoice = .external(id)
             } catch {
                 guard generation == subtitleGeneration else { return }
+                pendingChoice = nil
                 timeline = nil
                 subtitleStatus = "Couldn't load these subtitles."
                 subtitleChoice = .off
@@ -257,10 +279,12 @@ public final class PlayerViewModel {
         }
     }
 
-    /// Picks the subtitle matching the user's default language, once, unless they already chose.
+    /// Picks the subtitle matching the user's default language, once, unless they already chose. A load already in flight for that
+    /// option is not repeated, so a later addon's answer cannot start a second copy of it.
     private func applyDefaultSubtitle() async {
         guard !userChoseSubtitle, subtitleChoice == .off,
-              let option = SubtitleService.defaultOption(in: subtitleOptions, preferredLanguage: settings.subtitleLanguage) else { return }
+              let option = SubtitleService.defaultOption(in: subtitleOptions, preferredLanguage: settings.subtitleLanguage),
+              pendingChoice != SubtitleChoice.external(option.id) else { return }
         await apply(.external(option.id))
     }
 

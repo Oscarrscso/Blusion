@@ -33,6 +33,9 @@ public final class PlaybackCoordinator {
     /// The engine currently in use; the video surface attaches to it.
     public private(set) var engine: (any PlaybackEngine)?
     public private(set) var engineGeneration = 0
+    /// The listener's volume and mute. They carry over when the next stream starts on a new engine.
+    public private(set) var volume: Float = 1
+    public private(set) var isMuted = false
 
     public let plan: PlaybackPlan
     public var onEnded: (@MainActor () -> Void)?
@@ -101,6 +104,14 @@ public final class PlaybackCoordinator {
         await seek(to: state.duration.map { min(target, max(0, $0 - 1)) } ?? target)
     }
     public func setRate(_ rate: Float) { engine?.setRate(rate) }
+    public func setVolume(_ volume: Float) {
+        self.volume = min(1, max(0, volume))
+        engine?.setVolume(self.volume)
+    }
+    public func setMuted(_ muted: Bool) {
+        isMuted = muted
+        engine?.setMuted(muted)
+    }
     public func selectAudioTrack(id: String?) { engine?.selectAudioTrack(id: id) }
     public func selectEmbeddedSubtitleTrack(id: String?) { engine?.selectEmbeddedSubtitleTrack(id: id) }
 
@@ -131,6 +142,8 @@ public final class PlaybackCoordinator {
         observer?.cancel()
         self.engine?.stop()
         self.engine = engine
+        engine.setVolume(volume)
+        engine.setMuted(isMuted)
         phase = .starting
         state = engine.state
         hasStartedCurrent = false

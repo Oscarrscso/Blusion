@@ -93,6 +93,13 @@ import PlayerKitTestSupport
         #expect(backend.seeks == [99, 0] && backend.rates == [1.5] && engine.state.rate == 1.5)
     }
 
+    @Test func volumeAndMuteReachTheBackend() {
+        let (engine, backend) = make()
+        engine.setVolume(0.4)
+        engine.setMuted(true)
+        #expect(backend.volumes == [0.4] && backend.mutes == [true])
+    }
+
     @Test func endingAndReplaying() async throws {
         let (engine, backend) = make()
         engine.load(item)

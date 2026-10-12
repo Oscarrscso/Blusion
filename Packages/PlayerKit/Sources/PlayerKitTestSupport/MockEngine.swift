@@ -19,6 +19,8 @@ public final class MockEngine: PlaybackEngine {
     public private(set) var playCalls = 0
     public private(set) var pauseCalls = 0
     public private(set) var rates: [Float] = []
+    public private(set) var volumes: [Float] = []
+    public private(set) var mutes: [Bool] = []
     public private(set) var selectedAudio: [String?] = []
     public private(set) var selectedEmbeddedSubtitles: [String?] = []
     public private(set) var isStopped = false
@@ -77,6 +79,14 @@ public final class MockEngine: PlaybackEngine {
     public func setRate(_ rate: Float) {
         rates.append(rate)
         update { $0.rate = rate }
+    }
+
+    public func setVolume(_ volume: Float) {
+        volumes.append(volume)
+    }
+
+    public func setMuted(_ muted: Bool) {
+        mutes.append(muted)
     }
 
     public func selectAudioTrack(id: String?) {

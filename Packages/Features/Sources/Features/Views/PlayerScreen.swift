@@ -208,6 +208,12 @@ private struct PlayerKeyboard: View {
                 .keyboardShortcut(.rightArrow, modifiers: [])
             Button("Subtitles") { Task { await model.cycleSubtitles() } }
                 .keyboardShortcut("c", modifiers: [])
+            Button("Volume up") { model.adjustVolume(by: 0.1) }
+                .keyboardShortcut(.upArrow, modifiers: [])
+            Button("Volume down") { model.adjustVolume(by: -0.1) }
+                .keyboardShortcut(.downArrow, modifiers: [])
+            Button("Mute") { model.toggleMute() }
+                .keyboardShortcut("m", modifiers: [])
         }
         .frame(width: 0, height: 0)
         .opacity(0)

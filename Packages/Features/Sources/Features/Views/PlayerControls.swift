@@ -140,6 +140,9 @@ struct PlayerControls: View {
                 subtitlesMenu
                 if model.audioTracks.count > 1 { audioMenu }
                 speedMenu
+                #if targetEnvironment(macCatalyst)
+                volumeButton
+                #endif
                 if model.hasNextStream {
                     Button { Task { await model.nextStream() } } label: {
                         Label("Next stream", systemImage: "forward.end").frame(minWidth: 44, minHeight: 44)
@@ -226,6 +229,26 @@ struct PlayerControls: View {
             .accessibilityLabel("Speed")
             .accessibilityIdentifier("player.speedMenu")
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// The player's own level, not the system's: iPhone's hardware buttons already change the system level, so iPhone has no
+    /// control of its own here.
+    private var volumeButton: some View {
+        Button { model.toggleMute() } label: {
+            Image(systemName: volumeSymbol).frame(minWidth: 44, minHeight: 44)
+                .pointerInteraction(cornerRadius: 12)
+        }
+        .help(model.isMuted ? "Unmute (M)" : "Mute (M)")
+        .accessibilityLabel(model.isMuted ? "Unmute" : "Mute")
+        .accessibilityValue("\(Int((model.volume * 100).rounded())) percent")
+        .accessibilityIdentifier("player.mute")
+    }
+
+    private var volumeSymbol: String {
+        if model.isMuted || model.volume == 0 { return "speaker.slash.fill" }
+        return model.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.2.fill"
+    }
+    #endif
 
     @ViewBuilder
     private func checkmarked(_ title: String, _ selected: Bool) -> some View {

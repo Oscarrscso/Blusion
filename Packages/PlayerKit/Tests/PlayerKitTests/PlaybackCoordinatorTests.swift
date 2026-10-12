@@ -186,6 +186,17 @@ import PlayerKitTestSupport
         #expect(engine.rates == [1.5] && engine.selectedAudio == ["a2"] && engine.selectedEmbeddedSubtitles == ["s1"])
     }
 
+    @Test func volumeAndMuteCarryOverToTheNextEngine() async {
+        let (coordinator, rig) = coordinator(["a", "b"], ["a": .failsToLoad(boom), "b": .plays(duration: 50)])
+        coordinator.setVolume(0.3)
+        coordinator.setMuted(true)
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b")
+        #expect(rig.engines["a"]?.volumes == [0.3] && rig.engines["a"]?.mutes == [true])
+        #expect(rig.engines["b"]?.volumes == [0.3] && rig.engines["b"]?.mutes == [true])
+        #expect(coordinator.volume == 0.3 && coordinator.isMuted)
+    }
+
     @Test func tracksAreVisibleThroughTheCoordinatorState() async throws {
         let (coordinator, rig) = coordinator(["a"], ["a": .plays(duration: 100)])
         await coordinator.start()

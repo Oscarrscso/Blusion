@@ -249,6 +249,17 @@ public final class MPVBackend: FallbackBackend {
         mpv_set_property_string(handle, "speed", String(rate))
     }
 
+    public func setVolume(_ volume: Float) {
+        guard let handle else { return }
+        // mpv's volume runs 0 to 100.
+        mpv_set_property_string(handle, "volume", String(volume * 100))
+    }
+
+    public func setMuted(_ muted: Bool) {
+        guard let handle else { return }
+        mpv_set_property_string(handle, "mute", muted ? "yes" : "no")
+    }
+
     public func selectAudio(id: String?) {
         guard let handle else { return }
         mpv_set_property_string(handle, "aid", id.flatMap { Int($0.dropFirst()) }.map(String.init) ?? "no")

@@ -98,6 +98,14 @@ public final class AVEngine: PlaybackEngine {
         update { $0.rate = rate }
     }
 
+    public func setVolume(_ volume: Float) {
+        player.volume = volume
+    }
+
+    public func setMuted(_ muted: Bool) {
+        player.isMuted = muted
+    }
+
     public func selectAudioTrack(id: String?) {
         guard let id, let option = audioOptions[id], let group = audioGroup else { return }
         playerItem?.select(option, in: group)
