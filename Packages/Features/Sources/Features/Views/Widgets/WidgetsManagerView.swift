@@ -11,6 +11,8 @@ struct WidgetsManagerView: View {
     @State private var showsReset = false
     @State private var showsPendingImport = false
     @State private var copied = false
+    /// The rows whose settings are showing, so the toolbar can hide or open them all.
+    @State private var expandedWidgetIDs: Set<String> = []
     @Environment(\.editMode) private var editMode
 
     init(services: AppServices) {
@@ -49,12 +51,36 @@ struct WidgetsManagerView: View {
         .accessibilityIdentifier("widgets.edit")
     }
 
+    /// Hides every open row's settings at once, or opens them all when none is open.
+    private var foldToggle: some View {
+        let anyOpen = model.widgets.contains { expandedWidgetIDs.contains($0.id) }
+        return Button {
+            withAnimation { expandedWidgetIDs = anyOpen ? [] : Set(model.widgets.map(\.id)) }
+        } label: {
+            Image(systemName: anyOpen ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+        }
+        .disabled(model.widgets.isEmpty)
+        .accessibilityLabel(anyOpen ? "Collapse All" : "Expand All")
+        .help(anyOpen ? "Collapse All" : "Expand All")
+        .accessibilityIdentifier("widgets.collapseAll")
+    }
+
+    /// Whether a row's settings are showing, read from and written to the open rows.
+    private func expansion(of id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedWidgetIDs.contains(id) },
+            set: { open in
+                if open { expandedWidgetIDs.insert(id) } else { expandedWidgetIDs.remove(id) }
+            }
+        )
+    }
+
     var body: some View {
         List {
             Section {
                 ForEach(model.widgets) { widget in
                     // A row drops down in place to show every setting of its widget, and its Edit Widget link sits at the foot of them.
-                    DisclosureGroup {
+                    DisclosureGroup(isExpanded: expansion(of: widget.id)) {
                         ForEach(model.details(of: widget)) { detail in
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
                                 Text(detail.label)
@@ -122,10 +148,13 @@ struct WidgetsManagerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("widgets.manager")
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) { foldToggle }
             ToolbarItem(placement: .topBarTrailing) { addMenu }
             ToolbarItem(placement: .topBarTrailing) { editToggle }
         }
         .task { await model.load() }
+        // A row that is deleted or replaced comes back closed, not still open.
+        .onChange(of: model.widgets.map(\.id)) { _, ids in expandedWidgetIDs.formIntersection(ids) }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
         .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
         .sheet(isPresented: $showsGenreCollection) {
