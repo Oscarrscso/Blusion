@@ -127,11 +127,13 @@ private struct BannerFeature: View {
                              contentMode: .fill, placeholderURL: item.poster ?? MetahubArtwork.poster(imdbID: item.id), imageAlignment: .top)
             }
             .clipped()
+            // Marked before the fade, so the zoom carries a solid picture. The fade is see-through at the bottom, and there the zoom
+            // showed its own black instead of the tray behind the banner, until the zoom ended.
+            .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: HeroBanner.cornerRadius)
             .mask {
                 LinearGradient(stops: [.init(color: .black, location: 0.8), .init(color: .black.opacity(0), location: 1)],
                                startPoint: .top, endPoint: .bottom)
             }
-            .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: HeroBanner.cornerRadius)
             .overlay(alignment: .top) {
                 LinearGradient(colors: [.black.opacity(0.35), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
                     .frame(height: 110)
