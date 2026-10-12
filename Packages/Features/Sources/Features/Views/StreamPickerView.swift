@@ -352,10 +352,11 @@ struct StreamPickerView: View {
                             .textCase(.uppercase)
                             .foregroundStyle(.secondary)
                     }
+                    // Under the title page's hero, so one line: a longer name is cut short rather than wrapped.
                     Text(model.request.title)
                         .font(.headline)
                         .multilineTextAlignment(.leading)
-                        .lineLimit(2)
+                        .lineLimit(1)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                 }
@@ -380,6 +381,7 @@ struct StreamPickerView: View {
         return model.request.year
     }
 
+    /// Only while the addons are still answering: the stream count is not shown once they have.
     @ViewBuilder
     private var status: some View {
         if model.isLoading {
@@ -392,21 +394,11 @@ struct StreamPickerView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("streams.loading")
-        } else if !model.addonSections.isEmpty {
-            Text(summary)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
     }
 
     private var waitingText: String {
         "Checking for streams…"
-    }
-
-    private var summary: String {
-        let streams = model.addonSections.reduce(0) { $0 + $1.streams.count }
-        let addons = model.addonSections.count
-        return "\(streams) \(streams == 1 ? "stream" : "streams") from \(addons) \(addons == 1 ? "addon" : "addons")"
     }
 
     // MARK: the main action

@@ -27,7 +27,9 @@ struct DetailActions: View {
 
     var body: some View {
         VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {
+            // Under the hero's picture, so one line: a long run of genres is cut short rather than wrapped.
             MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
+                .lineLimit(1)
                 .multilineTextAlignment(leadsText ? .leading : .center)
             if showsActions {
                 VStack(alignment: leadsText ? .leading : .center, spacing: Theme.Spacing.s) {

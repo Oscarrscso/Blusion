@@ -16,6 +16,8 @@ struct DetailEpisodes: View {
 
     /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
     private static let secondaryControlHeight: CGFloat = 36
+    /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
+    private static let previewPadding: CGFloat = Theme.Spacing.xl
 
     var body: some View {
         let width = episodeWidth(pageWidth: pageWidth)
@@ -100,13 +102,9 @@ struct DetailEpisodes: View {
     }
 
     private func episodeRow(_ video: Video, width: CGFloat) -> some View {
-        // Written once: the card and the menu's preview are the same view. The preview is on screen only while the menu is open.
         let airsLater = !video.hasAired()
-        let row = EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                             artwork: model.backdropURL, score: model.score(for: video), width: width,
-                             showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater)
         return NavigationLink(value: model.request(for: video)) {
-            row
+            episodeCard(video, width: width, airsLater: airsLater)
         }
         .buttonStyle(PressableCardStyle())
         // An episode that has not aired cannot be opened: its card shows the air date instead.
@@ -121,7 +119,10 @@ struct DetailEpisodes: View {
                 }
             }
         } preview: {
-            row
+            // The same card, the full width between the page margins, inset by its padding so the menu's corners do not cut into it. The
+            // preview is on screen only while the menu is open.
+            episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater)
+                .padding(Self.previewPadding)
                 .onAppear { isHoldingEpisode = true }
                 .onDisappear { isHoldingEpisode = false }
         }
@@ -131,6 +132,13 @@ struct DetailEpisodes: View {
             guard model.hasSettledHero else { return }
             await model.episodeAppeared(video)
         }
+    }
+
+    /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width.
+    private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool) -> EpisodeRow {
+        EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
+                   artwork: model.backdropURL, score: model.score(for: video), width: width,
+                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater)
     }
 }
 

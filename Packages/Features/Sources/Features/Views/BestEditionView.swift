@@ -7,6 +7,9 @@ import SwiftUI
 struct BestEditionView: View {
     let model: StreamPickerViewModel
     @State private var isExpanded = false
+    /// Past any row's height, so the folded row's ends are round, as the Auto Pick button beside it is. A corner radius is clamped to half
+    /// the shorter side, so this draws a capsule.
+    private static let foldedRadius: CGFloat = 1_000
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -44,7 +47,7 @@ struct BestEditionView: View {
                         .transition(.opacity)
                 }
             }
-            .glassCardSurface()
+            .glassCardSurface(cornerRadius: isExpanded ? Theme.Radius.card : Self.foldedRadius)
         }
     }
 
