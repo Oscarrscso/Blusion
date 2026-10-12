@@ -97,6 +97,12 @@ struct ShelfScroll<Content: View>: View {
     let content: Content
     @State private var height: CGFloat?
     @State private var measuredKey: String?
+    #if targetEnvironment(macCatalyst)
+    /// Where the shelf is scrolled, how wide it is, and whether the pointer is over it, for the chevrons at its ends.
+    @State private var shelfPosition = ScrollPosition()
+    @State private var shelfMetrics = ShelfMetrics()
+    @State private var isHoveringShelf = false
+    #endif
 
     init(margin: CGFloat, spacing: CGFloat, lazy: Bool = true, resetKey: String = "", @ViewBuilder content: () -> Content) {
         self.margin = margin
@@ -116,6 +122,18 @@ struct ShelfScroll<Content: View>: View {
                     .scrollTargetLayout()
             }
         }
+        #if targetEnvironment(macCatalyst)
+        .scrollPosition($shelfPosition)
+        .onScrollGeometryChange(for: ShelfMetrics.self) { geometry in
+            ShelfMetrics(offset: geometry.contentOffset.x, contentWidth: geometry.contentSize.width, viewWidth: geometry.containerSize.width)
+        } action: { _, metrics in
+            shelfMetrics = metrics
+        }
+        .onHover { isHoveringShelf = $0 }
+        .overlay {
+            if isHoveringShelf { shelfArrows }
+        }
+        #endif
         .shelfIndicators()
         .contentMargins(.horizontal, margin, for: .scrollContent)
         .softSnappingScroll()
@@ -132,7 +150,50 @@ struct ShelfScroll<Content: View>: View {
             if abs(next - (height ?? -1)) > 0.5 { height = next }
         }
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Mac: a chevron at each end of the shelf while the pointer is over it, shown where the shelf can scroll that way. Each pages by most
+    /// of the shelf's width.
+    private var shelfArrows: some View {
+        HStack {
+            shelfArrow(systemName: "chevron.left", label: "Scroll back", step: -1, enabled: shelfMetrics.offset > 1)
+            Spacer()
+            shelfArrow(systemName: "chevron.right", label: "Scroll forward", step: 1,
+                       enabled: shelfMetrics.offset + shelfMetrics.viewWidth < shelfMetrics.contentWidth - 1)
+        }
+        .padding(.horizontal, Theme.Spacing.s)
+        .frame(maxHeight: .infinity)
+    }
+
+    private func shelfArrow(systemName: String, label: String, step: CGFloat, enabled: Bool) -> some View {
+        Button {
+            // The shelf rests at minus its leading margin, so a page back stops there rather than cutting the margin off the first card.
+            let target = max(-margin, shelfMetrics.offset + step * shelfMetrics.viewWidth * 0.8)
+            withAnimation(.snappy(duration: 0.35)) { shelfPosition.scrollTo(x: target) }
+        } label: {
+            Image(systemName: systemName)
+                .font(.headline.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .glassEffect(.regular, in: .circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        // A hidden chevron must not take clicks meant for the cards beneath it.
+        .allowsHitTesting(enabled)
+        .opacity(enabled ? 1 : 0)
+        .accessibilityLabel(label)
+    }
+    #endif
 }
+
+#if targetEnvironment(macCatalyst)
+/// A shelf's scroll state for the Mac chevrons: how far it is scrolled, how wide its content is, and how wide the shelf shows.
+private struct ShelfMetrics: Equatable {
+    var offset: CGFloat = 0
+    var contentWidth: CGFloat = 0
+    var viewWidth: CGFloat = 0
+}
+#endif
 
 /// The coordinate space of a shelf's viewport: a card's `minX` in it is where the card's leading edge sits on screen.
 private let shelfScrollSpace = "softSnappingShelf"

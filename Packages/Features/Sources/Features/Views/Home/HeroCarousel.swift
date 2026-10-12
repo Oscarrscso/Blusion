@@ -57,6 +57,10 @@ struct HeroCarousel: View {
     @Environment(AppRouter.self) private var router
     /// Keep the same title aligned when the window resizes or the device rotates.
     @State private var pageID: String?
+    #if targetEnvironment(macCatalyst)
+    /// Whether the pointer is over the spotlight, which shows its page chevrons on Mac.
+    @State private var isHoveringSpotlight = false
+    #endif
 
     /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
     /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
@@ -76,6 +80,41 @@ struct HeroCarousel: View {
     private var currentIndex: Int {
         items.firstIndex { $0.identity == (pageID ?? items.first?.identity) } ?? 0
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Mac: a chevron at each side of the spotlight, shown while the pointer is over it, to page it.
+    private var pageArrows: some View {
+        HStack {
+            pageArrow(systemName: "chevron.left", label: "Previous title", step: -1, enabled: currentIndex > 0)
+            Spacer()
+            pageArrow(systemName: "chevron.right", label: "Next title", step: 1, enabled: currentIndex < items.count - 1)
+        }
+        .padding(.horizontal, Theme.Spacing.l)
+        .frame(maxHeight: .infinity)
+    }
+
+    private func pageArrow(systemName: String, label: String, step: Int, enabled: Bool) -> some View {
+        Button { page(by: step) } label: {
+            Image(systemName: systemName)
+                .font(.title2.weight(.semibold))
+                .frame(width: 48, height: 48)
+                .glassEffect(.regular, in: .circle)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        // A hidden chevron must not take taps meant for the picture beneath it.
+        .allowsHitTesting(enabled)
+        .opacity(enabled ? 1 : 0)
+        .accessibilityLabel(label)
+    }
+
+    /// Pages the spotlight by one title in either direction, with the same animation a swipe settles with.
+    private func page(by step: Int) {
+        let target = min(max(currentIndex + step, 0), items.count - 1)
+        guard target != currentIndex else { return }
+        withAnimation(.snappy(duration: 0.35)) { pageID = items[target].identity }
+    }
+    #endif
 
     var body: some View {
         let preferred = metrics.heroHeight(forContainerHeight: containerHeight) + 100
@@ -118,6 +157,12 @@ struct HeroCarousel: View {
             .overlay(alignment: .bottom) {
                 if items.count > 1 { pageDots }
             }
+            #if targetEnvironment(macCatalyst)
+            .onHover { isHoveringSpotlight = $0 }
+            .overlay {
+                if isHoveringSpotlight && items.count > 1 { pageArrows }
+            }
+            #endif
             .task(id: items.map(\.identity)) { await preload() }
     }
 
