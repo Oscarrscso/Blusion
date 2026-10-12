@@ -3,12 +3,11 @@ import Foundation
 extension TMDbDiscoverQuery {
     /// The query for a Fusion `tmdbDiscover` source. Fusion's exports carry no filters for these, so the filters are read from the
     /// widget's title (or the tile's, inside a collection): whether the list is of TV or films, the genres it names, a decade such as
-    /// "1980s", whether it asks for the newest, trending, classic, acclaimed or hidden-gem titles, and whether it names adult titles.
-    /// Anything the title does not name is left open, so a title with no clues is the most popular films. Pure: nothing is requested.
+    /// "1980s", and whether it asks for the newest, trending, classic, acclaimed or hidden-gem titles. Anything the title does not name is
+    /// left open, so a title with no clues is the most popular films. Pure: nothing is requested.
     public static func inferred(fromTitle title: String) -> TMDbDiscoverQuery {
         // An apostrophe is dropped first, so "1980's" reads as "1980s".
-        let words = title.lowercased().filter { $0 != "'" && $0 != "\u{2019}" }
-            .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        let words = titleWords(title)
         let text = " " + words.joined(separator: " ") + " "
         let has: (String) -> Bool = { word in words.contains(word) }
 
@@ -50,14 +49,36 @@ extension TMDbDiscoverQuery {
             minimumVotes = 100
         }
 
-        // TMDb leaves out the titles it flags as adult unless a list asks for them, so "adult" keeps them. "No adult" or "non-adult"
-        // asks for the other way round; an "adult" with nothing before it is not negated.
-        let includesAdult = words.indices.contains { index in
-            words[index] == "adult" && (index == 0 || !["no", "not", "non", "without"].contains(words[index - 1]))
-        }
+        // Adult animation has no genre of its own, so it is animation without the family titles, and for TV without the kids' shows too.
+        var excludedGenres: [Named] = []
+        if namesAdultAnimation(title) { excludedGenres = adultAnimationExclusions(kind, namedGenres: genres) }
 
         return TMDbDiscoverQuery(kind: kind, ordering: ordering, genres: genres, minimumScore: minimumScore, minimumVotes: minimumVotes,
-                                 releasedFrom: releasedFrom, releasedTo: releasedTo, includesAdult: includesAdult)
+                                 releasedFrom: releasedFrom, releasedTo: releasedTo, excludedGenres: excludedGenres)
+    }
+
+    /// Whether a title names adult animation: "adult" then "animation" or "animated", in any case, and not negated. "Non-adult animation"
+    /// and "no adult animation" name the other thing.
+    static func namesAdultAnimation(_ title: String) -> Bool {
+        let words = titleWords(title)
+        return words.indices.contains { index in
+            guard index + 1 < words.count, words[index] == "adult", ["animation", "animated"].contains(words[index + 1]) else { return false }
+            return index == 0 || !["no", "not", "non", "without"].contains(words[index - 1])
+        }
+    }
+
+    /// The genres adult animation leaves out for a list of this kind: the family titles, and for TV the kids' shows as well. A genre the
+    /// list already names is not left out.
+    static func adultAnimationExclusions(_ kind: Kind, namedGenres: [Named]) -> [Named] {
+        let family = Named(id: 10751, name: "Family")
+        let all = kind == .movie ? [family] : [family, Named(id: 10762, name: "Kids")]
+        return all.filter { excluded in !namedGenres.contains { $0.id == excluded.id } }
+    }
+
+    /// The title's words in lowercase, with apostrophes dropped first so "1980's" reads as "1980s", and punctuation splitting words.
+    private static func titleWords(_ title: String) -> [String] {
+        title.lowercased().filter { $0 != "'" && $0 != "\u{2019}" }
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
     }
 
     /// The first year of a decade written "1980s" or "80s", or nil for any other word. A two-digit decade from 30 on is the 1900s, and
@@ -105,8 +126,7 @@ extension TMDbDiscoverQuery {
 
 extension HomeWidget {
     /// A saved widget whose source is a Fusion `tmdbDiscover` list, which was kept as unsupported before its filters were read from the
-    /// title. It is read the way an import reads one now, so a saved layout shows what a fresh import would. A saved list that was
-    /// imported before its title's "adult" was read is given the adult flag too. Other sources are unchanged.
+    /// title. It is read the way an import reads one now, so a saved layout shows what a fresh import would. Other sources are unchanged.
     func readingSavedTMDbFilters() -> HomeWidget {
         var widget = self
         switch content {
@@ -137,8 +157,9 @@ extension WidgetSource {
         switch self {
         case .unsupported(let kind) where kind == "tmdbDiscover":
             return .tmdbDiscover(TMDbDiscoverQuery.inferred(fromTitle: title))
-        case .tmdbDiscover(var query) where !query.includesAdult && TMDbDiscoverQuery.inferred(fromTitle: title).includesAdult:
-            query.includesAdult = true
+        case .tmdbDiscover(var query) where query.excludedGenres.isEmpty && TMDbDiscoverQuery.namesAdultAnimation(title):
+            // A list saved before its title's adult animation left out the family titles is given them, as a Fusion title reads them.
+            query.excludedGenres = TMDbDiscoverQuery.adultAnimationExclusions(query.kind, namedGenres: query.genres)
             return .tmdbDiscover(query)
         default:
             return self

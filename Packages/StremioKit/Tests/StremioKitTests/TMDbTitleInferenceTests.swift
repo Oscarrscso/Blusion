@@ -73,20 +73,23 @@ import Testing
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Warriors") == TMDbDiscoverQuery())
     }
 
-    @Test func anAdultTitleKeepsTheTitlesTMDbFlagsAsAdult() {
+    @Test func adultAnimationLeavesOutTheFamilyTitlesAndForTVTheKidsShows() {
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation")
-            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], includesAdult: true))
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")]))
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation TV")
-            == TMDbDiscoverQuery(kind: .series, genres: [.init(id: 16, name: "Animation")], includesAdult: true))
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Popular Animation Movies").includesAdult == false)
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adults Only").includesAdult == false, "only the word adult is read")
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation, not for kids").includesAdult)
+            == TMDbDiscoverQuery(kind: .series, genres: [.init(id: 16, name: "Animation")],
+                                 excludedGenres: [.init(id: 10751, name: "Family"), .init(id: 10762, name: "Kids")]))
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult-Animation Movies").excludedGenres == [.init(id: 10751, name: "Family")])
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation").excludedGenres.isEmpty)
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adults Only").excludedGenres.isEmpty, "only the words adult animation count")
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animated Movies").excludedGenres == [.init(id: 10751, name: "Family")])
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Non-Adult Animation").excludedGenres.isEmpty, "a negated adult animation is not left out")
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation without adult animation").excludedGenres.isEmpty)
     }
 
-    @Test func aNegatedAdultWordKeepsAdultTitlesOut() {
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Family movies, no adult titles").includesAdult == false)
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Non-adult Comedy").includesAdult == false)
-        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation without adult").includesAdult == false)
+    @Test func aFamilyGenreTheTitleNamesIsNotLeftOut() {
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Family Adult Animation")
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation"), .init(id: 10751, name: "Family")]))
     }
 
     @Test func aTitleReadFromFusionWritesBackAsBlusionsQuery() throws {

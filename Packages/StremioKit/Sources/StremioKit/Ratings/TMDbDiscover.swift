@@ -113,12 +113,13 @@ extension TMDbRatings {
             return (["trending", kind, window], [URLQueryItem(name: "page", value: String(page))])
         }
         let active: (TMDbDiscoverQuery.Filter) -> Bool = { query.isSet($0) && query.supports($0) }
-        var items = [URLQueryItem(name: "include_adult", value: query.includesAdult ? "true" : "false"), URLQueryItem(name: "page", value: String(page)),
+        var items = [URLQueryItem(name: "include_adult", value: "false"), URLQueryItem(name: "page", value: String(page)),
                      URLQueryItem(name: "sort_by", value: sortKey(query.ordering, isMovie: isMovie))]
         func add(_ name: String, _ value: String?) {
             if let value { items.append(URLQueryItem(name: name, value: value)) }
         }
         add("with_genres", active(.genres) ? joinedIDs(query.genres, separator: ",") : nil)
+        add("without_genres", query.effectiveExcludedGenres.isEmpty ? nil : joinedIDs(query.effectiveExcludedGenres, separator: ","))
         add("with_keywords", active(.keywords) ? joinedIDs(query.keywords, separator: "|") : nil)
         add("without_keywords", active(.excludedKeywords) ? joinedIDs(query.excludedKeywords, separator: ",") : nil)
         add("vote_average.gte", active(.score) ? query.minimumScore.map(oneDecimal) : nil)
@@ -181,6 +182,11 @@ extension TMDbRatings {
 }
 
 extension TMDbRatings {
+    /// Whether a title has a genre the query leaves out. TMDb is asked the same with `without_genres`; this checks each title as well.
+    static func hasExcludedGenre(_ entry: TMDbDiscoverEntry, query: TMDbDiscoverQuery) -> Bool {
+        query.effectiveExcludedGenres.contains { genre in entry.genreIDs.contains(genre.id) }
+    }
+
     /// One page of a discover or trending widget as `MetaPreview`s, from `skip` on, `limit` at most. Pages are read from TMDb until enough
     /// titles are found or the pages run out. Entries without an IMDb id are left out, since the addon's links need one. Throws
     /// `AddonError` for refusals and failures, and `CancellationError` when the caller is cancelled. Empty without a credential.
@@ -202,6 +208,8 @@ extension TMDbRatings {
             let answer = try TMDbDiscoverEntry.parsePage(result.data)
             for entry in answer.entries where seen.insert(entry.tmdbID).inserted {
                 if query.isTrending, !Self.matchesTrendingFilters(entry, query: query, today: today, calendar: calendar) { continue }
+                // `without_genres` is asked of TMDb for discover lists, and each title is checked here too, trending lists included.
+                if Self.hasExcludedGenre(entry, query: query) { continue }
                 entries.append(entry)
             }
             if page >= min(answer.totalPages, 500) { break }

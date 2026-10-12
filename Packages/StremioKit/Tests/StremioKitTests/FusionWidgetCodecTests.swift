@@ -515,24 +515,29 @@ private let bigSample = #"""
         #expect(row.source == .tmdbDiscover(TMDbDiscoverQuery(kind: .series)))
     }
 
-    @Test func aFusionAdultAnimationRowReadsItsAdultTitlesFromItsTitle() throws {
-        // Fusion's export carries no filters for a TMDb list, so the title is all there is to read.
+    @Test func theAdultAnimationRowFromTheUsersExportLeavesOutTheFamilyTitles() throws {
+        // Two widgets exactly as Fusion exported them. A TMDb list carries an empty payload, so its title is all there is to read.
         let text = #"""
         { "widgets": [
-          { "id": "adult", "title": "Adult Animation", "type": "row.classic",
-            "dataSource": { "kind": "tmdbDiscover", "payload": {} } },
-          { "id": "plain", "title": "Animation", "type": "row.classic",
-            "dataSource": { "kind": "tmdbDiscover", "payload": {} } } ] }
+          { "cacheTTL": 1800, "dataSource": { "kind": "tmdbDiscover", "payload": {} }, "hideTitle": false,
+            "id": "discover.4A68472A-B3CD-4AEB-A363-C15ED3885518", "limit": 20,
+            "presentation": { "aspectRatio": "poster", "badges": { "providers": false, "ratings": true }, "cardStyle": "medium" },
+            "title": "Adult Animation", "type": "row.classic" },
+          { "cacheTTL": 1800, "dataSource": { "kind": "tmdbDiscover", "payload": {} }, "hideTitle": false,
+            "id": "discover.D4983A40-4D81-4290-90C5-27CB01DC03B6", "limit": 20,
+            "presentation": { "aspectRatio": "poster", "badges": { "providers": false, "ratings": true }, "cardStyle": "medium" },
+            "title": "Popular Animation Movies", "type": "row.classic" } ] }
         """#
         let result = try decode(text)
         #expect(result.skipped == 0)
         let animation = TMDbDiscoverQuery.Named(id: 16, name: "Animation")
-        guard case .row(let adult) = result.widgets.first?.content, case .row(let plain) = result.widgets.last?.content else {
+        let family = TMDbDiscoverQuery.Named(id: 10751, name: "Family")
+        guard case .row(let adult) = result.widgets.first?.content, case .row(let popular) = result.widgets.last?.content else {
             Issue.record("both rows should be kept")
             return
         }
-        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], includesAdult: true)))
-        #expect(plain.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation])))
+        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], excludedGenres: [family])))
+        #expect(popular.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation])))
     }
 
     @Test func aBrokenDiscoverQueryReadsAsUnsupported() throws {

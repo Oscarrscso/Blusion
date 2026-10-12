@@ -150,17 +150,18 @@ import StremioKitTestSupport
         }
     }
 
-    /// A list saved before its title's "adult" was read has no adult flag. Loading reads the title again, as an import would.
-    @Test func aSavedListTitledAdultGainsTheAdultFlagOnLoad() async throws {
+    /// A list saved before its title's adult animation left out the family titles has none left out. Loading gives them, as an import does.
+    @Test func aSavedAdultAnimationListLeavesOutTheFamilyTitlesOnLoad() async throws {
         let (defaults, name) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
         let animation = [TMDbDiscoverQuery.Named(id: 16, name: "Animation")]
+        let family = [TMDbDiscoverQuery.Named(id: 10751, name: "Family")]
         let adult = HomeWidget(id: "adult", title: "Adult Animation", content: .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation)))))
         let plain = HomeWidget(id: "plain", title: "Animation", content: .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation)))))
         await DefaultsWidgetStore(defaults: defaults).save([adult, plain])
         let loaded = try #require(await DefaultsWidgetStore(defaults: defaults).load())
-        #expect(loaded[0].content == .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation, includesAdult: true)))))
-        #expect(loaded[1] == plain, "a title that does not say adult is unchanged")
+        #expect(loaded[0].content == .row(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery(genres: animation, excludedGenres: family)))))
+        #expect(loaded[1] == plain, "a title without adult animation is unchanged")
     }
 
     /// A collection saved with repeated tile ids (before the import fix) loads with every id unique, the same way on each load. A collection

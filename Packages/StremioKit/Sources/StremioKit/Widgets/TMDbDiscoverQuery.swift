@@ -94,15 +94,14 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     public var cast: [Named]
     public var crew: [Named]
     public var companies: [Named]
-    /// Whether titles TMDb flags as adult are kept. Off unless a Fusion title names adult titles (see `inferred(fromTitle:)`). The app's
-    /// trending lists do not send it, so they leave adult titles out.
-    public var includesAdult: Bool
+    /// Genres TMDb leaves out, sent as `without_genres`. Adult animation leaves out the family titles (see `inferred(fromTitle:)`).
+    public var excludedGenres: [Named]
 
     public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],
                 excludedKeywords: [Named] = [], minimumScore: Double? = nil, maximumScore: Double? = nil, minimumVotes: Int? = nil,
                 language: String? = nil, minimumRuntime: Int? = nil, maximumRuntime: Int? = nil, releasedFrom: String? = nil,
                 releasedTo: String? = nil, providers: [Named] = [], region: String? = nil, cast: [Named] = [], crew: [Named] = [],
-                companies: [Named] = [], includesAdult: Bool = false) {
+                companies: [Named] = [], excludedGenres: [Named] = []) {
         self.kind = kind
         self.ordering = ordering
         self.period = period
@@ -122,12 +121,12 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
         self.cast = cast
         self.crew = crew
         self.companies = companies
-        self.includesAdult = includesAdult
+        self.excludedGenres = excludedGenres
     }
 
     private enum CodingKeys: String, CodingKey {
         case kind, ordering, period, genres, keywords, excludedKeywords, minimumScore, maximumScore, minimumVotes, language
-        case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies, includesAdult
+        case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies, excludedGenres
     }
 
     /// Every key is optional. An unknown `kind`, `ordering` or `period` falls back to its default, so a file from another version still
@@ -154,11 +153,11 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
             cast: try container.decodeIfPresent([Named].self, forKey: .cast) ?? [],
             crew: try container.decodeIfPresent([Named].self, forKey: .crew) ?? [],
             companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [],
-            includesAdult: try container.decodeIfPresent(Bool.self, forKey: .includesAdult) ?? false)
+            excludedGenres: try container.decodeIfPresent([Named].self, forKey: .excludedGenres) ?? [])
     }
 
-    /// Writes the keys the synthesized encoding wrote. `includesAdult` is written only when set, so a list that does not ask for adult
-    /// titles encodes as it did before the flag existed: its saved snapshot file name and its Fusion export stay the same.
+    /// Writes the keys the synthesized encoding wrote. `excludedGenres` is written only when it has genres, so a list that leaves none
+    /// out encodes as it did before the field existed: its saved snapshot file name and its Fusion export stay the same.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(kind, forKey: .kind)
@@ -180,7 +179,12 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
         try container.encode(cast, forKey: .cast)
         try container.encode(crew, forKey: .crew)
         try container.encode(companies, forKey: .companies)
-        if includesAdult { try container.encode(true, forKey: .includesAdult) }
+        if !excludedGenres.isEmpty { try container.encode(excludedGenres, forKey: .excludedGenres) }
+    }
+
+    /// The excluded genres the list does not name itself. A genre the list asks for is never left out, so the two cannot contradict.
+    public var effectiveExcludedGenres: [Named] {
+        excludedGenres.filter { excluded in !genres.contains { $0.id == excluded.id } }
     }
 
     /// True when the ordering is one of TMDb's trending lists, which take no filters of their own.

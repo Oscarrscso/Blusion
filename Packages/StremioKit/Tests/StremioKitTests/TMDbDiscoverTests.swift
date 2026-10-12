@@ -115,14 +115,14 @@ private func externalIDRequests(_ transport: StubTransport, tmdbID: Int? = nil) 
         #expect(plain.items == ["include_adult=false", "page=1", "sort_by=popularity.desc"])
     }
 
-    @Test func anAdultQueryAsksTMDbForItsAdultTitles() {
+    @Test func excludedGenresAreSentAsWithoutGenres() {
         let animation = [TMDbDiscoverQuery.Named(id: 16, name: "Animation")]
-        let adult = request(TMDbDiscoverQuery(genres: animation, includesAdult: true))
-        #expect(adult.path == ["discover", "movie"])
-        #expect(adult.items == ["include_adult=true", "page=1", "sort_by=popularity.desc", "with_genres=16"])
-        #expect(request(TMDbDiscoverQuery(genres: animation)).items.contains("include_adult=false"), "a list without the flag still leaves them out")
-        #expect(request(TMDbDiscoverQuery(ordering: .trendingToday, includesAdult: true)).items == ["page=1"],
-                "TMDb's trending lists take no adult flag")
+        let family = [TMDbDiscoverQuery.Named(id: 10751, name: "Family")]
+        #expect(request(TMDbDiscoverQuery(genres: animation, excludedGenres: family)).items
+            == ["include_adult=false", "page=1", "sort_by=popularity.desc", "with_genres=16", "without_genres=10751"])
+        let kids = family + [TMDbDiscoverQuery.Named(id: 10762, name: "Kids")]
+        #expect(request(TMDbDiscoverQuery(kind: .series, genres: animation, excludedGenres: kids)).items.contains("without_genres=10751,10762"))
+        #expect(request(TMDbDiscoverQuery(genres: animation)).items.allSatisfy { !$0.hasPrefix("without_genres") })
     }
 
     @Test func aFullMovieQueryHasEveryItemWithItsSeparator() {
@@ -215,6 +215,20 @@ private func externalIDRequests(_ transport: StubTransport, tmdbID: Int? = nil) 
 
     private func matches(_ entry: TMDbDiscoverEntry, _ query: TMDbDiscoverQuery) -> Bool {
         TMDbRatings.matchesTrendingFilters(entry, query: query, today: testToday, calendar: utc)
+    }
+
+    @Test func aTitleWithAnExcludedGenreIsLeftOut() {
+        let family = TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")])
+        #expect(TMDbRatings.hasExcludedGenre(entry(1, genres: [16, 10751]), query: family))
+        #expect(!TMDbRatings.hasExcludedGenre(entry(1, genres: [16, 18]), query: family))
+        #expect(!TMDbRatings.hasExcludedGenre(entry(1, genres: [16, 10751]), query: TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")])))
+    }
+
+    @Test func aGenreTheListNamesIsNeverLeftOut() {
+        let named = [TMDbDiscoverQuery.Named(id: 16, name: "Animation"), TMDbDiscoverQuery.Named(id: 10751, name: "Family")]
+        let both = TMDbDiscoverQuery(genres: named, excludedGenres: [.init(id: 10751, name: "Family")])
+        #expect(!TMDbRatings.hasExcludedGenre(entry(1, genres: [16, 10751]), query: both))
+        #expect(request(both).items.allSatisfy { !$0.hasPrefix("without_genres") })
     }
 
     @Test func anEntryWithNoFilterMatchesWhateverItLacks() {

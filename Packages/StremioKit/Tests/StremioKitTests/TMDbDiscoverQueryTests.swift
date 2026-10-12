@@ -66,20 +66,14 @@ private func setting(_ filter: TMDbDiscoverQuery.Filter) -> TMDbDiscoverQuery {
         #expect(query.genres == [.init(id: 16, name: "Animation")], "the rest of the file still decodes")
     }
 
-    @Test func theAdultFlagRoundTripsAndDefaultsOff() throws {
-        #expect(TMDbDiscoverQuery().includesAdult == false)
-        #expect(try JSONDecoder().decode(TMDbDiscoverQuery.self, from: Data(#"{"includesAdult":true}"#.utf8)).includesAdult)
-        let adult = TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], includesAdult: true)
-        #expect(try JSONDecoder().decode(TMDbDiscoverQuery.self, from: JSONEncoder().encode(adult)) == adult)
-    }
-
-    @Test func aListThatDoesNotAskForAdultTitlesEncodesWithoutTheFlag() throws {
-        // Snapshot file names and Fusion exports are made from this encoding, so an ordinary list keeps the same keys.
+    @Test func excludedGenresRoundTripAndAreNotWrittenWhenEmpty() throws {
+        // Snapshot file names and Fusion exports are made from this encoding, so a list that leaves no genre out keeps its keys.
         let plain = String(decoding: try JSONEncoder().encode(TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")])), as: UTF8.self)
-        #expect(!plain.contains("includesAdult"))
-        #expect(plain.contains("\"genres\""))
-        let adult = String(decoding: try JSONEncoder().encode(TMDbDiscoverQuery(includesAdult: true)), as: UTF8.self)
-        #expect(adult.contains("\"includesAdult\":true"))
+        #expect(!plain.contains("excludedGenres"))
+        let excluded = TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")])
+        #expect(String(decoding: try JSONEncoder().encode(excluded), as: UTF8.self).contains("\"excludedGenres\""))
+        #expect(try JSONDecoder().decode(TMDbDiscoverQuery.self, from: JSONEncoder().encode(excluded)) == excluded)
+        #expect(try JSONDecoder().decode(TMDbDiscoverQuery.self, from: Data("{}".utf8)).excludedGenres.isEmpty)
     }
 
     @Test func aFileFromANewerVersionWithExtraKeysStillDecodes() throws {
