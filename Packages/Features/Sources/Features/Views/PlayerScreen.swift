@@ -80,6 +80,10 @@ struct PlayerContent: View {
         #endif
         .accessibilityIdentifier("player.screen")
         #if targetEnvironment(macCatalyst)
+        // Moving the pointer over the player shows its controls again, as they hide when idle while playing.
+        .onContinuousHover { phase in
+            if case .active = phase { model.showControls() }
+        }
         .background { PlayerKeyboard(model: model, onClose: close) }
         #endif
     }
@@ -202,6 +206,8 @@ private struct PlayerKeyboard: View {
                 .keyboardShortcut(.leftArrow, modifiers: [])
             Button("Forward 10 seconds") { Task { await model.skip(by: 10) } }
                 .keyboardShortcut(.rightArrow, modifiers: [])
+            Button("Subtitles") { Task { await model.cycleSubtitles() } }
+                .keyboardShortcut("c", modifiers: [])
         }
         .frame(width: 0, height: 0)
         .opacity(0)

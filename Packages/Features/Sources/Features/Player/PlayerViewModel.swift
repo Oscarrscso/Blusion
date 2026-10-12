@@ -143,7 +143,8 @@ public final class PlayerViewModel {
     // MARK: Controls visibility
 
     public func showControls() {
-        controlsVisible = true
+        // The pointer hover calls this on every move, so the observed flag is written only when it changes.
+        if !controlsVisible { controlsVisible = true }
         lastInteraction = now()
     }
 
@@ -181,6 +182,17 @@ public final class PlayerViewModel {
         userChoseSubtitle = true
         showControls()
         await apply(choice)
+    }
+
+    /// The Mac's C key: the next subtitle choice in the menu's order, Off first, then the embedded tracks, then the external ones, and
+    /// back to Off.
+    public func cycleSubtitles() async {
+        let choices: [SubtitleChoice] = [.off]
+            + embeddedSubtitleTracks.map { SubtitleChoice.embedded($0.id) }
+            + subtitleOptions.map { SubtitleChoice.external($0.id) }
+        guard choices.count > 1 else { return }
+        let current = choices.firstIndex(of: subtitleChoice) ?? 0
+        await selectSubtitle(choices[(current + 1) % choices.count])
     }
 
     public func adjustSubtitleOffset(by delta: TimeInterval) {

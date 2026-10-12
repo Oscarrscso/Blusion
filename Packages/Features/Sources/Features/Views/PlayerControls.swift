@@ -21,6 +21,10 @@ struct PlayerControls: View {
                 transport
                 Spacer()
                 bottomBar
+                    #if targetEnvironment(macCatalyst)
+                    // A window is wider than a bar should run, so the bar keeps to a readable width, centred.
+                    .frame(maxWidth: 900)
+                    #endif
             }
             .padding()
         }
