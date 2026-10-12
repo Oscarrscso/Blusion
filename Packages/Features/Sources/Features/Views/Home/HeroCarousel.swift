@@ -309,7 +309,7 @@ private struct HeroPage: View {
     }
 
     /// Landscape keeps the caption over the picture. Portrait stops the picture above a band that holds the metadata, and the title sits
-    /// low on the picture as it does on the title page.
+    /// low on the picture as it does on the title page when that page opens (the title page then drops its logo, see `TitleHero.detailDrop`).
     @ViewBuilder
     private var pageContent: some View {
         if isLandscape {
