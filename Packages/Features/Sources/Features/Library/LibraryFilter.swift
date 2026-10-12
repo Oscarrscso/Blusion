@@ -248,14 +248,15 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
 
     /// A progress record. Its metadata comes from the saved title it belongs to, when there is one.
     public init(record: WatchProgress, saved: LibraryItem?) {
+        let name = WatchedCards.name(of: record)
         id = record.id
         kind = LibraryKind(type: record.type)
-        title = saved?.name ?? record.title
+        title = saved?.name ?? name
         year = LibraryFiltering.year(from: saved?.releaseInfo)
         rating = saved?.imdbRating
         genres = saved?.genres ?? []
         addedAt = saved?.addedAt
-        preview = saved?.preview ?? MetaPreview(id: record.seriesID ?? record.contentID, type: record.type, name: record.title, poster: record.poster)
+        preview = saved?.preview ?? MetaPreview(id: record.seriesID ?? record.contentID, type: record.type, name: name, poster: record.poster)
         activityAt = record.updatedAt
         status = LibraryFiltering.status(of: [record])
         item = saved

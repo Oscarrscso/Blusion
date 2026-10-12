@@ -35,7 +35,7 @@ import StremioKitTestSupport
         #expect(!model.hasLoaded)
         await model.load()
         #expect(model.hasLoaded)
-        #expect(model.watched.map(\.contentID) == ["done"])
+        #expect(model.watched.map(\.latest.contentID) == ["done"])
         #expect(model.isEmpty == false)
     }
 
@@ -62,9 +62,22 @@ import StremioKitTestSupport
         let model = LibraryViewModel(services: services(progress: [progress("a", 40), progress("b", 50, age: -10)]))
         await model.load()
         await model.markWatched(progress("a", 40))
-        #expect(model.watched.map(\.contentID) == ["a"])
+        #expect(model.watched.map(\.latest.contentID) == ["a"])
         await model.markUnwatched(model.watched[0])
         #expect(model.watched.isEmpty && model.isEmpty)
+    }
+
+    @Test func episodesOfAShowShareOneWatchedCard() async {
+        let model = LibraryViewModel(services: services(progress: [
+            progress("tt9:1:1", 100, watched: true, age: 0, type: "series", season: 1, episode: 1),
+            progress("tt9:1:2", 100, watched: true, age: 100, type: "series", season: 1, episode: 2),
+            progress("m", 100, watched: true, age: 50),
+        ]))
+        await model.load()
+        #expect(model.watched.map(\.id) == ["series/tt9", "movie/m"], "the show's card takes the place of its newest episode")
+        #expect(model.watched[0].watchedCount == 2 && model.watched[0].latest.contentID == "tt9:1:2")
+        await model.markUnwatched(model.watched[0])
+        #expect(model.watched.map(\.id) == ["movie/m"], "clearing the show clears each of its episodes and leaves the movie")
     }
 
     @Test func requestsToResumeCarryEverythingTheyNeed() {

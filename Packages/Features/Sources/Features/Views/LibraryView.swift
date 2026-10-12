@@ -164,12 +164,18 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Watched").padding(.horizontal, metrics.pageMargin)
             LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.cardSpacing) {
-                ForEach(model.watched) { item in
-                    let preview = MetaPreview(id: item.seriesID ?? item.contentID, type: item.type, name: item.title, poster: item.poster)
-                    MediaCardLink(item: preview).stretched()
-                        .overlay(alignment: .topTrailing) { Badge("Watched", systemImage: "checkmark").padding(6) }
-                        .accessibilityIdentifier("library.watched.\(item.id)")
-                        .contextMenu { Button("Mark as Unwatched") { Task { await model.markUnwatched(item); await actions?.refresh() } } }
+                ForEach(model.watched) { card in
+                    // A show's card names its latest episode and counts the episodes watched; a movie's card is just the movie, as it was.
+                    MediaCardLink(item: card.preview, showsTitle: card.isShow ? true : nil, subtitle: card.episodeLine).stretched()
+                        .overlay(alignment: .topTrailing) {
+                            Badge(card.isShow ? "\(card.watchedCount) watched" : "Watched", systemImage: "checkmark").padding(6)
+                        }
+                        .accessibilityIdentifier("library.watched.\(card.id)")
+                        .contextMenu {
+                            Button(card.isShow ? "Mark Watched Episodes as Unwatched" : "Mark as Unwatched") {
+                                Task { await model.markUnwatched(card); await actions?.refresh() }
+                            }
+                        }
                 }
             }
             .padding(.horizontal, metrics.pageMargin)

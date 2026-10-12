@@ -7,9 +7,9 @@ import StremioKit
 @MainActor
 @Observable
 public final class LibraryViewModel {
-    /// The sections as the view shows them: each already filtered and sorted.
+    /// The sections as the view shows them: each already filtered and sorted. Watched has one card per movie and one per show.
     public private(set) var saved: [LibraryItem] = []
-    public private(set) var watched: [WatchProgress] = []
+    public private(set) var watched: [WatchedCard] = []
     public private(set) var hasLoaded = false
 
     /// The filters and sort in use. Changing it re-filters the sections at once.
@@ -89,8 +89,11 @@ public final class LibraryViewModel {
         await load()
     }
 
-    public func markUnwatched(_ item: WatchProgress) async {
-        await services.progress.remove(item.id)
+    /// Clears the watched mark from every watched record of the card's title as it is now, so an episode watched since the
+    /// card was drawn is cleared too. In-progress records of the title are left alone.
+    public func markUnwatched(_ card: WatchedCard) async {
+        let current = await services.progress.all().filter { $0.isWatched && WatchedCards.titleKey(of: $0) == card.id }
+        await services.progress.remove(current.map(\.id))
         await load()
     }
 
@@ -117,7 +120,7 @@ public final class LibraryViewModel {
 
     /// The saved title a progress record belongs to: its type and series id (the episode's series for a series).
     private static func titleKey(of record: WatchProgress) -> String {
-        LibraryItem.identity(type: record.type, contentID: record.seriesID ?? record.contentID)
+        WatchedCards.titleKey(of: record)
     }
 
     private func applyFilter() {
@@ -142,7 +145,7 @@ public final class LibraryViewModel {
         self.visibleSaved = visibleSaved
         self.visibleWatched = visibleWatched
         saved = visibleSaved.compactMap(\.item)
-        watched = visibleWatched.compactMap(\.progress)
+        watched = WatchedCards.cards(from: visibleWatched)
     }
 
     /// Every site's score for a title comes from the rating store, which starts a lookup for it if it has none yet. Without a

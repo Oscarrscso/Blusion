@@ -193,7 +193,7 @@ import StremioKitTestSupport
         let model = LibraryViewModel(services: services(progress: progress, library: library))
         await model.load()
         #expect(model.saved.map(\.contentID) == ["a", "b"])
-        #expect(model.watched.map(\.contentID) == ["d"])
+        #expect(model.watched.map(\.latest.contentID) == ["d"])
         #expect(model.availableGenres == ["Comedy", "Drama"])
 
         model.filter.kinds = [.series]
