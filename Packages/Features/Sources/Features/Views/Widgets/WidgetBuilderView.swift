@@ -4,8 +4,8 @@ import SwiftUI
 import UIKit
 
 /// The screen that makes a row, spotlight or banner, or changes a saved one. Its middle is a sentence that describes the widget, whose
-/// words are its settings; the settings also sit in a strip of pills at the foot of the screen, and the open one has its editor in a
-/// panel above that strip. `WidgetBuilderModel` holds the state and the logic; this view draws it and calls it.
+/// words are its settings. Under it the settings are one vertical list of rows, and the open one has its editor in a panel at the foot
+/// of the screen. `WidgetBuilderModel` holds the state and the logic; this view draws it and calls it.
 struct WidgetBuilderView: View {
     let manager: WidgetsManagerViewModel
     let services: AppServices
@@ -13,7 +13,7 @@ struct WidgetBuilderView: View {
     @State private var model: WidgetBuilderModel
     @State private var showsPicker = false
     @State private var showsTraktBrowser = false
-    /// True while a text field in the open panel is being edited, so the pill strip gives way to the keyboard.
+    /// True while a text field in the open panel is being edited.
     @State private var isTyping = false
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.dismiss) private var dismiss
@@ -27,19 +27,27 @@ struct WidgetBuilderView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                if model.needsTMDbToken { tokenNotice }
-                SentenceCard(model: model)
-                if mode == .edit { removeButton }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                    if model.needsTMDbToken { tokenNotice }
+                    SentenceCard(model: model)
+                    PillList(model: model)
+                    if mode == .edit { removeButton }
+                }
+                .padding(.horizontal, metrics.contentMargin)
+                .padding(.vertical, Theme.Spacing.m)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, metrics.contentMargin)
-            .padding(.vertical, Theme.Spacing.m)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+            // The open setting's row is brought into view, so it stays clear of the panel at the foot of the screen.
+            .onChange(of: model.selectedField) { _, field in
+                guard let field else { return }
+                withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(field) }
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .screenBackground()
         .navigationTitle(mode == .create ? "New Widget" : "Edit Widget")
         .navigationBarTitleDisplayMode(.inline)
@@ -126,7 +134,7 @@ struct WidgetBuilderView: View {
         .accessibilityIdentifier("widgetEditor.remove")
     }
 
-    /// The open setting's panel above the pill strip. It is a safe-area inset, so it rises with the keyboard by itself.
+    /// The open setting's panel, at the foot of the screen. It is a safe-area inset, so it rises with the keyboard by itself.
     private var bottomBar: some View {
         VStack(spacing: Theme.Spacing.s) {
             if let field = model.selectedField {
@@ -136,9 +144,8 @@ struct WidgetBuilderView: View {
                     .id(model.selectedField)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            if !isTyping { PillStrip(model: model) }
         }
-        .padding(.bottom, Theme.Spacing.s)
+        .padding(.bottom, model.selectedField == nil ? 0 : Theme.Spacing.s)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
         .animation(.snappy(duration: 0.25), value: model.selectedField)
@@ -284,45 +291,30 @@ private struct SentenceCard: View {
     }
 }
 
-/// The settings strip: every setting as a pill, in two rows that scroll sideways. The open setting's pill is brought into view.
-private struct PillStrip: View {
+/// The settings as one vertical list: every setting a full-width row, in the order of the pills, so the rows share the sentence's margins.
+private struct PillList: View {
     let model: WidgetBuilderModel
-    @Environment(\.layoutMetrics) private var metrics
-
-    private static let rows = [GridItem(.fixed(PillButton.height), spacing: Theme.Spacing.s),
-                               GridItem(.fixed(PillButton.height), spacing: Theme.Spacing.s)]
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal) {
-                GlassEffectContainer(spacing: Theme.Spacing.s) {
-                    LazyHGrid(rows: Self.rows, spacing: Theme.Spacing.s) {
-                        ForEach(model.pills) { pill in
-                            PillButton(model: model, pill: pill)
-                                .id(pill.field)
-                        }
-                    }
+        GlassEffectContainer(spacing: Theme.Spacing.s) {
+            VStack(spacing: Theme.Spacing.s) {
+                ForEach(model.pills) { pill in
+                    PillButton(model: model, pill: pill)
+                        .id(pill.field)
                 }
-                .padding(.horizontal, metrics.contentMargin)
-            }
-            .shelfIndicators()
-            .scrollClipDisabled()
-            .onChange(of: model.selectedField) { _, field in
-                guard let field else { return }
-                withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(field) }
             }
         }
     }
 }
 
-/// One setting in the strip: its icon, its name over its value, and a chevron that shows whether its editor is open. A pill that cannot
-/// be used now is faded and does nothing.
+/// One setting in the list: its icon, its name over its value, and a chevron that shows whether its editor is open. Every row is the
+/// width of the page and at least as tall as the others, so they line up. A row that cannot be used now is faded and does nothing.
 private struct PillButton: View {
     let model: WidgetBuilderModel
     let pill: WidgetBuilderModel.Pill
 
-    /// The height of every pill, so the strip's two rows line up.
-    static let height: CGFloat = 52
+    /// The least height of every row, so the rows of the list line up.
+    static let minHeight: CGFloat = 52
     private static let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
     var body: some View {
@@ -342,15 +334,15 @@ private struct PillButton: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .frame(maxWidth: 140, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.tertiary)
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, Theme.Spacing.m)
-            .frame(height: Self.height)
+            .frame(maxWidth: .infinity, minHeight: Self.minHeight)
             .glassEffect(.regular.interactive(), in: Self.shape)
             .overlay {
                 if isOpen { Self.shape.strokeBorder(.white, lineWidth: 1.5) }

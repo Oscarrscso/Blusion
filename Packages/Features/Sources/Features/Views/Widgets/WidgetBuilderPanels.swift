@@ -2,12 +2,12 @@
 import StremioKit
 import SwiftUI
 
-/// The editor panel of one setting, shown above the pill strip: the setting's name and a close button, then its choices. A panel is as
+/// The editor panel of one setting, shown at the foot of the screen: the setting's name and a close button, then its choices. A panel is as
 /// tall as its content; only the lists that can grow long scroll (see `ScrollsWhenLong`).
 struct WidgetFieldPanel: View {
     let model: WidgetBuilderModel
     let field: WidgetBuilderModel.Field
-    /// True while a text field in the panel is being edited, so the pill strip can give way to the keyboard.
+    /// True while a text field in the panel is being edited.
     @Binding var isTyping: Bool
     /// Opens the picker of addon catalogs and Trakt feeds and lists.
     let openSourcePicker: () -> Void
