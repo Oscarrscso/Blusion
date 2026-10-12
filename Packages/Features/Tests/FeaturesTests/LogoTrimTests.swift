@@ -35,6 +35,28 @@ import Testing
         #expect(LogoTrim.trimmed(source) === source)
     }
 
+    @Test func aHazeTrailingToOneSideIsBalancedSoTheLetteringIsCentred() {
+        // Lettering 40...60, haze reaching out to 0 on the left and 70 on the right: centre 50, so the span runs 0...100.
+        let span = LogoTrim.centredSpan(visible: CGRect(x: 0, y: 0, width: 70, height: 10), solid: CGRect(x: 40, y: 0, width: 20, height: 10))
+        #expect(span?.minX == 0 && span?.width == 100)
+        #expect(LogoTrim.centredSpan(visible: CGRect(x: 0, y: 0, width: 70, height: 10), solid: nil) == nil, "no solid lettering: as it is")
+        let symmetric = LogoTrim.centredSpan(visible: CGRect(x: 0, y: 0, width: 70, height: 10), solid: CGRect(x: 25, y: 0, width: 20, height: 10))
+        #expect(symmetric == nil, "already centred")
+    }
+
+    @Test func trimmingAHazyLogoWidensItWithTransparentSpace() throws {
+        let width = 100, height = 20
+        let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.3))
+        context.fill(CGRect(x: 10, y: 0, width: 60, height: height))
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 50, y: 0, width: 20, height: height))
+        let source = try #require(context.makeImage())
+        // Visible 10...70, lettering 50...70 (centre 60): widened to 10...110, so 100 wide.
+        #expect(LogoTrim.trimmed(source).width == 100)
+    }
+
     @Test func faintPixelsBelowTheThresholdDoNotCount() throws {
         let source = try #require(image(width: 20, height: 20, block: CGRect(x: 2, y: 2, width: 16, height: 16), alpha: 0.02))
         #expect(LogoTrim.visibleBounds(of: source) == nil)

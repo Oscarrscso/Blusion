@@ -5,13 +5,53 @@ import CoreGraphics
 enum LogoTrim {
     /// Alpha (of 255) at or below which a pixel counts as empty.
     static let alphaThreshold: UInt8 = 10
+    /// Alpha above which a pixel is part of the logo's solid lettering, not a glow or haze around it.
+    static let solidThreshold: UInt8 = 230
 
     /// The bounding box, in pixels from the top left, of the pixels whose alpha is above the threshold. Nil when nothing is visible, the
     /// image cannot be read, or the whole image is visible (nothing to trim).
     static func visibleBounds(of image: CGImage, threshold: UInt8 = alphaThreshold) -> CGRect? {
+        guard let box = alphaBounds(of: image, thresholds: [threshold]).first ?? nil else { return nil }
+        return box.width == CGFloat(image.width) && box.height == CGFloat(image.height) ? nil : box
+    }
+
+    /// The horizontal span, in pixels, the logo is laid out by: the visible box widened with transparent space on its shorter side, so
+    /// the solid lettering sits at its centre. A haze trailing further to one side (Project Hail Mary) would otherwise pull the
+    /// lettering off the centre line. Nil leaves the visible box as it is.
+    static func centredSpan(visible: CGRect, solid: CGRect?) -> (minX: CGFloat, width: CGFloat)? {
+        guard let solid, solid.width > 0 else { return nil }
+        let centre = solid.midX
+        let half = max(centre - visible.minX, visible.maxX - centre)
+        let span = (minX: centre - half, width: half * 2)
+        // A difference under a pixel or two is not worth a redraw.
+        return abs(span.width - visible.width) < 2 ? nil : span
+    }
+
+    /// The image cropped to its visible pixels with its solid lettering centred, or the image itself when there is nothing to change.
+    static func trimmed(_ image: CGImage) -> CGImage {
+        let boxes = alphaBounds(of: image, thresholds: [alphaThreshold, solidThreshold])
+        guard let visible = boxes[0] else { return image }
+        guard let span = centredSpan(visible: visible, solid: boxes[1]) else {
+            let isWhole = visible.width == CGFloat(image.width) && visible.height == CGFloat(image.height)
+            return isWhole ? image : (image.cropping(to: visible) ?? image)
+        }
+        // Draw the visible box into a wider transparent canvas, offset so the lettering's centre is the canvas's centre.
+        let width = Int(span.width.rounded(.up))
+        let height = Int(visible.height)
+        guard let cropped = image.cropping(to: visible),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image.cropping(to: visible) ?? image }
+        context.draw(cropped, in: CGRect(x: visible.minX - span.minX, y: 0, width: visible.width, height: visible.height))
+        return context.makeImage() ?? cropped
+    }
+
+    /// For each threshold, the bounding box (from the top left) of the pixels whose alpha is above it; nil when none are.
+    private static func alphaBounds(of image: CGImage, thresholds: [UInt8]) -> [CGRect?] {
         let width = image.width
         let height = image.height
-        guard width > 0, height > 0 else { return nil }
+        let none = [CGRect?](repeating: nil, count: thresholds.count)
+        guard width > 0, height > 0 else { return none }
         var pixels = [UInt8](repeating: 0, count: width * height)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
@@ -19,25 +59,20 @@ enum LogoTrim {
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
             return true
         }
-        guard drawn else { return nil }
-        var minX = width, maxX = -1, minY = height, maxY = -1
-        for y in 0..<height {
-            let row = y * width
-            for x in 0..<width where pixels[row + x] > threshold {
-                if x < minX { minX = x }
-                if x > maxX { maxX = x }
-                if y < minY { minY = y }
-                maxY = y
+        guard drawn else { return none }
+        return thresholds.map { threshold in
+            var minX = width, maxX = -1, minY = height, maxY = -1
+            for y in 0..<height {
+                let row = y * width
+                for x in 0..<width where pixels[row + x] > threshold {
+                    if x < minX { minX = x }
+                    if x > maxX { maxX = x }
+                    if y < minY { minY = y }
+                    maxY = y
+                }
             }
+            guard maxX >= minX, maxY >= minY else { return nil }
+            return CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
         }
-        guard maxX >= minX, maxY >= minY else { return nil }
-        let box = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
-        return box.width == CGFloat(width) && box.height == CGFloat(height) ? nil : box
-    }
-
-    /// The image cropped to its visible pixels, or the image itself when there is nothing to trim.
-    static func trimmed(_ image: CGImage) -> CGImage {
-        guard let box = visibleBounds(of: image), let cropped = image.cropping(to: box) else { return image }
-        return cropped
     }
 }
