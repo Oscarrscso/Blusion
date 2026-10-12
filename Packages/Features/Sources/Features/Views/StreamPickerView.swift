@@ -34,7 +34,7 @@ struct StreamPickerView: View {
     /// Embedded only: takes the streams away and shows the title's details again. Back leaves the title's page, so this is the way back
     /// to the details.
     private let onClose: (() -> Void)?
-    /// Called once four streams are in, or every addon has answered.
+    /// Called once every addon has answered.
     private let onReady: (() -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
@@ -170,12 +170,10 @@ struct StreamPickerView: View {
             }
     }
 
-    /// The first `readyStreamCount` streams are in, or every addon has answered (with streams, with nothing, or with a failure). Until
-    /// then the title page keeps its details and Play spins.
-    private var isReady: Bool {
-        model.hasLoaded && (model.listing.items.count >= Self.readyStreamCount || !model.listing.isLoading)
-    }
-    private static let readyStreamCount = 4
+    /// Every addon has answered (with streams, with nothing, or with a failure). Until then the title page keeps its details and Play
+    /// spins. A movie's first addon often answers with many streams at once, so revealing at a stream count dropped a movie's details
+    /// at once while its other addons were still loading; waiting for every addon treats movies and episodes alike.
+    private var isReady: Bool { model.hasLoaded && !model.listing.isLoading }
 
     // MARK: header
 
