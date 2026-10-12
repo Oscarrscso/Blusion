@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 import StremioKitTestSupport
@@ -373,3 +374,4 @@ import StremioKitTestSupport
         for error in refused { #expect(!error.isTransient, "\(error) should not be transient") }
     }
 }
+// swiftlint:enable line_length

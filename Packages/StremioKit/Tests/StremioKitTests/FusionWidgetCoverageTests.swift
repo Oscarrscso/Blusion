@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 @testable import StremioKit
@@ -154,3 +155,4 @@ import Testing
         #expect(presentation == WidgetPresentation(aspectRatio: .wide, cardStyle: .large, showsRatings: false, showsProviders: true, showsRank: false))
     }
 }
+// swiftlint:enable line_length

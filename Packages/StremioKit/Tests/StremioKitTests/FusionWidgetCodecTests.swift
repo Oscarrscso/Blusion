@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 @testable import StremioKit
@@ -562,3 +563,4 @@ private let bigSample = #"""
         #expect(result.widgets.count == 3)
     }
 }
+// swiftlint:enable line_length

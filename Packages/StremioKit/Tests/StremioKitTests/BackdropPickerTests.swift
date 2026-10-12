@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 @testable import StremioKit
@@ -152,3 +153,4 @@ import StremioKitTestSupport
         #expect(english?.portraitHidesLogo == true)
     }
 }
+// swiftlint:enable line_length

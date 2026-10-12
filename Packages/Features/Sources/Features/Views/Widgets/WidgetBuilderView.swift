@@ -183,7 +183,7 @@ private struct SentenceCard: View {
 
         let id: String
         let content: Content
-        var trailing: String? = nil
+        var trailing: String?
     }
 
     /// The sentence as drawn pieces: each word of the plain text on its own, and punctuation glued to the piece before it, so a line never

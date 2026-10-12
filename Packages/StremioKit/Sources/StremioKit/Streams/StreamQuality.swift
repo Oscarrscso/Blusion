@@ -204,6 +204,7 @@ public struct StreamQuality: Sendable, Equatable {
     /// A bare standard height beside a codec word, before or after it ("1080 x264", "x265 2160"). It is a weaker signal than "1080p": it sets
     /// the resolution only when nothing else does, and it never counts as a contradiction. A height followed by a unit ("x264 720 MB",
     /// "x264 720 fps") is left out. Group 1 holds the height before the codec word, group 2 the one after.
+    // swiftlint:disable:next line_length
     private static let codecAdjacentHeightPattern = #"(?<![\d.])(2160|1440|1080|720|576|480)(?=\s?(?:x26[45]|h[ .]?26[45]|hevc|avc|av1)(?![a-z0-9]))|\b(?:x26[45]|h[ .]?26[45]|hevc|avc|av1)\s(2160|1440|1080|720|576|480)(?!\d)(?!\s?(?:[kmg]i?b(?:ps|it)?|fps|subs?)\b)"#
 
     private static func resolution(in text: String) -> Int? {

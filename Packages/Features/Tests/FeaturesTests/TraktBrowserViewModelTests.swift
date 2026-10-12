@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 #if canImport(FoundationNetworking)
@@ -188,3 +189,4 @@ private func page(of request: URLRequest) -> Int {
         #expect(grid.items.map(\.id) == ["tt1", "tt2", "tt3"])
     }
 }
+// swiftlint:enable line_length

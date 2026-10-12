@@ -409,7 +409,7 @@ struct HeroTitleArt: View {
     /// Draws nothing, not even the name, but keeps the logo's space, for a portrait picture that already carries the title.
     var hidden = false
     /// The box a logo is fitted into, when a page sizes its own title; nil uses the page's standard sizes.
-    var logoBox: CGSize? = nil
+    var logoBox: CGSize?
 
     /// The tallest a logo can be on this page.
     private var logoHeight: CGFloat { logoBox?.height ?? (compact ? TitleHero.landscapeLogoMaxHeight : TitleHero.logoMaxHeight) }

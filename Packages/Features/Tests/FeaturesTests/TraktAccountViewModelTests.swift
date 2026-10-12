@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import Foundation
 import Testing
 import PlayerKit
@@ -303,3 +304,4 @@ private final class CallCounter: @unchecked Sendable {
         }
     }
 }
+// swiftlint:enable line_length
