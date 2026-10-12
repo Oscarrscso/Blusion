@@ -165,30 +165,51 @@ private final class BackSwipeProbe: UIView {
     }
 }
 
-/// When the latest back swipe began and lifted, on any stack. A tap that a swipe ends on is not a choice, so a card asks this before it plays.
+/// Sees every touch on a stack's screens and reports it to `SwipeRecord.latest`. It never recognizes, and it does not delay or cancel
+/// touches, so scrolling, taps and the back swipe behave as they did.
 @MainActor
-enum BackSwipeRecord {
-    /// When the back swipe under the finger began, or nil once that finger has lifted.
-    private static var began: ContinuousClock.Instant?
-    /// When the latest back swipe lifted.
-    private static var lifted: ContinuousClock.Instant?
+private final class SwipeWatch: UIGestureRecognizer {
+    /// The touch being followed: the most recent one to begin. A new touch restarts it, so a touch UIKit lost cannot block the next.
+    private var tracked: UITouch?
+    /// Where the tracked touch began, in the stack's view.
+    private var start: CGPoint?
 
-    /// True while a back swipe is under the finger, and for a moment after it lifts: the touch that ends a swipe is then not a choice.
-    static var isFresh: Bool {
-        let now = ContinuousClock.now
-        // A swipe still under the finger after this long has lost its end, so it no longer blocks a tap.
-        if let began, now - began < .seconds(5) { return true }
-        guard let lifted else { return false }
-        return now - lifted < .milliseconds(400)
+    override init(target: Any?, action: Selector?) {
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
     }
 
-    static func noteBegan() {
-        began = ContinuousClock.now
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        guard let view, let touch = touches.first else { return }
+        tracked = touch
+        start = touch.location(in: view)
+        SwipeRecord.latest.touchBegan(at: ContinuousClock.now)
     }
 
-    static func noteLifted() {
-        began = nil
-        lifted = ContinuousClock.now
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+        guard let view, let tracked, touches.contains(tracked), let start else { return }
+        let point = tracked.location(in: view)
+        SwipeRecord.latest.touchMoved(distance: hypot(point.x - start.x, point.y - start.y))
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        finish(touches)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        finish(touches)
+    }
+
+    private func finish(_ touches: Set<UITouch>) {
+        guard let tracked, touches.contains(tracked) else { return }
+        self.tracked = nil
+        SwipeRecord.latest.touchEnded(at: ContinuousClock.now)
     }
 }
 
@@ -215,6 +236,8 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
         pan.delegate = self
         return pan
     }()
+    /// Sees every touch on the stack, so a card can tell a swipe from a tap whether or not `pan` recognized the swipe.
+    private lazy var watch = SwipeWatch(target: nil, action: nil)
     private weak var stack: UINavigationController?
     private weak var touched: UIView?
     private var startsAtEdge = false
@@ -227,10 +250,12 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     func attach(to stack: UINavigationController?) {
         guard stack !== self.stack else { return }
         pan.view?.removeGestureRecognizer(pan)
+        watch.view?.removeGestureRecognizer(watch)
         // The stack this swipe leaves gets its own back swipes again.
         systemPops.forEach { $0.isEnabled = true }
         self.stack = stack
         stack?.view.addGestureRecognizer(pan)
+        stack?.view.addGestureRecognizer(watch)
         silenceSystemGestures()
     }
 
@@ -280,14 +305,7 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func swiped() {
-        // The finger lifting ends the swipe whether or not it went back, so a tap from here on is a new one.
-        if pan.state == .ended || pan.state == .cancelled {
-            BackSwipeRecord.noteLifted()
-            return
-        }
-        guard pan.state == .began else { return }
-        BackSwipeRecord.noteBegan()
-        guard let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
+        guard pan.state == .began, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
         // The same light tap as opening a title, once per swipe that goes back.
         Haptics.tap()
         // A screen that was not popped stays, and keeps taking touches.

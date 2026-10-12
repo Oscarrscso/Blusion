@@ -416,7 +416,11 @@ struct StreamPickerView: View {
         if !model.listing.items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 HStack(spacing: Theme.Spacing.m) {
-                    Button { autoPick() } label: {
+                    Button {
+                        // The same swipe check as a stream card: a swipe that ends on Auto Pick plays nothing.
+                        guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
+                        autoPick()
+                    } label: {
                         HStack(spacing: Theme.Spacing.xs) {
                             if model.isAutoPicking { ProgressView() } else { Image(systemName: "sparkles").foregroundStyle(.secondary) }
                             Text("Auto Pick")
@@ -622,8 +626,8 @@ struct StreamPickerView: View {
     private func streamButton(_ item: RankedStream, isRecommended: Bool, order: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                // A back swipe that began on the card ends as a touch-up here too. It plays nothing.
-                guard !BackSwipeRecord.isFresh else { return }
+                // A swipe that travelled across the card ends as a touch-up here too. It plays nothing.
+                guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
                 select(item)
             } label: {
                 StreamRow(item: item, isBest: isRecommended, isRemux: item.quality.isRemux)
