@@ -68,7 +68,7 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
         case object([String: SavedJSON])
 
         init(from decoder: Decoder) throws {
-            var container = try decoder.singleValueContainer()
+            let container = try decoder.singleValueContainer()
             if container.decodeNil() {
                 self = .null
             } else if let value = try? container.decode(Bool.self) {
