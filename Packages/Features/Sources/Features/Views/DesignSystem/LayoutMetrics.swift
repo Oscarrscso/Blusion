@@ -111,8 +111,9 @@ struct LayoutMetrics: Equatable, Sendable {
     }
 }
 
-/// Lists and forms keep to a readable column on a wide window, centred, as the widget builder does. A phone keeps the full width,
-/// including a large one turned sideways, whose size class is regular.
+/// Lists and forms keep to a readable column on a wide window, centred as before. On Mac the column starts at the leading edge instead, beside
+/// the sidebar: a centred column left a wide gap there. A phone keeps the full width, including a large one turned sideways, whose size
+/// class is regular.
 struct ReadableColumn: ViewModifier {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
@@ -120,10 +121,18 @@ struct ReadableColumn: ViewModifier {
     /// `isPhoneLandscape` is also true on an iPad turned sideways, so the device is checked as well.
     private var isPhoneInLandscape: Bool { isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone }
 
+    private var alignment: Alignment {
+        #if targetEnvironment(macCatalyst)
+        return .leading
+        #else
+        return .center
+        #endif
+    }
+
     func body(content: Content) -> some View {
         content
-            .frame(maxWidth: (metrics.isRegular && !isPhoneInLandscape) ? 680 : CGFloat.infinity)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: (metrics.isRegular && !isPhoneInLandscape) ? 680 : CGFloat.infinity, alignment: alignment)
+            .frame(maxWidth: .infinity, alignment: alignment)
     }
 }
 
