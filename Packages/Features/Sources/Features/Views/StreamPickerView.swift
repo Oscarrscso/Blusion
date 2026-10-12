@@ -24,6 +24,9 @@ struct StreamPickerView: View {
     /// A hand-off whose player app is not installed: the alert offers its App Store page, or playing the stream in Blusion.
     @State private var missing: MissingPlayer?
     private let services: AppServices
+    /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
+    /// the page above it has them.
+    private let isEmbedded: Bool
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -32,100 +35,121 @@ struct StreamPickerView: View {
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
-    init(request: StreamRequest, services: AppServices) {
+    init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false) {
         self.services = services
+        self.isEmbedded = isEmbedded
         _model = State(initialValue: StreamPickerViewModel(request: request, services: services))
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                header
-                playBestButton
-                BestEditionView(model: model)
-                    .padding(.horizontal, streamMargin)
-                resolutionChips
-                failures
-                emptyState
-                loadingRows
-                groups(recommended: model.recommendedStream)
-                links
-                hiddenHint
-            }
-            .frame(maxWidth: 760)
-            .frame(maxWidth: .infinity)
+        if isEmbedded {
+            behaviour(content.accessibilityIdentifier("streams.list"))
+        } else {
+            behaviour(
+                ScrollView {
+                    content
+                }
+                // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding
+                // inside it.
+                .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
+                // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
+                .background(alignment: .top) { ambientBackdrop }
+                .screenBackground()
+                .scrollEdgeEffectStyle(.soft, for: .top)
+                .scrollEdgeEffectHidden(isLandscape, for: .top)
+                // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
+                .navigationTitle(model.request.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar(removing: .title)
+                .accessibilityIdentifier("streams.list")
+            )
         }
-        // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding inside it.
-        .contentMargins(.bottom, Theme.Spacing.xxl, for: .scrollContent)
-        // The glow is a layer of the page, not of the list: it stays put under the navigation bar while the streams scroll over it.
-        .background(alignment: .top) { ambientBackdrop }
-        .screenBackground()
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .scrollEdgeEffectHidden(isLandscape, for: .top)
-        // The title is the header's; the navigation title stays set for VoiceOver and the screen's name, but is not drawn twice.
-        .navigationTitle(model.request.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(removing: .title)
-        .accessibilityIdentifier("streams.list")
-        .task { await model.findBestEdition() }
-        .task {
-            // Asked once, here: routing hands streams to these players only, and the menus offer only these.
-            model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
-            await model.loadAutoPlayPreference()
-            if !model.hasLoaded {
-                let settings = await services.settings.load()
-                if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
-                if settings.autoPlayBestStream, !hasSelectedManually {
-                    // With the switch on, opening the streams does what the Auto Pick button beside it does, for a viewer whose streams
-                    // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
-                    if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {
-                        autoPick(fallingBackToBest: true)
-                    } else if let best = model.listing.best {
-                        select(best)
+    }
+
+    /// The picker's rows. Pushed, the first row is the picker's own header; embedded, it is the lighter header, since the page above
+    /// already has the poster and the title.
+    private var content: some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            if isEmbedded { embeddedHeader } else { header }
+            playBestButton
+            BestEditionView(model: model)
+                .padding(.horizontal, streamMargin)
+            resolutionChips
+            failures
+            emptyState
+            loadingRows
+            groups(recommended: model.recommendedStream)
+            links
+            hiddenHint
+        }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// What the picker does once it is on screen: loading, the sheets and the alerts, and cleaning up when it leaves. The same whether
+    /// it is pushed or embedded.
+    private func behaviour(_ view: some View) -> some View {
+        view
+            .task { await model.findBestEdition() }
+            .task {
+                // Asked once, here: routing hands streams to these players only, and the menus offer only these.
+                model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
+                await model.loadAutoPlayPreference()
+                if !model.hasLoaded {
+                    let settings = await services.settings.load()
+                    if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
+                    if settings.autoPlayBestStream, !hasSelectedManually {
+                        // With the switch on, opening the streams does what the Auto Pick button beside it does, for a viewer whose streams
+                        // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
+                        if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {
+                            autoPick(fallingBackToBest: true)
+                        } else if let best = model.listing.best {
+                            select(best)
+                        }
                     }
                 }
             }
-        }
-        .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { isOpeningPlayer = false }
-        }
-        .sheet(item: $expandedDetails) { item in
-            NavigationStack {
-                ScrollView {
-                    Text(item.stream.description ?? item.title)
-                        .font(.footnote)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+            .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { isOpeningPlayer = false }
+            }
+            .sheet(item: $expandedDetails) { item in
+                NavigationStack {
+                    ScrollView {
+                        Text(item.stream.description ?? item.title)
+                            .font(.footnote)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
+                    .navigationTitle("Stream Details")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { expandedDetails = nil } } }
                 }
-                .navigationTitle("Stream Details")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { expandedDetails = nil } } }
+                .preferredColorScheme(.dark)
             }
-            .preferredColorScheme(.dark)
-        }
-        .fullScreenCover(item: $plan) { PlayerScreen(plan: $0, services: services) }
-        .alert("This format isn't supported yet", isPresented: isShowingUnsupported, presenting: unsupported) { item in
-            if let player = model.alternativePlayers(for: item).first {
-                Button("Open in \(player.displayName)") { openIn(player, item) }
+            .fullScreenCover(item: $plan) { PlayerScreen(plan: $0, services: services) }
+            .alert("This format isn't supported yet", isPresented: isShowingUnsupported, presenting: unsupported) { item in
+                if let player = model.alternativePlayers(for: item).first {
+                    Button("Open in \(player.displayName)") { openIn(player, item) }
+                }
+                if let next = model.nextPlayable(after: item), next.id != item.id {
+                    Button("Try the next stream") { select(next) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { item in
+                Text(unsupportedMessage(for: item))
             }
-            if let next = model.nextPlayable(after: item), next.id != item.id {
-                Button("Try the next stream") { select(next) }
+            .alert("\(missing?.player.displayName ?? "Player") isn't installed", isPresented: isShowingMissing,
+                   presenting: missing) { pending in
+                if let url = pending.player.appStoreURL {
+                    Button("Get \(pending.player.displayName)") { openURL(url) }
+                }
+                if model.inAppChoice(for: pending.item) != nil {
+                    Button("Play in Blusion") { playInBlusion(pending.item) }
+                }
+                Button("Cancel", role: .cancel) {}
             }
-            Button("Cancel", role: .cancel) {}
-        } message: { item in
-            Text(unsupportedMessage(for: item))
-        }
-        .alert("\(missing?.player.displayName ?? "Player") isn't installed", isPresented: isShowingMissing, presenting: missing) { pending in
-            if let url = pending.player.appStoreURL {
-                Button("Get \(pending.player.displayName)") { openURL(url) }
-            }
-            if model.inAppChoice(for: pending.item) != nil {
-                Button("Play in Blusion") { playInBlusion(pending.item) }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
     }
 
     // MARK: header
@@ -176,6 +200,30 @@ struct StreamPickerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, streamMargin)
         .padding(.top, Theme.Spacing.xs)
+    }
+
+    /// The header of a title page that shows these streams in place of its details: the episode's name, then the status. The page above
+    /// already has the poster, the title and the picture, so there is no poster here.
+    private var embeddedHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if model.request.season != nil {
+                if let eyebrow {
+                    Text(eyebrow)
+                        .font(Theme.Typography.eyebrow)
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                }
+                Text(model.request.title)
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            status
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, streamMargin)
     }
 
     /// "S1 · E3" for an episode, the release year for a film.

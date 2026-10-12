@@ -9,6 +9,8 @@ struct DetailEpisodes: View {
     let model: DetailViewModel
     let pageWidth: CGFloat
     let contentMargin: CGFloat
+    /// True while an episode's menu is open, so the page can blur behind it. Cleared when this view leaves the screen.
+    @Binding var isHoldingEpisode: Bool
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
 
@@ -36,6 +38,8 @@ struct DetailEpisodes: View {
             }
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
+        // A page that is left never stays blurred, even if its episode's menu was still open.
+        .onDisappear { isHoldingEpisode = false }
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
@@ -96,10 +100,12 @@ struct DetailEpisodes: View {
     }
 
     private func episodeRow(_ video: Video, width: CGFloat) -> some View {
-        NavigationLink(value: model.request(for: video)) {
-            EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                       artwork: model.backdropURL, score: model.score(for: video), width: width,
-                       showsWholeOverview: model.matchesEpisodeWidthToText)
+        // Written once: the card and the menu's preview are the same view. The preview is on screen only while the menu is open.
+        let row = EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
+                             artwork: model.backdropURL, score: model.score(for: video), width: width,
+                             showsWholeOverview: model.matchesEpisodeWidthToText)
+        return NavigationLink(value: model.request(for: video)) {
+            row
         }
         .buttonStyle(PressableCardStyle())
         .titleTapHaptic()
@@ -111,6 +117,10 @@ struct DetailEpisodes: View {
                     await titleActions.refresh()
                 }
             }
+        } preview: {
+            row
+                .onAppear { isHoldingEpisode = true }
+                .onDisappear { isHoldingEpisode = false }
         }
         .accessibilityIdentifier("detail.episode.\(video.id)")
         // IMDb's episode scores come from OMDb, a season at a time, asked for when its first card comes on screen (and again if the key changes).

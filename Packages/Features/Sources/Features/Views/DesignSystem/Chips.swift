@@ -191,29 +191,64 @@ struct RatingBadge: View {
 /// Dot-separated metadata such as "Drama · 2008 · 2 hr 32 min". Nil and empty parts are skipped, and it renders nothing when every
 /// part is skipped.
 struct MetaLine: View {
+    /// The space kept on each side of a dot when the parts are spread, so a dot never touches the text beside it.
+    private static let minimumGap: CGFloat = 4
+
     private let parts: [String]
     /// The accessibility identifier of the line, for UI tests. Nil leaves it unset.
     private let identifier: String?
+    /// True spreads the parts across the whole width the line is given, with the dots between them, so the line is as wide as what sits
+    /// under it. When the parts do not fit on one line that way, the line is drawn as usual.
+    private let spreads: Bool
 
-    init(_ parts: [String?], identifier: String? = nil) {
+    init(_ parts: [String?], identifier: String? = nil, spreads: Bool = false) {
         self.parts = parts
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         self.identifier = identifier
+        self.spreads = spreads
     }
 
     var body: some View {
         if !parts.isEmpty {
-            let line = Text(parts.joined(separator: " · "))
+            let line = partsLine
                 .font(Theme.Typography.metaLine)
                 .foregroundStyle(Theme.metaText)
-                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(parts.joined(separator: ", "))
             if let identifier {
                 line.accessibilityIdentifier(identifier)
             } else {
                 line
             }
+        }
+    }
+
+    /// The parts as drawn: spread across the width when `spreads` is set and there are two or more parts, otherwise joined by dots
+    /// on one wrapped line.
+    @ViewBuilder
+    private var partsLine: some View {
+        let joinedLine = Text(parts.joined(separator: " · "))
+            .fixedSize(horizontal: false, vertical: true)
+        if spreads && parts.count > 1 {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                        if index > 0 {
+                            Spacer(minLength: Self.minimumGap)
+                            Text("·")
+                            Spacer(minLength: Self.minimumGap)
+                        }
+                        Text(part)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                joinedLine
+            }
+        } else {
+            joinedLine
         }
     }
 }

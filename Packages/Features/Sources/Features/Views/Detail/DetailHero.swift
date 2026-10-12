@@ -18,6 +18,9 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     let logoSlot: HeroSlot
     let isRevealed: Bool
     let hidesLogo: Bool
+    /// False hides the trailer's panel, the synopsis and the ratings row, leaving the picture, the logo and the controls. The page then
+    /// shows its streams under them.
+    let showsDetails: Bool
     @ViewBuilder let controls: Controls
     @ViewBuilder let trailer: TrailerPanel
     @ViewBuilder let synopsis: Synopsis
@@ -30,14 +33,20 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     @ViewBuilder
     var body: some View {
         if isLandscape { landscapeTop } else { portraitTop }
-        if model.trailer.showsPanel {
+        if showsDetails && model.trailer.showsPanel {
             trailer
                 .padding(.horizontal, contentMargin)
                 // The same gap as the synopsis keeps from what is above it, in each orientation.
                 .padding(.top, isLandscape ? Theme.Spacing.s : metrics.titleRatingsGap)
                 .transition(Self.trailerTransition)
         }
-        if isLandscape { landscapeBottom } else { portraitBottom }
+        if showsDetails {
+            if isLandscape {
+                landscapeBottom.transition(.opacity)
+            } else {
+                portraitBottom.transition(.opacity)
+            }
+        }
     }
 
     /// The landscape picture's width, and the width of the column beside it, where the play buttons sit.

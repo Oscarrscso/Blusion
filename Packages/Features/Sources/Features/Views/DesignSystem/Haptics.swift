@@ -25,6 +25,11 @@ enum Haptics {
     static func scrollSnapSoft() {
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
     }
+
+    /// A soft thud for something that has just finished moving into place: a review card that has opened or closed.
+    static func settle() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
+    }
 }
 
 extension View {

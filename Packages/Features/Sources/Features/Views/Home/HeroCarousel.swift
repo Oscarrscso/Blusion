@@ -329,7 +329,7 @@ private struct HeroPage: View {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
                 // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
-                MetaLine(metaParts, identifier: "hero.metaLine")
+                MetaLine(metaParts, identifier: "hero.metaLine", spreads: true)
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
@@ -368,10 +368,12 @@ private struct HeroPage: View {
             .padding(.bottom, TitleHero.logoTextGap)
     }
 
+    /// The picture fills its page in both orientations. A landscape phone is wider than the 16:9 backdrop, so fitting the picture left a
+    /// black bar down each side; filling crops a little off the bottom instead, under the fade and the caption.
     private var artwork: some View {
         Color.clear
             .overlay {
-                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: isLandscape ? .fit : .fill, preview: item)
+                HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, preview: item)
             }
     }
 

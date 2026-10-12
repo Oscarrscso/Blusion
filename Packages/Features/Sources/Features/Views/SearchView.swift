@@ -91,13 +91,17 @@ struct SearchView: View {
                             .help("Clear")
                             .accessibilityIdentifier("search.clearRecents")
                     }
+                    .padding(.horizontal, metrics.pageMargin)
                     ForEach(model.recentQueries, id: \.self) { query in
                         Button {
                             model.query = query
                             Task { await model.submit() }
                         } label: {
+                            // The inset is part of the label, so the whole row from edge to edge answers a tap, not only the text.
                             Label(query, systemImage: "clock")
                                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .padding(.horizontal, metrics.pageMargin)
+                                .contentShape(Rectangle())
                                 .pointerInteraction(cornerRadius: Theme.Radius.card)
                         }
                         .buttonStyle(.plain)
@@ -107,7 +111,6 @@ struct SearchView: View {
                         }
                     }
                 }
-                .padding(.horizontal, metrics.pageMargin)
             }
             if model.browseGenres.isEmpty {
                 EmptyStateView("Search your addons", systemImage: "magnifyingglass", message: "Find something to watch by title.")

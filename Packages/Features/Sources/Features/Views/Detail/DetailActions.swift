@@ -8,19 +8,28 @@ import UIKit
 struct DetailActions: View {
     let model: DetailViewModel
     @Binding var isConfirmingUnmarkShow: Bool
+    /// False leaves only the metadata line, while the page shows its streams in place of the actions.
+    var showsActions = true
+    /// The main action's tap: the page shows this title's streams.
+    let play: (StreamRequest) -> Void
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
 
     var body: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
-            MetaLine(metaParts, identifier: "detail.metaLine")
+            MetaLine(metaParts, identifier: "detail.metaLine", spreads: true)
                 .multilineTextAlignment(isLandscape ? .leading : .center)
-            actionRow
-            if model.isFallback && !model.isLoading {
-                Label("Only basic details are available for this title.", systemImage: "info.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("detail.fallbackNote")
+            if showsActions {
+                VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
+                    actionRow
+                    if model.isFallback && !model.isLoading {
+                        Label("Only basic details are available for this title.", systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("detail.fallbackNote")
+                    }
+                }
+                .transition(.opacity)
             }
         }
     }
@@ -33,7 +42,9 @@ struct DetailActions: View {
     @ViewBuilder
     private var primaryAction: some View {
         if let request = model.primaryRequest {
-            NavigationLink(value: request) {
+            Button {
+                play(request)
+            } label: {
                 Label(model.primaryActionTitle, systemImage: "play.fill")
             }
             .buttonStyle(.primaryAction)

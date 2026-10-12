@@ -116,7 +116,8 @@ private struct BackSwipeModifier: ViewModifier {
 }
 
 private struct BackSwipeInstaller: UIViewRepresentable {
-    let onSwipe: () -> Void
+    /// Goes back. True when the screen on top was popped; false when it stays (it closed something of its own instead).
+    let onSwipe: () -> Bool
 
     func makeUIView(context: Context) -> BackSwipeProbe {
         let probe = BackSwipeProbe()
@@ -171,9 +172,13 @@ private final class BackSwipeProbe: UIView {
 /// pans are switched off too. SwiftUI's zoom has no setting for them (UIKit's own has `interactiveDismissShouldBegin`, which SwiftUI
 /// does not pass on), so they are found by what they are, with no private class named: pan recognizers on the screen's view whose
 /// delegate is an interaction installed on that same view. The zoom's pinch to close is not a pan and is left to UIKit.
+///
+/// A screen that is still arriving can be swiped away at once. The zoom that opens a title takes about a second to settle, and UIKit
+/// lets a pop turn such a push round, so the swipe only waits for a screen that is already leaving (see `isLeaving`).
 @MainActor
 private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
-    var onSwipe: () -> Void = {}
+    /// Goes back. True when the screen on top was popped; false when it stays (it closed something of its own instead).
+    var onSwipe: () -> Bool = { false }
     private lazy var pan: UIPanGestureRecognizer = {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(swiped))
         pan.maximumNumberOfTouches = 1
@@ -212,6 +217,16 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
 
     private var isRightToLeft: Bool { stack?.view.effectiveUserInterfaceLayoutDirection == .rightToLeft }
 
+    /// True while a pop is running that brought `controller` to the top: the screen above it is on its way out, and a second swipe must
+    /// not pop again. False with no transition, and false while `controller` itself is still arriving: the screen it was pushed from
+    /// is then still under it in the stack.
+    private func isLeaving(_ controller: UIViewController) -> Bool {
+        guard let coordinator = controller.transitionCoordinator else { return false }
+        guard let stack, coordinator.viewController(forKey: .to) === controller,
+              let origin = coordinator.viewController(forKey: .from) else { return true }
+        return !stack.viewControllers.contains(origin)
+    }
+
     /// A zoomed screen's own dismissal pans, see the type's comment.
     private func dismissalPans(on page: UIView) -> [UIGestureRecognizer] {
         (page.gestureRecognizers ?? []).filter { recognizer in
@@ -235,12 +250,13 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc private func swiped() {
-        guard pan.state == .began, let controller = pushed, controller.transitionCoordinator == nil, let page = controller.viewIfLoaded else { return }
+        guard pan.state == .began, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
+        // The same light tap as opening a title, once per swipe that goes back.
+        Haptics.tap()
+        // A screen that only closed something of its own (the title page's streams) stays, and keeps taking touches.
+        guard onSwipe() else { return }
         // Off at once: a touch that lands while the screen zooms away goes to the screen underneath.
         page.isUserInteractionEnabled = false
-        // The same light tap as opening a title, once per swipe that closes a screen.
-        Haptics.tap()
-        onSwipe()
         // Should the pop not happen, the screen works again.
         Task { [weak page] in
             try? await Task.sleep(for: .seconds(1.5))
@@ -272,13 +288,13 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
         return true
     }
 
-    /// Only a swipe that is more sideways than vertical, towards the trailing edge, on a pushed screen and with no transition running.
-    /// Anything else fails here, and the page's scrolling carries on as it would without this recognizer.
+    /// Only a swipe that is more sideways than vertical, towards the trailing edge, on a pushed screen that is not already on its way
+    /// out. Anything else fails here, and the page's scrolling carries on as it would without this recognizer.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let controller = pushed, let page = controller.viewIfLoaded else { return false }
         let movement = pan.translation(in: page)
         let forward = isRightToLeft ? -movement.x : movement.x
-        guard controller.transitionCoordinator == nil, forward > abs(movement.y) else { return false }
+        guard !isLeaving(controller), forward > abs(movement.y) else { return false }
         return startsAtEdge || !isOverScrolledShelf(within: page)
     }
 

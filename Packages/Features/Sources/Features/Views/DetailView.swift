@@ -10,6 +10,12 @@ struct DetailView: View {
     @State private var isDescriptionExpanded = false
     @State private var isDescriptionTruncated = false
     @State private var isConfirmingUnmarkShow = false
+    /// True while an episode's context menu is open. The page blurs behind it.
+    @State private var isHoldingEpisode = false
+    /// The streams the page shows in place of its details after Play; nil shows the details.
+    @State private var pickedRequest: StreamRequest?
+    /// Names this page's back handler on the router, so the back swipe and the back buttons close the streams before they leave the page.
+    @State private var backHandlerID = UUID()
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
@@ -29,17 +35,24 @@ struct DetailView: View {
     @State private var scrollBottom: CGFloat = 0
     /// True when Home's spotlight opened the page (the only caller that passes a handoff). Only such a page plays the settle.
     private let opensFromSpotlight: Bool
+    /// The stream picker shown in place of the details needs the services.
+    private let services: AppServices
     /// Turns true when the page first appears, so the settle plays once for a page opened from the spotlight and not again when the user
     /// returns to it from a deeper page.
     @State private var hasSettled = false
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.windowSafeArea) private var windowSafeArea
+    @Environment(AppRouter.self) private var router
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
     /// The back button with its leading gap and the gap after it. In landscape the page keeps this column free.
     private static let backButtonColumn: CGFloat = 72
+    /// How far the page blurs while an episode's menu is open.
+    private static let heldBlur: CGFloat = 4
+    /// The streams replace the details, or the details come back, in this swap.
+    private static let swapAnimation = Animation.easeInOut(duration: 0.22)
 
     /// In portrait the artwork runs under the bar, so the page margin is enough. In landscape on iPhone the page keeps the portrait margin
     /// plus only the device's side safe-area inset, with no back-button column. On Mac the back button floats over the page's top
@@ -76,6 +89,7 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked,
                                                      trailerPreparer: AVTrailerPreparer()))
         _hero = State(initialValue: HeroLoader(seeding: handoff))
+        self.services = services
         opensFromSpotlight = handoff != nil
     }
 
@@ -86,39 +100,56 @@ struct DetailView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
                                    topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
-                                   logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo) {
-                            DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow)
+                                   logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo,
+                                   showsDetails: pickedRequest == nil) {
+                            DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
+                                          showsActions: pickedRequest == nil, play: showStreams)
                         } trailer: {
                             DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size))
                         } synopsis: {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated)
                         }
-                        Rectangle()
-                            .fill(Theme.separator)
-                            .frame(height: 1)
-                            .padding(.horizontal, contentMargin)
-                            .padding(.top, metrics.titleRatingsGap)
-                            .accessibilityHidden(true)
-                        if model.isSeries {
-                            DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin)
+                        if let request = pickedRequest {
+                            // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
+                            StreamPickerView(request: request, services: services, isEmbedded: true)
+                                .id(request.id)
                                 .padding(.top, metrics.titleRatingsGap)
-                        }
-                        VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
-                            if !model.reviews.isEmpty {
-                                DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
+                                .transition(.opacity)
+                        } else {
+                            Group {
+                                Rectangle()
+                                    .fill(Theme.separator)
+                                    .frame(height: 1)
+                                    .padding(.horizontal, contentMargin)
+                                    .padding(.top, metrics.titleRatingsGap)
+                                    .accessibilityHidden(true)
+                                if model.isSeries {
+                                    DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin,
+                                                   isHoldingEpisode: $isHoldingEpisode)
+                                        .padding(.top, metrics.titleRatingsGap)
+                                }
+                                VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
+                                    if !model.reviews.isEmpty {
+                                        DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
+                                    }
+                                    DetailCredits(model: model, contentMargin: contentMargin)
+                                }
+                                .padding(.top, model.isSeries ? metrics.titleSectionSpacing : metrics.titleRatingsGap)
+                                if !model.relatedTitles.isEmpty {
+                                    related
+                                        .padding(.top, metrics.titleSectionSpacing)
+                                }
                             }
-                            DetailCredits(model: model, contentMargin: contentMargin)
-                        }
-                        .padding(.top, model.isSeries ? metrics.titleSectionSpacing : metrics.titleRatingsGap)
-                        if !model.relatedTitles.isEmpty {
-                            related
-                                .padding(.top, metrics.titleSectionSpacing)
+                            .transition(.opacity)
                         }
                     }
                     .padding(.bottom, Theme.Spacing.xxl)
                     // The panel's appearance and disappearance moves the content below it, rather than jumping.
                     .animation(.snappy(duration: 0.35), value: model.trailer.showsPanel)
+                    // The system draws the held episode and its menu above the page, so they stay sharp.
+                    .blur(radius: isHoldingEpisode ? Self.heldBlur : 0)
+                    .animation(.easeOut(duration: 0.2), value: isHoldingEpisode)
                 }
                 // The track of the page's own scroll indicator is inset, so the bar is a short line rather than the whole screen height.
                 .contentMargins(.vertical, Self.scrollIndicatorInset, for: .scrollIndicators)
@@ -162,6 +193,23 @@ struct DetailView: View {
         .scrollEdgeEffectHidden(true, for: .top)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
+        // While the streams show, back closes them rather than leaving the page. On iPhone a page from the spotlight hides the system
+        // back button already (see `instantDestination()`), so this stays hidden there too.
+        .navigationBarBackButtonHidden(!usesOwnBackButton || pickedRequest != nil)
+        .toolbar {
+            if pickedRequest != nil, usesOwnBackButton {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        closeStreams()
+                    } label: {
+                        Image(systemName: "chevron.backward")
+                            .fontWeight(.semibold)
+                    }
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("detail.back")
+                }
+            }
+        }
         .task { await model.load(afterHero: { await loadHero() }) }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(isLandscape)") {
             await loadHero()
@@ -174,14 +222,44 @@ struct DetailView: View {
         .onAppear {
             Task { await model.refreshUserState() }
             if opensFromSpotlight { hasSettled = true }
+            // A page that comes back with its streams open takes its back handler again.
+            if pickedRequest != nil { router.addBackHandler(id: backHandlerID) { closeStreams() } }
         }
         .onDisappear {
+            // A tab switch or a covering screen leaves the streams open; when the page returns, its handler is registered again.
+            router.removeBackHandler(id: backHandlerID)
             model.releaseStreamPrefetch()
             // A full-screen trailer covers the page without leaving it, so its player stays. Leaving the page stops the load and player.
             if !model.trailer.isFullScreen { model.trailer.cancel() }
         }
         .accessibilityIdentifier("detail.scroll")
         .youTubeTrailer(Bindable(model.trailer).youTubeHandoff)
+    }
+
+    // MARK: - Streams
+
+    /// Play shows this title's streams in place of its details, and the trailer stops, since it would play behind them. Back then closes
+    /// them rather than the page. The page does not scroll.
+    private func showStreams(_ request: StreamRequest) {
+        model.trailer.cancel()
+        withAnimation(Self.swapAnimation) { pickedRequest = request }
+        router.addBackHandler(id: backHandlerID) { closeStreams() }
+    }
+
+    /// Takes the streams away and shows the details again, and gives up the back handler so the next back leaves the page.
+    private func closeStreams() {
+        router.removeBackHandler(id: backHandlerID)
+        withAnimation(Self.swapAnimation) { pickedRequest = nil }
+    }
+
+    /// Whether the page draws its own back button while the streams show. On Mac always. On iPhone not for a title opened from Home's
+    /// spotlight, which already has a back button that calls `goBack`.
+    private var usesOwnBackButton: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return !opensFromSpotlight
+        #endif
     }
 
     // MARK: - Header

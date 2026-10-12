@@ -87,19 +87,27 @@ struct DetailReviews: View {
         }
     }
 
-    /// Choosing a sort, the current one included, folds the open review first: its card would otherwise be moved while it is open.
+    /// Choosing a sort, the current one included, folds the open review first: its card would otherwise be moved while it is open. The
+    /// haptic comes when that fold has finished, and only when a review was open to fold.
     private func chooseSort(_ sort: ReviewSort) {
         if expandedReviewID != nil {
-            withAnimation(.snappy(duration: 0.35)) { expandedReviewID = nil }
+            withAnimation(.snappy(duration: 0.35)) {
+                expandedReviewID = nil
+            } completion: {
+                Haptics.settle()
+            }
         }
         reviewSort = sort
     }
 
     /// Opening a review widens its card and unfolds its text together. Closing one folds the text and narrows the card in the same motion,
-    /// as it opened: one animation for the state, the card's width and the text.
+    /// as it opened: one animation for the state, the card's width and the text. The haptic comes when the card has finished moving,
+    /// opened or closed.
     private func toggleReview(_ id: String) {
         withAnimation(.snappy(duration: 0.35)) {
             expandedReviewID = expandedReviewID == id ? nil : id
+        } completion: {
+            Haptics.settle()
         }
     }
 }
