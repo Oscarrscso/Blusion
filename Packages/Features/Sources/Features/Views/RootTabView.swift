@@ -103,6 +103,23 @@ public final class AppRouter {
         return true
     }
 
+    /// Back on the tab that is showing: pops its stack by one screen, as the back swipe does. False when there was nothing to pop.
+    @discardableResult
+    func goBackOnTab() -> Bool {
+        switch tab {
+        case .home: return goBack(in: \.homePath)
+        case .discover: return goBack(in: \.discoverPath)
+        case .library: return goBack(in: \.libraryPath)
+        case .settings: return goBack(in: \.settingsPath)
+        case .search: return goBack(in: \.searchPath)
+        }
+    }
+
+    /// Home reloads everything it shows, as a pull from the top would (see `HomeView`).
+    var homeRefreshRevision = 0
+
+    func refreshHome() { homeRefreshRevision += 1 }
+
     /// The Search tab on its category browser, as if the tab had been tapped from another tab.
     func showSearchBrowse() {
         searchPath = NavigationPath()

@@ -52,6 +52,8 @@ struct HomeView: View {
             }
             .onChange(of: actions?.watchedIdentities) { Task { await model.refreshContinueWatching() } }
             .onChange(of: router.userStateRevision) { _, _ in Task { await model.refreshContinueWatching() } }
+            // Command-R on Mac reloads everything Home shows (see `HomeViewModel.refresh()`).
+            .onChange(of: router.homeRefreshRevision) { _, _ in Task { await model.refresh() } }
             // Coming back from Settings: addons or widgets may have changed.
             .onChange(of: router.tab) { old, _ in
                 if old == .settings { Task { await model.load() } }
