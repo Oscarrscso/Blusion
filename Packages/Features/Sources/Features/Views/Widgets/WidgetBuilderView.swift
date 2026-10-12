@@ -291,24 +291,64 @@ private struct SentenceCard: View {
     }
 }
 
-/// The settings as one vertical list: every setting a full-width row, in the order of the pills, so the rows share the sentence's margins.
+/// The settings as one vertical list, in the order of the pills. The filters that narrow a TMDB list sit two across, in pairs; every other
+/// setting is a full-width row, so the rows share the sentence's margins.
 private struct PillList: View {
     let model: WidgetBuilderModel
+
+    /// The settings that narrow a TMDB list: the filters the sentence reads out.
+    private static let filters: Set<WidgetBuilderModel.Field> = [
+        .period, .genres, .keywords, .excludedKeywords, .score, .votes, .language, .runtime, .release, .providers, .region, .cast, .crew,
+        .companies,
+    ]
+    private static let columns = [GridItem(.flexible(), spacing: Theme.Spacing.s), GridItem(.flexible(), spacing: Theme.Spacing.s)]
 
     var body: some View {
         GlassEffectContainer(spacing: Theme.Spacing.s) {
             VStack(spacing: Theme.Spacing.s) {
-                ForEach(model.pills) { pill in
-                    PillButton(model: model, pill: pill)
-                        .id(pill.field)
+                ForEach(Self.runs(model.pills)) { run in
+                    if run.isFilters {
+                        LazyVGrid(columns: Self.columns, spacing: Theme.Spacing.s) {
+                            ForEach(run.pills) { pill in row(pill) }
+                        }
+                    } else {
+                        ForEach(run.pills) { pill in row(pill) }
+                    }
                 }
             }
         }
     }
+
+    private func row(_ pill: WidgetBuilderModel.Pill) -> some View {
+        PillButton(model: model, pill: pill)
+            .id(pill.field)
+    }
+
+    /// The pills in runs of one layout: consecutive filters share a run, and every other pill is a run of its own.
+    private static func runs(_ pills: [WidgetBuilderModel.Pill]) -> [PillRun] {
+        var runs: [PillRun] = []
+        for pill in pills {
+            let isFilter = filters.contains(pill.field)
+            if isFilter, let last = runs.last, last.isFilters {
+                runs[runs.count - 1].pills.append(pill)
+            } else {
+                runs.append(PillRun(id: pill.field.rawValue, isFilters: isFilter, pills: [pill]))
+            }
+        }
+        return runs
+    }
 }
 
-/// One setting in the list: its icon, its name over its value, and a chevron that shows whether its editor is open. Every row is the
-/// width of the page and at least as tall as the others, so they line up. A row that cannot be used now is faded and does nothing.
+/// Pills drawn together: a run of filters, two across, or one other setting as a full-width row.
+private struct PillRun: Identifiable {
+    let id: String
+    let isFilters: Bool
+    var pills: [WidgetBuilderModel.Pill]
+}
+
+/// One setting in the list: its icon, its name over its value, and a chevron that shows whether its editor is open. A row fills the page's
+/// width, or its half of a pair of filters, and is at least as tall as the others, so they line up. A row that cannot be used now is faded
+/// and does nothing.
 private struct PillButton: View {
     let model: WidgetBuilderModel
     let pill: WidgetBuilderModel.Pill
