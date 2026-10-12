@@ -102,4 +102,35 @@ import StremioKitTestSupport
         #expect(!raw.contains("TOKEN") && !raw.contains("manifest.json"), "only the addon's id and display host are persisted")
         #expect(await store.load() == imported.widgets)
     }
+
+    @Test func aWidgetThisBuildCannotReadIsKeptInStorageWhereItWas() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = DefaultsWidgetStore(defaults: defaults)
+        await store.save(layout)
+        // A widget a newer build saved between the two this build reads: its content kind is one this build does not have.
+        let future: [String: Any] = ["id": "future", "title": "From a newer build", "hideTitle": false, "content": ["futureKind": [String: Any]()]]
+        let stored = try #require(defaults.data(forKey: DefaultsWidgetStore.key))
+        var envelope = try #require(JSONSerialization.jsonObject(with: stored) as? [String: Any])
+        var widgets = try #require(envelope["widgets"] as? [Any])
+        widgets.insert(future, at: 1)
+        envelope["widgets"] = widgets
+        defaults.set(try JSONSerialization.data(withJSONObject: envelope), forKey: DefaultsWidgetStore.key)
+
+        #expect(await store.load() == layout, "a widget this build cannot read is left out of the layout")
+
+        let added = HomeWidget(id: "added", title: "Added", content: .continueWatching)
+        await store.save([layout[0], added, layout[1]])
+        #expect(await store.load() == [layout[0], added, layout[1]])
+        #expect(try savedIDs(in: defaults) == ["continue", "future", "added", "row"], "it stays after the widget before it")
+
+        await store.save([added, layout[1]])
+        #expect(try savedIDs(in: defaults) == ["future", "added", "row"], "with the widget before it gone, it moves to the front")
+    }
+
+    private func savedIDs(in defaults: UserDefaults) throws -> [String] {
+        let data = try #require(defaults.data(forKey: DefaultsWidgetStore.key))
+        let envelope = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try #require(envelope["widgets"] as? [[String: Any]]).compactMap { $0["id"] as? String }
+    }
 }

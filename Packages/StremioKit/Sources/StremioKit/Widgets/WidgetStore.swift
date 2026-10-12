@@ -21,6 +21,8 @@ public actor InMemoryWidgetStore: WidgetStore {
 }
 
 /// Stores the layout as JSON in `UserDefaults`, wrapped as `{ "version": 1, "widgets": [...] }`. Unreadable data loads as nil.
+/// A widget this build cannot read (written by a newer build, or edited by hand) is left out of the layout but kept in storage: each save
+/// writes it back after the widget that came before it, so a build that can read it later finds it where it was.
 public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
     public static let key = "home.widgets.v1"
 
@@ -28,31 +30,74 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
 
     private struct Envelope: Codable {
         var version: Int
-        var widgets: [HomeWidget]
+        var widgets: [Entry]
+    }
 
-        init(version: Int, widgets: [HomeWidget]) {
-            self.version = version
-            self.widgets = widgets
-        }
+    /// One saved widget: one this build reads, or one it cannot, kept with the values it was saved with.
+    private enum Entry: Codable {
+        case widget(HomeWidget)
+        case unreadable(SavedJSON)
 
-        /// One widget that cannot be read (written by a newer build, or edited by hand) is left out instead of losing the whole layout.
+        /// Never throws: one entry whose values cannot be represented is kept as null, so it does not take the other widgets with it.
         init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            version = try container.decode(Int.self, forKey: .version)
-            var list = try container.nestedUnkeyedContainer(forKey: .widgets)
-            var decoded: [HomeWidget] = []
-            while !list.isAtEnd {
-                if let widget = try? list.decode(HomeWidget.self) {
-                    decoded.append(widget)
-                } else {
-                    _ = try? list.decode(Skipped.self)
-                }
+            let container = try decoder.singleValueContainer()
+            if let widget = try? container.decode(HomeWidget.self) {
+                self = .widget(widget)
+            } else {
+                self = .unreadable((try? container.decode(SavedJSON.self)) ?? .null)
             }
-            widgets = decoded
         }
 
-        private enum CodingKeys: String, CodingKey { case version, widgets }
-        private struct Skipped: Decodable {}
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .widget(let widget): try container.encode(widget)
+            case .unreadable(let json): try container.encode(json)
+            }
+        }
+    }
+
+    /// Any JSON value, so an entry this build cannot read is written back with the same values. Whole numbers in the Int64 range keep their exact value.
+    private enum SavedJSON: Codable {
+        case null
+        case bool(Bool)
+        case integer(Int64)
+        case number(Double)
+        case string(String)
+        case array([SavedJSON])
+        case object([String: SavedJSON])
+
+        init(from decoder: Decoder) throws {
+            var container = try decoder.singleValueContainer()
+            if container.decodeNil() {
+                self = .null
+            } else if let value = try? container.decode(Bool.self) {
+                self = .bool(value)
+            } else if let value = try? container.decode(Int64.self) {
+                self = .integer(value)
+            } else if let value = try? container.decode(Double.self) {
+                self = .number(value)
+            } else if let value = try? container.decode(String.self) {
+                self = .string(value)
+            } else if let value = try? container.decode([SavedJSON].self) {
+                self = .array(value)
+            } else {
+                self = .object(try container.decode([String: SavedJSON].self))
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .null: try container.encodeNil()
+            case .bool(let value): try container.encode(value)
+            case .integer(let value): try container.encode(value)
+            case .number(let value): try container.encode(value)
+            case .string(let value): try container.encode(value)
+            case .array(let value): try container.encode(value)
+            case .object(let value): try container.encode(value)
+            }
+        }
     }
 
     private let defaults: UserDefaults
@@ -62,10 +107,11 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
     }
 
     public func load() async -> [HomeWidget]? {
-        guard let data = defaults.data(forKey: Self.key),
-              let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-              envelope.version == Self.currentVersion else { return nil }
-        return envelope.widgets
+        guard let envelope = readEnvelope() else { return nil }
+        return envelope.widgets.compactMap { entry -> HomeWidget? in
+            guard case .widget(let widget) = entry else { return nil }
+            return widget
+        }
     }
 
     public func save(_ widgets: [HomeWidget]?) async {
@@ -73,7 +119,32 @@ public final class DefaultsWidgetStore: WidgetStore, @unchecked Sendable {
             defaults.removeObject(forKey: Self.key)
             return
         }
-        guard let data = try? JSONEncoder().encode(Envelope(version: Self.currentVersion, widgets: widgets)) else { return }
+        // An unreadable entry stays after the last widget before it that is still in the layout, or first when there is none.
+        let present = Set(widgets.map(\.id))
+        var unreadable: [String?: [Entry]] = [:]
+        var anchor: String?
+        for entry in readEnvelope()?.widgets ?? [] {
+            switch entry {
+            case .widget(let widget):
+                if present.contains(widget.id) { anchor = widget.id }
+            case .unreadable:
+                unreadable[anchor, default: []].append(entry)
+            }
+        }
+        var entries = unreadable.removeValue(forKey: nil) ?? []
+        for widget in widgets {
+            entries.append(.widget(widget))
+            entries += unreadable.removeValue(forKey: widget.id) ?? []
+        }
+        guard let data = try? JSONEncoder().encode(Envelope(version: Self.currentVersion, widgets: entries)) else { return }
         defaults.set(data, forKey: Self.key)
+    }
+
+    /// The saved envelope, or nil when there is none, it cannot be read, or it is another version.
+    private func readEnvelope() -> Envelope? {
+        guard let data = defaults.data(forKey: Self.key),
+              let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+              envelope.version == Self.currentVersion else { return nil }
+        return envelope
     }
 }
