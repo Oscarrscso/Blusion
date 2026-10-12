@@ -14,7 +14,7 @@ struct BestEditionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Round ends while folded, the card's corners once open.
-    private var cornerRadius: CGFloat { isExpanded ? Theme.Radius.card : Self.foldedRadius }
+    private var rowRadius: CGFloat { isExpanded ? Theme.Radius.card : Self.foldedRadius }
 
     var body: some View {
         if model.canFindBestEdition {
@@ -36,7 +36,11 @@ struct BestEditionView: View {
                     }
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.vertical, Theme.Spacing.s + 2)
-                    .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    // Folded, the whole row is the capsule, so its tap area is too. Open, the header is the card's top edge, and its
+                    // tap area stays square, as it was.
+                    .contentShape(isExpanded
+                                  ? AnyShape(Rectangle())
+                                  : AnyShape(RoundedRectangle(cornerRadius: Self.foldedRadius, style: .continuous)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -50,7 +54,7 @@ struct BestEditionView: View {
                         .transition(.opacity)
                 }
             }
-            .glassCardSurface(cornerRadius: cornerRadius)
+            .glassCardSurface(cornerRadius: rowRadius)
         }
     }
 
