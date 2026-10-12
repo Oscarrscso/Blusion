@@ -38,6 +38,9 @@ public final class StreamPickerViewModel {
     public private(set) var isAutoPicking = false
     public private(set) var autoPickMessage: String?
     public private(set) var autoPickedStream: RankedStream?
+    /// What "Play best" and automatic playback start when Auto Pick has nothing to hand over. It is the best-ranked stream of the first route
+    /// class (natively playable first, as the list orders them), picked by the same ranking as Auto Pick.
+    public private(set) var bestToPlay: RankedStream?
 
     private let services: AppServices
     private var sniffTasks: [Task<Void, Never>] = []
@@ -75,6 +78,16 @@ public final class StreamPickerViewModel {
         }
         links = Self.linksToOffer(in: listing.items)
         bestAssessment = listing.isLoading ? nil : AutoStreamRanking.best(from: infuseCandidates, duration: request.expectedDuration)
+        // The list is already ordered by route class, so the first watchable stream names the class to rank within. A preferred resolution
+        // is an explicit choice that the list's order applies, so it decides instead of the quality score.
+        let watchable = listing.items.filter { $0.route.isWatchable }
+        if settings.rankingPreferences.preferredResolution != nil {
+            bestToPlay = watchable.first
+        } else {
+            bestToPlay = watchable.first.flatMap { first in
+                AutoStreamRanking.best(from: watchable.filter { $0.route.sortClass == first.route.sortClass }, duration: request.expectedDuration)?.item
+            }
+        }
     }
 
     public func load() async {
@@ -228,7 +241,7 @@ public final class StreamPickerViewModel {
 
     /// The best stream the user can start, in Blusion or in the app they chose, for a one-tap "Play best".
     public func playBest() async -> Choice? {
-        guard let best = listing.best else { return nil }
+        guard let best = bestToPlay else { return nil }
         return await choose(best)
     }
 

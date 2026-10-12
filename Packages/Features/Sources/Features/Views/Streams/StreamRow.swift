@@ -10,7 +10,7 @@ struct StreamRow: View {
     let item: RankedStream
     /// True for the stream Auto Pick recommends, shown with a "Best match" label.
     var isBest = false
-    /// True when the release name says REMUX. Found in the name, the same way Auto Pick finds it.
+    /// True when the release name says REMUX, as the stream's parsed quality reads it.
     var isRemux = false
 
     var body: some View {

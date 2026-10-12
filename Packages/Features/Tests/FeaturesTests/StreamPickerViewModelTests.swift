@@ -301,6 +301,16 @@ import StremioKitTestSupport
         #expect(model.listing.items.map(\.title) == ["hd", "uhd"])
     }
 
+    @Test func playBestFollowsThePreferredResolution() async throws {
+        // An explicit preferred resolution decides play best, even where the quality score prefers the larger 4K release.
+        let streams = [direct("uhd", "https://a.example.com/1.mp4", "2160p WEB-DL 40 GB"), direct("hd", "https://a.example.com/2.mp4", "720p WEB-DL 3 GB")]
+        let services = try await services(bodies: [body(streams)], settings: PlaybackSettings(preferredResolution: 720))
+        let model = StreamPickerViewModel(request: request, services: services)
+        await model.load()
+        guard case .play(let plan)? = await model.playBest() else { Issue.record("expected a plan"); return }
+        #expect(plan.candidates.first?.title == "hd")
+    }
+
     @Test func bingeGroupContinuityPicksTheMatchingStream() async throws {
         let withGroup = { (name: String, url: String, group: String) in #"{"name":"\#(name)","url":"\#(url)","behaviorHints":{"bingeGroup":"\#(group)"}}"# }
         let services = try await services(bodies: [body([withGroup("other", "https://a.example.com/1.mp4", "g-other"), withGroup("match", "https://a.example.com/2.mp4", "g-1080")])])

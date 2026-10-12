@@ -233,7 +233,7 @@ struct StreamPickerView: View {
                         // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
                         if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {
                             autoPick(fallingBackToBest: true)
-                        } else if let best = model.listing.best {
+                        } else if let best = model.bestToPlay {
                             select(best)
                         }
                     }
@@ -618,7 +618,7 @@ struct StreamPickerView: View {
                 guard !BackSwipeRecord.isFresh else { return }
                 select(item)
             } label: {
-                StreamRow(item: item, isBest: isRecommended, isRemux: AutoStreamRanking.assess(item, duration: nil).isRemux)
+                StreamRow(item: item, isBest: isRecommended, isRemux: item.quality.isRemux)
             }
             .buttonStyle(PressableCardStyle())
             .contextMenu { contextActions(for: item) }
@@ -697,7 +697,7 @@ struct StreamPickerView: View {
                 present(choice, for: item)
                 return
             }
-            guard fallingBackToBest, !Task.isCancelled, let best = model.listing.best, let choice = await model.choose(best) else { return }
+            guard fallingBackToBest, !Task.isCancelled, let best = model.bestToPlay, let choice = await model.choose(best) else { return }
             present(choice, for: best)
         }
     }

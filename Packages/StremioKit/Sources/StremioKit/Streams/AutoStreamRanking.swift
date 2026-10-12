@@ -1,6 +1,12 @@
 import Foundation
 
-/// Opt-in release comparison. This estimates quality from addon metadata, without changing manual listing order.
+/// Opt-in release comparison, behind Auto Pick and the Best match mark, which both read this one ranking. It scores each release from the
+/// facts its addon's text and size state, and leaves the manual listing order as it is.
+///
+/// The score adds separately bounded parts, so no single tag decides it. Video counts resolution, source, codec, bit depth, HDR and bitrate,
+/// where bitrate is size relative to runtime and gains nothing beyond a cap. Audio counts the best track named, with lossless above any lossy
+/// codec, then channels and Atmos. REMUX is an indicator of an untouched disc video: a small nudge that a clearly better release overrides.
+/// A fact that a release contradicts earns nothing.
 public enum AutoStreamRanking {
     public struct Assessment: Sendable {
         public let item: RankedStream
@@ -11,41 +17,19 @@ public enum AutoStreamRanking {
     }
 
     public static func assess(_ item: RankedStream, duration: TimeInterval?) -> Assessment {
-        let text = [item.stream.name, item.stream.description, item.stream.behaviorHints.filename].compactMap { $0 }
-            .joined(separator: " ").lowercased()
-        let remux = expressions[#"\bremux\b"#]?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
-        var bitrate = number(#"([0-9]+(?:\.[0-9]+)?)\s*(?:mbps|mb/s|mbit/s)\b"#, in: text)
-        if bitrate == nil, let bytes = item.quality.sizeBytes, bytes > 0, let duration, duration > 0 {
-            bitrate = Double(bytes) * 8 / duration / 1_000_000
-        }
-        let seeds = number(#"(?:seeders?\s*[:=]?\s*|[👤👥🌱]\s*)([0-9]+)\b"#, in: text)
-            ?? number(#"\b([0-9]+)\s*seeders?\b"#, in: text)
         let quality = item.quality
-        let resolution = quality.resolution ?? 0
-        var score: Double = resolution >= 2160 ? 16 : resolution >= 1080 ? 10 : resolution >= 720 ? 2 : 0
-        switch quality.source {
-        case .bluray: score += 26
-        case .webDL: score += 20
-        case .webRip: score += 12
-        case .hdtv: score += 8
-        case .dvd: score += 2
-        case .cam: score -= 30
-        case nil: break
-        }
-        if remux { score += 10 }
-        if let bitrate, resolution > 0 {
-            // More pixels need more data; HEVC/AV1 use less than H.264 for comparable fidelity.
-            let pixels = resolution >= 2160 ? 2.8 : resolution >= 1080 ? 1.0 : 0.5
-            let codec = quality.videoCodec == .av1 ? 0.55 : quality.videoCodec == .hevc ? 0.65 : 1.0
-            let target = 16 * pixels * codec
-            score += max(-22, min(12, (bitrate / target - 1) * 18))
-        }
-        if quality.isHDR { score += 4 }
-        if quality.isDolbyVision { score += 1 }
-        if quality.audioCodecs.contains(where: { [.trueHD, .dtsHD, .flac].contains($0) }) { score += 3 }
-        if quality.hasAtmos { score += 2 }
-        let seeders = seeds.flatMap { $0 >= 0 && $0 < Double(Int.max) ? Int($0) : nil }
-        return Assessment(item: item, qualityScore: score, bitrateMbps: bitrate, seeders: seeders, isRemux: remux)
+        // A contradicted resolution, source or codec is left out. The bitrate reference depends on the resolution and codec, so it goes too.
+        let resolution = quality.hasConflictingResolution ? nil : quality.resolution
+        let source = quality.hasConflictingSource ? nil : quality.source
+        let codec = quality.hasConflictingVideoCodec ? nil : quality.videoCodec
+        let bitrate = bitrateMbps(quality, duration: duration)
+        var score = resolutionPoints(resolution) + sourcePoints(source) + videoCodecPoints(codec)
+        score += bitDepthPoints(quality.bitDepth) + hdrPoints(quality)
+        score += bitratePoints(bitrate, resolution: resolution, codec: codec)
+        score += audioPoints(quality)
+        // A REMUX name counts only when no other source is named beside it.
+        if quality.isRemux && !quality.hasConflictingSource { score += remuxPoints }
+        return Assessment(item: item, qualityScore: score, bitrateMbps: bitrate, seeders: quality.seeders, isRemux: quality.isRemux)
     }
 
     public static func best(from items: [RankedStream], duration: TimeInterval?) -> Assessment? {
@@ -65,22 +49,103 @@ public enum AutoStreamRanking {
         } ?? leader
     }
 
-    private static let expressions: [String: NSRegularExpression] = {
-        let patterns = [
-            #"\bremux\b"#,
-            #"([0-9]+(?:\.[0-9]+)?)\s*(?:mbps|mb/s|mbit/s)\b"#,
-            #"(?:seeders?\s*[:=]?\s*|[👤👥🌱]\s*)([0-9]+)\b"#,
-            #"\b([0-9]+)\s*seeders?\b"#,
-        ]
-        return Dictionary(uniqueKeysWithValues: patterns.compactMap { pattern in
-            (try? NSRegularExpression(pattern: pattern)).map { (pattern, $0) }
-        })
-    }()
+    /// REMUX is the disc's own video, so it is worth a few points, and no more.
+    private static let remuxPoints: Double = 4
 
-    private static func number(_ pattern: String, in text: String) -> Double? {
-        guard let regex = expressions[pattern],
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let range = Range(match.range(at: 1), in: text), let value = Double(text[range]), value.isFinite else { return nil }
-        return value
+    // MARK: - Video
+
+    private static func resolutionPoints(_ height: Int?) -> Double {
+        guard let height else { return 0 }
+        if height >= 2160 { return 24 }
+        if height >= 1440 { return 18 }
+        if height >= 1080 { return 12 }
+        if height >= 720 { return 6 }
+        if height >= 576 { return 3 }
+        if height >= 480 { return 1 }
+        return 0
+    }
+
+    /// Blu-ray is the source of a REMUX and of most encodes made from discs; a cam is the worst source there is.
+    private static func sourcePoints(_ source: StreamSourceKind?) -> Double {
+        switch source {
+        case .bluray?: return 14
+        case .webDL?: return 10
+        case .webRip?: return 6
+        case .hdtv?: return 3
+        case .dvd?: return 1
+        case .cam?: return -40
+        case nil: return 0
+        }
+    }
+
+    private static func videoCodecPoints(_ codec: VideoCodec?) -> Double {
+        switch codec {
+        case .hevc?, .av1?: return 2
+        case .h264?, nil: return 0
+        }
+    }
+
+    private static func bitDepthPoints(_ depth: Int?) -> Double {
+        (depth ?? 0) >= 10 ? 3 : 0
+    }
+
+    private static func hdrPoints(_ quality: StreamQuality) -> Double {
+        quality.isDolbyVision ? 5 : quality.isHDR ? 3 : 0
+    }
+
+    /// Size relative to runtime, against what the resolution usually needs. Doubling the rate is worth 5 points, and the score is capped
+    /// above and floored below, so a huge file gains no more than a well-encoded one, and a starved one loses only so much.
+    private static func bitratePoints(_ mbps: Double?, resolution: Int?, codec: VideoCodec?) -> Double {
+        guard let mbps, let resolution, let reference = referenceMbps(resolution) else { return 0 }
+        // HEVC and AV1 reach the same picture at a lower rate than H.264.
+        let efficiency: Double = codec == .hevc ? 0.7 : codec == .av1 ? 0.6 : 1
+        return min(6, max(-8, 5 * log2(mbps / (reference * efficiency))))
+    }
+
+    /// The rate, in Mbps, that an H.264 release of this height is usually encoded at for good quality.
+    private static func referenceMbps(_ height: Int) -> Double? {
+        if height >= 2160 { return 35 }
+        if height >= 1440 { return 20 }
+        if height >= 1080 { return 14 }
+        if height >= 720 { return 6 }
+        if height >= 480 { return 2 }
+        return nil
+    }
+
+    /// The bitrate in Mbps: the one the addon states, else size over runtime. When both are known and differ by more than twice, the release
+    /// contradicts itself, so neither is trusted.
+    private static func bitrateMbps(_ quality: StreamQuality, duration: TimeInterval?) -> Double? {
+        let sized = sizeOverRuntimeMbps(quality, duration: duration)
+        guard let declared = quality.declaredBitrateMbps else { return sized }
+        guard let measured = sized else { return declared }
+        return max(declared, measured) <= 2 * min(declared, measured) ? declared : nil
+    }
+
+    private static func sizeOverRuntimeMbps(_ quality: StreamQuality, duration: TimeInterval?) -> Double? {
+        guard let bytes = quality.sizeBytes, bytes > 0, let duration, duration > 0 else { return nil }
+        return Double(bytes) * 8 / duration / 1_000_000
+    }
+
+    // MARK: - Audio
+
+    /// The best track the text names counts, since the player picks a track it can play. Channels add a little, and Atmos counts only with
+    /// a codec that carries it: an Atmos label beside AAC contradicts itself.
+    private static func audioPoints(_ quality: StreamQuality) -> Double {
+        var points = quality.audioCodecs.map { audioCodecPoints($0) }.max() ?? 0
+        if let channels = quality.audioChannels { points += channels >= 8 ? 3 : channels >= 6 ? 2 : 0 }
+        if quality.atmosFormat != nil { points += 2 }
+        return points
+    }
+
+    /// Lossless tracks keep the studio's mix bit for bit, so they sit well above every lossy codec. Plain DTS-HD is read as its lossless
+    /// Master Audio form, which is what release names mean by it.
+    private static func audioCodecPoints(_ codec: AudioCodec) -> Double {
+        switch codec {
+        case .trueHD, .dtsHD, .flac: return 14
+        case .eac3: return 8
+        case .dts, .ac3: return 6
+        case .aac, .opus: return 5
+        case .mp3: return 2
+        }
     }
 }

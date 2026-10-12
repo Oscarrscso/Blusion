@@ -70,11 +70,25 @@ public enum AtmosFormat: String, Sendable, Equatable, Hashable {
 public struct StreamQuality: Sendable, Equatable {
     /// Vertical resolution (2160, 1080, 720, 480, …).
     public var resolution: Int?
+    /// The text names more than one resolution, so this release's resolution can't be ranked on.
+    public var hasConflictingResolution = false
     public var isHDR = false
     public var isDolbyVision = false
+    /// Bits per colour channel the text names (8, 10 or 12).
+    public var bitDepth: Int?
     public var source: StreamSourceKind?
+    /// The text names more than one source, as a WEB-DL and a REMUX would, so this release's source can't be ranked on.
+    public var hasConflictingSource = false
+    /// The name says REMUX: the disc's own video, not a re-encode. An indicator of quality, weighed with the rest of the release.
+    public var isRemux = false
     public var videoCodec: VideoCodec?
+    /// The text names more than one video codec (an x264 transcoded from HEVC, say), so this release's codec can't be ranked on.
+    public var hasConflictingVideoCodec = false
+    /// The bitrate in Mbps that the addon's text states, when it states one.
+    public var declaredBitrateMbps: Double?
     public var audioCodecs: [AudioCodec] = []
+    /// The most channels the text names: 6 for 5.1, 8 for 7.1.
+    public var audioChannels: Int?
     public var hasAtmos = false
     public var sizeBytes: Int64?
     /// Peers that have the whole file and upload it, as the addon's text gives them.
@@ -126,14 +140,23 @@ public struct StreamQuality: Sendable, Equatable {
         guard !text.isEmpty else { return quality }
 
         quality.resolution = resolution(in: text)
+        quality.hasConflictingResolution = namedHeights(in: text).count > 1
         quality.isDolbyVision = matches(#"\b(dolby[ .\-]?vision|dovi|dv)\b"#, in: text)
         quality.isHDR = matches(#"\bhdr(10)?\+?\b"#, in: text) || quality.isDolbyVision
+        quality.bitDepth = bitDepth(in: text)
         quality.source = source(in: text)
+        quality.hasConflictingSource = namedValues(sourceRules, in: text).count > 1
+        quality.isRemux = matches(remuxPattern, in: text)
         quality.videoCodec = videoCodec(in: text)
+        quality.hasConflictingVideoCodec = namedValues(videoCodecRules, in: text).count > 1
+        quality.declaredBitrateMbps = positiveNumber(bitratePattern, in: text)
         quality.audioCodecs = audioCodecs(in: text)
+        quality.audioChannels = audioChannels(in: text)
         quality.hasAtmos = matches(#"\batmos\b"#, in: text)
         quality.sizeBytes = size(in: text)
-        quality.seeders = swarmCount(#"(?:👤|\bseed(?:s|ers)?:|\bs:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#, in: text)
+        // The counted form ("12 seeders") is read before the labelled one, which would otherwise take the next number as the count.
+        quality.seeders = swarmCount(seedersPattern, in: text) ?? swarmCount(seedersCountedPattern, in: text)
+            ?? swarmCount(seedersLabelledPattern, in: text)
         quality.peers = swarmCount(#"(?:\bpeers?:|\bp:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#, in: text)
         return quality
     }
@@ -157,36 +180,68 @@ public struct StreamQuality: Sendable, Equatable {
         return count
     }
 
+    /// Resolution words, most specific first. Each names the height it stands for.
+    private static let resolutionRules: [(pattern: String, value: Int)] = [
+        (#"\b(2160p|4k|uhd)\b"#, 2160),
+        (#"\b1440p\b"#, 1440),
+        (#"\b(1080[pi]|fhd|full[ .\-]?hd)\b"#, 1080),
+        (#"\b(720p|hd720)\b"#, 720),
+        (#"\b576p\b"#, 576),
+        (#"\b480p\b"#, 480),
+        (StreamQuality.bareSDPattern, 480),
+        (#"\b360p\b"#, 360),
+    ]
+
+    private static let bareSDPattern = #"\bsd\b"#
+
     private static func resolution(in text: String) -> Int? {
-        if matches(#"\b(2160p|4k|uhd)\b"#, in: text) { return 2160 }
-        if matches(#"\b1440p\b"#, in: text) { return 1440 }
-        if matches(#"\b(1080[pi]|fhd|full[ .\-]?hd)\b"#, in: text) { return 1080 }
-        if matches(#"\b(720p|hd720)\b"#, in: text) { return 720 }
-        if matches(#"\b576p\b"#, in: text) { return 576 }
-        if matches(#"\b(480p|sd)\b"#, in: text) { return 480 }
-        if matches(#"\b360p\b"#, in: text) { return 360 }
-        // 1920x1080
-        if let match = firstMatch(#"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#, in: text), match.count == 3, let height = Int(match[2]), (240...4320).contains(height) {
-            return height
-        }
-        return nil
+        if let rule = resolutionRules.first(where: { matches($0.pattern, in: text) }) { return rule.value }
+        return dimensionHeight(in: text)
     }
+
+    /// The height in a WIDTHxHEIGHT pair such as 1920x1080.
+    private static func dimensionHeight(in text: String) -> Int? {
+        guard let match = firstMatch(#"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#, in: text), match.count == 3, let height = Int(match[2]),
+              (240...4320).contains(height) else { return nil }
+        return height
+    }
+
+    /// The heights the text names, for the contradiction check. A bare "sd" is left out: it is too common in release text to contradict a
+    /// 1080p, though it still sets the resolution when nothing else does.
+    private static func namedHeights(in text: String) -> Set<Int> {
+        var heights = namedValues(resolutionRules.filter { $0.pattern != StreamQuality.bareSDPattern }, in: text)
+        if let height = dimensionHeight(in: text) { heights.insert(height) }
+        return heights
+    }
+
+    /// Source words, most specific first. The first rule that matches sets the source.
+    private static let sourceRules: [(pattern: String, value: StreamSourceKind)] = [
+        (#"\b(hdcam|camrip|cam|telesync|hdts|tsrip)\b"#, .cam),
+        (#"\b(blu[ .\-]?ray|bdrip|brrip|remux)\b"#, .bluray),
+        (#"\bweb[ .\-]?dl\b"#, .webDL),
+        (#"\bweb[ .\-]?rip\b"#, .webRip),
+        (#"\bhdtv\b"#, .hdtv),
+        (#"\b(dvdrip|dvd)\b"#, .dvd),
+    ]
 
     private static func source(in text: String) -> StreamSourceKind? {
-        if matches(#"\b(hdcam|camrip|cam|telesync|hdts|tsrip)\b"#, in: text) { return .cam }
-        if matches(#"\b(blu[ .\-]?ray|bdrip|brrip|remux)\b"#, in: text) { return .bluray }
-        if matches(#"\bweb[ .\-]?dl\b"#, in: text) { return .webDL }
-        if matches(#"\bweb[ .\-]?rip\b"#, in: text) { return .webRip }
-        if matches(#"\bhdtv\b"#, in: text) { return .hdtv }
-        if matches(#"\b(dvdrip|dvd)\b"#, in: text) { return .dvd }
-        return nil
+        sourceRules.first(where: { matches($0.pattern, in: text) })?.value
     }
 
+    /// The distinct values that the rules give for the words the text names. More than one is a contradiction.
+    private static func namedValues<Value: Hashable>(_ rules: [(pattern: String, value: Value)], in text: String) -> Set<Value> {
+        Set(rules.filter { matches($0.pattern, in: text) }.map { $0.value })
+    }
+
+    /// Video codec words, in the order they are tried. The first that matches sets the codec.
+    private static let videoCodecRules: [(pattern: String, value: VideoCodec)] = [
+        (#"\b(x265|h[ .]?265|hevc)\b"#, .hevc),
+        (#"\b(x264|h[ .]?264|avc)\b"#, .h264),
+        (#"\bav1\b"#, .av1),
+    ]
+
     private static func videoCodec(in text: String) -> VideoCodec? {
-        if matches(#"\b(x265|h[ .]?265|hevc)\b"#, in: text) { return .hevc }
-        if matches(#"\b(x264|h[ .]?264|avc)\b"#, in: text) { return .h264 }
-        if matches(#"\bav1\b"#, in: text) { return .av1 }
-        return nil
+        videoCodecRules.first(where: { matches($0.pattern, in: text) })?.value
     }
 
     /// Codecs are tested most specific first and each match is blanked out, so "E-AC3" doesn't also read as "AC3" and "DTS-HD" doesn't also read as "DTS".
@@ -212,6 +267,30 @@ public struct StreamQuality: Sendable, Equatable {
         return found
     }
 
+    /// Bits per channel the text names ("10bit", "8-bit"). "Hi10P" is 10-bit by name.
+    private static func bitDepth(in text: String) -> Int? {
+        if let match = firstMatch(bitDepthPattern, in: text), match.count == 2, let depth = Int(match[1]) { return depth }
+        return matches(highBitDepthPattern, in: text) ? 10 : nil
+    }
+
+    /// The most channels the text names for a layout such as "5.1" or "7.1", as a count: 5.1 is six. A size such as "5.1 GB" is not one.
+    private static func audioChannels(in text: String) -> Int? {
+        guard let regex = expressions[channelLayoutPattern] else { return nil }
+        let counts = regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match -> Int? in
+            guard let front = Range(match.range(at: 1), in: text).flatMap({ Int(text[$0]) }),
+                  let lfe = Range(match.range(at: 2), in: text).flatMap({ Int(text[$0]) }) else { return nil }
+            return front + lfe
+        }
+        return counts.max()
+    }
+
+    /// The number a pattern's capture reads as, when it is a positive, finite value.
+    private static func positiveNumber(_ pattern: String, in text: String) -> Double? {
+        guard let match = firstMatch(pattern, in: text), match.count == 2,
+              let value = Double(match[1]), value.isFinite, value > 0 else { return nil }
+        return value
+    }
+
     private static func size(in text: String) -> Int64? {
         guard let match = firstMatch(#"(\d+(?:[.,]\d+)?)\s?(gb|gib|mb|mib)\b"#, in: text), match.count == 3,
               let value = Double(match[1].replacingOccurrences(of: ",", with: ".")) else { return nil }
@@ -222,29 +301,28 @@ public struct StreamQuality: Sendable, Equatable {
         return Int64(value * multiplier)
     }
 
+    private static let remuxPattern = #"\bremux\b"#
+    private static let bitDepthPattern = #"\b(8|10|12)[ .\-]?bits?\b"#
+    private static let highBitDepthPattern = #"\bhi10p?\b"#
+    private static let bitratePattern = #"([0-9]+(?:\.[0-9]+)?)\s*(?:mbps|mb/s|mbit/s)\b"#
+    /// A channel layout: the front channels, then the LFE channel, so "5.1" reads as 5 and 1. Not followed by a digit or a size unit.
+    private static let channelLayoutPattern = #"(?<!\d)([1-9])\.([01])(?!\d|\s?(?:gb|gib|mb|mib)\b)"#
+    private static let seedersPattern = #"(?:👤|👥|🌱|\bseed(?:s|ers)?:|\bs:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#
+    private static let seedersLabelledPattern = #"\bseeders?\s*[:=]?\s*(\d{1,3}(?:,\d{3})+|\d+)"#
+    private static let seedersCountedPattern = #"(\d{1,3}(?:,\d{3})+|\d+)\s*seeders?\b"#
+
     /// Fixed release patterns are compiled once and shared safely across parses.
     private static let expressions: [String: NSRegularExpression] = {
-        let patterns = [
+        var patterns = [
             #"\b(dolby[ .\-]?vision|dovi|dv)\b"#,
             #"\bhdr(10)?\+?\b"#,
             #"\batmos\b"#,
-            #"\b(2160p|4k|uhd)\b"#,
-            #"\b1440p\b"#,
-            #"\b(1080[pi]|fhd|full[ .\-]?hd)\b"#,
-            #"\b(720p|hd720)\b"#,
-            #"\b576p\b"#,
-            #"\b(480p|sd)\b"#,
-            #"\b360p\b"#,
+            StreamQuality.remuxPattern,
+            StreamQuality.bitDepthPattern,
+            StreamQuality.highBitDepthPattern,
+            StreamQuality.bitratePattern,
+            StreamQuality.channelLayoutPattern,
             #"\b(\d{3,4})\s?x\s?(\d{3,4})\b"#,
-            #"\b(hdcam|camrip|cam|telesync|hdts|tsrip)\b"#,
-            #"\b(blu[ .\-]?ray|bdrip|brrip|remux)\b"#,
-            #"\bweb[ .\-]?dl\b"#,
-            #"\bweb[ .\-]?rip\b"#,
-            #"\bhdtv\b"#,
-            #"\b(dvdrip|dvd)\b"#,
-            #"\b(x265|h[ .]?265|hevc)\b"#,
-            #"\b(x264|h[ .]?264|avc)\b"#,
-            #"\bav1\b"#,
             #"\b(dts[ .\-]?hd([ .\-]?ma)?|dts[ .\-]?x)\b"#,
             #"\bdts\b"#,
             #"\btrue[ .\-]?hd\b"#,
@@ -255,9 +333,14 @@ public struct StreamQuality: Sendable, Equatable {
             #"\bopus\b"#,
             #"\bmp3\b"#,
             #"(\d+(?:[.,]\d+)?)\s?(gb|gib|mb|mib)\b"#,
-            #"(?:👤|\bseed(?:s|ers)?:|\bs:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#,
+            StreamQuality.seedersPattern,
+            StreamQuality.seedersLabelledPattern,
+            StreamQuality.seedersCountedPattern,
             #"(?:\bpeers?:|\bp:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#,
         ]
+        patterns += StreamQuality.resolutionRules.map { $0.pattern }
+        patterns += StreamQuality.sourceRules.map { $0.pattern }
+        patterns += StreamQuality.videoCodecRules.map { $0.pattern }
         return Dictionary(uniqueKeysWithValues: patterns.compactMap { pattern in
             (try? NSRegularExpression(pattern: pattern)).map { (pattern, $0) }
         })
