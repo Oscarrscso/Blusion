@@ -162,7 +162,7 @@ public struct RootTabView: View {
     @State private var titleActions: TitleActions
     @State private var isLandscape = false
     @State private var windowSafeArea = EdgeInsets()
-    /// A phone turned sideways. A Mac window is never a phone, so its navigation bar keeps its phone-portrait look at any window shape.
+    /// A phone turned sideways. A Mac window is never a phone, so `isPhoneLandscape` never governs its navigation bar, at any window shape.
     private var isPhoneLandscape: Bool { isLandscape && !Self.isMacCatalyst }
     private static var isMacCatalyst: Bool {
         #if targetEnvironment(macCatalyst)

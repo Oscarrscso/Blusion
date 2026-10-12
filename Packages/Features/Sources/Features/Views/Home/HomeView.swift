@@ -39,7 +39,8 @@ struct HomeView: View {
             .onGeometryChange(for: CGFloat.self) { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) } action: { sideInset = $0 }
             .navigationTitle(heroIsFirst ? "" : "Home")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackgroundVisibility(heroIsFirst || isPhoneLandscape ? .hidden : .automatic, for: .navigationBar)
+            .toolbarBackgroundVisibility(heroIsFirst || isPhoneLandscape || HeroCarousel.isMacCatalyst ? .hidden : .automatic,
+                                         for: .navigationBar)
             .task { await model.observeAddons() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
