@@ -41,6 +41,12 @@ struct StreamPickerView: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    #if targetEnvironment(macCatalyst)
+    /// Closes a pushed picker, for Escape: the same as its back button.
+    @Environment(\.dismiss) private var dismiss
+    /// The row the arrow keys are on. Nil until the list takes the keyboard.
+    @State private var keyboardRow: KeyboardRow?
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     /// A slight inset from each edge. The screens' page margin is zero, so the stream rows would otherwise run to the screen's edge.
     private var streamMargin: CGFloat { Theme.Spacing.l }
@@ -57,11 +63,11 @@ struct StreamPickerView: View {
 
     var body: some View {
         if isEmbedded {
-            behaviour(content.accessibilityIdentifier("streams.list"))
+            behaviour(list.accessibilityIdentifier("streams.list"))
         } else {
             behaviour(
                 ScrollView {
-                    content
+                    list
                 }
                 // The last card scrolls clear of the tab bar and the mini player: the scroll content's bottom margin, not padding
                 // inside it.
@@ -79,6 +85,89 @@ struct StreamPickerView: View {
             )
         }
     }
+
+    /// The list the page shows. On Mac it also takes the keyboard (see `keyboardNavigated`); on iPhone it is the rows alone.
+    private var list: some View {
+        #if targetEnvironment(macCatalyst)
+        return keyboardNavigated(content)
+        #else
+        return content
+        #endif
+    }
+
+    /// A row of the list, by the addon section it sits in and its stream. Two addons can offer the same stream, so it can appear in two
+    /// sections; the stream alone would not say which row the keyboard is on.
+    private struct KeyboardRow: Hashable {
+        let addon: UUID
+        let stream: RankedStream.ID
+    }
+
+    /// Mac: marks the row the arrow keys are on, and gives it the id the list scrolls to. iPhone: the row as it is.
+    @ViewBuilder
+    private func keyboardMarked(_ row: some View, in addon: UUID, stream: RankedStream.ID) -> some View {
+        #if targetEnvironment(macCatalyst)
+        row
+            .overlay {
+                if keyboardRow == KeyboardRow(addon: addon, stream: stream) {
+                    RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+                        .stroke(Color.white.opacity(0.8), lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+            }
+            .id(KeyboardRow(addon: addon, stream: stream))
+        #else
+        row
+        #endif
+    }
+
+    #if targetEnvironment(macCatalyst)
+    /// Mac: the list takes the keyboard. Down and up move a highlight through the streams and scroll it into view, Return chooses the
+    /// highlighted stream, and Escape closes the picker. Only the highlight changes, so a click works as it did.
+    private func keyboardNavigated<Rows: View>(_ rows: Rows) -> some View {
+        ScrollViewReader { proxy in
+            rows
+                .focusable()
+                .focusEffectDisabled()
+                .onKeyPress(.downArrow) { moveKeyboardSelection(by: 1) }
+                .onKeyPress(.upArrow) { moveKeyboardSelection(by: -1) }
+                .onKeyPress(.return) { chooseKeyboardStream() }
+                .onKeyPress(.escape) { closeFromKeyboard() }
+                .onChange(of: keyboardRow) { _, row in
+                    guard let row else { return }
+                    withAnimation(.snappy(duration: 0.25)) { proxy.scrollTo(row, anchor: .center) }
+                }
+        }
+    }
+
+    /// The rows in the order the list shows them, each with its stream.
+    private var keyboardOrder: [(row: KeyboardRow, stream: RankedStream)] {
+        visibleSections.flatMap { section in
+            section.streams.map { (KeyboardRow(addon: section.id, stream: $0.id), $0) }
+        }
+    }
+
+    /// Moves the highlight one row up or down, in the order the list shows them. From nothing, Down takes the first row and Up the last.
+    private func moveKeyboardSelection(by step: Int) -> KeyPress.Result {
+        let rows = keyboardOrder
+        guard !rows.isEmpty else { return .ignored }
+        let current = rows.firstIndex { $0.row == keyboardRow } ?? (step > 0 ? -1 : rows.count)
+        keyboardRow = rows[min(max(current + step, 0), rows.count - 1)].row
+        return .handled
+    }
+
+    /// Chooses the highlighted stream, as a tap on its row does.
+    private func chooseKeyboardStream() -> KeyPress.Result {
+        guard let row = keyboardRow, let item = keyboardOrder.first(where: { $0.row == row })?.stream else { return .ignored }
+        select(item)
+        return .handled
+    }
+
+    /// Closes the embedded picker through its own close, or a pushed picker by popping it.
+    private func closeFromKeyboard() -> KeyPress.Result {
+        if let onClose { onClose() } else { dismiss() }
+        return .handled
+    }
+    #endif
 
     /// The picker's rows. Pushed, the first row is the picker's own header; embedded, it is the lighter header, since the page above
     /// already has the poster and the title.
@@ -457,7 +546,8 @@ struct StreamPickerView: View {
         return ForEach(visibleSections) { section in
             Section {
                 ForEach(section.streams) { item in
-                    streamButton(item, isRecommended: item.id == recommended?.id, order: order[item.id] ?? 0)
+                    keyboardMarked(streamButton(item, isRecommended: item.id == recommended?.id, order: order[item.id] ?? 0),
+                                   in: section.id, stream: item.id)
                         .padding(.horizontal, streamMargin)
                 }
             } header: {
