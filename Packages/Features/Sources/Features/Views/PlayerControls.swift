@@ -245,8 +245,8 @@ struct PlayerControls: View {
     }
 
     private var volumeSymbol: String {
-        if model.isMuted || model.volume == 0 { return "speaker.slash.fill" }
-        return model.volume < 0.5 ? "speaker.wave.1.fill" : "speaker.wave.2.fill"
+        if model.isMuted || model.volume == 0 { return "speaker.slash" }
+        return model.volume < 0.5 ? "speaker.wave.1" : "speaker.wave.2"
     }
     #endif
 

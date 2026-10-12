@@ -197,6 +197,12 @@ import PlayerKitTestSupport
         #expect(coordinator.volume == 0.3 && coordinator.isMuted)
     }
 
+    @Test func anEngineKeepsItsOwnMuteUntilTheListenerChoosesOne() async {
+        let (coordinator, rig) = coordinator(["a"], ["a": .plays(duration: 100)])
+        await coordinator.start()
+        #expect(rig.engines["a"]?.volumes == [] && rig.engines["a"]?.mutes == [], "a snapshot run's silent engine is not unmuted")
+    }
+
     @Test func tracksAreVisibleThroughTheCoordinatorState() async throws {
         let (coordinator, rig) = coordinator(["a"], ["a": .plays(duration: 100)])
         await coordinator.start()

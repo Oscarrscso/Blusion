@@ -33,9 +33,13 @@ public final class PlaybackCoordinator {
     /// The engine currently in use; the video surface attaches to it.
     public private(set) var engine: (any PlaybackEngine)?
     public private(set) var engineGeneration = 0
-    /// The listener's volume and mute. They carry over when the next stream starts on a new engine.
+    /// The listener's volume and mute, for the UI to show.
     public private(set) var volume: Float = 1
     public private(set) var isMuted = false
+    /// What the listener has chosen, once they have chosen it. Only these carry over to a new engine, so an engine keeps its own
+    /// defaults until then (a snapshot run mutes its AVEngine, for example).
+    private var chosenVolume: Float?
+    private var chosenMuted: Bool?
 
     public let plan: PlaybackPlan
     public var onEnded: (@MainActor () -> Void)?
@@ -106,10 +110,12 @@ public final class PlaybackCoordinator {
     public func setRate(_ rate: Float) { engine?.setRate(rate) }
     public func setVolume(_ volume: Float) {
         self.volume = min(1, max(0, volume))
+        chosenVolume = self.volume
         engine?.setVolume(self.volume)
     }
     public func setMuted(_ muted: Bool) {
         isMuted = muted
+        chosenMuted = muted
         engine?.setMuted(muted)
     }
     public func selectAudioTrack(id: String?) { engine?.selectAudioTrack(id: id) }
@@ -142,8 +148,8 @@ public final class PlaybackCoordinator {
         observer?.cancel()
         self.engine?.stop()
         self.engine = engine
-        engine.setVolume(volume)
-        engine.setMuted(isMuted)
+        if let chosenVolume { engine.setVolume(chosenVolume) }
+        if let chosenMuted { engine.setMuted(chosenMuted) }
         phase = .starting
         state = engine.state
         hasStartedCurrent = false
