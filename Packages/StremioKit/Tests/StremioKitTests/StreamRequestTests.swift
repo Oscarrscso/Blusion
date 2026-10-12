@@ -55,6 +55,15 @@ import Testing
         #expect(following?.expectedDuration == 2940)
     }
 
+    @Test func anEpisodeThatHasNotAiredIsNeverTheNextOne() {
+        let pilot = Video(id: "tt9:1:1", title: "Pilot", season: 1, episode: 1, released: "2008-01-20T00:00:00.000Z")
+        let second = Video(id: "tt9:1:2", title: "Second", season: 1, episode: 2, released: "2008-01-27T00:00:00.000Z")
+        let finale = Video(id: "tt9:1:3", title: "Finale", season: 1, episode: 3, released: "2099-01-01T00:00:00.000Z")
+        let series = MetaDetail(preview: MetaPreview(id: "tt9", type: "series", name: "Show"), videos: [pilot, second, finale])
+        #expect(StreamRequest(episode: pilot, of: series).nextID == "tt9:1:2", "an aired next episode is still offered")
+        #expect(StreamRequest(episode: second, of: series).nextRequest == nil, "the finale airs in 2099: nothing to binge into")
+    }
+
     @Test func requestsWrittenBeforeTheseFieldsExistStillDecode() throws {
         let decoded = try JSONDecoder().decode(StreamRequest.self, from: Data(#"{"type":"movie","id":"tt1","title":"Film"}"#.utf8))
         #expect(decoded.seriesName == nil && decoded.year == nil && decoded.expectedDuration == nil)

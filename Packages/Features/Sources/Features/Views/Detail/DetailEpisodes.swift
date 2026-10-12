@@ -101,13 +101,16 @@ struct DetailEpisodes: View {
 
     private func episodeRow(_ video: Video, width: CGFloat) -> some View {
         // Written once: the card and the menu's preview are the same view. The preview is on screen only while the menu is open.
+        let airsLater = !video.hasAired()
         let row = EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
                              artwork: model.backdropURL, score: model.score(for: video), width: width,
-                             showsWholeOverview: model.matchesEpisodeWidthToText)
+                             showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater)
         return NavigationLink(value: model.request(for: video)) {
             row
         }
         .buttonStyle(PressableCardStyle())
+        // An episode that has not aired cannot be opened: its card shows the air date instead.
+        .disabled(airsLater)
         .titleTapHaptic()
         .contextMenu {
             let watched = model.isWatched(video)
@@ -142,6 +145,8 @@ private struct EpisodeRow: View {
     let width: CGFloat
     /// Set for a full-width card: the whole overview shows at its own height, so the rating sits under this episode's own text.
     var showsWholeOverview = false
+    /// Set for an episode that has not aired: its still is dimmed, and the card cannot be opened.
+    var airsLater = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -170,6 +175,7 @@ private struct EpisodeRow: View {
     private var still: some View {
         ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: width * 3)
             .frame(width: width, height: width / CardAspect.wide.ratio)
+            .opacity(airsLater ? 0.45 : 1)
             .overlay {
                 if !watched, let fraction {
                     PlaybackProgressOverlay(fraction: fraction, width: width)

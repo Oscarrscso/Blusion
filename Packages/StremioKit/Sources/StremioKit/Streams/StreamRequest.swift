@@ -55,7 +55,8 @@ public struct StreamRequest: Sendable, Hashable, Codable {
     }
 
     public init(episode video: Video, of series: MetaDetail) {
-        let next = series.nextVideo(after: video)
+        // An episode that has not aired yet is never offered as the next one: the player would start it.
+        let next = series.nextVideo(after: video).flatMap { $0.hasAired() ? $0 : nil }
         self.init(type: series.type.isEmpty ? "series" : series.type, id: video.id,
                   title: "\(series.name) · \(video.title)", poster: series.preview.poster, season: video.season, episode: video.episode,
                   nextID: next?.id, nextTitle: next.map { "\(series.name) · \($0.title)" }, nextSeason: next?.season, nextEpisode: next?.episode,

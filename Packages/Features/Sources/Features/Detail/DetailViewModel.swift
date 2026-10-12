@@ -405,19 +405,29 @@ public final class DetailViewModel {
         return ordered.first(where: { !watchedIdentities.contains(episodeIdentity($0)) }) ?? ordered.first
     }
 
-    /// "Play", "Resume", "Play S1 · E1", "Resume S2 · E5". "Resume" only when playback starts from saved progress.
+    /// "Play", "Resume", "Play S1 · E1", "Resume S2 · E5". "Resume" only when playback starts from saved progress. A next episode that has
+    /// not aired yet gives its air date instead (see `unairedAirLabel`).
     public var primaryActionTitle: String {
         guard isSeries else { return progressFractions[movieIdentity] == nil ? "Play" : "Resume" }
         guard let next = nextUp else { return "Play" }
+        if let airs = unairedAirLabel { return airs }
         let verb = progressFractions[episodeIdentity(next)] == nil ? "Play" : "Resume"
         guard let season = next.season, let episode = next.episode else { return verb }
         return "\(verb) S\(season) · E\(episode)"
     }
 
-    /// What the main action plays: a movie itself, or a series' next episode. Nil while a series' episodes are still arriving.
+    /// What the main action plays: a movie itself, or a series' next episode once it has aired. Nil while a series' episodes are still
+    /// arriving, and while the next episode has not aired: nothing is played then, and the button shows `unairedAirLabel` instead.
     public var primaryRequest: StreamRequest? {
         guard isSeries else { return movieRequest }
-        return nextUp.map { request(for: $0) }
+        guard let next = nextUp, next.hasAired() else { return nil }
+        return request(for: next)
+    }
+
+    /// The main action's label while a series' next episode has not aired yet: its air date, e.g. "Airs Oct 20, 2026". Nil otherwise.
+    public var unairedAirLabel: String? {
+        guard let next = nextUp, !next.hasAired(), let airDate = next.airDate else { return nil }
+        return "Airs \(airDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
     /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.

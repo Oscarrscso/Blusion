@@ -63,6 +63,14 @@ struct DetailActions: View {
             .buttonStyle(.primaryAction)
             .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
+        } else if let airs = model.unairedAirLabel {
+            // The series' next episode is not out yet: the button is dimmed and shows when it airs, and nothing starts.
+            Button {} label: {
+                Label(airs, systemImage: "calendar")
+            }
+            .buttonStyle(.primaryAction)
+            .disabled(true)
+            .accessibilityIdentifier("detail.playButton")
         } else if model.isLoading {
             Capsule()
                 .fill(Theme.surfaceStrong)
