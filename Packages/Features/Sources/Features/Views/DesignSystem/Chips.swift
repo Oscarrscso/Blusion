@@ -239,18 +239,15 @@ struct MetaLine: View {
     }
 
     /// The line as drawn: the first variant that fits the width it is given. The variants keep every genre, then drop one more each time,
-    /// the last genre first. The last variant has no genre left to drop, so it shrinks to fit rather than wrapping.
+    /// the last genre first. The last one has no genre left to drop, so it shrinks to fit rather than wrapping.
     @ViewBuilder
     private var partsLine: some View {
         let droppable = min(genres.count, Self.maximumDroppedGenres)
+        // Always three children, so no slot depends on a missing child: with fewer genres, a slot repeats the variant before it.
         ViewThatFits(in: .horizontal) {
-            variant(dropping: 0, shrinks: droppable == 0)
-            if droppable >= 1 {
-                variant(dropping: 1, shrinks: droppable == 1)
-            }
-            if droppable >= 2 {
-                variant(dropping: 2, shrinks: droppable == 2)
-            }
+            variant(dropping: 0, shrinks: false)
+            variant(dropping: min(1, droppable), shrinks: false)
+            variant(dropping: droppable, shrinks: true)
         }
     }
 
