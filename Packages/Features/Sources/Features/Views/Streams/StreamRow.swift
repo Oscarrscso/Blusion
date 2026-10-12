@@ -2,9 +2,10 @@
 import SwiftUI
 import StremioKit
 
-/// One stream as a card. The top of it is the button that plays the stream: small badges for sharpness, REMUX and source, the release
-/// name in up to two lines, and one grey line of facts (size, codec, audio). A note underneath says when the stream opens elsewhere or
-/// Blusion cannot play it. The technical details fold away in a section of their own, so tapping the card always plays.
+/// One stream as a card, in the title page's design: a "Best match" label for the stream Auto Pick recommends, small badges for sharpness,
+/// REMUX and source, the release name in up to two lines, one grey line of facts (size, codec, audio), and a note when the stream opens
+/// elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap does. The technical details fold away in a
+/// section of their own, so tapping the card always plays.
 struct StreamRow: View {
     let item: RankedStream
     /// True for the stream Auto Pick recommends, shown with a "Best match" label.
@@ -13,36 +14,55 @@ struct StreamRow: View {
     var isRemux = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs + 2) {
-            HStack(spacing: Theme.Spacing.xs) {
-                if let label = item.quality.resolutionLabel {
-                    QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                if isBest {
+                    Label("Best match", systemImage: "sparkles")
+                        .font(Theme.Typography.eyebrow)
+                        .textCase(.uppercase)
+                        .foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
+                        .accessibilityIdentifier("stream.bestMatch")
                 }
-                if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
-                if isRemux { QualityBadge.remux }
-                if let source = item.quality.source { QualityBadge.source(source) }
+                if hasBadges {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        if let label = item.quality.resolutionLabel {
+                            QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
+                        }
+                        if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
+                        if isRemux { QualityBadge.remux }
+                        if let source = item.quality.source { QualityBadge.source(source) }
+                    }
+                }
+                Text(Self.headline(for: item))
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !facts.isEmpty {
+                    Text(facts)
+                        .font(Theme.Typography.metaLine)
+                        .foregroundStyle(Theme.metaText)
+                        .lineLimit(1)
+                }
+                if let routeNote {
+                    Label(routeNote.text, systemImage: routeNote.symbol)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(routeNote.isWarning ? Color.orange : Color.white.opacity(0.62))
+                }
             }
-            Text(Self.headline(for: item))
-                .font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.leading)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-            metadataRow
-            if let routeNote {
-                Label(routeNote.text, systemImage: routeNote.symbol)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(routeNote.isWarning ? Color.orange : Color.white.opacity(0.62))
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            routeGlyph
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.m)
-        .padding(.top, Theme.Spacing.m)
-        .padding(.bottom, Theme.Spacing.s)
-        .contentShape(shape)
+        .padding(Theme.Spacing.l)
+        .contentShape(Rectangle())
         .help(item.route.handoffTarget.map { "Play in \($0.player.displayName)" } ?? "Choose this stream")
     }
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous) }
+    /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.
+    private var hasBadges: Bool {
+        item.quality.resolutionLabel != nil || item.quality.isHDR || item.quality.isDolbyVision || isRemux || item.quality.source != nil
+    }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
     /// The technical details use it too, to avoid repeating the description's first line when that is the headline.
@@ -56,49 +76,43 @@ struct StreamRow: View {
         return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
-    /// Size and video codec in grey, then the audio: lossless Atmos as a small badge, lossy Atmos as text, and "Best match" at the
-    /// trailing edge of the stream Auto Pick would start.
-    private var metadataRow: some View {
-        HStack(spacing: Theme.Spacing.s) {
-            if !sizeAndCodec.isEmpty {
-                Text(sizeAndCodec)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            audio
-            Spacer(minLength: 0)
-            if isBest {
-                Label("Best match", systemImage: "sparkles")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(1)
-                    .accessibilityIdentifier("stream.bestMatch")
-            }
-        }
-    }
-
-    /// "38.2 GB · HEVC": the facts a viewer picks a stream by after its sharpness and source.
-    private var sizeAndCodec: String {
+    /// The grey line of facts: "38.2 GB · HEVC · Atmos TrueHD". The parts the stream does not give are left out.
+    private var facts: String {
         var parts: [String] = []
         if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
         if let codec = item.quality.videoCodec { parts.append(codec.label) }
+        if let audio = audioText { parts.append(audio) }
         return parts.joined(separator: " · ")
     }
 
-    /// The audio as tags, as the codec says it is. Lossless Atmos (TrueHD) and streaming Atmos (DD+) each get their own tag, and the codec
-    /// they already name is left out of it. Otherwise the first audio codec the release names, and "Atmos" when only the marker is there.
-    @ViewBuilder private var audio: some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            switch item.quality.atmosFormat {
-            case .lossless:
-                QualityBadge("Atmos · TrueHD", symbol: "waveform")
-            case .streaming:
-                QualityBadge("Atmos · DD+", symbol: "speaker.wave.3")
-            case nil:
-                if item.quality.hasAtmos { QualityBadge("Atmos", symbol: "speaker.wave.3") }
-                if let codec = item.quality.audioCodecs.first { QualityBadge(codec.label, symbol: "speaker.wave.2") }
-            }
+    /// The audio as the release names it. Lossless Atmos (TrueHD) and streaming Atmos (DD+) each read as one name, and the codec they
+    /// already name is left out of it. Otherwise "Atmos" when the marker is there, and the first audio codec the release names.
+    private var audioText: String? {
+        switch item.quality.atmosFormat {
+        case .lossless: return "Atmos TrueHD"
+        case .streaming: return "Atmos DD+"
+        case nil:
+            let parts = [item.quality.hasAtmos ? "Atmos" : nil, item.quality.audioCodecs.first?.label].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " ")
+        }
+    }
+
+    /// The round mark at the trailing edge: it shows what a tap does with this stream. It is not a control of its own, so it is hidden
+    /// from VoiceOver, which reads the card's hint instead.
+    private var routeGlyph: some View {
+        Image(systemName: routeMark.symbol)
+            .font(.footnote.weight(.bold))
+            .foregroundStyle(routeMark.tint)
+            .frame(width: 36, height: 36)
+            .background(Theme.surfaceStrong, in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    private var routeMark: (symbol: String, tint: Color) {
+        switch item.route {
+        case .native, .fallback, .hidden: ("play.fill", .white)
+        case .handoff, .external: ("arrow.up.forward", .white)
+        case .unsupported: ("exclamationmark.triangle.fill", .orange)
         }
     }
 
@@ -120,21 +134,29 @@ struct StreamTechnicalDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Divider()
-                .padding(.horizontal, Theme.Spacing.m)
+            Rectangle()
+                .fill(Theme.separator)
+                .frame(height: 1)
+                .padding(.horizontal, Theme.Spacing.l)
+                .accessibilityHidden(true)
             Button {
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { isExpanded.toggle() }
             } label: {
                 HStack(spacing: Theme.Spacing.xs) {
                     Text("Technical details")
                     Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .accessibilityHidden(true)
                 }
-                .font(.caption.weight(.semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, Theme.Spacing.m)
-                .padding(.vertical, Theme.Spacing.s)
+                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.vertical, Theme.Spacing.m)
                 .contentShape(Rectangle())
-                .pointerInteraction(cornerRadius: Theme.Radius.card)
+                .pointerInteraction(cornerRadius: Theme.Radius.surface)
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
@@ -147,11 +169,12 @@ struct StreamTechnicalDetails: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .font(.caption)
+                .font(.footnote)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, Theme.Spacing.m)
-                .padding(.bottom, Theme.Spacing.s)
+                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.bottom, Theme.Spacing.l)
+                .transition(.opacity)
             }
         }
     }
@@ -166,7 +189,7 @@ struct StreamTechnicalDetails: View {
                     Text(fact.label)
                         .foregroundStyle(.secondary)
                     Text(fact.value)
-                        .font(fact.isIdentifier ? .caption.monospaced() : .caption)
+                        .font(fact.isIdentifier ? .footnote.monospaced() : .footnote)
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -187,11 +210,11 @@ struct StreamTechnicalDetails: View {
 /// Grey stand-ins for stream cards while the first answers are on their way, so the screen has its shape at once.
 struct StreamRowsSkeleton: View {
     var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
+        VStack(spacing: Theme.Spacing.m) {
             ForEach(0..<3, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
                     .fill(Theme.surface)
-                    .frame(height: 84)
+                    .frame(height: 132)
             }
         }
         .shimmering()

@@ -23,6 +23,8 @@ struct StreamPickerView: View {
     @State private var unsupported: RankedStream?
     /// A hand-off whose player app is not installed: the alert offers its App Store page, or playing the stream in Blusion.
     @State private var missing: MissingPlayer?
+    /// The stream cards that have already come in, so a card scrolled away and back does not animate again.
+    @State private var entranceLog = StreamCardEntranceLog()
     private let services: AppServices
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
@@ -73,7 +75,7 @@ struct StreamPickerView: View {
     /// The picker's rows. Pushed, the first row is the picker's own header; embedded, it is the lighter header, since the page above
     /// already has the poster and the title.
     private var content: some View {
-        LazyVStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
             if isEmbedded { embeddedHeader } else { header }
             playBestButton
             BestEditionView(model: model)
@@ -425,10 +427,14 @@ struct StreamPickerView: View {
 
     /// `recommended` is the stream Auto Pick would start; it alone carries the Best match mark.
     private func groups(recommended: RankedStream?) -> some View {
-        ForEach(visibleSections) { section in
+        // Each card's place counted across every visible section from the top, so the entrance runs down the whole list. A stream id
+        // repeated in a later section keeps its first place.
+        let order = Dictionary(visibleSections.flatMap(\.streams).enumerated().map { ($1.id, $0) },
+                               uniquingKeysWith: { first, _ in first })
+        return ForEach(visibleSections) { section in
             Section {
                 ForEach(section.streams) { item in
-                    streamButton(item, isRecommended: item.id == recommended?.id)
+                    streamButton(item, isRecommended: item.id == recommended?.id, order: order[item.id] ?? 0)
                         .padding(.horizontal, streamMargin)
                 }
             } header: {
@@ -441,7 +447,7 @@ struct StreamPickerView: View {
     private func sectionTitle(_ section: StreamPickerViewModel.AddonSection) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text(section.addon.name)
-                .font(.subheadline.weight(.semibold))
+                .font(.headline)
             Text("\(section.streams.count)")
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
@@ -450,7 +456,7 @@ struct StreamPickerView: View {
                 .padding(.vertical, 2)
                 .background(Theme.surfaceStrong, in: Capsule())
         }
-        .padding(.top, Theme.Spacing.xs)
+        .padding(.top, Theme.Spacing.s)
         .padding(.leading, Theme.Spacing.xs)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
@@ -473,8 +479,8 @@ struct StreamPickerView: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityValue(isNotesExpanded ? "Expanded" : "Collapsed")
                 if isNotesExpanded {
-                    VStack(spacing: Theme.Spacing.s) {
-                        ForEach(model.links) { item in streamButton(item, isRecommended: false) }
+                    VStack(spacing: Theme.Spacing.m) {
+                        ForEach(model.links) { item in streamButton(item, isRecommended: false, order: 8) }
                     }
                     .padding(.top, Theme.Spacing.s)
                 }
@@ -484,8 +490,9 @@ struct StreamPickerView: View {
         }
     }
 
-    /// One stream as a card: the top plays it, the technical details fold away underneath in the same glass.
-    private func streamButton(_ item: RankedStream, isRecommended: Bool) -> some View {
+    /// One stream as a card on the title page's surface: the top plays it, the technical details fold away underneath. `order` is the
+    /// card's place in the list, which sets when its entrance animation starts.
+    private func streamButton(_ item: RankedStream, isRecommended: Bool, order: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 select(item)
@@ -498,14 +505,16 @@ struct StreamPickerView: View {
             .accessibilityHint(hint(for: item))
             StreamTechnicalDetails(item: item)
         }
-        .glassCardSurface()
+        .cardSurface()
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
         .overlay {
             if isRecommended {
-                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .strokeBorder(Theme.brandGradient, lineWidth: 2)
+                RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous)
+                    .strokeBorder(Theme.brandGradient, lineWidth: 1.5)
                     .allowsHitTesting(false)
             }
         }
+        .streamCardEntrance(id: AnyHashable(item.id), order: order, log: entranceLog)
     }
 
     @ViewBuilder
