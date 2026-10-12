@@ -53,7 +53,7 @@ struct DetailReviews: View {
                                        foldedWidth: foldedWidth, expandedWidth: expandedWidth) {
                                 toggleReview(review.id)
                             }
-                            .frame(width: expandedReviewID == review.id ? expandedWidth : foldedWidth)
+                            .modifier(FoldingWidth(isExpanded: expandedReviewID == review.id, folded: foldedWidth, expanded: expandedWidth))
                             .id(review.id)
                             .reportsShelfEdge(id: review.id)
                             .onGeometryChange(for: Bool.self) { [expandedReviewID, contentMargin] geometry in
@@ -127,6 +127,35 @@ struct DetailReviews: View {
             total + max(1, (paragraph.count + perLine - 1) / perLine)
         }
         return max(0, lines - ReviewCard.foldedLines)
+    }
+}
+
+/// A review card's width. Opening, the card takes its full width in the layout at once and the animation draws the growth, so the shelf
+/// can scroll to the open card straight away. Folding, the width shrinks in the layout frame by frame. A width that dropped at once made
+/// the shelf suddenly shorter than where it was scrolled to when the last card folded, so the row jumped before it moved; shrinking in
+/// step lets the row follow the card.
+private struct FoldingWidth: ViewModifier, Animatable {
+    /// 1 when open and 0 when folded, and every value between while the card folds.
+    private var progress: CGFloat
+    private let isExpanded: Bool
+    private let folded: CGFloat
+    private let expanded: CGFloat
+
+    init(isExpanded: Bool, folded: CGFloat, expanded: CGFloat) {
+        self.isExpanded = isExpanded
+        self.folded = folded
+        self.expanded = expanded
+        progress = isExpanded ? 1 : 0
+    }
+
+    /// Not tied to the main actor, as `Animatable` asks: it only reads and writes the modifier's own number.
+    nonisolated var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.frame(width: isExpanded ? expanded : folded + (expanded - folded) * min(max(progress, 0), 1))
     }
 }
 
