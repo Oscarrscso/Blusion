@@ -27,16 +27,16 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     /// The hero's height: most of the window, kept between 440 and 620 points.
     private var heroHeight: CGFloat { min(max(size.height * 0.62, 440), 620) }
     /// The widest the title, the actions and the ratings are, over the picture's lower left edge.
-    private static let textWidth: CGFloat = 560
+    private static var textWidth: CGFloat { 560 }
     /// The widest and tallest the title's logo is on this page.
-    private static let logoBox = CGSize(width: 420, height: 120)
+    private static var logoBox: CGSize { CGSize(width: 420, height: 120) }
     /// The page's width from which the synopsis and the information sit side by side.
-    private static let twoColumnWidth: CGFloat = 900
+    private static var twoColumnWidth: CGFloat { 900 }
     /// The information's column beside the synopsis, and the gap between them.
-    private static let informationWidth: CGFloat = 300
-    private static let columnGap: CGFloat = 48
+    private static var informationWidth: CGFloat { 300 }
+    private static var columnGap: CGFloat { 48 }
     /// The widest the synopsis and the trailer's panel run, so their lines stay readable on a wide window.
-    private static let detailsMax: CGFloat = 640
+    private static var detailsMax: CGFloat { 640 }
 
     /// The page's width less its margins.
     private var contentWidth: CGFloat { max(0, size.width - contentMargin * 2) }
