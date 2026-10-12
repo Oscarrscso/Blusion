@@ -19,8 +19,13 @@ struct ArtworkImage: View {
     let acceptsAnyCachedSize: Bool
     /// Told whether the picture on show is the fallback, so the caller can draw what the first choice would have carried itself.
     let usesFallback: Binding<Bool>?
+    /// True when `fallbackURL` is the picture the card already shows and `url` is its upgrade (a BetterPosters picture): a decoded copy of
+    /// the fallback, at any size, stands in from the first frame, so no placeholder shows between the two.
+    let standsInWhileLoading: Bool
 
     @State private var image: UIImage?
+    /// The picture `image` replaced, held opaque under it while the new one fades in, so no placeholder shows through (see `show`).
+    @State private var beneath: UIImage?
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
     @State private var imageURL: URL?
     @State private var placeholderImage: UIImage?
@@ -29,7 +34,7 @@ struct ArtworkImage: View {
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
          placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, fallbackURL: URL? = nil, imageAlignment: Alignment = .center,
-         acceptsAnyCachedSize: Bool = false, usesFallback: Binding<Bool>? = nil) {
+         acceptsAnyCachedSize: Bool = false, usesFallback: Binding<Bool>? = nil, standsInWhileLoading: Bool = false) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
@@ -40,16 +45,26 @@ struct ArtworkImage: View {
         self.imageAlignment = imageAlignment
         self.acceptsAnyCachedSize = acceptsAnyCachedSize
         self.usesFallback = usesFallback
+        self.standsInWhileLoading = standsInWhileLoading
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
         var cached = url.flatMap { Self.cachedPicture($0, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) }
         var fellBack = false
-        // A first choice that is known not to exist is not waited for again: its fallback, when decoded, is there at once too.
-        if cached == nil, let url, let fallbackURL, fallbackURL != url, ImagePipeline.shared.isKnownMissing(url) {
-            cached = ImagePipeline.shared.cachedImage(for: fallbackURL, maxPixelSize: maxPixelSize)
-            fellBack = cached != nil
+        // The URL the first picture belongs to. Nil for a stand-in, so `load()` still fetches `url`.
+        var shownURL = cached == nil ? nil : url
+        if cached == nil, let url, let fallbackURL, fallbackURL != url {
+            // A first choice that is known not to exist is not waited for again: its fallback, when decoded, is there at once too.
+            if ImagePipeline.shared.isKnownMissing(url) {
+                cached = ImagePipeline.shared.cachedImage(for: fallbackURL, maxPixelSize: maxPixelSize)
+                fellBack = cached != nil
+                shownURL = cached == nil ? nil : url
+            }
+            if cached == nil, standsInWhileLoading {
+                cached = ImagePipeline.shared.cachedImageAtAnySize(for: fallbackURL)
+                fellBack = cached != nil
+            }
         }
         _image = State(initialValue: cached)
-        _imageURL = State(initialValue: cached == nil ? nil : url)
+        _imageURL = State(initialValue: shownURL)
         _showsFallback = State(initialValue: fellBack)
         _placeholderImage = State(initialValue: placeholderURL.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 600) })
     }
@@ -65,6 +80,13 @@ struct ArtworkImage: View {
                         .aspectRatio(contentMode: contentMode)
                         .blur(radius: placeholderBlur)
                         .transition(.opacity)
+                }
+            }
+            .overlay(alignment: imageAlignment) {
+                if let beneath {
+                    Image(uiImage: beneath)
+                        .resizable()
+                        .aspectRatio(contentMode: contentMode)
                 }
             }
             .overlay(alignment: imageAlignment) {
@@ -112,23 +134,31 @@ struct ArtworkImage: View {
             return
         }
         if imageURL == url, image != nil { return }
+        // The picture on show is still the fallback while `url` loads over it, so the caller keeps drawing what the fallback lacks.
+        if standsInWhileLoading, image != nil, let fallbackURL, imageURL == fallbackURL { showsFallback = true }
         if let cached = Self.cachedPicture(url, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) {
-            withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
-                image = cached
-                imageURL = url
-                placeholderImage = nil
-                showsFallback = false
-            }
+            await show(cached, url: url, fellBack: false)
             return
         }
         // Keep the current artwork visible while a replacement downloads.
         guard let loaded = try? await download(url), !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
-            image = loaded.image
+        await show(loaded.image, url: url, fellBack: loaded.isFallback)
+    }
+
+    /// Fades `picture` in over the one on show. For a stand-in, the one on show stays opaque beneath until the fade is over, so the
+    /// placeholder never shows through: a BetterPosters picture replacing the usual poster goes straight from one poster to the other.
+    private func show(_ picture: UIImage, url: URL, fellBack: Bool) async {
+        let duration = placeholderURL == nil ? 0.35 : 0.15
+        if standsInWhileLoading, image != nil { beneath = image }
+        withAnimation(.easeInOut(duration: duration)) {
+            image = picture
             imageURL = url
             placeholderImage = nil
-            showsFallback = loaded.isFallback
+            showsFallback = fellBack
         }
+        guard beneath != nil else { return }
+        try? await Task.sleep(for: .seconds(duration + 0.05))
+        beneath = nil
     }
 
     /// The decoded picture of `url` at this view's size, or, for a stand-in, at any size.

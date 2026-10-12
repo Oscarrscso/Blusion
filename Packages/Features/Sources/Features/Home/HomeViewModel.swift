@@ -102,6 +102,20 @@ public final class HomeViewModel {
         apply(result)
     }
 
+    /// Turns Better Posters on or off for a poster row and saves the layout. The row keeps its items: only its cards change.
+    public func setBetterPosters(_ on: Bool, sectionID: String) async {
+        guard let index = sections.firstIndex(where: { $0.id == sectionID }),
+              case .row(var row) = sections[index].widget.content,
+              row.presentation.aspectRatio == .poster, row.presentation.usesBetterPosters != on else { return }
+        row.presentation.usesBetterPosters = on
+        var widget = sections[index].widget
+        widget.content = .row(row)
+        let current = sections[index]
+        sections[index] = Section(widget: widget, state: current.state, issue: current.issue, isRefreshing: current.isRefreshing)
+        isCustomised = true
+        await services.widgets.save(sections.map(\.widget))
+    }
+
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
     public func continueWatchingRefreshInterval() async -> Int {
         let settings = await services.settings.load()

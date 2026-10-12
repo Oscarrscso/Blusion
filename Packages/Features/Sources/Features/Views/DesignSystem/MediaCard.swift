@@ -56,8 +56,8 @@ enum CardSize: String, CaseIterable, Sendable {
 /// The card is `width` wide, or `size`'s width when `width` is nil. `stretched()` lets a grid give it a column's width instead.
 /// `showsTitle` nil means the aspect's default (no caption under a poster, a caption under wide and square cards); pass a Bool to
 /// force either. With `showsRating`, posters carry the IMDb and Letterboxd ratings from the environment's `PosterRatingsStore`.
-/// With `usesBetterPosters`, a poster takes its picture from the BetterPosters addon, which carries the rating itself; the app's own
-/// rating is drawn only when the usual poster stands in.
+/// With `usesBetterPosters`, a poster takes its picture from the BetterPosters addon, which carries the IMDb rating itself; the app's own
+/// rating is drawn only when the usual poster stands in, and while a BetterPosters picture loads over it.
 struct MediaCard: View {
     let item: MetaPreview
     let aspect: CardAspect
@@ -69,7 +69,7 @@ struct MediaCard: View {
     let usesBetterPosters: Bool
     private var stretches = false
     private var zoomID: String?
-    /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that did not load.
+    /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that has not loaded (or did not).
     @State private var posterFellBack = false
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
@@ -192,11 +192,12 @@ struct MediaCard: View {
                 if usesLandscapeArtwork {
                     LandscapeArtwork(title: item.name, artwork: Self.landscapeArtworkURL(for: item), logo: Self.landscapeLogoURL(for: item),
                                      maxPixelSize: pixelSize)
-                } else if let betterPosterURL {
-                    ArtworkImage(url: betterPosterURL, title: item.name, maxPixelSize: pixelSize, fallbackURL: artworkURL,
-                                 usesFallback: $posterFellBack)
                 } else {
-                    ArtworkImage(url: artworkURL, title: item.name, maxPixelSize: pixelSize)
+                    // One picture view whether or not the card uses BetterPosters, so turning the setting on or off keeps the picture on show
+                    // until the other one has loaded: the usual poster stays while the BetterPosters picture loads, and no placeholder shows.
+                    ArtworkImage(url: betterPosterURL ?? artworkURL, title: item.name, maxPixelSize: pixelSize,
+                                 fallbackURL: betterPosterURL == nil ? nil : artworkURL, usesFallback: $posterFellBack,
+                                 standsInWhileLoading: betterPosterURL != nil)
                 }
             }
             .overlay(alignment: .bottom) {

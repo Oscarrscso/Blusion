@@ -408,6 +408,17 @@
         }
       }
     },
+    "Better Posters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Better Posters"
+          }
+        }
+      }
+    },
     "Blusion can't play this container or audio yet. Pick another stream.": {
       "extractionState": "manual",
       "localizations": {
@@ -2256,13 +2267,13 @@
         }
       }
     },
-    "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.": {
+    "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the IMDb rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed."
+            "value": "Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the IMDb rating on each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed."
           }
         }
       }

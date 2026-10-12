@@ -134,6 +134,25 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(model.sections[0].state.value?.count == 2)
     }
 
+    @Test func betterPostersTurnOnForAPosterRowAndKeepItsItemsAndSaveIt() async throws {
+        let appServices = try await services([cinemeta], transport: answering(), widgets: [catalogRow("top", catalog: "top")])
+        let model = HomeViewModel(services: appServices)
+        await model.load()
+        let items = model.sections[0].state.value
+
+        await model.setBetterPosters(true, sectionID: "top")
+
+        guard case .row(let row) = model.sections[0].widget.content else {
+            Issue.record("the row stays a row")
+            return
+        }
+        #expect(row.presentation.usesBetterPosters)
+        #expect(model.sections[0].state.value == items, "the row keeps the items it has")
+        #expect(model.isCustomised)
+        let saved = await appServices.widgets.load()
+        #expect(saved?.first?.content == model.sections[0].widget.content, "the change is saved")
+    }
+
     @Test func aSavedListWithNothingInItIsReadyAndEmpty() async throws {
         let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: []))
         await model.load()

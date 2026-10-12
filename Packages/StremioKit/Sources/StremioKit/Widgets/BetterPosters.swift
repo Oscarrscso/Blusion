@@ -4,6 +4,9 @@ import Foundation
 /// serves one by IMDb id or TMDb id and needs no key. It answers 404 for a title it has no poster for.
 public enum BetterPosters {
     private static let base = "https://btttr.cc/poster"
+    /// The addon draws an average of several sites' ratings unless asked for one. `IM` is IMDb's score out of 10 (its "IMDb (/10)"
+    /// option, which its own configuration page sends as `rs=IM`).
+    private static let imdbRating = "?rs=IM"
 
     /// The addon's poster for a title, or nil when `id` is neither an IMDb id ("tt" and digits, with or without a ":season:episode"
     /// ending, which is dropped) nor "tmdb:<number>". A TMDb id needs `type` "movie" or "series".
@@ -17,7 +20,7 @@ public enum BetterPosters {
             case "series": kind = "series"
             default: return nil
             }
-            return URL(string: "\(base)/tmdb/poster-default/\(kind)-\(number).jpg")
+            return URL(string: "\(base)/tmdb/poster-default/\(kind)-\(number).jpg\(imdbRating)")
         }
         let parts = id.split(separator: ":", omittingEmptySubsequences: false)
         let imdb: Substring
@@ -27,7 +30,7 @@ public enum BetterPosters {
         default: return nil
         }
         guard imdb.hasPrefix("tt"), isDigits(String(imdb.dropFirst(2))) else { return nil }
-        return URL(string: "\(base)/imdb/poster-default/\(imdb).jpg")
+        return URL(string: "\(base)/imdb/poster-default/\(imdb).jpg\(imdbRating)")
     }
 
     /// True for one or more ASCII digits and nothing else.

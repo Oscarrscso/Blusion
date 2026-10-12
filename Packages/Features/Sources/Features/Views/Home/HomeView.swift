@@ -203,7 +203,8 @@ struct HomeView: View {
         case .banner(let row):
             HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
         case .row(let row):
-            WidgetRow(section: section, row: row, onRetry: { retry(section) })
+            WidgetRow(section: section, row: row, onRetry: { retry(section) },
+                      onSetBetterPosters: { on in Task { await model.setBetterPosters(on, sectionID: section.id) } })
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:

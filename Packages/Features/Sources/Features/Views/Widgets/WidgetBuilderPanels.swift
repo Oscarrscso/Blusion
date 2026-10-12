@@ -504,8 +504,8 @@ struct WidgetFieldPanel: View {
             Toggle("Use Better Posters addon", isOn: presentationBinding(\.usesBetterPosters))
                 .accessibilityIdentifier("widgetEditor.betterPosters")
             Text("""
-                Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the rating on each \
-                poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.
+                Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the IMDb rating on \
+                each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.
                 """)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
