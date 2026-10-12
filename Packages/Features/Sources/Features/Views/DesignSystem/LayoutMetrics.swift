@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
+import UIKit
 
 /// Every size that differs between a phone and a Mac window, in one place. Screens read these instead of hard-coding numbers, so
 /// the same code is right on both:
@@ -116,9 +117,12 @@ struct ReadableColumn: ViewModifier {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
+    /// `isPhoneLandscape` is also true on an iPad turned sideways, so the device is checked as well.
+    private var isPhoneInLandscape: Bool { isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone }
+
     func body(content: Content) -> some View {
         content
-            .frame(maxWidth: (metrics.isRegular && !isPhoneLandscape) ? 680 : CGFloat.infinity)
+            .frame(maxWidth: (metrics.isRegular && !isPhoneInLandscape) ? 680 : CGFloat.infinity)
             .frame(maxWidth: .infinity)
     }
 }

@@ -167,9 +167,9 @@ struct WidgetEditorView: View {
                 #if targetEnvironment(macCatalyst)
                 .contextMenu {
                     Button(role: .destructive) {
-                        // One tile, as the swipe removes one: the first with this id, since imported ids can repeat.
+                        // One tile: the first that matches this row in full, so a tile sharing an id with another is not taken instead.
                         var remaining = tiles
-                        if let index = remaining.firstIndex(where: { $0.id == tile.id }) { remaining.remove(at: index) }
+                        if let index = remaining.firstIndex(of: tile) { remaining.remove(at: index) }
                         widget.content = .collection(remaining)
                     } label: { Label("Delete", systemImage: "trash") }
                 }
