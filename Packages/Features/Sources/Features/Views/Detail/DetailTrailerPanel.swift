@@ -26,7 +26,7 @@ struct DetailTrailerPanel: View {
         switch model.trailer.phase {
         case .playing:
             if let playback = model.trailer.playback as? AVTrailerPlayback {
-                TrailerPlayerView(player: playback.player, loader: model.trailer)
+                TrailerPlayerView(player: playback.player, loader: model.trailer, fillsPicture: playback.fillsPicture)
                     .frame(width: size.width, height: size.height)
                     .mediaArtwork()
                     .frame(maxWidth: .infinity)
