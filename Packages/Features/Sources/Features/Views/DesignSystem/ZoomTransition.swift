@@ -15,6 +15,9 @@ struct TitleDestination: Hashable {
     var opensInstantly = false
     /// The picture and logo the spotlight page showed when it opened this title, so the title page starts with them (see `HeroHandoff`).
     var handoff: HeroHandoff?
+    /// The item to resume, for a Continue Watching card: the title page opens with its stream picker already on the page, as if Play had
+    /// been tapped for this request. Nil opens the details.
+    var streams: StreamRequest?
 }
 
 extension EnvironmentValues {

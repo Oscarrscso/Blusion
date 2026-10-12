@@ -14,6 +14,9 @@ struct DetailView: View {
     @State private var isHoldingEpisode = false
     /// The streams the page shows in place of its details after Play; nil shows the details.
     @State private var pickedRequest: StreamRequest?
+    /// The item a Continue Watching card opens the page with. It is picked once the hero has settled (see the lookup task below), so the
+    /// picker never loads ahead of the hero's images.
+    @State private var pendingStreams: StreamRequest?
     /// False while the picked streams are still on their way: the details stay and Play shows a spinner. True once the addons have
     /// all answered, and the streams take the details' place.
     @State private var streamsAreReady = false
@@ -85,10 +88,15 @@ struct DetailView: View {
         if abs(next - bottomExtra) > 0.5 { bottomExtra = next }
     }
 
-    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false, handoff: HeroHandoff? = nil) {
+    /// `streams` opens the page with its stream picker already on it, as if Play had been tapped for that request, once the hero has
+    /// settled. A Continue Watching card opens its title this way, with the item it resumes. The picker reveals once its streams are
+    /// ready, as it does after Play.
+    init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false, handoff: HeroHandoff? = nil,
+         streams: StreamRequest? = nil) {
         _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked,
                                                      trailerPreparer: AVTrailerPreparer()))
         _hero = State(initialValue: HeroLoader(seeding: handoff))
+        _pendingStreams = State(initialValue: streams)
         self.services = services
         opensFromSpotlight = handoff != nil
     }
@@ -226,9 +234,17 @@ struct DetailView: View {
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(showsBackdrop)") {
             await loadHero()
         }
-        // The Play button's stream lookup starts once the hero has settled, so it never delays the hero images.
+        // The Play button's stream lookup starts once the hero has settled, so it never delays the hero images. A page opened on a
+        // Continue Watching item opens its picker at that same point instead, and the picker asks for the item itself. While the picker is
+        // on the page, no prefetch starts, so a series' next episode arriving later does not ask the addons a second time.
         .task(id: "\(model.hasSettledHero)|\(model.primaryRequest?.id ?? "-")") {
             guard model.hasSettledHero else { return }
+            if let request = pendingStreams {
+                pendingStreams = nil
+                pickedRequest = request
+                return
+            }
+            guard pickedRequest == nil else { return }
             model.prefetchStreams(for: model.primaryRequest)
         }
         .onAppear {
@@ -255,6 +271,8 @@ struct DetailView: View {
     /// of their own.
     private func showStreams(_ request: StreamRequest) {
         model.trailer.cancel()
+        // Play is the user's own choice, so it replaces a Continue Watching item still waiting for the hero to settle.
+        pendingStreams = nil
         streamsAreReady = false
         pickedRequest = pickedRequest == nil ? request : nil
     }

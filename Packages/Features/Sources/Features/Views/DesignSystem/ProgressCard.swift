@@ -36,7 +36,8 @@ struct ProgressCard: View {
 }
 
 extension View {
-    /// A Continue Watching card: a tap opens its streams, and its context menu opens the title from that artwork.
+    /// A Continue Watching card: a tap opens its title's page with the stream picker open on the item it resumes, and its context menu
+    /// opens the title from that artwork.
     func continueWatchingHold(preview: MetaPreview, request: StreamRequest, onRemove: @escaping () -> Void) -> some View {
         modifier(ContinueWatchingHoldModifier(preview: preview, request: request, onRemove: onRemove))
     }
@@ -55,7 +56,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
         Button {
             Haptics.tap()
             router.open(.home)
-            router.homePath.append(request)
+            router.homePath.append(TitleDestination(preview: preview, sourceID: sourceID, streams: request))
         } label: {
             content
                 .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: CardAspect.wide.cornerRadius)

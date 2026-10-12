@@ -132,7 +132,8 @@ struct AppDestinations: ViewModifier {
             .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
             .navigationDestination(for: TitleDestination.self) { destination in
                 let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
-                                        artworkChecked: destination.artworkChecked, handoff: destination.handoff)
+                                        artworkChecked: destination.artworkChecked, handoff: destination.handoff,
+                                        streams: destination.streams)
                 if destination.opensInstantly {
                     detail.instantDestination()
                 } else {

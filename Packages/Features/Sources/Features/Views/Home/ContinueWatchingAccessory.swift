@@ -62,7 +62,7 @@ struct ResumeAccessoryModifier: ViewModifier {
 }
 
 /// The tab bar accessory (iOS 26, like the mini player in Music): the newest title to resume, with its progress. Tapping it opens
-/// Home at that title's streams, where the player resumes from the saved position.
+/// that title's page on Home with its stream picker open, where the player resumes from the saved position.
 struct ContinueWatchingAccessory: View {
     let item: WatchProgress
     let onRemove: () -> Void
