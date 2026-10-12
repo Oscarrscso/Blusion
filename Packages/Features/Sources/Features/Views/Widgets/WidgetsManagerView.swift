@@ -11,8 +11,9 @@ struct WidgetsManagerView: View {
     @State private var showsReset = false
     @State private var showsPendingImport = false
     @State private var copied = false
-    /// The rows whose settings are showing, so the toolbar can hide or open them all.
-    @State private var expandedWidgetIDs: Set<String> = []
+    /// True while the toolbar's button has hidden every widget's row, leaving one line that says how many there are. Kept between
+    /// visits, so a long list stays out of the way until it is shown again.
+    @AppStorage("widgets.hidesRows") private var hidesWidgets = false
     @Environment(\.editMode) private var editMode
 
     init(services: AppServices) {
@@ -22,11 +23,13 @@ struct WidgetsManagerView: View {
 
     /// The plus: a menu of the widgets that can be added.
     private var addMenu: some View {
+        // Adding a widget shows the rows, so the new one is not hidden with the rest.
         Menu {
-            Button("New Widget", systemImage: "rectangle.stack.badge.plus") { creating = .widget }
-            Button("Genre Collection", systemImage: "square.grid.2x2") { showsGenreCollection = true }
+            Button("New Widget", systemImage: "rectangle.stack.badge.plus") { hidesWidgets = false; creating = .widget }
+            Button("Genre Collection", systemImage: "square.grid.2x2") { hidesWidgets = false; showsGenreCollection = true }
                 .disabled(model.catalogChoices.allSatisfy { $0.genres.isEmpty })
             Button("Continue Watching", systemImage: "play.circle") {
+                hidesWidgets = false
                 Task { await model.add(HomeWidget(title: "Continue", content: .continueWatching)) }
             }
             .disabled(model.widgets.contains { $0.content == .continueWatching })
@@ -42,7 +45,11 @@ struct WidgetsManagerView: View {
     private var editToggle: some View {
         let isEditing = editMode?.wrappedValue.isEditing == true
         return Button {
-            withAnimation { editMode?.wrappedValue = isEditing ? .inactive : .active }
+            withAnimation {
+                // Reordering and deleting need the rows, so editing shows them.
+                if !isEditing { hidesWidgets = false }
+                editMode?.wrappedValue = isEditing ? .inactive : .active
+            }
         } label: {
             Image(systemName: isEditing ? "wrench.adjustable.fill" : "wrench.adjustable")
         }
@@ -51,36 +58,43 @@ struct WidgetsManagerView: View {
         .accessibilityIdentifier("widgets.edit")
     }
 
-    /// Hides every open row's settings at once, or opens them all when none is open.
-    private var foldToggle: some View {
-        let anyOpen = model.widgets.contains { expandedWidgetIDs.contains($0.id) }
-        return Button {
-            withAnimation { expandedWidgetIDs = anyOpen ? [] : Set(model.widgets.map(\.id)) }
+    /// Hides every widget's row at once, or shows them all again. The rows themselves go, not just the settings each one drops down.
+    private var hideToggle: some View {
+        Button {
+            withAnimation { setWidgetsHidden(!hidesWidgets) }
         } label: {
-            Image(systemName: anyOpen ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+            Image(systemName: hidesWidgets ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
         }
         .disabled(model.widgets.isEmpty)
-        .accessibilityLabel(anyOpen ? "Collapse All" : "Expand All")
-        .help(anyOpen ? "Collapse All" : "Expand All")
-        .accessibilityIdentifier("widgets.collapseAll")
+        .accessibilityLabel(hidesWidgets ? "Show All Widgets" : "Hide All Widgets")
+        .help(hidesWidgets ? "Show All Widgets" : "Hide All Widgets")
+        .accessibilityIdentifier("widgets.hideAll")
     }
 
-    /// Whether a row's settings are showing, read from and written to the open rows.
-    private func expansion(of id: String) -> Binding<Bool> {
-        Binding(
-            get: { expandedWidgetIDs.contains(id) },
-            set: { open in
-                if open { expandedWidgetIDs.insert(id) } else { expandedWidgetIDs.remove(id) }
-            }
-        )
+    /// Hidden rows cannot be reordered or deleted, so hiding them ends editing.
+    private func setWidgetsHidden(_ hidden: Bool) {
+        hidesWidgets = hidden
+        if hidden { editMode?.wrappedValue = .inactive }
+    }
+
+    /// The one line that stands in for the rows while they are hidden. A tap shows them again.
+    private var hiddenRowsLine: some View {
+        Button {
+            withAnimation { setWidgetsHidden(false) }
+        } label: {
+            Label(model.widgets.count == 1 ? "1 widget hidden" : "\(model.widgets.count) widgets hidden", systemImage: "eye.slash")
+        }
+        .accessibilityHint("Shows the widgets")
+        .accessibilityIdentifier("widgets.hiddenRows")
     }
 
     var body: some View {
         List {
             Section {
-                ForEach(model.widgets) { widget in
+                if hidesWidgets && !model.widgets.isEmpty { hiddenRowsLine }
+                ForEach(hidesWidgets ? [] : model.widgets) { widget in
                     // A row drops down in place to show every setting of its widget, and its Edit Widget link sits at the foot of them.
-                    DisclosureGroup(isExpanded: expansion(of: widget.id)) {
+                    DisclosureGroup {
                         ForEach(model.details(of: widget)) { detail in
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
                                 Text(detail.label)
@@ -155,13 +169,15 @@ struct WidgetsManagerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier("widgets.manager")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { foldToggle }
+            ToolbarItem(placement: .topBarTrailing) { hideToggle }
             ToolbarItem(placement: .topBarTrailing) { addMenu }
             ToolbarItem(placement: .topBarTrailing) { editToggle }
         }
         .task { await model.load() }
-        // A row that is deleted or replaced comes back closed, not still open.
-        .onChange(of: model.widgets.map(\.id)) { _, ids in expandedWidgetIDs.formIntersection(ids) }
+        // A list that has just been imported or reset is shown too.
+        .onChange(of: model.widgets.map(\.id)) { old, new in
+            if !old.isEmpty, !Set(new).isSubset(of: old) { withAnimation { hidesWidgets = false } }
+        }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
         .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
         .sheet(isPresented: $showsGenreCollection) {
