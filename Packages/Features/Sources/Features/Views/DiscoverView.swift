@@ -18,8 +18,8 @@ struct DiscoverView: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 pageTitle
                 if model.hasSources {
+                    filters
                     VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                        filters
                         results
                     }
                 } else {
@@ -48,65 +48,68 @@ struct DiscoverView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// The same filter row as the Library: the type control, menus that show their active choice, and removable chips under them.
+    /// The filter block the Library shares (see `BrowseFilterBar`): the type control, shown for Movies and Series when both exist,
+    /// then the Year, Catalog and Genre menus, then a chip for the year span and one for the genre. Clearing them all reloads only
+    /// for the genre, since the year span filters what is already loaded.
     private var filters: some View {
         @Bindable var model = model
         // Movies and Series only: the other catalogue types stay out of the type control.
         let types = model.types.filter { ["movie", "series"].contains($0.lowercased()) }
-        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            if types.count > 1 {
-                QualitySelector(titles: ["All", "Movies", "Series"], selection: Binding {
-                    model.showsAllTypes ? 0 : model.selectedType?.lowercased() == "series" ? 2 : 1
-                } set: { index in
-                    guard index > 0 else { Task { await model.selectAllTypes() }; return }
-                    let type = index == 2 ? "series" : "movie"
-                    guard let selected = types.first(where: { $0.lowercased() == type }) else { return }
-                    Task { await model.select(type: selected) }
-                }, symbols: ["square.grid.2x2", "film", "tv"], accessibilityID: "discover.filter.type")
-                .padding(.horizontal, metrics.pageMargin)
+        var chips: [ActiveFilterChip] = []
+        if let year = model.yearSpanLabel {
+            chips.append(ActiveFilterChip(id: "year", label: year) {
+                model.minimumYear = nil
+                model.maximumYear = nil
+            })
+        }
+        if let genre = model.selectedGenre {
+            chips.append(ActiveFilterChip(id: "genre", label: genre) { Task { await model.select(genre: nil) } })
+        }
+        return BrowseFilterBar(kinds: types.count > 1 ? .init(titles: ["All", "Movies", "Series"], selection: Binding {
+            model.showsAllTypes ? 0 : model.selectedType?.lowercased() == "series" ? 2 : 1
+        } set: { index in
+            guard index > 0 else { Task { await model.selectAllTypes() }; return }
+            let type = index == 2 ? "series" : "movie"
+            guard let selected = types.first(where: { $0.lowercased() == type }) else { return }
+            Task { await model.select(type: selected) }
+        }, identifier: "discover.filter.type") : nil, chips: chips, identifier: "discover", clearAll: {
+            model.minimumYear = nil
+            model.maximumYear = nil
+            if model.selectedGenre != nil { Task { await model.select(genre: nil) } }
+        }) {
+            Menu {
+                ReleaseYearOptions(minimumYear: $model.minimumYear, maximumYear: $model.maximumYear, identifier: "discover.filter.year")
+            } label: {
+                FilterMenuLabel("Year", systemImage: "calendar", isActive: model.minimumYear != nil || model.maximumYear != nil,
+                                minHeight: BrowseFilterBar<EmptyView>.menuHeight)
             }
-            GlassEffectContainer(spacing: Theme.Spacing.s) {
-                HStack(spacing: Theme.Spacing.s) {
-                    Menu {
-                        ForEach(model.visibleSources) { source in
-                            Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
-                        }
-                    } label: {
-                        FilterMenuLabel(model.selectedSource?.title ?? "Catalog", systemImage: "square.stack")
-                    }
-                    .accessibilityIdentifier("discover.catalogMenu")
-                    if !model.genres.isEmpty {
-                        Menu {
-                            Button("All genres") { Task { await model.select(genre: nil) } }
-                            ForEach(model.genres, id: \.self) { genre in
-                                Button {
-                                    Task { await model.select(genre: genre) }
-                                } label: {
-                                    if model.selectedGenre == genre { Label(genre, systemImage: "checkmark") } else { Text(genre) }
-                                }
-                            }
-                        } label: {
-                            FilterMenuLabel(model.selectedGenre ?? "Genre", systemImage: "tag", isActive: model.selectedGenre != nil)
-                        }
-                        .accessibilityIdentifier("discover.genreMenu")
-                    }
-                    Menu {
-                        ReleaseYearOptions(minimumYear: $model.minimumYear, maximumYear: $model.maximumYear, identifier: "discover.filter.year")
-                    } label: {
-                        FilterMenuLabel("Year", systemImage: "calendar", isActive: model.minimumYear != nil || model.maximumYear != nil)
-                    }
-                    .accessibilityIdentifier("discover.filter.year")
+            .accessibilityIdentifier("discover.filter.year")
+            Menu {
+                ForEach(model.visibleSources) { source in
+                    Button("\(source.title) · \(source.addon.name)") { Task { await model.select(source: source) } }
                 }
+            } label: {
+                FilterMenuLabel(model.selectedSource?.title ?? "Catalog", systemImage: "square.stack",
+                                minHeight: BrowseFilterBar<EmptyView>.menuHeight)
             }
-            .padding(.horizontal, metrics.pageMargin)
-            if let genre = model.selectedGenre {
-                ActiveFilterChips(chips: [ActiveFilterChip(id: "genre", label: genre) { Task { await model.select(genre: nil) } }],
-                                  identifier: "discover", clearAll: { Task { await model.select(genre: nil) } })
-                    .padding(.horizontal, metrics.pageMargin)
-                    .padding(.top, Theme.Spacing.xs)
+            .accessibilityIdentifier("discover.catalogMenu")
+            if !model.genres.isEmpty {
+                Menu {
+                    Button("All genres") { Task { await model.select(genre: nil) } }
+                    ForEach(model.genres, id: \.self) { genre in
+                        Button {
+                            Task { await model.select(genre: genre) }
+                        } label: {
+                            if model.selectedGenre == genre { Label(genre, systemImage: "checkmark") } else { Text(genre) }
+                        }
+                    }
+                } label: {
+                    FilterMenuLabel(model.selectedGenre ?? "Genre", systemImage: "tag", isActive: model.selectedGenre != nil,
+                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+                }
+                .accessibilityIdentifier("discover.genreMenu")
             }
         }
-        .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: model.selectedGenre)
         .sensoryFeedback(.selection, trigger: model.selectedSource)
         .sensoryFeedback(.selection, trigger: model.minimumYear)

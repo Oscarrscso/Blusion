@@ -25,6 +25,8 @@ public struct AppServices: Sendable {
     public let widgetContent: WidgetContentService
     /// IMDb and Letterboxd ratings for poster badges.
     public let posterRatings: PosterRatingsStore
+    /// The titles' fuller details for the metadata line under a hero, shared by Home's spotlight and the title page.
+    public let heroMeta: HeroMetaStore
     /// Finds a film's best Blu-ray edition on bestblurays.com while its streams are loading.
     public let bestBlurays: BestBluraysClient
     public let makeEngine: EngineFactory
@@ -45,7 +47,7 @@ public struct AppServices: Sendable {
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
                 trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil,
-                traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false) {
+                traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false, heroMeta: HeroMetaStore? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -67,6 +69,7 @@ public struct AppServices: Sendable {
         self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt,
                                                                    account: traktAccount)
         self.posterRatings = posterRatings ?? PosterRatingsStore()
+        self.heroMeta = heroMeta ?? HeroMetaStore(browse: self.browse)
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()

@@ -74,7 +74,8 @@ import StremioKitTestSupport
                                           delays: [.seconds(2), .zero])
         let model = StreamPickerViewModel(request: request, services: services)
         defer { model.cancelLoading() }
-        await model.loadForAutomaticSelection(timeout: .milliseconds(100))
+        // Well short of the slow addon's two seconds, and long enough for the fast one to answer while the other suites run beside this one.
+        await model.loadForAutomaticSelection(timeout: .milliseconds(600))
         #expect(model.isLoading, "the slow addon is still pending")
         #expect(model.listing.best?.title == "fast")
     }
@@ -335,6 +336,41 @@ import StremioKitTestSupport
         await model.load()
         await model.retry()
         #expect(model.listing.items.count == 1)
+    }
+
+    // MARK: always picking the best stream
+
+    @Test func theAlwaysPickPreferenceDefaultsToOff() async throws {
+        let services = try await services(bodies: [body([])])
+        let model = StreamPickerViewModel(request: request, services: services)
+        #expect(!model.autoPlaysBestStream)
+        await model.loadAutoPlayPreference()
+        #expect(!model.autoPlaysBestStream)
+    }
+
+    @Test func theAlwaysPickPreferenceIsSavedKeepingTheOtherSettings() async throws {
+        let services = try await services(bodies: [body([])], settings: PlaybackSettings(preferredResolution: 720))
+        let model = StreamPickerViewModel(request: request, services: services)
+        await model.setAutoPlaysBestStream(true)
+        #expect(model.autoPlaysBestStream)
+        let saved = await services.settings.load()
+        #expect(saved.autoPlayBestStream, "the choice is written to the saved settings")
+        #expect(saved.preferredResolution == 720, "the other settings survive the save")
+    }
+
+    @Test func aNewPickerReadsTheSavedAlwaysPickPreference() async throws {
+        let services = try await services(bodies: [body([])], settings: PlaybackSettings(preferredResolution: 720))
+        let first = StreamPickerViewModel(request: request, services: services)
+        await first.setAutoPlaysBestStream(true)
+        let reopened = StreamPickerViewModel(request: request, services: services)
+        await reopened.loadAutoPlayPreference()
+        #expect(reopened.autoPlaysBestStream)
+        await reopened.setAutoPlaysBestStream(false)
+        let cleared = await services.settings.load()
+        #expect(!cleared.autoPlayBestStream && cleared.preferredResolution == 720)
+        let again = StreamPickerViewModel(request: request, services: services)
+        await again.loadAutoPlayPreference()
+        #expect(!again.autoPlaysBestStream, "switching it off persists too")
     }
 
     // MARK: another player

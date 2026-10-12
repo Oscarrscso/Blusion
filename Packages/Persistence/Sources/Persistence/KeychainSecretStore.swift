@@ -16,6 +16,8 @@ public final class KeychainSecretStore: SecretStore, Sendable {
         DefaultsSettingsStore.Keys.traktClientSecret,
         DefaultsSettingsStore.Keys.tmdbReadToken,
         DefaultsSettingsStore.Keys.omdbAPIKey,
+        // A legacy key of the removed trailer service. It stays listed so the one-time cleanup also deletes a copy iCloud Keychain carries.
+        "settings.originSubscriptionKey",
         TraktAccount.Keys.clientSecret,
         TraktAccount.Keys.token,
         TraktAccount.Keys.redirectURI,

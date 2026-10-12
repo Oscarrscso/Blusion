@@ -97,10 +97,10 @@ final class JustifiedLabel: UIView {
         let endAttributes: [NSAttributedString.Key: Any]
     }
 
-    /// A word as the last drawing placed it, so a tap inside its frame can find the link it holds.
-    private struct PlacedWord {
+    /// A link as the last drawing placed it: the frame it covers in its line, so a tap near it can find it (see `JustifiedLinkHit`).
+    private struct PlacedLink {
         let frame: CGRect
-        let word: Word
+        let url: URL
     }
 
     /// The measured text: its paragraphs of words, the metrics of the base font, and the links in it.
@@ -146,8 +146,8 @@ final class JustifiedLabel: UIView {
     private var layouts: [(key: LayoutKey, layout: Layout)] = []
     /// The width of the last measurement. Drawing uses that layout when the view's width is within a pixel of it (see `JustifiedSizing`).
     private var measuredWidth: CGFloat?
-    /// The words of the last drawing that hold a tappable link are placed by it; empty unless links are tappable.
-    private var placedWords: [PlacedWord] = []
+    /// The links the last drawing placed, each with the frame it covers. Empty unless links are tappable.
+    private var placedLinks: [PlacedLink] = []
     /// Taps the text when `onTap` is set. Off until then, so a text without it takes no touches.
     private let tapRecognizer = UITapGestureRecognizer()
 
@@ -212,12 +212,9 @@ final class JustifiedLabel: UIView {
         onTap?(linksAreTappable ? link(at: recognizer.location(in: self)) : nil)
     }
 
-    /// The link drawn under `point` by the last drawing, if there is one.
+    /// The link the last drawing placed nearest `point`, if one is near it (see `JustifiedLinkHit`).
     private func link(at point: CGPoint) -> URL? {
-        guard let placed = placedWords.first(where: { $0.frame.contains(point) }) else { return nil }
-        let index = CTLineGetStringIndexForPosition(placed.word.line, CGPoint(x: point.x - placed.frame.minX, y: 0))
-        guard index >= 0, index < placed.word.text.length else { return nil }
-        return placed.word.text.attribute(.link, at: index, effectiveRange: nil) as? URL
+        JustifiedLinkHit.index(at: point, frames: placedLinks.map(\.frame)).map { placedLinks[$0].url }
     }
 
     /// Offers the links to VoiceOver as actions when they are tappable. A folded text offers none, so its links read as plain text.
@@ -449,7 +446,7 @@ final class JustifiedLabel: UIView {
         let isCut = lineLimit > 0 && total > lineLimit
         let scale = max(contentScaleFactor, 1)
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        placedWords = []
+        placedLinks = []
         for index in 0..<shown {
             let line = layout.lines[index]
             let words = Array(layout.words[line.words])
@@ -459,6 +456,27 @@ final class JustifiedLabel: UIView {
             drawLine(words, in: context, content: content, width: width, baseline: baseline, scale: scale,
                      justified: !line.isParagraphEnd, ellipsis: cut)
         }
+    }
+
+    /// The links in `word`, each with the frame it covers in a line where the word starts at `x`. The extent is measured from the
+    /// word's own text, not from string indices in its line: a piece of a wrapped word has a line of its own, indexed from its start.
+    private func linkFrames(in word: Word, x: CGFloat, top: CGFloat, height: CGFloat) -> [PlacedLink] {
+        var frames: [PlacedLink] = []
+        let text = word.text
+        text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let url = value as? URL else { return }
+            let leading = NSRange(location: 0, length: range.location)
+            let through = NSRange(location: 0, length: NSMaxRange(range))
+            let start = range.location == 0 ? 0 : typographicWidth(text.attributedSubstring(from: leading))
+            let end = NSMaxRange(range) >= text.length ? word.width : typographicWidth(text.attributedSubstring(from: through))
+            frames.append(PlacedLink(frame: CGRect(x: x + start, y: top, width: max(0, end - start), height: height), url: url))
+        }
+        return frames
+    }
+
+    /// The typographic width of `text` drawn as one line.
+    private func typographicWidth(_ text: NSAttributedString) -> CGFloat {
+        CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(text), nil, nil, nil))
     }
 
     /// Draws one line. Justified, the gaps between words share the slack equally, up to a cap (see `JustifiedSpacing`); otherwise the words
@@ -496,8 +514,7 @@ final class JustifiedLabel: UIView {
             CTLineDraw(word.line, context)
             if linksAreTappable {
                 // The line box of the word: its top is the line's top, which the baseline sits `ascender` below.
-                let wordFrame = CGRect(x: x, y: baseline - content.font.ascender, width: word.width, height: content.font.lineHeight)
-                placedWords.append(PlacedWord(frame: wordFrame, word: word))
+                placedLinks += linkFrames(in: word, x: x, top: baseline - content.font.ascender, height: content.font.lineHeight)
             }
             if offset == kept.count - 1, let mark {
                 context.textPosition = CGPoint(x: ((x + word.width) * scale).rounded() / scale, y: baseline)

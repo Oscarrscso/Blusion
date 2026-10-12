@@ -27,8 +27,6 @@ struct DetailView: View {
     @State private var layoutWidth: CGFloat = 0
     /// The bottom inset the page's scroll view actually applies to its content, including the extra margin added below.
     @State private var scrollBottom: CGFloat = 0
-    /// The trailer playing full screen, if any.
-    @State private var playingTrailer: Trailer?
     /// True when Home's spotlight opened the page (the only caller that passes a handoff). Only such a page plays the settle.
     private let opensFromSpotlight: Bool
     /// Turns true when the page first appears, so the settle plays once for a page opened from the spotlight and not again when the user
@@ -75,56 +73,72 @@ struct DetailView: View {
     }
 
     init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false, handoff: HeroHandoff? = nil) {
-        _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked))
+        _model = State(initialValue: DetailViewModel(preview: preview, services: services, artwork: artwork, artworkChecked: artworkChecked,
+                                                     trailerPreparer: AVTrailerPreparer()))
         _hero = State(initialValue: HeroLoader(seeding: handoff))
         opensFromSpotlight = handoff != nil
     }
 
     var body: some View {
         GeometryReader { geometry in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
-                               topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
-                               logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo) {
-                        DetailActions(model: model, playingTrailer: $playingTrailer, isConfirmingUnmarkShow: $isConfirmingUnmarkShow)
-                    } synopsis: {
-                        DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
-                                       isTruncated: $isDescriptionTruncated)
-                    }
-                    Rectangle()
-                        .fill(Theme.separator)
-                        .frame(height: 1)
-                        .padding(.horizontal, contentMargin)
-                        .padding(.top, metrics.titleRatingsGap)
-                        .accessibilityHidden(true)
-                    if model.isSeries {
-                        DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin)
-                            .padding(.top, metrics.titleRatingsGap)
-                    }
-                    VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
-                        if !model.reviews.isEmpty {
-                            DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,
+                                   topInset: max(topInset, windowSafeArea.top), scrollPull: scrollPull, pictureSlot: pictureSlot,
+                                   logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo) {
+                            DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow)
+                        } trailer: {
+                            DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size))
+                        } synopsis: {
+                            DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
+                                           isTruncated: $isDescriptionTruncated)
                         }
-                        DetailCredits(model: model, contentMargin: contentMargin)
+                        Rectangle()
+                            .fill(Theme.separator)
+                            .frame(height: 1)
+                            .padding(.horizontal, contentMargin)
+                            .padding(.top, metrics.titleRatingsGap)
+                            .accessibilityHidden(true)
+                        if model.isSeries {
+                            DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin)
+                                .padding(.top, metrics.titleRatingsGap)
+                        }
+                        VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
+                            if !model.reviews.isEmpty {
+                                DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
+                            }
+                            DetailCredits(model: model, contentMargin: contentMargin)
+                        }
+                        .padding(.top, model.isSeries ? metrics.titleSectionSpacing : metrics.titleRatingsGap)
+                        if !model.relatedTitles.isEmpty {
+                            related
+                                .padding(.top, metrics.titleSectionSpacing)
+                        }
                     }
-                    .padding(.top, model.isSeries ? metrics.titleSectionSpacing : metrics.titleRatingsGap)
-                    if !model.relatedTitles.isEmpty {
-                        related
-                            .padding(.top, metrics.titleSectionSpacing)
+                    .padding(.bottom, Theme.Spacing.xxl)
+                    // The panel's appearance and disappearance moves the content below it, rather than jumping.
+                    .animation(.snappy(duration: 0.35), value: model.trailer.showsPanel)
+                }
+                // The track of the page's own scroll indicator is inset, so the bar is a short line rather than the whole screen height.
+                .contentMargins(.vertical, Self.scrollIndicatorInset, for: .scrollIndicators)
+                .contentMargins(.bottom, bottomExtra, for: .scrollContent)
+                .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.bottom } action: { _, value in
+                    scrollBottom = value
+                    refreshBottomExtra()
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
+                    scrollPull = value
+                }
+                // A panel that appears may be below the fold. The page moves only as far as it needs to, and not at all when the panel is
+                // already in view. The short wait lets the panel's own appearance start first, so the page moves to where it ends up.
+                .onChange(of: model.trailer.showsPanel) { _, shows in
+                    guard shows else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(50))
+                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailTrailerPanel.scrollID) }
                     }
                 }
-                .padding(.bottom, Theme.Spacing.xxl)
-            }
-            // The track of the page's own scroll indicator is inset, so the bar is a short line rather than the whole screen height.
-            .contentMargins(.vertical, Self.scrollIndicatorInset, for: .scrollIndicators)
-            .contentMargins(.bottom, bottomExtra, for: .scrollContent)
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentInsets.bottom } action: { _, value in
-                scrollBottom = value
-                refreshBottomExtra()
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
-                scrollPull = value
             }
         }
         .onGeometryChange(for: [CGFloat].self) {
@@ -161,12 +175,24 @@ struct DetailView: View {
             Task { await model.refreshUserState() }
             if opensFromSpotlight { hasSettled = true }
         }
-        .onDisappear { model.releaseStreamPrefetch() }
+        .onDisappear {
+            model.releaseStreamPrefetch()
+            // A full-screen trailer covers the page without leaving it, so its player stays. Leaving the page stops the load and player.
+            if !model.trailer.isFullScreen { model.trailer.cancel() }
+        }
         .accessibilityIdentifier("detail.scroll")
-        .trailerPlayer(item: $playingTrailer)
+        .youTubeTrailer(Bindable(model.trailer).youTubeHandoff)
     }
 
     // MARK: - Header
+
+    /// The trailer's panel is the page's width less its margins. In landscape it is also kept to the screen's height at 16:9, so the panel
+    /// never runs off the bottom of a short screen.
+    private func trailerWidth(in size: CGSize) -> CGFloat {
+        let fitting = max(0, size.width - contentMargin * 2)
+        guard isLandscape else { return fitting }
+        return min(fitting, max(160, size.height * 0.78) * 16 / 9)
+    }
 
     /// The main picture: the backdrop in landscape, the tall artwork in portrait. Nil until the artwork lookup answers; nothing is drawn for it until the picture and the logo are both ready.
     private var heroURL: URL? { isLandscape ? model.backdropURL : model.portraitArtworkURL }

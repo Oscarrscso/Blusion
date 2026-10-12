@@ -32,6 +32,8 @@ public final class StreamPickerViewModel {
     /// True when no installed addon can answer this request at all (as opposed to "still loading" or "nothing found").
     public private(set) var nobodyCanAnswer = false
     public private(set) var settings = PlaybackSettings()
+    /// The saved choice to start the best stream at once whenever streams are opened. The picker's switch shows it and changes it.
+    public private(set) var autoPlaysBestStream = false
     public private(set) var hasLoaded = false
     public private(set) var isAutoPicking = false
     public private(set) var autoPickMessage: String?
@@ -102,6 +104,20 @@ public final class StreamPickerViewModel {
                 self?.cancelSniffing()
             }
         }
+    }
+
+    /// Reads the saved choice to start the best stream at once, so the picker's switch shows the saved state each time it opens.
+    public func loadAutoPlayPreference() async {
+        settings = await services.settings.load()
+        autoPlaysBestStream = settings.autoPlayBestStream
+    }
+
+    /// Saves the choice to start the best stream at once, keeping the other settings. It only saves: the picker starts nothing itself.
+    public func setAutoPlaysBestStream(_ value: Bool) async {
+        autoPlaysBestStream = value
+        settings = await services.settings.load()
+        settings.autoPlayBestStream = value
+        await services.settings.save(settings)
     }
 
     /// Automatic playback has a total selection deadline; slower answers still improve the open picker.
@@ -216,7 +232,8 @@ public final class StreamPickerViewModel {
         return await choose(best)
     }
 
-    /// Called only by the explicit Auto Pick action. All resolutions, including REMUX, are compared together.
+    /// Called by the Auto Pick action, and when the streams open with automatic playback on. All resolutions, including REMUX, are
+    /// compared together.
     public func autoPickBest() async -> Choice? {
         guard !isAutoPicking else { return nil }
         isAutoPicking = true
@@ -234,7 +251,6 @@ public final class StreamPickerViewModel {
         }
         guard !Task.isCancelled else { return nil }
         autoPickedStream = pick.item
-        autoPickMessage = "Selected \(pick.item.quality.resolutionLabel ?? "stream") · \(pick.isRemux ? "REMUX" : pick.item.quality.source?.rawValue ?? "release")"
         return await handoffChoice(for: pick.item, player: .infuse)
     }
 
@@ -243,6 +259,14 @@ public final class StreamPickerViewModel {
     public var recommendedStream: RankedStream? {
         guard !isLoading else { return nil }
         return bestAssessment?.item
+    }
+
+    /// What kind of stream Auto Pick would start, as its button says it: "4K · REMUX". Nil while the addons are still answering and when
+    /// there is nothing Auto Pick can start, like `recommendedStream`.
+    public var recommendedStreamLabel: String? {
+        guard !isLoading, let pick = bestAssessment else { return nil }
+        let sharpness = pick.item.quality.resolutionLabel ?? "stream"
+        return "\(sharpness) · \(pick.isRemux ? "REMUX" : pick.item.quality.source?.rawValue ?? "release")"
     }
 
     /// The streams Infuse can take as they are: what Auto Pick ranks.

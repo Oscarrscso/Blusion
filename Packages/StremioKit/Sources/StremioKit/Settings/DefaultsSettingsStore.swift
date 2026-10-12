@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persists `PlaybackSettings`: plain preferences in `UserDefaults`; the streaming server URL (it may embed credentials), the Trakt
-/// client ID and the TMDb credential live in a `SecretStore`.
+/// Persists `PlaybackSettings`: plain preferences in `UserDefaults`; the streaming server URL (it may embed credentials), the Trakt client
+/// ID and the TMDb credential live in a `SecretStore`.
 public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
     public enum Keys {
         public static let preferredResolution = "settings.preferredResolution"
@@ -19,6 +19,12 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let omdbAPIKey = "settings.omdbAPIKey"
     }
 
+    /// The flag that says the old trailer service's saved key and address have been removed.
+    private static let removedTrailerServiceFlag = "settings.removedOriginTrailerService"
+    /// The secret and the default an older build of the paid trailer service saved. Only the one-time cleanup reads them.
+    private static let legacyOriginSubscriptionKey = "settings.originSubscriptionKey"
+    private static let legacyOriginAPIBaseURL = "settings.originAPIBaseURL"
+
     private let defaults: UserDefaults
     private let secrets: any SecretStore
     private let logger: AddonLogger
@@ -29,7 +35,16 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         self.logger = logger
     }
 
+    /// Blusion once had a paid trailer service; its saved key and address are removed the first time settings load.
+    private func removeLegacyTrailerService() async {
+        guard !defaults.bool(forKey: Self.removedTrailerServiceFlag) else { return }
+        await remove(Self.legacyOriginSubscriptionKey)
+        defaults.removeObject(forKey: Self.legacyOriginAPIBaseURL)
+        defaults.set(true, forKey: Self.removedTrailerServiceFlag)
+    }
+
     public func load() async -> PlaybackSettings {
+        await removeLegacyTrailerService()
         let resolution = defaults.integer(forKey: Keys.preferredResolution)
         let language = defaults.string(forKey: Keys.subtitleLanguage)
         let fallback = defaults.object(forKey: Keys.fallbackEngineEnabled) as? Bool ?? true

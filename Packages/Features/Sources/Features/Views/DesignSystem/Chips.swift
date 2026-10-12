@@ -192,20 +192,28 @@ struct RatingBadge: View {
 /// part is skipped.
 struct MetaLine: View {
     private let parts: [String]
+    /// The accessibility identifier of the line, for UI tests. Nil leaves it unset.
+    private let identifier: String?
 
-    init(_ parts: [String?]) {
+    init(_ parts: [String?], identifier: String? = nil) {
         self.parts = parts
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        self.identifier = identifier
     }
 
     var body: some View {
         if !parts.isEmpty {
-            Text(parts.joined(separator: " · "))
+            let line = Text(parts.joined(separator: " · "))
                 .font(Theme.Typography.metaLine)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.metaText)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(parts.joined(separator: ", "))
+            if let identifier {
+                line.accessibilityIdentifier(identifier)
+            } else {
+                line
+            }
         }
     }
 }

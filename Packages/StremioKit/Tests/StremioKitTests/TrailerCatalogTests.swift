@@ -38,13 +38,14 @@ import Testing
         #expect(keys(trailers) == ["teaser", "unofficial"], "language, then official, then kind")
     }
 
-    @Test func englishBeforeNoLanguageBeforeOtherLanguagesAndOnlyTheBestTwoAreKept() throws {
+    @Test func englishBeforeNoLanguageBeforeOtherLanguagesAndOnlyTheBestThreeAreKept() throws {
         let trailers = merged(youtube: ["addon01"], tmdb: [
             try tmdb("french", official: true, language: "fr"),
             try tmdb("nolang", official: true, language: nil),
             try tmdb("english", official: false, language: "EN "),
         ])
-        #expect(keys(trailers) == ["addon01", "english"], "addon-only entries count as English and official; the rest fall past the two")
+        #expect(keys(trailers) == ["addon01", "english", "nolang"],
+                "addon-only entries count as English and official; the French one falls past the three")
     }
 
     @Test func officialTrailersAreRankedNewestFirstAndUndatedLast() throws {
@@ -53,12 +54,12 @@ import Testing
             try tmdb("old", official: true, publishedAt: "2019-03-01T10:00:00.000Z"),
             try tmdb("new", official: true, publishedAt: "2024-07-15T10:00:00.000Z"),
         ])
-        #expect(keys(trailers) == ["new", "old"], "the undated trailer falls past the two best")
+        #expect(keys(trailers) == ["new", "old", "undated"], "the undated trailer comes last")
     }
 
     @Test func entriesThatTieKeepTheirSourceOrder() throws {
         let trailers = merged(youtube: ["second", "third"], tmdb: [try tmdb("first", official: true)])
-        #expect(keys(trailers) == ["first", "second"])
+        #expect(keys(trailers) == ["first", "second", "third"])
     }
 
     @Test func teasersAreIncludedWithTheirKind() throws {
@@ -68,9 +69,9 @@ import Testing
         #expect(trailers[0].title == "Teaser", "a blank TMDb name falls back to the kind")
     }
 
-    @Test func youTubeIsTheFallbackWhenNoDirectFileExists() {
-        let trailers = merged(youtube: ["one", "two", "three"])
-        #expect(keys(trailers) == ["one", "two"], "at most two YouTube trailers")
+    @Test func youTubeIsTheFallbackWhenNoDirectFileExistsAndAtMostThreeAreKept() {
+        let trailers = merged(youtube: ["one", "two", "three", "four"])
+        #expect(keys(trailers) == ["one", "two", "three"], "at most three YouTube trailers, in case YouTube refuses one")
     }
 
     @Test func aDirectFileIsOfferedAloneAndYouTubeIsLeftOut() throws {
@@ -120,6 +121,21 @@ import Testing
         #expect(try TMDbRatings.parseVideos(Data(#"{"results":[]}"#.utf8)).isEmpty)
         #expect(throws: AddonError.self) { try TMDbRatings.parseVideos(Data("nope".utf8)) }
         #expect(throws: AddonError.self) { try TMDbRatings.parseVideos(Data(#"{"id":1}"#.utf8)) }
+    }
+
+    @Test func playbackOrderListsTheDirectFilesThenTheThreeBestYouTubeTrailers() {
+        let preview = Trailer(source: .direct(URL(string: "https://a.example.com/p.m4v")!))
+        let order = TrailerCatalog.playbackOrder(previews: [preview], addonYouTubeIDs: ["one", "two", "three", "four"], addonURLs: [],
+                                                 tmdb: [])
+        #expect(order.map(\.id) == ["url:https://a.example.com/p.m4v", "yt:one", "yt:two", "yt:three"],
+                "YouTube is the fallback after every direct file")
+    }
+
+    @Test func playbackOrderWithoutAnInAppSourceIsTheMergeList() {
+        let ids = ["one", "two", "three"]
+        let order = TrailerCatalog.playbackOrder(previews: [], addonYouTubeIDs: ids, addonURLs: [], tmdb: [])
+        #expect(order.map(\.id) == ["yt:one", "yt:two", "yt:three"])
+        #expect(order == TrailerCatalog.merge(previews: [], addonYouTubeIDs: ids, addonURLs: [], tmdb: []))
     }
 
     @Test func isYouTubeIDAcceptsOnlyShortASCIIIDs() {

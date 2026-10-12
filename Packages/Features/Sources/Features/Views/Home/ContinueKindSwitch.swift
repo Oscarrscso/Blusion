@@ -18,7 +18,7 @@ enum ContinueKind: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .all: "square.grid.2x2"
+        case .all: "infinity"
         case .movies: "film"
         case .series: "tv"
         }

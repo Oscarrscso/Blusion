@@ -1,7 +1,7 @@
 import Foundation
 
-/// A trailer or teaser for a title, from TMDb's videos or an addon's `trailerStreams`. A YouTube source plays on YouTube; a direct
-/// source is a file the addon links to.
+/// A trailer or teaser for a title, from TMDb's videos, an addon's `trailerStreams` or iTunes' preview. A YouTube source plays in YouTube's
+/// embedded player on the title page; a direct source is a file the app's own player plays.
 public struct Trailer: Sendable, Hashable, Identifiable {
     public enum Kind: Sendable, Hashable {
         case trailer

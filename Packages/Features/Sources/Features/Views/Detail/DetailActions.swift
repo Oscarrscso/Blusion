@@ -7,15 +7,13 @@ import UIKit
 /// the logo in portrait, beside the artwork in landscape.
 struct DetailActions: View {
     let model: DetailViewModel
-    @Binding var playingTrailer: Trailer?
     @Binding var isConfirmingUnmarkShow: Bool
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
-    @Environment(PosterRatingsStore.self) private var ratings
 
     var body: some View {
         VStack(alignment: isLandscape ? .leading : .center, spacing: Theme.Spacing.s) {
-            MetaLine(metaParts)
+            MetaLine(metaParts, identifier: "detail.metaLine")
                 .multilineTextAlignment(isLandscape ? .leading : .center)
             actionRow
             if model.isFallback && !model.isLoading {
@@ -28,10 +26,7 @@ struct DetailActions: View {
     }
 
     /// The metadata line, the same text as the spotlight's. It sits above the actions.
-    private var metaParts: [String?] {
-        DetailViewModel.heroMetaParts(for: model.detail.preview, certification: model.certification,
-                                      imdbRating: ratings.ratings(for: model.detail.preview, includeReviews: true, source: .imdb).imdb)
-    }
+    private var metaParts: [String?] { model.heroMetaLine }
 
     /// The one main action. A movie plays itself; a series plays its next episode. While a series' episodes are still arriving,
     /// a placeholder holds the place.
@@ -160,14 +155,14 @@ struct DetailActions: View {
         }
     }
 
-    /// Plays the first trailer: a direct file in Blusion's player, a YouTube trailer in the YouTube app. It is there from the start, so the row
-    /// does not change when the page loads; until a trailer is known it is dimmed and does nothing.
+    /// Loads the title's trailer into the page and plays it there, with a spinner while it loads. While it plays the symbol is filled,
+    /// and a tap closes the player. A YouTube trailer opens in the YouTube app instead. It is there from the start, so the row does not
+    /// change when the page loads; when no trailer can be had it is dimmed and does nothing.
     private var trailerAction: some View {
-        CircleActionButton(title: "Trailer", systemImage: "play.rectangle") {
-            playingTrailer = model.trailers.first
-        }
-        .disabled(model.trailers.isEmpty)
-        .opacity(model.trailers.isEmpty ? 0.4 : 1)
+        CircleActionButton(title: "Trailer", systemImage: "play.rectangle", isOn: model.trailer.isPlaying, onTitle: "Close Trailer",
+                           action: { model.toggleTrailer() }, isLoading: model.trailer.phase == .loading)
+        .disabled(!model.canPlayTrailer)
+        .opacity(model.canPlayTrailer ? 1 : 0.4)
         .accessibilityIdentifier("detail.trailerButton")
     }
 }

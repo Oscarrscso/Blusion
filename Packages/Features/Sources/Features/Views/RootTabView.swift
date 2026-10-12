@@ -243,6 +243,7 @@ public struct RootTabView: View {
         }
         .environment(router)
         .environment(services.posterRatings)
+        .environment(services.heroMeta)
         .environment(titleActions)
         .environment(\.isLandscape, isLandscape)
         .environment(\.windowSafeArea, windowSafeArea)

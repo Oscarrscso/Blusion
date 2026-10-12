@@ -133,7 +133,7 @@ public struct TMDbRatings: Sendable {
     }
 
     /// The TMDb id for an IMDb title, looked up once per session (see `TMDbTitleIDCache`). Nil when TMDb does not know the title.
-    func tmdbID(imdbID: String, type: String) async throws -> Int? {
+    public func tmdbID(imdbID: String, type: String) async throws -> Int? {
         try await titleIDs.id(for: "\(type)|\(imdbID)") {
             let resolved = try await self.ratings(imdbID: imdbID, type: type)
             guard let id = resolved.tmdbURL?.lastPathComponent else { return nil }

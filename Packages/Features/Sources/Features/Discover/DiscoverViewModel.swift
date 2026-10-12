@@ -29,6 +29,16 @@ public final class DiscoverViewModel {
     public var minimumYear: Int?
     public var maximumYear: Int?
 
+    /// The year span as a filter chip words it, the same as the Library's chips ("1990–1999"); nil when no span is set.
+    public var yearSpanLabel: String? {
+        switch (minimumYear, maximumYear) {
+        case let (low?, high?): low == high ? "\(low)" : "\(low)–\(high)"
+        case let (low?, nil): "From \(low)"
+        case let (nil, high?): "Until \(high)"
+        case (nil, nil): nil
+        }
+    }
+
     /// One catalog feeding the "All" mix, with how far it has been read.
     private struct Cursor {
         var source: CatalogSource

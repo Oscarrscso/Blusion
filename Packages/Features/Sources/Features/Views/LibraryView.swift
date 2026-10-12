@@ -85,62 +85,47 @@ struct LibraryView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// Half of the gap between the selector and the posters. The sorts sit `sortGap` below the selector and, as the bottom padding,
-    /// `sortGap` above the grid, so they are exactly midway between the two.
-    private var sortGap: CGFloat { (Theme.Spacing.s + metrics.shelfSpacing) / 2 }
-    /// The sort menus are a little shorter than the default filter label.
-    private static let sortHeight: CGFloat = 34
-
-    /// The Movies/Series selector, then the sort menus, then the grid. Chips under the sorts keep their own padding.
+    /// The Movies/Series selector, then the Year, Rating and Sort menus, then the chips: the filter block Discover shares (see
+    /// `BrowseFilterBar`), so the two pages look the same.
     private var filters: some View {
         @Bindable var model = model
         let kinds: [LibraryKind] = [.movie, .series]
-        return VStack(alignment: .leading, spacing: sortGap) {
-            QualitySelector(titles: ["All"] + kinds.map(\.title), selection: Binding {
-                kinds.firstIndex(where: { model.filter.kinds.contains($0) }).map { $0 + 1 } ?? 0
-            } set: { index in
-                model.filter.kinds = index > 0 && index <= kinds.count ? [kinds[index - 1]] : []
-            }, symbols: ["square.grid.2x2", "film", "tv"], accessibilityID: "library.filter.kind")
-            .padding(.horizontal, metrics.pageMargin)
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            GlassEffectContainer(spacing: Theme.Spacing.s) {
-                HStack(spacing: Theme.Spacing.s) {
-                    Menu {
-                        ReleaseYearOptions(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear,
-                                           identifier: "library.filter.year")
-                    } label: {
-                        filterLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
-                    }
-                    .accessibilityIdentifier("library.filter.year")
-                    Menu {
-                        RatingPicker(threshold: $model.filter.minimumRating)
-                    } label: {
-                        filterLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil)
-                    }
-                    .accessibilityIdentifier("library.filter.rating")
-                    Menu {
-                        Picker("Sort by", selection: $model.filter.sort) {
-                            ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
-                        }
-                    } label: {
-                        filterLabel(model.filter.sort.title, systemImage: "arrow.up.arrow.down", isActive: model.filter.sort != .recentlyAdded)
-                    }
-                    .accessibilityLabel("Sort by \(model.filter.sort.title)")
-                    .accessibilityIdentifier("library.sort")
+        return BrowseFilterBar(kinds: .init(titles: ["All"] + kinds.map(\.title), selection: Binding {
+            kinds.firstIndex(where: { model.filter.kinds.contains($0) }).map { $0 + 1 } ?? 0
+        } set: { index in
+            model.filter.kinds = index > 0 && index <= kinds.count ? [kinds[index - 1]] : []
+        }, identifier: "library.filter.kind"), chips: model.filter.chips.map { chip in
+            ActiveFilterChip(id: chip.id, label: chip.label) { model.removeFilter(chip) }
+        }, identifier: "library", clearAll: { model.clearFilters() }) {
+            Menu {
+                ReleaseYearOptions(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear,
+                                   identifier: "library.filter.year")
+            } label: {
+                filterLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
+            }
+            .accessibilityIdentifier("library.filter.year")
+            Menu {
+                RatingPicker(threshold: $model.filter.minimumRating)
+            } label: {
+                filterLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil)
+            }
+            .accessibilityIdentifier("library.filter.rating")
+            Menu {
+                Picker("Sort by", selection: $model.filter.sort) {
+                    ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
                 }
+            } label: {
+                filterLabel(model.filter.sort.title, systemImage: "arrow.up.arrow.down", isActive: model.filter.sort != .recentlyAdded)
             }
-            if !model.filter.chips.isEmpty { filterChips }
-            }
-            .padding(.horizontal, metrics.pageMargin)
+            .accessibilityLabel("Sort by \(model.filter.sort.title)")
+            .accessibilityIdentifier("library.sort")
         }
-        .padding(.bottom, model.filter.chips.isEmpty ? sortGap : 0)
-        .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: model.filter)
         .accessibilityIdentifier("library.filters")
     }
 
     private func filterLabel(_ title: String, systemImage: String? = nil, tint: Color = .primary, isActive: Bool = false) -> some View {
-        FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive, minHeight: Self.sortHeight)
+        FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive, minHeight: BrowseFilterBar<EmptyView>.menuHeight)
     }
 
     private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
@@ -153,17 +138,6 @@ struct LibraryView: View {
                 model.filter[keyPath: keyPath].remove(value)
             }
         }
-    }
-
-    /// The active filters, one chip each (tap to clear it), and a chip that clears them all. The stack already adds 8pt above this view,
-    /// so the padding makes that gap 12pt, and the padding below makes the gap to the grid 24pt. The view is removed with the last chip,
-    /// so clearing every filter leaves no gap behind.
-    private var filterChips: some View {
-        ActiveFilterChips(chips: model.filter.chips.map { chip in
-            ActiveFilterChip(id: chip.id, label: chip.label) { model.removeFilter(chip) }
-        }, identifier: "library", clearAll: { model.clearFilters() })
-        .padding(.top, Theme.Spacing.xs)
-        .padding(.bottom, Theme.Spacing.xl)
     }
 
     private var savedSection: some View {

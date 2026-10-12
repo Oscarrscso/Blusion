@@ -2,9 +2,9 @@ import Foundation
 
 /// Joins a title's trailers from iTunes, TMDb and its addons into one list to offer.
 public enum TrailerCatalog {
-    /// How many YouTube trailers are offered when no direct file is. TMDb exposes no view counts, so the two that rank best stand in for
-    /// the most watched.
-    private static let youTubeLimit = 2
+    /// How many YouTube trailers are offered when no direct file is. TMDb exposes no view counts, so the three that rank best stand in for
+    /// the most watched. A third is there in case YouTube refuses to embed one of the first two.
+    private static let youTubeLimit = 3
 
     /// The trailers to offer for a title, best first. A direct file is the first choice: the iTunes preview, then the addon's own direct
     /// links, each listed once. YouTube is only a fallback: when there is no direct file at all, the best `youTubeLimit` YouTube trailers
@@ -15,6 +15,22 @@ public enum TrailerCatalog {
     /// Ranking: English, then no language, then other languages; official before unofficial; trailers before teasers; newer before
     /// older, undated last. Entries that still tie keep the order they were listed in.
     public static func merge(previews: [Trailer], addonYouTubeIDs: [String], addonURLs: [URL], tmdb: [TMDbVideo]) -> [Trailer] {
+        let direct = directTrailers(previews: previews, addonURLs: addonURLs)
+        guard direct.isEmpty else { return direct }
+        return youTubeTrailers(addonYouTubeIDs: addonYouTubeIDs, tmdb: tmdb)
+    }
+
+    /// The order a player tries the trailers of a title in: every direct file in the order `merge` lists them, then the best
+    /// `youTubeLimit` YouTube trailers, so YouTube is the fallback when no direct file plays. With no direct file it is the same list
+    /// `merge` returns.
+    public static func playbackOrder(previews: [Trailer], addonYouTubeIDs: [String], addonURLs: [URL], tmdb: [TMDbVideo]) -> [Trailer] {
+        directTrailers(previews: previews, addonURLs: addonURLs)
+            + youTubeTrailers(addonYouTubeIDs: addonYouTubeIDs, tmdb: tmdb)
+    }
+
+    /// The direct files, each listed once, in this order: the iTunes previews, then the addon's direct links. Any direct file that is not
+    /// http(s) is left out.
+    private static func directTrailers(previews: [Trailer], addonURLs: [URL]) -> [Trailer] {
         var seen = Set<String>()
         var direct: [Trailer] = []
         for preview in previews {
@@ -25,8 +41,12 @@ public enum TrailerCatalog {
             let trailer = Trailer(source: .direct(url), isOfficial: true)
             if seen.insert(trailer.id).inserted { direct.append(trailer) }
         }
-        guard direct.isEmpty else { return direct }
+        return direct
+    }
 
+    /// The best `youTubeLimit` YouTube trailers from TMDb's videos and the addon's YouTube ids, best first.
+    private static func youTubeTrailers(addonYouTubeIDs: [String], tmdb: [TMDbVideo]) -> [Trailer] {
+        var seen = Set<String>()
         var candidates: [Candidate] = []
         func add(_ trailer: Trailer, languageRank: Int) {
             guard seen.insert(trailer.id).inserted else { return }

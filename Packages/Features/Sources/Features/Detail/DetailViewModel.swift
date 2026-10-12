@@ -45,11 +45,15 @@ public final class DetailViewModel {
     public private(set) var certification: String?
     /// Set once the hero picture and logo have loaded (or five seconds have passed), so the page's other requests may start.
     public private(set) var hasSettledHero = false
+    /// The title's trailer: its loading, the player in the page's panel, and a failure. The trailer button and the panel share it.
+    public let trailer: TrailerLoader
 
-    public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false) {
+    public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false,
+                trailerPreparer: (any TrailerPreparing)? = nil) {
         self.preview = preview
         self.detail = .fallback(from: preview)
         self.services = services
+        self.trailer = TrailerLoader(preparer: trailerPreparer ?? UnavailableTrailerPreparer())
         // An artwork handed over by Home, or one looked up earlier this session, is used at once: the page then has nothing to wait for.
         let known = artwork ?? services.posterRatings.cachedHeroArtwork(for: preview)
         self.tmdbArtwork = known
@@ -79,9 +83,11 @@ public final class DetailViewModel {
         let result = await services.browse.detail(for: preview)
         // A load that was cancelled must not overwrite what the newer load shows.
         guard !Task.isCancelled else { return }
-        matchesEpisodeWidthToText = await playbackSettings.matchesEpisodeWidthToText
+        let settings = await playbackSettings
+        matchesEpisodeWidthToText = settings.matchesEpisodeWidthToText
         detail = result.detail
         isFallback = result.isFallback
+        if !result.isFallback { services.heroMeta.record(detail.preview, for: preview) }
         isLoading = false
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
@@ -124,10 +130,12 @@ public final class DetailViewModel {
         titleCredits = loaded
     }
 
+    /// The age rating comes from the same session cache the spotlight reads, so a title shown on Home is not asked for again. Without
+    /// a saved TMDb read token none is asked for, as before.
     private func loadCertification() async {
         let settings = await services.settings.load()
         guard let token = settings.tmdbReadToken, !token.isEmpty else { certification = nil; return }
-        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).certification(imdbID: preview.id, type: preview.type)
+        let loaded = await services.posterRatings.certification(for: preview)
         guard !Task.isCancelled else { return }
         certification = loaded
     }
@@ -441,11 +449,40 @@ public final class DetailViewModel {
         return [preview.releaseInfo] + preview.genres.prefix(2).map { Optional($0) } + [certification, preview.runtime, rating]
     }
 
-    /// The title's trailers, merged and ordered (see `TrailerCatalog`): the iTunes preview first when there is one, then the addon's direct
-    /// links; YouTube trailers only when there is no direct file at all.
+    /// The metadata line under the hero, built by the shared store exactly as Home's spotlight builds it (see `HeroMetaStore.parts`).
+    public var heroMetaLine: [String?] {
+        services.heroMeta.parts(for: preview, certification: certification, ratings: services.posterRatings)
+    }
+
+    /// The title's trailers known without a tap, merged and ordered (see `TrailerCatalog`): the iTunes preview first when there is one,
+    /// then the addon's direct links; YouTube trailers only when there is no direct file at all.
     public var trailers: [Trailer] {
         TrailerCatalog.merge(previews: itunesTrailer.map { [$0] } ?? [], addonYouTubeIDs: detail.trailers, addonURLs: detail.trailerURLs,
                              tmdb: tmdbVideos)
+    }
+
+    /// Whether the trailer button can do anything: a trailer is known.
+    public var canPlayTrailer: Bool { !trailers.isEmpty }
+
+    /// The trailer button's tap: loads the title's trailer into the page, or closes it while it plays. A YouTube video is checked
+    /// with YouTube before it is tried in the page's embedded player.
+    public func toggleTrailer() {
+        trailer.toggle(TrailerLoader.Source(
+            plan: { [weak self] in
+                guard let self else { return TrailerPlan(trailers: []) }
+                return await self.trailerPlan()
+            },
+            allowsEmbedding: { [weak self] videoID in
+                guard let self else { return false }
+                return await YouTubeEmbedCheck(client: self.services.client).allowsEmbedding(videoID: videoID)
+            }))
+    }
+
+    /// The trailers to try, best first: the iTunes preview and the addon's direct links, then the best YouTube trailers (see
+    /// `TrailerCatalog.playbackOrder`).
+    public func trailerPlan() async -> TrailerPlan {
+        TrailerPlan(trailers: TrailerCatalog.playbackOrder(previews: itunesTrailer.map { [$0] } ?? [], addonYouTubeIDs: detail.trailers,
+                                                          addonURLs: detail.trailerURLs, tmdb: tmdbVideos))
     }
 
     public var subtitle: String {

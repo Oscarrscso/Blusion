@@ -29,6 +29,10 @@ enum TitleHero {
     static let placeholderBlur: CGFloat = 2
     /// The band under the picture on Home that holds the metadata line. The title page has no band; its picture is the same height.
     static let captionBelow: CGFloat = 72
+    /// The scale a title page starts from when it opens from the spotlight: a little larger, then it settles at rest (see `heroSettle`).
+    static let settleLarger: Double = 1.025
+    /// The scale the spotlight starts from when a title closes back to it: a little smaller, so going back reads as pulling away.
+    static let settleSmaller: Double = 0.975
 
     // MARK: Landscape title page (iPhone only; the Mac keeps its original sizes)
     /// The share of the content width (after the gap) the landscape picture takes.
@@ -86,6 +90,8 @@ enum TitleHero {
 /// The settle as a modifier, so its keyframes are built in a plain type rather than in a generic `View` extension (see `View.heroSettle`).
 private struct HeroSettle<Trigger: Equatable & Sendable>: ViewModifier {
     let trigger: Trigger
+    /// The scale the settle starts from before it springs to rest at 1.
+    let from: Double
 
     func body(content: Content) -> some View {
         content.keyframeAnimator(initialValue: 1.0, trigger: trigger) { view, scale in
@@ -94,7 +100,7 @@ private struct HeroSettle<Trigger: Equatable & Sendable>: ViewModifier {
             KeyframeTrack {
                 // A move, not a keyframe of no length: that one has no speed to hand the spring, and the scale comes out
                 // infinite, which draws nothing and takes no touches.
-                MoveKeyframe(1.025)
+                MoveKeyframe(from)
                 SpringKeyframe(1, duration: 0.4, spring: .smooth)
                 // The spring is not quite at rest when its time is up. The spotlight ends at exactly its own size.
                 LinearKeyframe(1, duration: 0.1)
@@ -104,11 +110,12 @@ private struct HeroSettle<Trigger: Equatable & Sendable>: ViewModifier {
 }
 
 extension View {
-    /// The settle the spotlight makes when a title closes back to it, and the title page makes when it opens from the spotlight: a little
-    /// larger, then at rest. Scale only, so the picture and logo are never hidden or faded. Plays each time `trigger` changes, never on
-    /// first appearance.
-    func heroSettle(trigger: some Equatable & Sendable) -> some View {
-        modifier(HeroSettle(trigger: trigger))
+    /// The settle a screen plays when `trigger` changes: the picture starts at `scale` and springs to rest at its own size. The title page
+    /// opens from the spotlight a little larger (`TitleHero.settleLarger`, the default). Home's spotlight, when a title closes back to it,
+    /// starts a little smaller (`TitleHero.settleSmaller`), so going back reads as pulling away. Scale only, so the picture and logo are
+    /// never hidden or faded. Plays each time `trigger` changes, never on first appearance.
+    func heroSettle(trigger: some Equatable & Sendable, from scale: Double = TitleHero.settleLarger) -> some View {
+        modifier(HeroSettle(trigger: trigger, from: scale))
     }
 }
 
@@ -308,6 +315,26 @@ struct HeroPicture: View {
     var alignment: Alignment = TitleHero.imageAlignment
     /// The title whose poster stands in until the picture is revealed. A title with no poster and no IMDb id draws no stand-in.
     let preview: MetaPreview
+    /// The stand-in's address, chosen once when the page opens (see `standInURL(for:)`).
+    @State private var standIn: URL?
+
+    init(slot: HeroSlot, isRevealed: Bool, contentMode: ContentMode, alignment: Alignment = TitleHero.imageAlignment, preview: MetaPreview) {
+        self.slot = slot
+        self.isRevealed = isRevealed
+        self.contentMode = contentMode
+        self.alignment = alignment
+        self.preview = preview
+        _standIn = State(initialValue: Self.standInURL(for: preview))
+    }
+
+    /// The picture that stands in for `preview`: its card poster, or, when that is not decoded and another picture of the title is (the
+    /// backdrop a wide card or a turned phone showed), that one. Whatever the card that opened this page was showing is then on screen in
+    /// the first frame, and nothing is loaded again for it.
+    private static func standInURL(for preview: MetaPreview) -> URL? {
+        let poster = PosterQuality.poster(for: preview)
+        let shown = [poster, preview.background, MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
+        return shown.first { ImagePipeline.shared.cachedImageAtAnySize(for: $0) != nil } ?? poster
+    }
 
     private var hasPicture: Bool {
         if case .ready = slot { return true }
@@ -316,12 +343,12 @@ struct HeroPicture: View {
 
     var body: some View {
         ZStack {
-            if !isRevealed, let standIn = PosterQuality.poster(for: preview) {
+            if !isRevealed, let standIn {
                 // Stays fully opaque while the picture fades in over it (the reveal lasts 0.25 s), then goes unseen. With no picture to
                 // reveal it goes as it did, with a fade.
                 ArtworkImage(url: standIn, maxPixelSize: TitleHero.placeholderPixelSize, contentMode: contentMode,
                              placeholderBlur: 0, fallbackURL: PosterQuality.smallest(MetahubArtwork.poster(imdbID: preview.id)),
-                             imageAlignment: alignment)
+                             imageAlignment: alignment, acceptsAnyCachedSize: true)
                     .blur(radius: TitleHero.placeholderBlur, opaque: true)
                     .overlay {
                         ProgressView()
@@ -345,6 +372,8 @@ struct HeroPicture: View {
         }
         .clipped()
         .accessibilityHidden(true)
+        // A view that is kept for another title chooses again.
+        .onChange(of: preview.identity) { standIn = Self.standInURL(for: preview) }
     }
 }
 

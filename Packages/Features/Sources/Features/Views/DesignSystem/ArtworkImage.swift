@@ -14,14 +14,22 @@ struct ArtworkImage: View {
     /// Tried once, at the same size, when `url` fails to load. Nil, or the same URL as `url`, means no second try.
     let fallbackURL: URL?
     let imageAlignment: Alignment
+    /// True for a stand-in: a picture of `url` that is decoded at another size is shown as it is, so one the user has just seen is there
+    /// in the first frame and nothing is loaded for it.
+    let acceptsAnyCachedSize: Bool
+    /// Told whether the picture on show is the fallback, so the caller can draw what the first choice would have carried itself.
+    let usesFallback: Binding<Bool>?
 
     @State private var image: UIImage?
     /// The URL `image` was loaded for, so a view that re-appears keeps its picture instead of flashing the placeholder.
     @State private var imageURL: URL?
     @State private var placeholderImage: UIImage?
+    /// True while `image` came from `fallbackURL`.
+    @State private var showsFallback: Bool
 
     init(url: URL?, title: String = "", maxPixelSize: CGFloat = 600, contentMode: ContentMode = .fill,
-         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, fallbackURL: URL? = nil, imageAlignment: Alignment = .center) {
+         placeholderURL: URL? = nil, placeholderBlur: CGFloat = 1, fallbackURL: URL? = nil, imageAlignment: Alignment = .center,
+         acceptsAnyCachedSize: Bool = false, usesFallback: Binding<Bool>? = nil) {
         self.url = url
         self.title = title
         self.maxPixelSize = maxPixelSize
@@ -30,10 +38,19 @@ struct ArtworkImage: View {
         self.placeholderBlur = placeholderBlur
         self.fallbackURL = fallbackURL
         self.imageAlignment = imageAlignment
+        self.acceptsAnyCachedSize = acceptsAnyCachedSize
+        self.usesFallback = usesFallback
         // Already decoded (the usual case when scrolling back): start with the picture, no placeholder frame and no fade.
-        let cached = url.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: maxPixelSize) }
+        var cached = url.flatMap { Self.cachedPicture($0, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) }
+        var fellBack = false
+        // A first choice that is known not to exist is not waited for again: its fallback, when decoded, is there at once too.
+        if cached == nil, let url, let fallbackURL, fallbackURL != url, ImagePipeline.shared.isKnownMissing(url) {
+            cached = ImagePipeline.shared.cachedImage(for: fallbackURL, maxPixelSize: maxPixelSize)
+            fellBack = cached != nil
+        }
         _image = State(initialValue: cached)
         _imageURL = State(initialValue: cached == nil ? nil : url)
+        _showsFallback = State(initialValue: fellBack)
         _placeholderImage = State(initialValue: placeholderURL.flatMap { ImagePipeline.shared.cachedImage(for: $0, maxPixelSize: 600) })
     }
 
@@ -63,6 +80,7 @@ struct ArtworkImage: View {
             .accessibilityHidden(true)
             // Stretching changes only the frame; it must not restart the download, decode or fade.
             .task(id: url) { await load() }
+            .onChange(of: showsFallback, initial: true) { _, fellBack in usesFallback?.wrappedValue = fellBack }
             .task(id: image == nil ? placeholderURL : nil) {
                 guard image == nil, let placeholderURL else { return }
                 let preview = try? await ImagePipeline.shared.image(for: placeholderURL, maxPixelSize: 600)
@@ -90,33 +108,42 @@ struct ArtworkImage: View {
         guard let url else {
             image = nil
             imageURL = nil
+            showsFallback = false
             return
         }
         if imageURL == url, image != nil { return }
-        if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) {
+        if let cached = Self.cachedPicture(url, maxPixelSize: maxPixelSize, anySize: acceptsAnyCachedSize) {
             withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
                 image = cached
                 imageURL = url
                 placeholderImage = nil
+                showsFallback = false
             }
             return
         }
         // Keep the current artwork visible while a replacement downloads.
         guard let loaded = try? await download(url), !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: placeholderURL == nil ? 0.35 : 0.15)) {
-            image = loaded
+            image = loaded.image
             imageURL = url
             placeholderImage = nil
+            showsFallback = loaded.isFallback
         }
     }
 
+    /// The decoded picture of `url` at this view's size, or, for a stand-in, at any size.
+    private static func cachedPicture(_ url: URL, maxPixelSize: CGFloat, anySize: Bool) -> UIImage? {
+        if let exact = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: maxPixelSize) { return exact }
+        return anySize ? ImagePipeline.shared.cachedImageAtAnySize(for: url) : nil
+    }
+
     /// The picture at `url`, or at `fallbackURL` once when `url` fails. A load that was cancelled does not try the fallback.
-    private func download(_ url: URL) async throws -> UIImage {
+    private func download(_ url: URL) async throws -> (image: UIImage, isFallback: Bool) {
         do {
-            return try await ImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize)
+            return (try await ImagePipeline.shared.image(for: url, maxPixelSize: maxPixelSize), false)
         } catch {
             guard !Task.isCancelled, let fallbackURL, fallbackURL != url else { throw error }
-            return try await ImagePipeline.shared.image(for: fallbackURL, maxPixelSize: maxPixelSize)
+            return (try await ImagePipeline.shared.image(for: fallbackURL, maxPixelSize: maxPixelSize), true)
         }
     }
 }

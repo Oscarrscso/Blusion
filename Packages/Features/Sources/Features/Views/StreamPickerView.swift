@@ -14,6 +14,9 @@ struct StreamPickerView: View {
     @State private var autoPickTask: Task<Void, Never>?
     @State private var hasSelectedManually = false
     @State private var isOpeningPlayer = false
+    /// The Auto Pick button's height and the switch's own size, as laid out: the switch is scaled to the button's height.
+    @State private var autoPickButtonHeight: CGFloat = 0
+    @State private var autoPickSwitchSize: CGSize = .zero
     /// The sharpness the chips narrow the list to; nil shows every stream.
     @State private var resolutionFilter: Band?
     /// A stream whose format Blusion can't play: the alert offers another player, or the next stream.
@@ -68,10 +71,19 @@ struct StreamPickerView: View {
         .task {
             // Asked once, here: routing hands streams to these players only, and the menus offer only these.
             model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
+            await model.loadAutoPlayPreference()
             if !model.hasLoaded {
                 let settings = await services.settings.load()
                 if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
-                if settings.autoPlayBestStream, !hasSelectedManually, let best = model.listing.best { select(best) }
+                if settings.autoPlayBestStream, !hasSelectedManually {
+                    // With the switch on, opening the streams does what the Auto Pick button beside it does, for a viewer whose streams
+                    // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
+                    if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {
+                        autoPick(fallingBackToBest: true)
+                    } else if let best = model.listing.best {
+                        select(best)
+                    }
+                }
             }
         }
         .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
@@ -203,21 +215,53 @@ struct StreamPickerView: View {
 
     // MARK: the main action
 
+    /// How much the switch is scaled so it is as tall as the Auto Pick button. 1 until both have been measured.
+    private var autoPickSwitchScale: CGFloat {
+        guard autoPickButtonHeight > 0, autoPickSwitchSize.height > 0 else { return 1 }
+        return autoPickButtonHeight / autoPickSwitchSize.height
+    }
+
     @ViewBuilder
     private var playBestButton: some View {
         if !model.listing.items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Button { autoPick() } label: {
-                    HStack {
-                        if model.isAutoPicking { ProgressView() } else { Image(systemName: "sparkles") }
-                        Text(model.isAutoPicking ? "Comparing streams…" : "Auto Pick Best Stream")
+                HStack(spacing: Theme.Spacing.m) {
+                    Button { autoPick() } label: {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            if model.isAutoPicking { ProgressView() } else { Image(systemName: "sparkles") }
+                            Text("Auto Pick")
+                            // The kind of stream it would start, always there once the addons have answered.
+                            if let kind = model.recommendedStreamLabel {
+                                Text("- \(kind)")
+                                    .fontWeight(.regular)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.primaryActionCompact)
+                    .controlSize(.small)
+                    .disabled(model.isAutoPicking)
+                    .accessibilityLabel(model.recommendedStreamLabel.map { "Auto Pick, \($0)" } ?? "Auto Pick")
+                    .accessibilityIdentifier("streams.playBest")
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { autoPickButtonHeight = $0 }
+                    // Saves the choice to start the best stream at once next time; it starts nothing itself.
+                    Toggle("Always pick the best stream", isOn: Binding(get: { model.autoPlaysBestStream }, set: { value in
+                        Task { await model.setAutoPlaysBestStream(value) }
+                    }))
+                    .labelsHidden()
+                    .fixedSize()
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { autoPickSwitchSize = $0 }
+                    // The switch has one size of its own, so it is scaled to stand exactly as tall as the button beside it.
+                    .scaleEffect(autoPickSwitchScale)
+                    .frame(width: autoPickSwitchSize.width > 0 ? autoPickSwitchSize.width * autoPickSwitchScale : nil,
+                           height: autoPickSwitchSize.height > 0 ? autoPickSwitchSize.height * autoPickSwitchScale : nil)
+                    .accessibilityLabel("Always pick the best stream")
+                    .accessibilityHint("Starts the best stream at once whenever you open a title's streams")
+                    .accessibilityIdentifier("streams.autoPickAlways")
                 }
-                .buttonStyle(.primaryActionCompact)
-                .controlSize(.small)
-                .disabled(model.isAutoPicking)
-                .accessibilityIdentifier("streams.playBest")
                 if let message = model.autoPickMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
             }
             .padding(.horizontal, streamMargin)
@@ -451,12 +495,18 @@ struct StreamPickerView: View {
         }
     }
 
-    private func autoPick() {
+    /// Runs Auto Pick and starts its choice. The run made when the streams open (`fallingBackToBest`) starts the best stream by rank when
+    /// Auto Pick has nothing it can hand over, so automatic playback still starts something.
+    private func autoPick(fallingBackToBest: Bool = false) {
         hasSelectedManually = true
         autoPickTask?.cancel()
         autoPickTask = Task {
-            guard let choice = await model.autoPickBest(), !Task.isCancelled, let item = model.autoPickedStream else { return }
-            present(choice, for: item)
+            if let choice = await model.autoPickBest(), !Task.isCancelled, let item = model.autoPickedStream {
+                present(choice, for: item)
+                return
+            }
+            guard fallingBackToBest, !Task.isCancelled, let best = model.listing.best, let choice = await model.choose(best) else { return }
+            present(choice, for: best)
         }
     }
 

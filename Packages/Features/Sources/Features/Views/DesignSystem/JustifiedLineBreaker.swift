@@ -200,3 +200,35 @@ enum JustifiedSizing {
         return ceil(CGFloat(lines) * lineHeight)
     }
 }
+
+/// Finds the link a tap is meant for. A link drawn in body text is one line tall, far smaller than a fingertip, so a tap also counts
+/// when it lands near a link: each link's frame is grown to at least `minimumTarget` points each way (and by `slop` at least), and the
+/// nearest link whose grown frame holds the tap wins. A tap inside a link's own frame always wins.
+enum JustifiedLinkHit {
+    /// The smallest touch target, as the system's own controls have.
+    static let minimumTarget: CGFloat = 44
+    /// How far past a link's own frame a tap still counts, when the frame is already as large as `minimumTarget` that way.
+    static let slop: CGFloat = 8
+
+    /// The index of the frame in `frames` the tap at `point` is meant for, or nil when it is near none of them.
+    static func index(at point: CGPoint, frames: [CGRect]) -> Int? {
+        if let inside = frames.firstIndex(where: { !$0.isEmpty && $0.contains(point) }) { return inside }
+        var best: (index: Int, distance: CGFloat)?
+        for (index, frame) in frames.enumerated() where !frame.isEmpty {
+            let grown = frame.insetBy(dx: -max(slop, (minimumTarget - frame.width) / 2), dy: -max(slop, (minimumTarget - frame.height) / 2))
+            guard grown.contains(point) else { continue }
+            let distance = squaredDistance(from: point, to: frame)
+            // Frames are read in order and only a strictly nearer one replaces the best, so a tie goes to the lower index.
+            if let best, best.distance <= distance { continue }
+            best = (index, distance)
+        }
+        return best?.index
+    }
+
+    /// The squared distance from `point` to `frame`, zero when the point is inside it.
+    private static func squaredDistance(from point: CGPoint, to frame: CGRect) -> CGFloat {
+        let dx = max(frame.minX - point.x, 0, point.x - frame.maxX)
+        let dy = max(frame.minY - point.y, 0, point.y - frame.maxY)
+        return dx * dx + dy * dy
+    }
+}

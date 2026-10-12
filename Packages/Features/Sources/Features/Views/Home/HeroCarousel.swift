@@ -88,9 +88,9 @@ struct HeroCarousel: View {
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    // Plays once each time Home returns from a title (the revision changes), never on first appearance. It sits before the
-                    // clip, so the slight growth stays inside the page.
-                    .heroSettle(trigger: router.spotlightRevision)
+                    // Plays once each time Home returns from a title (the revision changes), never on first appearance. It starts a little
+                    // smaller, so going back reads as pulling away; the page behind it is black, as the spotlight's own edges are.
+                    .heroSettle(trigger: router.spotlightRevision, from: TitleHero.settleSmaller)
                     .frame(width: geometry.size.width, height: height)
                     .clipped()
                     .offset(y: -pull)
@@ -187,6 +187,8 @@ private struct HeroPage: View {
     @Environment(\.heroContainerWidth) private var containerWidth
     @Environment(\.isLandscape) private var isLandscape
     @Environment(PosterRatingsStore.self) private var ratings
+    /// The titles' fuller details, shared with the title page. Optional, so a preview without it still draws the item's own line.
+    @Environment(HeroMetaStore.self) private var heroMeta: HeroMetaStore?
     /// Starts from the artwork already looked up this session, so a title coming back into view shows its logo and picture at once.
     @State private var heroArtwork: TMDbArtwork?
     /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name. Starts set when the artwork is known.
@@ -222,10 +224,12 @@ private struct HeroPage: View {
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
-    /// The metadata line. Its score is IMDb's own when the dataset on the device has the title, else the catalog's, as on the title page.
+    /// The metadata line, built by the shared store from the same details as the title page's. Its score is IMDb's own when the dataset on
+    /// the device has the title, else the catalog's, as on the title page. Without the store, the item's own line.
     private var metaParts: [String?] {
-        DetailViewModel.heroMetaParts(for: item, certification: certification,
-                                      imdbRating: ratings.ratings(for: item, includeReviews: true, source: .imdb).imdb)
+        if let heroMeta { return heroMeta.parts(for: item, certification: certification, ratings: ratings) }
+        return DetailViewModel.heroMetaParts(for: item, certification: certification,
+                                             imdbRating: ratings.ratings(for: item, includeReviews: true, source: .imdb).imdb)
     }
 
     /// The picture and logo this page shows now, for the title page it opens. A picture or logo still loading is left out.
@@ -290,6 +294,11 @@ private struct HeroPage: View {
             guard !Task.isCancelled else { return }
             certification = loaded
         }
+        .task(id: "meta|\(distance <= 1)") {
+            // The page on screen and its neighbours ask for their details, so the line is ready before a swipe reaches it.
+            guard distance <= 1 else { return }
+            await heroMeta?.load(for: item)
+        }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(isInWindow)|\(distance <= 1)") {
             // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
             guard isInWindow else { hero.release(keeping: []); return }
@@ -320,7 +329,7 @@ private struct HeroPage: View {
                 portraitTitle
                     .frame(height: artworkHeight, alignment: .bottom)
                 // The metadata line starts at the picture's bottom edge, as it does on the title page, centred within the page's margins.
-                MetaLine(metaParts)
+                MetaLine(metaParts, identifier: "hero.metaLine")
                     .multilineTextAlignment(.center)
                     .allowsHitTesting(false)
                     .frame(maxWidth: .infinity)
@@ -371,7 +380,7 @@ private struct HeroPage: View {
         VStack(alignment: .center, spacing: Theme.Spacing.s) {
             titleBlock
                 .allowsHitTesting(false)
-            MetaLine(metaParts)
+            MetaLine(metaParts, identifier: "hero.metaLine")
                 .multilineTextAlignment(.center)
                 .allowsHitTesting(false)
         }

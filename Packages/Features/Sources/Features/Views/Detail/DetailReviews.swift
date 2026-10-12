@@ -27,10 +27,9 @@ struct DetailReviews: View {
                     .font(Theme.Typography.shelfTitle)
                     .accessibilityAddTraits(.isHeader)
                 Menu {
-                    Picker("Sort reviews", selection: $reviewSort) {
-                        ForEach(ReviewSort.allCases, id: \.self) { sort in
-                            Text(sort.rawValue).tag(sort)
-                        }
+                    // Toggles rather than a picker: a toggle draws the same tick, and it reports every choice, the current sort included.
+                    ForEach(ReviewSort.allCases, id: \.self) { sort in
+                        Toggle(sort.rawValue, isOn: Binding(get: { reviewSort == sort }, set: { _ in chooseSort(sort) }))
                     }
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
@@ -86,6 +85,14 @@ struct DetailReviews: View {
                 return reviewSort == .highestRated ? left > right : left < right
             }
         }
+    }
+
+    /// Choosing a sort, the current one included, folds the open review first: its card would otherwise be moved while it is open.
+    private func chooseSort(_ sort: ReviewSort) {
+        if expandedReviewID != nil {
+            withAnimation(.snappy(duration: 0.35)) { expandedReviewID = nil }
+        }
+        reviewSort = sort
     }
 
     /// Opening a review widens its card and unfolds its text together. Closing one folds the text and narrows the card in the same motion,

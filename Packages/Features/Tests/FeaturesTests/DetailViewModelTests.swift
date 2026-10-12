@@ -190,7 +190,7 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(!model.isFallback)
         #expect(model.tmdbVideos.isEmpty, "no read token, so TMDb is not asked")
         #expect(model.itunesTrailer == nil, "the stub answers the store with the meta, which is no search result")
-        #expect(model.trailers.map(\.id) == ["yt:EXeTwQWrcwY", "yt:zZZ999"], "malformed ids dropped, two kept")
+        #expect(model.trailers.map(\.id) == ["yt:EXeTwQWrcwY", "yt:zZZ999", "yt:third1"], "malformed ids dropped, three kept")
     }
 
     @Test func anITunesPreviewIsTheFirstTrailerAndYouTubeStepsAside() async throws {
@@ -511,11 +511,65 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 7.0", "a whole rating keeps one decimal")
     }
 
+    @Test func theMetaLineIsBuiltFromTheDetailsTheSpotlightKeeps() async throws {
+        let services = try await installedServices()
+        let preview = MetaPreview(id: "mock:movie3", type: "movie", name: "Preview Title")
+        let model = DetailViewModel(preview: preview, services: services)
+        await model.load()
+        #expect(model.heroMetaLine == services.heroMeta.parts(for: preview, certification: nil, ratings: services.posterRatings))
+        #expect(services.heroMeta.kept(for: preview) == model.detail.preview)
+    }
+
+    @Test func aPageOpenedAfterItsDetailsWereKeptStartsWithThem() async throws {
+        let services = try await installedServices()
+        let preview = MetaPreview(id: "mock:movie3", type: "movie", name: "Preview Title")
+        let details = MetaPreview(id: "mock:movie3", type: "movie", name: "Mock Movie 3", genres: ["Drama"], runtime: "100 min")
+        services.heroMeta.record(details, for: preview)
+        let model = DetailViewModel(preview: preview, services: services)
+        #expect(model.heroMetaLine == DetailViewModel.heroMetaParts(for: details, certification: nil),
+                "the line is the kept one before the page loads")
+    }
+
     @Test func heroMetaPartsShowIMDbsOwnScoreWhenTheCallerHasOne() {
         let preview = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008", imdbRating: 9.0)
         #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: 8.4).last == "★ 8.4",
                 "IMDb's own score replaces the catalog's")
         #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: nil).last == "★ 9.0",
                 "without one, the catalog's score")
+    }
+
+    // MARK: trailers
+
+    /// Services whose addon meta lists `trailers` as its trailer streams. The store has no preview, so the addon's trailers are the
+    /// only ones.
+    private func trailerServices(trailers: String) async throws -> AppServices {
+        let meta = Data((#"{"meta":{"id":"tt7200001","type":"movie","name":"Trailer Movie","releaseInfo":"2010","#
+            + #""trailerStreams":\#(trailers)}}"#).utf8)
+        let transport = StubTransport { request, _ in StubTransport.response(meta, for: request) }
+        let manifest = Manifest(id: "test.trailers", name: "Stub", version: "1", resources: [ResourceDescriptor(name: "meta")],
+                                types: ["movie"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        return AppServices(registry: registry, client: client)
+    }
+
+    @Test func aTitleWithNoTrailerCannotPlayOne() async throws {
+        let services = try await trailerServices(trailers: "[]")
+        let model = DetailViewModel(preview: MetaPreview(id: "tt7200001", type: "movie", name: "Trailer Movie", releaseInfo: "2010"),
+                                    services: services)
+        await model.load()
+        #expect(model.trailers.isEmpty)
+        #expect(!model.canPlayTrailer, "no trailer known: the button does nothing")
+    }
+
+    @Test func theTrailerPlanListsTheAddonsDirectLinkBeforeItsYouTubeIDs() async throws {
+        let trailers = #"[{"title":"Trailer","ytId":"EXeTwQWrcwY"},{"title":"Direct","url":"https://cdn.example.com/t.mp4"}]"#
+        let services = try await trailerServices(trailers: trailers)
+        let model = DetailViewModel(preview: MetaPreview(id: "tt7200001", type: "movie", name: "Trailer Movie", releaseInfo: "2010"),
+                                    services: services)
+        await model.load()
+        #expect(model.canPlayTrailer)
+        let plan = await model.trailerPlan()
+        #expect(plan.trailers.map(\.id) == ["url:https://cdn.example.com/t.mp4", "yt:EXeTwQWrcwY"],
+                "the direct file is tried first; the YouTube id is the fallback")
     }
 }

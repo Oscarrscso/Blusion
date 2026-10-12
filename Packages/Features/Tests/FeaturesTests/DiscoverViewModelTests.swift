@@ -180,4 +180,21 @@ import StremioKitTestSupport
         #expect(model.selectedSource?.catalog.id == "mock-movies")
         #expect(model.selectedSource?.addon.id != second.id)
     }
+
+    @Test func yearSpanLabelWordsTheSpanLikeTheLibraryChips() throws {
+        let model = DiscoverViewModel(services: services(try MockServer.shared()))
+        #expect(model.yearSpanLabel == nil)
+        model.minimumYear = 1990
+        model.maximumYear = 1999
+        #expect(model.yearSpanLabel == "1990–1999")
+        model.minimumYear = 2005
+        model.maximumYear = 2005
+        #expect(model.yearSpanLabel == "2005")
+        model.minimumYear = 2000
+        model.maximumYear = nil
+        #expect(model.yearSpanLabel == "From 2000")
+        model.minimumYear = nil
+        model.maximumYear = 1979
+        #expect(model.yearSpanLabel == "Until 1979")
+    }
 }

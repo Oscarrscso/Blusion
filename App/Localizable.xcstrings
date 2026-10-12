@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ""
+          }
+        }
+      }
+    },
     " ": {
       "extractionState": "manual",
       "localizations": {
@@ -8,6 +19,17 @@
           "stringUnit": {
             "state": "translated",
             "value": " "
+          }
+        }
+      }
+    },
+    "A key adds the IMDb score of each episode, one request per season. The free key allows 1,000 requests a day, counted on this device and reset at midnight UTC.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A key adds the IMDb score of each episode, one request per season. The free key allows 1,000 requests a day, counted on this device and reset at midnight UTC."
           }
         }
       }
@@ -56,6 +78,17 @@
         }
       }
     },
+    "Accounts & server": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accounts & server"
+          }
+        }
+      }
+    },
     "Acknowledgements": {
       "extractionState": "manual",
       "localizations": {
@@ -96,6 +129,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Tile"
+          }
+        }
+      }
+    },
+    "Add Widget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Widget"
           }
         }
       }
@@ -221,6 +265,17 @@
         }
       }
     },
+    "Always pick the best stream": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always pick the best stream"
+          }
+        }
+      }
+    },
     "Any": {
       "extractionState": "manual",
       "localizations": {
@@ -261,6 +316,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio"
+          }
+        }
+      }
+    },
+    "Auto Pick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Pick"
+          }
+        }
+      }
+    },
+    "Back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
           }
         }
       }
@@ -382,6 +459,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blusion works with Stremio addons but doesn't include any. Paste an addon's link (it starts with https:// or stremio://) on the Addons tab to get catalogs and streams."
+          }
+        }
+      }
+    },
+    "Browse Trakt Lists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse Trakt Lists"
           }
         }
       }
@@ -518,6 +606,17 @@
         }
       }
     },
+    "Configure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure"
+          }
+        }
+      }
+    },
     "Connect": {
       "extractionState": "manual",
       "localizations": {
@@ -547,6 +646,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to import your Trakt watchlist, collection and watched history. Playback positions stay on this device."
+          }
+        }
+      }
+    },
+    "Connect to sync your saved titles, watched marks and paused positions with Trakt.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to sync your saved titles, watched marks and paused positions with Trakt."
           }
         }
       }
@@ -595,6 +705,17 @@
         }
       }
     },
+    "Continue Watching": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue Watching"
+          }
+        }
+      }
+    },
     "Continue refresh": {
       "extractionState": "manual",
       "localizations": {
@@ -602,6 +723,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue refresh"
+          }
+        }
+      }
+    },
+    "Copy Link": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link"
           }
         }
       }
@@ -657,6 +789,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Customize Home"
+          }
+        }
+      }
+    },
+    "Data": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data"
           }
         }
       }
@@ -848,6 +991,17 @@
         }
       }
     },
+    "Filter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter"
+          }
+        }
+      }
+    },
     "Filter and Sort": {
       "extractionState": "manual",
       "localizations": {
@@ -936,6 +1090,17 @@
         }
       }
     },
+    "Genre Collection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genre Collection"
+          }
+        }
+      }
+    },
     "Genres appear here for titles saved from now on.": {
       "extractionState": "manual",
       "localizations": {
@@ -980,6 +1145,17 @@
         }
       }
     },
+    "Hide title on Home": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide title on Home"
+          }
+        }
+      }
+    },
     "Home": {
       "extractionState": "manual",
       "localizations": {
@@ -1009,6 +1185,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Host"
+          }
+        }
+      }
+    },
+    "How many posters stay loaded off screen above and below what you see in a long list: 12 on Near, 24 on Balanced, 48 on Far. Posters further away are unloaded. Further uses more data and memory.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How many posters stay loaded off screen above and below what you see in a long list: 12 on Near, 24 on Balanced, 48 on Far. Posters further away are unloaded. Further uses more data and memory."
+          }
+        }
+      }
+    },
+    "How often Continue Watching checks for newer progress.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How often Continue Watching checks for newer progress."
           }
         }
       }
@@ -1222,6 +1420,17 @@
         }
       }
     },
+    "Install an addon with catalogs, or use a Trakt list, to add more rows.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install an addon with catalogs, or use a Trakt list, to add more rows."
+          }
+        }
+      }
+    },
     "Install and Import": {
       "extractionState": "manual",
       "localizations": {
@@ -1244,6 +1453,17 @@
         }
       }
     },
+    "Items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items"
+          }
+        }
+      }
+    },
     "Large": {
       "extractionState": "manual",
       "localizations": {
@@ -1251,6 +1471,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Large"
+          }
+        }
+      }
+    },
+    "Lazy load": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lazy load"
+          }
+        }
+      }
+    },
+    "Leave it empty to use the addon's own name.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave it empty to use the addon's own name."
           }
         }
       }
@@ -1273,6 +1515,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Links usually come from the addon's own page. They can contain a private token, so Blusion keeps them in the Keychain and never shows or logs them."
+          }
+        }
+      }
+    },
+    "List Default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List Default"
+          }
+        }
+      }
+    },
+    "List Default keeps the order the list's owner chose.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "List Default keeps the order the list's owner chose."
           }
         }
       }
@@ -1409,6 +1673,17 @@
         }
       }
     },
+    "More options": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More options"
+          }
+        }
+      }
+    },
     "Name": {
       "extractionState": "manual",
       "localizations": {
@@ -1416,6 +1691,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Name"
+          }
+        }
+      }
+    },
+    "New Widget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Widget"
           }
         }
       }
@@ -1552,6 +1838,17 @@
         }
       }
     },
+    "Notes from your addons": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes from your addons"
+          }
+        }
+      }
+    },
     "Nothing here": {
       "extractionState": "manual",
       "localizations": {
@@ -1603,6 +1900,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Numbered (top list)"
+          }
+        }
+      }
+    },
+    "OMDb": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OMDb"
           }
         }
       }
@@ -1684,17 +1992,6 @@
         }
       }
     },
-    "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
-          }
-        }
-      }
-    },
     "Optional. IMDb scores for titles come from the ratings file on this device, with no key. An OMDb key adds the IMDb score of each episode, one request per season, made when its first episode card comes on screen. The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
       "extractionState": "manual",
       "localizations": {
@@ -1702,6 +1999,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optional. IMDb scores for titles come from the ratings file on this device, with no key. An OMDb key adds the IMDb score of each episode, one request per season, made when its first episode card comes on screen. The free key allows 1,000 lookups a day. TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
+          }
+        }
+      }
+    },
+    "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. OMDb adds Rotten Tomatoes and Metacritic scores; TMDB uses a Read Access Token. Credentials stay in the Keychain. Site links work without keys."
           }
         }
       }
@@ -1838,6 +2146,17 @@
         }
       }
     },
+    "Play or pause": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play or pause"
+          }
+        }
+      }
+    },
     "Play with": {
       "extractionState": "manual",
       "localizations": {
@@ -1856,6 +2175,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Playback"
+          }
+        }
+      }
+    },
+    "Playback & appearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback & appearance"
           }
         }
       }
@@ -1922,6 +2252,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rating"
+          }
+        }
+      }
+    },
+    "Ratings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ratings"
           }
         }
       }
@@ -2069,6 +2410,28 @@
         }
       }
     },
+    "Rename": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        }
+      }
+    },
+    "Rename Addon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Addon"
+          }
+        }
+      }
+    },
     "Replace My Widgets": {
       "extractionState": "manual",
       "localizations": {
@@ -2076,6 +2439,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Replace My Widgets"
+          }
+        }
+      }
+    },
+    "Requests today": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests today"
           }
         }
       }
@@ -2197,6 +2571,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved"
+          }
+        }
+      }
+    },
+    "Saved titles, watched marks and paused positions sync both ways automatically. Removing a saved title or clearing a watched mark here does the same on Trakt, and what is removed on Trakt is removed here. Saved titles use your Trakt watchlist; your collection is only read. Sync reads everything from Trakt again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved titles, watched marks and paused positions sync both ways automatically. Removing a saved title or clearing a watched mark here does the same on Trakt, and what is removed on Trakt is removed here. Saved titles use your Trakt watchlist; your collection is only read. Sync reads everything from Trakt again."
           }
         }
       }
@@ -2443,6 +2828,17 @@
         }
       }
     },
+    "Size on disk": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size on disk"
+          }
+        }
+      }
+    },
     "Small": {
       "extractionState": "manual",
       "localizations": {
@@ -2450,6 +2846,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Small"
+          }
+        }
+      }
+    },
+    "Sort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort"
           }
         }
       }
@@ -2509,6 +2916,17 @@
         }
       }
     },
+    "Starts the best stream at once whenever you open a title's streams": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starts the best stream at once whenever you open a title's streams"
+          }
+        }
+      }
+    },
     "Status": {
       "extractionState": "manual",
       "localizations": {
@@ -2549,6 +2967,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Streaming server address"
+          }
+        }
+      }
+    },
+    "Style": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style"
           }
         }
       }
@@ -2604,6 +3033,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "TMDB API settings"
+          }
+        }
+      }
+    },
+    "TMDB provides reviews, cast and artwork. It uses a Read Access Token.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TMDB provides reviews, cast and artwork. It uses a Read Access Token."
           }
         }
       }
@@ -2685,6 +3125,17 @@
         }
       }
     },
+    "Title scores come from the IMDb file on this device, with no key. Credentials stay in the Keychain. Site links work without keys.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title scores come from the IMDb file on this device, with no key. Credentials stay in the Keychain. Site links work without keys."
+          }
+        }
+      }
+    },
     "Titles": {
       "extractionState": "manual",
       "localizations": {
@@ -2758,6 +3209,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trakt List from Link"
+          }
+        }
+      }
+    },
+    "Trakt Lists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trakt Lists"
           }
         }
       }
@@ -2857,6 +3319,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Types"
+          }
+        }
+      }
+    },
+    "Updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated"
           }
         }
       }

@@ -76,7 +76,8 @@ extension View {
 
 /// A secondary action on a title page: the system's round Liquid Glass button with its symbol and no caption. `title` ("Add",
 /// "Watched", "Trailer") is its VoiceOver label. With `isOn` it shows `onSystemImage` (default: the same symbol, filled) and
-/// `onTitle` ("Added"); the symbol swaps with the system replace effect.
+/// `onTitle` ("Added"); the symbol swaps with the system replace effect. With `isLoading` the symbol gives way to a small spinner
+/// in the same square, so the button keeps its size, and VoiceOver says it is loading.
 ///
 /// Several in a row belong in one `GlassEffectContainer` (or `CircleActionRow`) so the glass is composed once.
 struct CircleActionButton: View {
@@ -86,35 +87,48 @@ struct CircleActionButton: View {
     let onTitle: String?
     let onSystemImage: String?
     let action: () -> Void
+    let isLoading: Bool
     /// The height of the large glass capsule beside it, so the circles are level with Play and equally wide.
     static let diameter: CGFloat = 50
 
     init(title: String, systemImage: String, isOn: Bool = false, onTitle: String? = nil, onSystemImage: String? = nil,
-         action: @escaping () -> Void) {
+         action: @escaping () -> Void, isLoading: Bool = false) {
         self.title = title
         self.systemImage = systemImage
         self.isOn = isOn
         self.onTitle = onTitle
         self.onSystemImage = onSystemImage
         self.action = action
+        self.isLoading = isLoading
     }
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
-                .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
-                .fontWeight(.semibold)
-                // A little greyed, like the link arrow on the rating buttons.
-                .foregroundStyle(.white.opacity(0.6))
-                .contentTransition(.symbolEffect(.replace))
-                // Every symbol is a different width; the label fills the same square so each button is the same circle.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                Image(systemName: isOn ? (onSystemImage ?? systemImage) : systemImage)
+                    .symbolVariant(isOn && onSystemImage == nil ? .fill : .none)
+                    .fontWeight(.semibold)
+                    // A little greyed, like the link arrow on the rating buttons.
+                    .foregroundStyle(.white.opacity(0.6))
+                    .contentTransition(.symbolEffect(.replace))
+                    // Every symbol is a different width; the label fills the same square so each button is the same circle.
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(isLoading ? 0 : 1)
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white.opacity(0.6))
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(.smooth(duration: 0.25), value: isLoading)
         }
         // The large size, like the main action beside it on the title page, so the two read as one row.
         .glassCircleButton()
         .frame(width: Self.diameter, height: Self.diameter)
-        // The caption is gone, so the name is spoken here instead.
-        .accessibilityLabel(isOn ? (onTitle ?? title) : title)
+        // The caption is gone, so the name is spoken here instead. Loading is part of the name, so a caller's own value is left as it is.
+        .accessibilityLabel(isLoading ? "\(title), loading" : (isOn ? (onTitle ?? title) : title))
         .help(isOn ? (onTitle ?? title) : title)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: isOn)

@@ -80,6 +80,22 @@ import Testing
         #expect(loaded.fallbackEngineEnabled, "the fallback toggle defaults to on")
     }
 
+    @Test func theOldTrailerServiceKeyAndAddressAreRemovedByTheFirstLoadOnly() async throws {
+        let defaults = isolatedDefaults()
+        let secrets = InMemorySecretStore(values: ["settings.originSubscriptionKey": "old-key"])
+        defaults.set("https://iva.example.com/api", forKey: "settings.originAPIBaseURL")
+        let store = DefaultsSettingsStore(defaults: defaults, secrets: secrets)
+        _ = await store.load()
+        #expect(await secrets.snapshot["settings.originSubscriptionKey"] == nil, "the first load removes the old key")
+        #expect(defaults.object(forKey: "settings.originAPIBaseURL") == nil, "the first load removes the old address")
+
+        try await secrets.set("saved-again", for: "settings.originSubscriptionKey")
+        defaults.set("https://later.example.com", forKey: "settings.originAPIBaseURL")
+        _ = await store.load()
+        #expect(await secrets.snapshot["settings.originSubscriptionKey"] == "saved-again", "a later load does not touch the old key again")
+        #expect(defaults.string(forKey: "settings.originAPIBaseURL") == "https://later.example.com", "nor the old address")
+    }
+
     @Test func theTraktClientIDIsTrimmedStoredAsASecretAndClearable() async {
         let defaults = isolatedDefaults()
         let secrets = InMemorySecretStore()

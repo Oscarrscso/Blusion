@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import Foundation
 import ImageIO
+import os
 import UIKit
 
 /// Loads, downsamples and caches artwork for `ArtworkImage`. Images are decoded at the size they are shown, not at the size
@@ -11,6 +12,16 @@ actor ImagePipeline {
     private let session: URLSession
     /// `NSCache` is thread-safe, which is what lets `cachedImage` answer without hopping onto the actor.
     private nonisolated(unsafe) let decoded = NSCache<NSString, UIImage>()
+    /// What the cache cannot be asked: the sizes each address has been decoded at, and the addresses that answered "not found". Behind a
+    /// lock, so views can read it without hopping onto the actor.
+    private struct Known {
+        /// `NSCache` does not say what it evicts, so a size listed here may be gone; `cachedImageAtAnySize` forgets those as it meets them.
+        var sizes: [String: Set<Int>] = [:]
+        var missing: Set<String> = []
+    }
+    private let known = OSAllocatedUnfairLock(initialState: Known())
+    /// Both lists are emptied when they pass this many addresses, so a long session cannot grow them without end.
+    private static let knownLimit = 4000
     /// Downloads and decodes still running, keyed like the cache, so two views asking for one poster share one request.
     private struct Pending {
         let task: Task<UIImage, Error>
@@ -39,6 +50,36 @@ actor ImagePipeline {
         decoded.object(forKey: Self.key(url, maxPixelSize: maxPixelSize) as NSString)
     }
 
+    /// A picture of `url` that is already decoded, at whatever size, the largest first, without waiting. For a stand-in that only has to be
+    /// there in the first frame: the page a card opens shows the poster the card is showing instead of loading it again.
+    nonisolated func cachedImageAtAnySize(for url: URL) -> UIImage? {
+        let address = url.absoluteString
+        let sizes = known.withLock { $0.sizes[address] } ?? []
+        var gone: [Int] = []
+        var found: UIImage?
+        for size in sizes.sorted(by: >) {
+            if let image = decoded.object(forKey: "\(size)|\(address)" as NSString) {
+                found = image
+                break
+            }
+            gone.append(size)
+        }
+        if !gone.isEmpty {
+            let evicted = gone
+            known.withLock { known in
+                known.sizes[address]?.subtract(evicted)
+                if known.sizes[address]?.isEmpty == true { known.sizes[address] = nil }
+            }
+        }
+        return found
+    }
+
+    /// True when `url` answered "not found" earlier in this session. Such an address is not asked again, so a card whose first choice of
+    /// artwork does not exist goes straight to its fallback.
+    nonisolated func isKnownMissing(_ url: URL) -> Bool {
+        known.withLock { $0.missing.contains(url.absoluteString) }
+    }
+
     /// Drops the decoded picture for this URL and size from memory. A view that still shows it keeps its own reference.
     nonisolated func evict(_ url: URL, maxPixelSize: CGFloat) {
         decoded.removeObject(forKey: Self.key(url, maxPixelSize: maxPixelSize) as NSString)
@@ -62,6 +103,7 @@ actor ImagePipeline {
         try Task.checkCancellation()
         let key = Self.key(url, maxPixelSize: maxPixelSize)
         if let cached = decoded.object(forKey: key as NSString) { return cached }
+        if isKnownMissing(url) { throw ImagePipelineError.httpStatus(404) }
         let consumer = UUID()
         let task: Task<UIImage, Error>
         if var pending = inFlight[key] {
@@ -82,9 +124,22 @@ actor ImagePipeline {
         }
         return try await withTaskCancellationHandler {
             defer { releaseConsumer(consumer, for: key) }
-            let image = try await task.value
+            let image: UIImage
+            do {
+                image = try await task.value
+            } catch ImagePipelineError.httpStatus(404) {
+                known.withLock { known in
+                    if known.missing.count >= Self.knownLimit { known.missing.removeAll() }
+                    known.missing.insert(url.absoluteString)
+                }
+                throw ImagePipelineError.httpStatus(404)
+            }
             try Task.checkCancellation()
             decoded.setObject(image, forKey: key as NSString, cost: Self.cost(of: image))
+            known.withLock { known in
+                if known.sizes.count >= Self.knownLimit { known.sizes.removeAll() }
+                known.sizes[url.absoluteString, default: []].insert(Int(size))
+            }
             return image
         } onCancel: {
             Task { await self.releaseConsumer(consumer, for: key) }

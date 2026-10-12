@@ -41,6 +41,9 @@ enum Theme {
     static let surfaceStrong = Color.white.opacity(0.18)
     static let separator = Color.white.opacity(0.12)
     static let artworkBorder = Color.white.opacity(0.22)
+    /// The grey of the metadata line under a title's name, on Home's spotlight and on the title page alike. A fixed colour rather than a
+    /// hierarchical style, so the line never takes a tint from the view around it.
+    static let metaText = Color(white: 0.58)
     /// Flat grey shown where artwork is still loading. Opaque, so a card never shows what is behind it.
     static let placeholder = Color(white: 0.11)
     static let brandStart = Color(red: 0.12, green: 0.30, blue: 0.86)
