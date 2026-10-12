@@ -58,7 +58,8 @@ public final class AppRouter {
 
     public func open(_ tab: LaunchRoute.Tab) { self.tab = tab }
 
-    /// A tap on a tab's item. Every tap scrolls that tab's first page to its top (see `tabTapRevisions`). Tapping the tab that is showing
+    /// A tap on a tab's item. Every tap scrolls that tab's first page to its top (see `tabTapRevisions`), except Widgets, which has no
+    /// scroll to reset and only returns to its first page. Tapping the tab that is showing
     /// also takes it back to its first page; switching to another tab keeps its stack, so a title or a draft on it is still there when
     /// it returns. Search starts afresh on every tap: its browse page, or with its field focused when it was already showing.
     func tapTab(_ tab: LaunchRoute.Tab) {
@@ -264,7 +265,9 @@ public struct RootTabView: View {
             // The Mac sidebar's Widgets item, at its bottom. On iPhone the widgets manager stays in Settings and behind Home's button.
             Tab(value: LaunchRoute.Tab.widgets) {
                 NavigationStack(path: $router.widgetsPath) {
+                    // Selecting the tab rebuilds the manager, so it loads what is saved now, not a copy from before a Settings edit.
                     WidgetsManagerView(services: services)
+                        .id(router.tabTapRevisions[.widgets, default: 0])
                 }
                 .zoomTransitions()
             } label: {
