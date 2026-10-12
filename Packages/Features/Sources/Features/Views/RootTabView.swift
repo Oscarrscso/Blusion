@@ -61,7 +61,7 @@ public final class AppRouter {
     /// A tap on a tab's item. Every tap scrolls that tab's first page to its top (see `tabTapRevisions`), except Widgets, which has no
     /// scroll to reset and restarts its stack instead. Tapping the tab that is showing
     /// also takes it back to its first page; switching to another tab keeps its stack, so a title or a draft on it is still there when
-    /// it returns. Search starts afresh on every tap: its browse page, or with its field focused when it was already showing.
+    /// it returns. Widgets is the exception: its stack restarts on each selection, so a draft on it does not survive a return. Search starts afresh on every tap: its browse page, or with its field focused when it was already showing.
     func tapTab(_ tab: LaunchRoute.Tab) {
         let isShowing = self.tab == tab
         switch tab {
@@ -72,7 +72,7 @@ public final class AppRouter {
         case .settings: if isShowing { popToRoot(\.settingsPath) }
         // Widgets restarts on each selection, not only on a tap of the showing tab: an editor parked on its stack can hold a copy from
         // before a change made on another tab, so it is not kept.
-        case .widgets: popToRoot(\.widgetsPath)
+        case .widgets: popToRoot(\.widgetsPath, instantly: true)
         case .search:
             popToRoot(\.searchPath)
             if isShowing { searchFocusRevision += 1 } else { searchBrowseRevision += 1 }
