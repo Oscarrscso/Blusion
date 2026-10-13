@@ -117,11 +117,11 @@ public final class HomeViewModel {
         await services.widgets.save(sections.map(\.widget))
     }
 
-    /// Removes a catalog row from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit
-    /// made elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is
-    /// refused, and Home shows the automatic layout again. From the automatic layout, the first removal saves the whole layout minus the row.
+    /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
+    /// elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is refused,
+    /// and Home shows the automatic layout again. From the automatic layout, the first removal saves the whole layout minus the widget.
     public func removeWidget(sectionID: String) async {
-        guard let section = sections.first(where: { $0.id == sectionID }), case .row = section.widget.content else { return }
+        guard sections.contains(where: { $0.id == sectionID }) else { return }
         let saved = await services.widgets.load()
         guard saved != nil || !isCustomised else {
             await load()

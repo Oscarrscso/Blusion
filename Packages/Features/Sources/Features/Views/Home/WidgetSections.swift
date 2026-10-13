@@ -63,7 +63,7 @@ struct WidgetRow: View {
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
                     Divider()
                 }
-                rowActions
+                widgetActions(for: widget, onEdit: onEdit, onRemove: onRemove)
             }
         } else {
             Group {
@@ -93,23 +93,8 @@ struct WidgetRow: View {
             // opens across the whole row, not only over the text it shows.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
-            .contextMenu { rowActions }
+            .contextMenu { widgetActions(for: widget, onEdit: onEdit, onRemove: onRemove) }
         }
-    }
-
-    /// The row's own actions, after its settings: the editor, then the destructive removal, set apart from it.
-    @ViewBuilder
-    private var rowActions: some View {
-        Button("Edit Widget", action: onEdit)
-            .accessibilityIdentifier("board.editWidget.\(section.widget.id)")
-        Divider()
-        removeButton
-    }
-
-    /// Removes the row from the layout, with no confirmation, as the widgets page does.
-    private var removeButton: some View {
-        Button("Remove Widget", role: .destructive, action: onRemove)
-            .accessibilityIdentifier("board.removeWidget.\(section.widget.id)")
     }
 
     private var seeAllRequest: CatalogListRequest {
@@ -120,6 +105,19 @@ struct WidgetRow: View {
     private var identifier: String {
         if case .addonCatalog(let reference) = row.source { return "board.row.\(reference.catalogID)" }
         return "board.row.\(section.widget.id)"
+    }
+}
+
+/// The long-press menu every Home widget shares, after its own items: its editor, then its removal, set apart from it. Removal has no
+/// confirmation, as the widgets page's does. Nil `onRemove` leaves removal out, for a widget Home always shows.
+@ViewBuilder
+func widgetActions(for widget: HomeWidget, onEdit: @escaping () -> Void, onRemove: (() -> Void)?) -> some View {
+    Button("Edit Widget", action: onEdit)
+        .accessibilityIdentifier("board.editWidget.\(widget.id)")
+    if let onRemove {
+        Divider()
+        Button("Remove Widget", role: .destructive, action: onRemove)
+            .accessibilityIdentifier("board.removeWidget.\(widget.id)")
     }
 }
 
@@ -152,6 +150,9 @@ struct UnsupportedWidgetRow: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, metrics.pageMargin)
         }
+        // Its menu opens across the whole row, as a row's does, not only over the text.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
         .accessibilityIdentifier("board.unsupported.\(widget.id)")
     }
 }

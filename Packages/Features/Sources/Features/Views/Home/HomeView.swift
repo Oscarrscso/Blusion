@@ -215,21 +215,24 @@ struct HomeView: View {
     private func sectionView(_ section: HomeViewModel.Section) -> some View {
         switch section.widget.content {
         case .hero:
-            HeroSection(section: section, onRetry: { retry(section) })
+            withWidgetMenu(HeroSection(section: section, onRetry: { retry(section) }), section)
                 // The next shelf starts 20 pt below the hero: the shelf spacing that follows it, less the 20 pt gap wanted here.
                 .padding(.bottom, 20 - metrics.shelfSpacing)
         case .banner(let row):
-            HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
+            withWidgetMenu(HeroBannerSection(section: section, row: row, onRetry: { retry(section) }), section)
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
                       onRemove: { removeWidget(section) }, onEdit: { editing = section.widget })
         case .collection(let items):
-            CollectionRow(widget: section.widget, items: items)
+            withWidgetMenu(CollectionRow(widget: section.widget, items: items), section)
         case .continueWatching:
-            ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue,
-                                title: section.widget.title, hideTitle: section.widget.hideTitle)
+            // Continue Watching is always shown at the top of Home when the layout leaves it out, so removing it would only move it: it is
+            // edited here, not removed. A card's own menu (removing it from Continue Watching) opens where it is.
+            withWidgetMenu(ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback,
+                                               onRemove: removeContinue, title: section.widget.title, hideTitle: section.widget.hideTitle),
+                           section, removable: false)
         case .unsupported:
-            UnsupportedWidgetRow(widget: section.widget)
+            withWidgetMenu(UnsupportedWidgetRow(widget: section.widget), section)
         }
     }
 
@@ -248,6 +251,14 @@ struct HomeView: View {
     private func removeContinue(_ item: ContinueWatchingEntry) { Task { await model.removeFromContinueWatching(item) } }
 
     private func removeWidget(_ section: HomeViewModel.Section) { Task { await model.removeWidget(sectionID: section.id) } }
+
+    /// The long-press menu every widget shares, on a widget whose own menus are on its cards or none. A card's menu opens where it is.
+    private func withWidgetMenu<Content: View>(_ content: Content, _ section: HomeViewModel.Section, removable: Bool = true) -> some View {
+        let onRemove: (() -> Void)? = removable ? { removeWidget(section) } : nil
+        return content.contextMenu {
+            widgetActions(for: section.widget, onEdit: { editing = section.widget }, onRemove: onRemove)
+        }
+    }
 
     private func retry(_ section: HomeViewModel.Section) {
         Task { await model.retry(sectionID: section.id) }
