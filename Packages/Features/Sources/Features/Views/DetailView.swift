@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import SwiftUI
 import StremioKit
+import UIKit
 
 /// The title page, drawn the way Apple's TV app draws one: artwork under the navigation bar with the logo low on it, one quiet
 /// metadata line, the main action, round secondary actions, the synopsis, then for a series its seasons and episodes, and last
@@ -46,7 +47,17 @@ struct DetailView: View {
     @State private var hasSettled = false
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    @Environment(AppRouter.self) private var router
     @Environment(\.windowSafeArea) private var windowSafeArea
+    /// True while a trailer that started on a phone turned sideways is shown full screen. The cover belongs to the page, so it lives as
+    /// long as the page does, and the trailer's panel is not what presents it.
+    @State private var showsTrailerCover = false
+    /// True from the moment the trailer's cover is shown until it has gone. A YouTube trailer's panel stays empty meanwhile.
+    @State private var playerIsCovered = false
+    /// A phone held sideways, not an iPad or a Mac window: the trailer that starts here plays full screen. Intentionally iOS-only, and
+    /// phone-only, since iPad landscape keeps the panel.
+    private var isPhoneInLandscape: Bool { isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone }
 
     /// How far the page's scroll indicator is kept from the top and bottom of the screen.
     private static let scrollIndicatorInset: CGFloat = 260
@@ -112,7 +123,7 @@ struct DetailView: View {
                                           showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
                                           showsMetaLine: false, play: showStreams)
                         } trailer: { width in
-                            DetailTrailerPanel(model: model, width: width)
+                            DetailTrailerPanel(model: model, width: width, playerIsCovered: playerIsCovered)
                         } synopsis: {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated, foldedLines: 5)
@@ -128,7 +139,7 @@ struct DetailView: View {
                                           showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
                                           play: showStreams)
                         } trailer: {
-                            DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size))
+                            DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size), playerIsCovered: playerIsCovered)
                         } synopsis: {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated)
@@ -279,6 +290,31 @@ struct DetailView: View {
         }
         .accessibilityIdentifier("detail.scroll")
         .youTubeTrailer(Bindable(model.trailer).youTubeHandoff)
+        // A trailer that starts on a phone held sideways plays full screen, decided when it starts, so turning the phone later does not
+        // move it. A YouTube trailer that ends or fails closes its cover. AVKit's player keeps its own end state until the cover is closed.
+        .onChange(of: model.trailer.isPlaying) { _, playing in
+            let fullScreen = playing && isPhoneInLandscape && model.trailer.playback != nil
+            if fullScreen {
+                // Set before the cover appears: the page is covered then, not left, so its trailer must not be closed.
+                model.trailer.isFullScreen = true
+                playerIsCovered = true
+            }
+            showsTrailerCover = fullScreen
+        }
+        .fullScreenCover(isPresented: $showsTrailerCover, onDismiss: {
+            playerIsCovered = false
+            model.trailer.isFullScreen = false
+        }) {
+            TrailerFullScreenView(trailer: model.trailer) { showsTrailerCover = false }
+        }
+        // The app can switch tab while a trailer plays, for example when an addon link opens Settings. The page is then off screen, and
+        // the disappear guard above has kept a covered trailer going, so it is stopped here. Keyed on the trailer, not the cover, since
+        // the cover may already be gone in the same update. An inline trailer was cancelled by that disappear, so this does nothing there.
+        .onChange(of: router.tab) { _, _ in
+            guard model.trailer.isPlaying else { return }
+            showsTrailerCover = false
+            model.trailer.cancel()
+        }
     }
 
     // MARK: - Streams

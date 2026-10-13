@@ -9,6 +9,8 @@ struct DetailTrailerPanel: View {
     let model: DetailViewModel
     /// The panel's width. Its height follows the picture's shape, and in landscape it is never taller than 16:9 at this width.
     let width: CGFloat
+    /// True while the page shows this trailer full screen. A YouTube web view is in one place at a time, so the panel stays empty then.
+    var playerIsCovered = false
     @Environment(\.isLandscape) private var isLandscape
     /// The id the page scrolls to when the panel appears.
     static let scrollID = "detail.trailerPanel"
@@ -32,11 +34,17 @@ struct DetailTrailerPanel: View {
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("detail.trailerPlayer")
             } else if let playback = model.trailer.playback as? YouTubeTrailerPlayback {
-                YouTubeTrailerView(playback: playback)
-                    .frame(width: size.width, height: size.height)
-                    .mediaArtwork()
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("detail.trailerPlayer")
+                Group {
+                    if playerIsCovered {
+                        Color.black
+                    } else {
+                        YouTubeTrailerView(playback: playback)
+                    }
+                }
+                .frame(width: size.width, height: size.height)
+                .mediaArtwork()
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("detail.trailerPlayer")
             }
         case .failed(let message):
             InlineErrorView(message) { model.toggleTrailer() }
