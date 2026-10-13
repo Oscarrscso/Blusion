@@ -21,8 +21,12 @@ struct DetailEpisodes: View {
     /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
     private static let previewPadding: CGFloat = Theme.Spacing.m
     /// The corner radius of the panel the system draws an episode's menu preview in: 32 pt, measured on an iPhone on iOS 27. The system
-    /// does not say what it is and does not let a preview set it. The preview's still and its hairline use it, so they follow the panel.
+    /// does not say what it is and does not let a preview set it. The preview's hairline uses it, so it follows the panel's edge.
     private static let previewPanelRadius: CGFloat = 32
+    /// The still's corner radius in the preview: the panel's less the padding between them, so the two corners share a centre and the
+    /// gap between the still and the panel is the same round the corner as along the sides. With the panel's own radius the gap grew
+    /// at the corners, which read as slightly off.
+    private static let previewStillRadius: CGFloat = previewPanelRadius - previewPadding
 
     var body: some View {
         let width = episodeWidth(pageWidth: pageWidth)
@@ -125,10 +129,10 @@ struct DetailEpisodes: View {
             }
         } preview: {
             // The same card, the full width between the page margins, inset by its padding so the menu's corners do not cut into it. Its
-            // still takes the panel's corner radius, and the panel gets the hairline the app's glass cards have. The preview is on screen
+            // still's corners follow the panel's, and the panel gets the hairline the app's glass cards have. The preview is on screen
             // only while the menu is open.
             episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater,
-                        stillRadius: Self.previewPanelRadius)
+                        stillRadius: Self.previewStillRadius)
                 .padding(Self.previewPadding)
                 .glassHairline(RoundedRectangle(cornerRadius: Self.previewPanelRadius, style: .continuous))
                 // Without the store the IMDb mark forgot the coloured-logos setting and changed colour while the card was held.
@@ -165,7 +169,7 @@ private struct EpisodeRow: View {
     var showsWholeOverview = false
     /// Set for an episode that has not aired: its still is dimmed, and the card cannot be opened.
     var airsLater = false
-    /// The still's corner radius. The menu's preview gives it its panel's, which is rounder than a card's.
+    /// The still's corner radius. The menu's preview gives it one that follows its panel's, which is rounder than a card's.
     var stillRadius: CGFloat = Theme.Radius.small
 
     /// How far the progress line and the watched mark move in from the still's edges, so a rounder corner does not cut into them.
