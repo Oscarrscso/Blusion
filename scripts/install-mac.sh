@@ -28,11 +28,11 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 fail() { echo "install-mac: $1" >&2; exit 1; }
 mkdir -p "$WORK"
 
-# The fallback spec (ADR-006: MKV, AVI, DTS, TrueHD and AV1 play in the app), built without a provisioning profile. A throwaway overlay.
-./scripts/enable-fallback.sh --generate-only >/dev/null || fail "could not write project.fallback.generated.yml"
+# The real project.yml, built without a provisioning profile. A throwaway overlay. No fallback engine here: the MPVKit versions the package allows (0.40.0, 0.41.0) fetch a Libuavs3d with no
+# Mac Catalyst slice (docs/CLAUDE_HANDOFF.md, iOS-only exceptions), so the Mac app plays AVPlayer's formats only.
 cat > "$WORK/project.install.yml" <<YAML
 include:
-  - path: ../../project.fallback.generated.yml
+  - path: ../../project.yml
 targets:
   Blusion:
     settings:

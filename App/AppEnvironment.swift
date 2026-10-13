@@ -101,7 +101,7 @@ final class AppEnvironment {
         }
         let settings = DefaultsSettingsStore(defaults: settingsDefaults, secrets: secrets, logger: logger)
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
-        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS, AV1 and friends go to the fallback engine when it is built in (ADR-006; the installs build it in).
+        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS, AV1 and friends go to the fallback engine when it is built in (ADR-006; the iPhone install builds it in).
         let makeEngine: EngineFactory = { candidate in
             switch candidate.route {
             case .native:

@@ -283,7 +283,7 @@ public final class MPVBackend: FallbackBackend {
 
     private func command(_ arguments: [String]) {
         guard let handle else { return }
-        var cStrings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
+        let cStrings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
         defer { cStrings.forEach { free($0) } }
         var pointers: [UnsafePointer<CChar>?] = cStrings.map { $0.map { UnsafePointer($0) } }
         pointers.append(nil)

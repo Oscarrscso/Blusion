@@ -20,9 +20,9 @@ No third-party code is linked into the **default** build: the dependency list is
 |---|---|---|
 | IMDb `title.ratings.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Downloaded to the device once a day, kept out of backups, never uploaded or redistributed. Credit line in Settings → IMDb ratings and Acknowledgements. ☐ A public or commercial release needs IMDb's permission or a licence: do not ship this to others on the current terms. |
 
-## Fallback engine (ADR-006) — in the iPhone and Mac installs
+## Fallback engine (ADR-006) — in the iPhone install
 
-`scripts/install-iphone.sh` and `scripts/install-mac.sh` build the fallback engine in, so MKV, AVI, DTS, TrueHD and AV1 play in the app. The default `project.yml` and `scripts/archive.sh` still leave it out: a release that ships it needs the sign-off below.
+`scripts/install-iphone.sh` builds the fallback engine in, so MKV, AVI, DTS, TrueHD and AV1 play in the iPhone app. `scripts/install-mac.sh` leaves it out: the MPVKit versions `from: "0.40.0"` allows fetch a Libuavs3d with no Mac Catalyst slice. The default `project.yml` and `scripts/archive.sh` still leave it out: a release that ships it needs the sign-off below.
 
 Linking MPVKit's **LGPL** build makes the app a distributor of LGPL libraries. Typical component set of that build (verify against the exact
 MPVKit release you pin; this list is from project documentation, not from inspecting a binary):
@@ -40,7 +40,7 @@ What LGPL asks, in practice, and where we stand:
 
 1. **Use the LGPL build, never the GPL one.** The GPL build would put the whole app under GPL, which conflicts with App Store distribution.
    `scripts/check-project-spec.py` fails the build if `Packages/FallbackPlayer/Package.swift` references a GPL product.
-2. **Link dynamically** (frameworks), so a user could in principle replace the library. ☐ Confirm the pinned MPVKit xcframeworks are dynamic.
+2. **Link dynamically** (frameworks), so a user could in principle replace the library. ☐ Confirm the MPVKit xcframeworks that get resolved are dynamic.
    Static linking into the app binary needs a relinking story that App Store signing makes hard.
 3. **Show notices.** The app's Settings → Acknowledgements screen lists each component, its license and a link to its source. ☐ Fill in exact
    versions once MPVKit is pinned (Acknowledgements currently lists MPVKit only when the engine is built in).

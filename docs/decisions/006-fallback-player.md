@@ -64,8 +64,9 @@ Accepted risks, all recorded rather than hidden:
 
 ## Update 2026-10-13: in-app codec coverage
 
-- **Installs build the engine in.** `scripts/install-iphone.sh` and `scripts/install-mac.sh` generate their spec with
-  `scripts/enable-fallback.sh`, so the iPhone and Mac apps link MPVKit (LGPL build). `project.yml` and `scripts/archive.sh` keep the
+- **The iPhone install builds the engine in.** `scripts/install-iphone.sh` generates its spec with `scripts/enable-fallback.sh`, so the
+  iPhone app links MPVKit (LGPL build). `scripts/install-mac.sh` does not: the MPVKit versions `from: "0.40.0"` allows fetch a Libuavs3d with no Mac Catalyst slice
+  (`docs/CLAUDE_HANDOFF.md`, iOS-only exceptions). `project.yml` and `scripts/archive.sh` keep the
   default build without it. Revert an install by using the default spec again; the routing below then falls back to today's behaviour.
 - **Routing.** A container AVPlayer cannot open (MKV, AVI, WebM, …) and DTS, DTS-HD or TrueHD audio go to the engine, as before. AV1 video
   goes to the engine only on chips without hardware AV1 decode (`AVHardware.decodesAV1InHardware`, VideoToolbox), where AVPlayer cannot play
@@ -79,6 +80,6 @@ Accepted risks, all recorded rather than hidden:
   own network timeout (20 s) before the next stream.
 - **Lost on engine playback.** PiP and AirPlay do not work for streams the engine plays (`PlayerViewModel.canPictureInPicture`, `AVEngine`).
 - **Not verified here.** The host tests cover routing and the coordinator. Nothing in `MPVBackend.swift` has been compiled against MPVKit or
-  played on a device; the Mac install build and a device run are the check. Dolby Vision profile 7 still plays its base layer only.
+  played on a device; the iPhone install build and a device run are the check. Dolby Vision profile 7 still plays its base layer only.
 - **Still the human's.** The licence and distribution questions in `docs/licenses.md` (LGPL linking, App Store route) are open. The installs
   are for the owner's own devices.

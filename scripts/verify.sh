@@ -141,6 +141,12 @@ print(pick["udid"])
     echo "SKIPPED (no iOS simulator runtime installed)"
     SKIPPED+=("simulator-tests")
     for target in device catalyst; do
+      # The Mac build has no fallback engine (docs/CLAUDE_HANDOFF.md, iOS-only exceptions), so its leg runs only without FALLBACK=1.
+      if [[ "$target" == "catalyst" && -n "${FALLBACK:-}" ]]; then
+        echo "SKIPPED (Mac Catalyst is built without the fallback engine; run without FALLBACK=1 for the Mac build)"
+        SKIPPED+=("build:catalyst:fallback")
+        continue
+      fi
       if [[ "$target" == "device" ]]; then DESTINATION='generic/platform=iOS'; else DESTINATION='platform=macOS,variant=Mac Catalyst'; fi
       echo "building: $DESTINATION"
       xcodebuild build -project Blusion.xcodeproj -scheme Blusion -destination "$DESTINATION" -jobs 2 CODE_SIGNING_ALLOWED=NO \
