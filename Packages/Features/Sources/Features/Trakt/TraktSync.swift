@@ -216,6 +216,8 @@ public actor TraktSync {
     /// certainly not seen needs nothing sent when Trakt already holds the result: saving a title and removing it again before either
     /// left is no request at all.
     private func enqueue(_ operation: TraktSyncOperation) {
+        // In ghost mode nothing is queued for Trakt, so nothing done meanwhile is sent once it is switched off.
+        guard !GhostMode.isOn else { return }
         if let index = state.operations.firstIndex(where: { $0.id == operation.id }) {
             let waiting = state.operations.remove(at: index)
             let traktHasIt = operation.slot == .saved ? state.syncedSaved.contains(operation.identity)
@@ -274,7 +276,8 @@ public actor TraktSync {
         let previous = running
         let task = Task { [weak self] () throws -> Summary in
             _ = await previous?.result
-            guard let self else { return Summary() }
+            // In ghost mode Trakt is left alone: nothing is read from it and nothing is sent.
+            guard let self, !GhostMode.isOn else { return Summary() }
             return try await self.runSync(force: force, sendingLocalOnly: sendingLocalOnly)
         }
         running = task

@@ -14,6 +14,15 @@ struct SettingsView: View {
     @Environment(AppRouter.self) private var router
     /// The id of the first section, which the list's scroll goes back to when the Settings tab's item is tapped.
     private static let topID = "settings.top"
+    /// Ghost mode, kept between launches (see `GhostMode`). Pulling the page down and holding it for two seconds switches it.
+    @AppStorage(GhostMode.defaultsKey) private var ghostIsOn = false
+    /// How far the page is pulled down past its top, in points.
+    @State private var pull: CGFloat = 0
+    /// How much of the two-second hold has run, 0...1, which the ring round the ghost draws.
+    @State private var holdProgress: CGFloat = 0
+    /// The pull from which the hold counts, and how long it must last.
+    private static let holdPull: CGFloat = 70
+    private static let holdDuration: Double = 2
 
     init(services: AppServices) {
         _model = State(initialValue: SettingsViewModel(services: services))
@@ -24,6 +33,25 @@ struct SettingsView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
+                if ghostIsOn {
+                    Section {
+                        HStack(spacing: Theme.Spacing.m) {
+                            Text("👻").font(.title2).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ghost mode is on").font(.subheadline.weight(.semibold))
+                                Text("Nothing you watch is saved to Continue Watching or sent to Trakt.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Button("Turn Off") { setGhost(false) }
+                                .buttonStyle(.glassCapsule)
+                                .accessibilityIdentifier("settings.ghost.off")
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("settings.ghost")
+                    }
+                }
                 Section("Content") {
                     NavigationLink(value: SettingsDestination.addons) {
                         SettingsRow(title: "Addons", summary: "\(model.installedAddonCount) installed", systemImage: "puzzlepiece.extension")
@@ -109,10 +137,62 @@ struct SettingsView: View {
                 Task { datasetStatus = await services.posterRatings.imdbDatasetStatus() }
             }
             .accessibilityIdentifier("settings.form")
+            // The pull past the top, which the ghost's indicator follows.
+            .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
+                pull = value
+            }
+            .overlay(alignment: .top) { ghostPullIndicator }
+            // Held past the mark for two seconds, the pull switches ghost mode. Let go sooner and nothing happens.
+            .task(id: pull >= Self.holdPull) {
+                guard pull >= Self.holdPull else {
+                    holdProgress = 0
+                    return
+                }
+                withAnimation(.linear(duration: Self.holdDuration)) { holdProgress = 1 }
+                do { try await Task.sleep(for: .seconds(Self.holdDuration)) } catch {
+                    holdProgress = 0
+                    return
+                }
+                setGhost(!ghostIsOn)
+            }
             // A tap on Settings' tab item goes back to its first page, and scrolls it to the top.
             .onChange(of: router.tabTapRevisions[.settings, default: 0]) { _, _ in
                 withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
+        }
+    }
+
+    private func setGhost(_ isOn: Bool) {
+        Haptics.tap()
+        withAnimation(.snappy(duration: 0.3)) { ghostIsOn = isOn }
+    }
+
+    /// Shown while the page is pulled down: a ghost in a ring that fills over the two seconds of the hold, and what letting it fill does.
+    @ViewBuilder
+    private var ghostPullIndicator: some View {
+        if pull > 24 {
+            let isHolding = pull >= Self.holdPull
+            HStack(spacing: Theme.Spacing.s) {
+                Text("👻")
+                    .font(.title3)
+                    .padding(8)
+                    .background {
+                        Circle().stroke(.white.opacity(0.2), lineWidth: 3)
+                        Circle().trim(from: 0, to: holdProgress)
+                            .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
+                Text(holdProgress >= 1 ? (ghostIsOn ? "Ghost mode on" : "Ghost mode off")
+                     : isHolding ? "Keep holding…" : (ghostIsOn ? "Pull and hold to leave ghost mode" : "Pull and hold for ghost mode"))
+                    .font(.footnote.weight(.semibold))
+            }
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.vertical, Theme.Spacing.s)
+            .glassEffect(.regular, in: .capsule)
+            .opacity(min(1, (pull - 24) / 30))
+            .padding(.top, Theme.Spacing.s)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 

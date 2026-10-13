@@ -56,7 +56,8 @@ public struct SyncedProgressStore: ProgressStore {
     public func save(_ progress: WatchProgress) async { await save([progress]) }
 
     public func save(_ records: [WatchProgress]) async {
-        guard !records.isEmpty else { return }
+        // In ghost mode nothing watched is recorded: no position, no watched mark, so nothing joins Continue Watching.
+        guard !records.isEmpty, !GhostMode.isOn else { return }
         let previous = await base.progress(for: records.map(\.id))
         await base.save(records)
         await sync.progressSaved(records, previous: previous)
