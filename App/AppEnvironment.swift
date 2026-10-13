@@ -101,7 +101,7 @@ final class AppEnvironment {
         }
         let settings = DefaultsSettingsStore(defaults: settingsDefaults, secrets: secrets, logger: logger)
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
-        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS and friends go to the fallback engine when it is built in (ADR-006, opt-in).
+        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS, AV1 and friends go to the fallback engine when it is built in (ADR-006; the installs build it in).
         let makeEngine: EngineFactory = { candidate in
             switch candidate.route {
             case .native:
@@ -164,7 +164,8 @@ final class AppEnvironment {
                                                dataset: imdbDataset, logger: logger)
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
         let services = AppServices(registry: registry, client: client, settings: settings, progress: progress, library: library,
-                                   makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, widgets: widgets, widgetContent: widgetContent,
+                                   makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, decodesAV1InHardware: AVHardware.decodesAV1InHardware,
+                                   widgets: widgets, widgetContent: widgetContent,
                                    posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount, trakt: trakt,
                                    secretsInKeychain: secretsInKeychain, traktSyncState: traktSyncState, syncSchedulesItself: !uiTesting)
         if !uiTesting {

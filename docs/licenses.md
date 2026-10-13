@@ -20,7 +20,9 @@ No third-party code is linked into the **default** build: the dependency list is
 |---|---|---|
 | IMDb `title.ratings.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Downloaded to the device once a day, kept out of backups, never uploaded or redistributed. Credit line in Settings → IMDb ratings and Acknowledgements. ☐ A public or commercial release needs IMDb's permission or a licence: do not ship this to others on the current terms. |
 
-## Opt-in fallback engine (ADR-006) — only when built with `FALLBACK=1`
+## Fallback engine (ADR-006) — in the iPhone and Mac installs
+
+`scripts/install-iphone.sh` and `scripts/install-mac.sh` build the fallback engine in, so MKV, AVI, DTS, TrueHD and AV1 play in the app. The default `project.yml` and `scripts/archive.sh` still leave it out: a release that ships it needs the sign-off below.
 
 Linking MPVKit's **LGPL** build makes the app a distributor of LGPL libraries. Typical component set of that build (verify against the exact
 MPVKit release you pin; this list is from project documentation, not from inspecting a binary):

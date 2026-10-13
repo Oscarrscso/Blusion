@@ -118,16 +118,16 @@ import Testing
         let settings = PlaybackSettings(preferredResolution: 720, streamingServerURL: " http://192.168.1.9:11470/ ", fallbackEngineEnabled: true)
         #expect(settings.serverURL?.absoluteString == "http://192.168.1.9:11470/")
         #expect(settings.rankingPreferences.preferredResolution == 720)
-        #expect(settings.policy(fallbackEngineLinked: true).fallbackEngineAvailable)
-        #expect(!settings.policy(fallbackEngineLinked: false).fallbackEngineAvailable, "not linked: never available")
+        #expect(settings.policy(fallbackEngineLinked: true, decodesAV1InHardware: false).fallbackEngineAvailable)
+        #expect(!settings.policy(fallbackEngineLinked: false, decodesAV1InHardware: false).fallbackEngineAvailable, "not linked: never available")
         var off = settings
         off.fallbackEngineEnabled = false
-        #expect(!off.policy(fallbackEngineLinked: true).fallbackEngineAvailable)
-        #expect(settings.policy(fallbackEngineLinked: true).playerPreference == .infuseWhenNeeded,
+        #expect(!off.policy(fallbackEngineLinked: true, decodesAV1InHardware: false).fallbackEngineAvailable)
+        #expect(settings.policy(fallbackEngineLinked: true, decodesAV1InHardware: false).playerPreference == .infuseWhenNeeded,
                 "by default Infuse takes only what Blusion's own player cannot open")
         var infuse = settings
         infuse.playerPreference = .infuse
-        #expect(infuse.policy(fallbackEngineLinked: false).playerPreference == .infuse)
+        #expect(infuse.policy(fallbackEngineLinked: false, decodesAV1InHardware: false).playerPreference == .infuse)
         #expect(PlayerPreference.builtIn.externalPlayer == nil)
         #expect(PlayerPreference.infuseWhenNeeded.externalPlayer == .infuse)
         for bad in ["", "   ", "not a url", "ftp://nas.local", "nas:11470", "//nas"] { #expect(PlaybackSettings(streamingServerURL: bad).serverURL == nil, "\(bad)") }

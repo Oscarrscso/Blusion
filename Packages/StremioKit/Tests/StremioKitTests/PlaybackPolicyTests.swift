@@ -40,6 +40,25 @@ import StremioKitTestSupport
         #expect(route(hls, withFallback) == .fallback(url("https://cdn.example.com/a.m3u8"), .audioCodec))
     }
 
+    @Test func av1GoesToTheFallbackEngineOnlyOnChipsWithoutHardwareAV1() {
+        // AVPlayer keeps AV1 where the chip decodes it (PiP and AirPlay stay); elsewhere the engine plays it.
+        let hardware = PolicyConfiguration(fallbackEngineAvailable: true, decodesAV1InHardware: true)
+        let mp4 = S.direct("1080p AV1", "https://cdn.example.com/a.mp4")
+        #expect(route(mp4, withFallback) == .fallback(url("https://cdn.example.com/a.mp4"), .videoCodec))
+        #expect(route(mp4, hardware) == .native(url("https://cdn.example.com/a.mp4")))
+        #expect(route(mp4, none) == .native(url("https://cdn.example.com/a.mp4")), "without the engine AVPlayer still gets the try")
+        let h264 = S.direct("1080p x264", "https://cdn.example.com/a.mp4")
+        #expect(route(h264, withFallback) == .native(url("https://cdn.example.com/a.mp4")))
+        let mkv = S.direct("1080p AV1", "https://cdn.example.com/a.mkv")
+        #expect(route(mkv, hardware) == .fallback(url("https://cdn.example.com/a.mkv"), .container(.matroska)), "the container says more")
+        let unnamed = S.direct("AV1", "https://cdn.example.com/blob")
+        #expect(route(unnamed, withFallback) == .fallback(url("https://cdn.example.com/blob"), .videoCodec))
+        #expect(route(unnamed, hardware) == .native(url("https://cdn.example.com/blob")))
+        #expect(StreamQuality.parse(from: ["1080p AV1"]).videoNeedsFallbackEngine(decodesAV1InHardware: false))
+        #expect(!StreamQuality.parse(from: ["1080p AV1"]).videoNeedsFallbackEngine(decodesAV1InHardware: true))
+        #expect(!StreamQuality.parse(from: ["1080p HEVC"]).videoNeedsFallbackEngine(decodesAV1InHardware: false))
+    }
+
     @Test func notWebReadyAloneDoesNotSendNativeContainersToTheFallbackEngine() {
         // ADR-003: upstream's flag means "not https or not MP4" for a browser player, and proxyHeaders requires it.
         let http = S.direct("x", "http://cdn.example.com/a.mp4", notWebReady: true)

@@ -53,6 +53,8 @@ public final class PlaybackCoordinator {
     private var stallTimer: Task<Void, Never>?
     private var startContinuation: CheckedContinuation<Bool, Never>?
     private var hasStartedCurrent = false
+    /// How the current candidate failed before it started, if it did. `tryCandidate` decides what happens next.
+    private var startFailure: PlaybackFailure?
     private var lastPosition: TimeInterval = 0
     private var stopped = false
 
@@ -123,7 +125,9 @@ public final class PlaybackCoordinator {
 
     // MARK: Candidates
 
-    private func tryCandidate(at index: Int, startPosition: TimeInterval) async {
+    /// `failure` is set when this is a retry: AVPlayer could not open the stream, so it plays in the fallback engine. With no fallback engine
+    /// linked, a retry reports the failure AVPlayer gave, as the first attempt would.
+    private func tryCandidate(at index: Int, startPosition: TimeInterval, retryingAfter failure: PlaybackFailure? = nil) async {
         guard !stopped else { return }
         engineGeneration += 1
         resolveStart(false)
@@ -137,11 +141,14 @@ public final class PlaybackCoordinator {
             return
         }
         candidateIndex = index
-        let candidate = plan.candidates[index]
+        var candidate = plan.candidates[index]
+        if failure != nil, let url = candidate.url {
+            candidate = candidate.rerouted(to: .fallback(url, .unknownFormat))
+        }
         current = candidate
 
         guard let engine = makeEngine(candidate), let url = candidate.url else {
-            recordFailure(candidate, PlaybackFailure(.noEngine, "No player is available for this stream."))
+            recordFailure(candidate, failure ?? PlaybackFailure(.noEngine, "No player is available for this stream."))
             await moveOn(startPosition: startPosition)
             return
         }
@@ -153,6 +160,7 @@ public final class PlaybackCoordinator {
         phase = .starting
         state = engine.state
         hasStartedCurrent = false
+        startFailure = nil
         lastPosition = startPosition
 
         let stream = engine.makeStateStream()
@@ -172,7 +180,13 @@ public final class PlaybackCoordinator {
             if phase != .finished { phase = .playing }
             notice = failedAttempts.isEmpty ? nil : notice
         } else if !hasStartedCurrent {
-            if state.failure == nil { recordFailure(candidate, PlaybackFailure(.timeout, "The stream took too long to start.")) }
+            // AVPlayer cannot open a codec it lacks (DTS in MP4, AV1 on older chips): the same stream goes to the fallback engine, once.
+            if failure == nil, let pending = startFailure, canRetryInFallbackEngine(candidate, after: pending) {
+                await tryCandidate(at: index, startPosition: startPosition, retryingAfter: pending)
+                return
+            }
+            // A start failure was recorded in handle(); only a timeout is left to record here.
+            if startFailure == nil { recordFailure(candidate, PlaybackFailure(.timeout, "The stream took too long to start.")) }
             await moveOn(startPosition: startPosition)
         }
     }
@@ -236,7 +250,9 @@ public final class PlaybackCoordinator {
                 recordFailure(candidate, failure)
                 Task { [weak self] in await self?.moveOn(startPosition: self?.lastPosition ?? 0) }
             } else {
-                recordFailure(candidate, failure)
+                // Recorded now, unless tryCandidate retries the stream in the fallback engine: then the retry decides what is recorded.
+                if !canRetryInFallbackEngine(candidate, after: failure) { recordFailure(candidate, failure) }
+                startFailure = failure
                 resolveStart(false)
             }
         case .ended:
@@ -248,6 +264,12 @@ public final class PlaybackCoordinator {
         default:
             break
         }
+    }
+
+    /// AVPlayer could not open this stream before it started, and the plan allows one retry in the fallback engine.
+    private func canRetryInFallbackEngine(_ candidate: PlaybackCandidate, after failure: PlaybackFailure) -> Bool {
+        guard plan.retriesInFallbackEngine, failure.kind == .format, case .native = candidate.route else { return false }
+        return true
     }
 
     private func watchForStall() {

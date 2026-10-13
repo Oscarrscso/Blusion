@@ -28,10 +28,11 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 fail() { echo "install-mac: $1" >&2; exit 1; }
 mkdir -p "$WORK"
 
-# The real project.yml, built without a provisioning profile. A throwaway overlay.
+# The fallback spec (ADR-006: MKV, AVI, DTS, TrueHD and AV1 play in the app), built without a provisioning profile. A throwaway overlay.
+./scripts/enable-fallback.sh --generate-only >/dev/null || fail "could not write project.fallback.generated.yml"
 cat > "$WORK/project.install.yml" <<YAML
 include:
-  - path: ../../project.yml
+  - path: ../../project.fallback.generated.yml
 targets:
   Blusion:
     settings:

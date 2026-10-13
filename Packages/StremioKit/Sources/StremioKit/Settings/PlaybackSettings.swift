@@ -66,9 +66,10 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
 
     public var rankingPreferences: RankingPreferences { RankingPreferences(preferredResolution: preferredResolution) }
 
-    public func policy(fallbackEngineLinked: Bool) -> PolicyConfiguration {
+    /// `decodesAV1InHardware` has no default: a caller that left it out would send AV1 to the engine on capable chips.
+    public func policy(fallbackEngineLinked: Bool, decodesAV1InHardware: Bool) -> PolicyConfiguration {
         PolicyConfiguration(fallbackEngineAvailable: fallbackEngineLinked && fallbackEngineEnabled, streamingServerURL: serverURL,
-                            playerPreference: playerPreference)
+                            playerPreference: playerPreference, decodesAV1InHardware: decodesAV1InHardware)
     }
 }
 

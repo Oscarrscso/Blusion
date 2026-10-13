@@ -9,19 +9,23 @@ public struct PolicyConfiguration: Sendable, Equatable {
     public var playerPreference: PlayerPreference
     /// The player apps installed on this device. Streams are only handed to one of these: the app itself can't be asked from here.
     public var installedPlayers: Set<ExternalPlayer>
+    /// This device decodes AV1 in hardware, so AVPlayer can play AV1 (A17 Pro, M3 and later). Otherwise AV1 goes to the fallback engine.
+    public var decodesAV1InHardware: Bool
 
     public init(fallbackEngineAvailable: Bool = false, streamingServerURL: URL? = nil, playerPreference: PlayerPreference = .builtIn,
-                installedPlayers: Set<ExternalPlayer> = []) {
+                installedPlayers: Set<ExternalPlayer> = [], decodesAV1InHardware: Bool = false) {
         self.fallbackEngineAvailable = fallbackEngineAvailable
         self.streamingServerURL = streamingServerURL
         self.playerPreference = playerPreference
         self.installedPlayers = installedPlayers
+        self.decodesAV1InHardware = decodesAV1InHardware
     }
 }
 
 public enum FallbackReason: Sendable, Equatable {
     case container(MediaContainer)
     case audioCodec
+    case videoCodec
     case unknownFormat
 }
 
@@ -152,14 +156,23 @@ public enum PlaybackPolicy {
                                    config: PolicyConfiguration) -> PlaybackRoute {
         let known = sniffed ?? ContainerSniffer.container(url: url, filename: stream.behaviorHints.filename)
         if let known {
-            if known.isNativelyPlayable && !quality.audioNeedsFallbackEngine { return .native(url) }
-            return fallback(url, known.isNativelyPlayable ? .audioCodec : .container(known), known: known, config: config)
+            guard known.isNativelyPlayable else { return fallback(url, .container(known), known: known, config: config) }
+            if quality.audioNeedsFallbackEngine { return fallback(url, .audioCodec, known: known, config: config) }
+            // Without the fallback engine AVPlayer still gets the try, as it did before.
+            if videoNeedsEngine(quality, config) { return .fallback(url, .videoCodec) }
+            return .native(url)
         }
-        // Nothing says what this is. Audio we can't decode, or `notWebReady` (a hint, not a verdict: ADR-003) tips it to the fallback
-        // engine; otherwise try AVPlayer and let the coordinator move on if it fails.
+        // Nothing says what this is. Audio or video we can't decode, or `notWebReady` (a hint, not a verdict: ADR-003) tips it to the fallback
+        // engine; otherwise try AVPlayer. If AVPlayer cannot open it, the coordinator retries the same stream in the fallback engine.
         if quality.audioNeedsFallbackEngine { return fallback(url, .audioCodec, known: nil, config: config) }
+        if videoNeedsEngine(quality, config) { return .fallback(url, .videoCodec) }
         if stream.behaviorHints.notWebReady { return fallback(url, .unknownFormat, known: nil, config: config) }
         return .native(url)
+    }
+
+    /// The video AVPlayer cannot decode on this device, and an engine is there to play it.
+    private static func videoNeedsEngine(_ quality: StreamQuality, _ config: PolicyConfiguration) -> Bool {
+        quality.videoNeedsFallbackEngine(decodesAV1InHardware: config.decodesAV1InHardware) && config.fallbackEngineAvailable
     }
 
     private static func fallback(_ url: URL, _ reason: FallbackReason, known: MediaContainer?, config: PolicyConfiguration) -> PlaybackRoute {

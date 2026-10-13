@@ -10,6 +10,9 @@
 # *.noindex, so the build product is never listed on the Mac as one more Blusion). Xcode may renew the provisioning profile
 # with the Apple ID it is signed in with. With a free Apple ID the app stops opening after seven days: run this again.
 # The device has to be paired, connected (cable or the same network) and unlocked. macOS + Xcode + xcodegen only.
+#
+# The install is built with the fallback engine (MPVKit, ADR-006), so MKV, AVI, DTS, TrueHD and AV1 play in the app. The spec comes from
+# scripts/enable-fallback.sh; project.yml itself stays the default build without third-party code.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -52,7 +55,7 @@ PY
 UDID="${DEVICE%% *}"; NAME="${DEVICE#* }"
 [[ -n "$UDID" ]] || fail "no connected iPhone or iPad: connect it, unlock it and trust this Mac"
 
-xcodegen generate --quiet || fail "xcodegen failed"
+./scripts/enable-fallback.sh >/dev/null || fail "could not generate the Xcode project with the fallback engine (scripts/enable-fallback.sh)"
 # The commit shown in Settings › About; "-dirty" when the working tree has uncommitted changes.
 TAG="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 git diff --quiet HEAD -- 2>/dev/null || TAG="$TAG-dirty"

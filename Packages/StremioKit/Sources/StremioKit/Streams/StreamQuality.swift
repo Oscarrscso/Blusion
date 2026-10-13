@@ -119,6 +119,12 @@ public struct StreamQuality: Sendable, Equatable {
         audioCodecs.contains { $0.needsFallbackEngine } && !audioCodecs.contains { !$0.needsFallbackEngine }
     }
 
+    /// True when the text names AV1 and this device cannot decode AV1 in hardware. AVPlayer then cannot play it, so the fallback engine
+    /// does (ADR-006). Where the chip decodes AV1, AVPlayer keeps it, with its PiP and AirPlay.
+    public func videoNeedsFallbackEngine(decodesAV1InHardware: Bool) -> Bool {
+        videoCodec == .av1 && !decodesAV1InHardware
+    }
+
     /// The kind of Atmos, read from the audio codec beside it, not from the release's source: TrueHD wins when both are named, since
     /// a lossless track is the one a viewer picks Atmos for. Nil when there is no Atmos, or the codec does not say which kind.
     public var atmosFormat: AtmosFormat? {

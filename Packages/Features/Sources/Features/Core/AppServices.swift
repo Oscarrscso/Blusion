@@ -32,6 +32,8 @@ public struct AppServices: Sendable {
     public let makeEngine: EngineFactory
     /// True once a fallback engine (M6) is linked into the app.
     public let fallbackEngineLinked: Bool
+    /// This device decodes AV1 in hardware, so AVPlayer plays AV1 and the fallback engine does not need to (ADR-006).
+    public let decodesAV1InHardware: Bool
     /// Streams handed to another player app, waiting for its callback to record where the viewer stopped.
     public let handoffs: any HandoffStore
     public let searchHistory: any SearchHistoryStore
@@ -44,6 +46,7 @@ public struct AppServices: Sendable {
     public init(registry: AddonRegistry, client: AddonClient, browse: BrowseService? = nil, streams: StreamService? = nil,
                 subtitles: SubtitleService? = nil, settings: (any SettingsStore)? = nil, progress: (any ProgressStore)? = nil,
                 library: (any LibraryStore)? = nil, makeEngine: EngineFactory? = nil, fallbackEngineLinked: Bool = false,
+                decodesAV1InHardware: Bool = false,
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
                 trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil,
@@ -77,6 +80,7 @@ public struct AppServices: Sendable {
         self.trakt = trakt
         self.makeEngine = makeEngine ?? { _ in nil }
         self.fallbackEngineLinked = fallbackEngineLinked
+        self.decodesAV1InHardware = decodesAV1InHardware
         self.secretsInKeychain = secretsInKeychain
     }
 }

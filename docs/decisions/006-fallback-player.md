@@ -61,3 +61,24 @@ Accepted risks, all recorded rather than hidden:
 - VideoLAN forum and vlc-devel threads on LGPL and App Store use of MobileVLCKit; CocoaPods listing of VLCKit 4.0.0a18; VideoLAN forum thread on Dolby Vision on iOS.
 - KSPlayer README as indexed by swiftpackageregistry.com and Swift Package Index (license tiers, dependencies, feature claims).
 - Press coverage of VLC's 2011 App Store removal (context for the GPL risk only).
+
+## Update 2026-10-13: in-app codec coverage
+
+- **Installs build the engine in.** `scripts/install-iphone.sh` and `scripts/install-mac.sh` generate their spec with
+  `scripts/enable-fallback.sh`, so the iPhone and Mac apps link MPVKit (LGPL build). `project.yml` and `scripts/archive.sh` keep the
+  default build without it. Revert an install by using the default spec again; the routing below then falls back to today's behaviour.
+- **Routing.** A container AVPlayer cannot open (MKV, AVI, WebM, …) and DTS, DTS-HD or TrueHD audio go to the engine, as before. AV1 video
+  goes to the engine only on chips without hardware AV1 decode (`AVHardware.decodesAV1InHardware`, VideoToolbox), where AVPlayer cannot play
+  it at all. On A17 Pro, M3 and later AVPlayer keeps AV1, so ranking, PiP and AirPlay are unchanged there. On the other chips AV1 streams rank
+  below native streams. Without an engine, AV1 still gets the AVPlayer attempt, as before.
+- **Retry on failure.** When AVPlayer cannot open a stream before it starts (`.format`), the coordinator plays the same stream once in the
+  fallback engine, from the same position. That covers codecs the release text does not name, such as VP9 or MPEG-4 Part 2 inside MP4. A
+  retry is not recorded as a failure, and a retry that also fails is recorded once. The retry follows Settings: it runs only when the engine is
+  linked and enabled (`PlaybackPlan.retriesInFallbackEngine`, from the policy that routed the streams). Network and timeout failures are not
+  retried. `AVEngine` maps `.failedToLoadMediaData` to a format failure, so a network error there can reach the engine, which then waits for its
+  own network timeout (20 s) before the next stream.
+- **Lost on engine playback.** PiP and AirPlay do not work for streams the engine plays (`PlayerViewModel.canPictureInPicture`, `AVEngine`).
+- **Not verified here.** The host tests cover routing and the coordinator. Nothing in `MPVBackend.swift` has been compiled against MPVKit or
+  played on a device; the Mac install build and a device run are the check. Dolby Vision profile 7 still plays its base layer only.
+- **Still the human's.** The licence and distribution questions in `docs/licenses.md` (LGPL linking, App Store route) are open. The installs
+  are for the owner's own devices.

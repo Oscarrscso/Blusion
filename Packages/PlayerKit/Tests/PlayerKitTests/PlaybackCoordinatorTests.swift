@@ -17,6 +17,15 @@ import PlayerKitTestSupport
 
     private func plan(_ names: [String]) -> PlaybackPlan { PlaybackPlan(request: request, candidates: names.map { candidate($0) }) }
 
+    private func plan(_ names: [String], retriesInFallbackEngine: Bool) -> PlaybackPlan {
+        PlaybackPlan(request: request, candidates: names.map { candidate($0) }, retriesInFallbackEngine: retriesInFallbackEngine)
+    }
+
+    private func isNative(_ route: PlaybackRoute) -> Bool {
+        if case .native = route { return true }
+        return false
+    }
+
     /// Engines are created per candidate from `script`; the coordinator under test gets them through `makeEngine`.
     private final class Rig {
         var engines: [String: MockEngine] = [:]
@@ -59,6 +68,91 @@ import PlayerKitTestSupport
         #expect(coordinator.notice?.contains("“a” didn't work") == true && coordinator.notice?.contains("“b”") == true)
         #expect(rig.engines["a"]?.isStopped == true, "the failed engine is released")
         #expect(rig.engines["c"] == nil)
+    }
+
+    /// Decides each engine from the candidate it is made for (id and route), and keeps what it was asked for and what it made.
+    @MainActor private final class RouteRig {
+        var made: [PlaybackCandidate] = []
+        var engines: [MockEngine] = []
+        let outcome: (PlaybackCandidate) -> MockEngine.Outcome?
+        init(_ outcome: @escaping (PlaybackCandidate) -> MockEngine.Outcome?) { self.outcome = outcome }
+        func make(_ candidate: PlaybackCandidate) -> (any PlaybackEngine)? {
+            made.append(candidate)
+            guard let scripted = outcome(candidate) else { return nil }
+            let engine = MockEngine(scripted)
+            engines.append(engine)
+            return engine
+        }
+    }
+
+    @Test func aStreamAVPlayerCannotOpenIsRetriedOnceInTheFallbackEngineFromTheSamePosition() async {
+        let rig = RouteRig { candidate in
+            if case .native = candidate.route { return .failsToLoad(PlaybackFailure(.format, "no decoder")) }
+            return .plays(duration: 100)
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"], retriesInFallbackEngine: true), resumeFrom: 42,
+                                              startupTimeout: .seconds(2), makeEngine: { rig.make($0) })
+        await coordinator.start()
+        let url = URL(string: "https://e.example.com/a.mp4")!
+        #expect(coordinator.phase == .playing && coordinator.candidateIndex == 0)
+        #expect(coordinator.current?.route == .fallback(url, .unknownFormat))
+        #expect(rig.made.map(\.id) == ["a", "a"], "AVPlayer, then the fallback engine for the same stream; the next stream is not tried")
+        #expect(rig.engines.last?.loadedItems.first?.startPosition == 42, "the retry resumes where the viewer was")
+        #expect(coordinator.failedAttempts.isEmpty && coordinator.notice == nil, "a retry that plays is not a failure")
+        await coordinator.stop()
+    }
+
+    @Test func aFormatFailureIsNotRetriedWhenTheFallbackEngineIsOffInSettings() async {
+        let rig = RouteRig { candidate in
+            if case .fallback = candidate.route { return .plays(duration: 100) }   // linked, but Settings has it off
+            return candidate.id == "a" ? .failsToLoad(PlaybackFailure(.format, "no decoder")) : .plays(duration: 50)
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"], retriesInFallbackEngine: false), startupTimeout: .seconds(2),
+                                              makeEngine: { rig.make($0) })
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b" && coordinator.phase == .playing)
+        #expect(rig.made.map(\.id) == ["a", "b"] && rig.made.map(\.route).allSatisfy(isNative), "no engine is asked for the fallback")
+        #expect(coordinator.failedAttempts.map(\.failure.kind) == [.format])
+        await coordinator.stop()
+    }
+
+    @Test func aStreamThatFailsInTheFallbackEngineTooIsRecordedOnceAndTheNextStreamPlays() async {
+        let rig = RouteRig { candidate in
+            candidate.id == "a" ? .failsToLoad(PlaybackFailure(.format, "no decoder")) : .plays(duration: 50)   // both routes fail for a
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"], retriesInFallbackEngine: true), startupTimeout: .seconds(2),
+                                              makeEngine: { rig.make($0) })
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b" && coordinator.phase == .playing)
+        #expect(rig.made.map(\.id) == ["a", "a", "b"], "AVPlayer, the fallback engine once, then the next stream")
+        #expect(coordinator.failedAttempts.map(\.id) == ["a"] && coordinator.failedAttempts.map(\.failure.kind) == [.format])
+        await coordinator.stop()
+    }
+
+    @Test func withoutAFallbackEngineAFormatFailureIsReportedAndTheNextStreamPlays() async {
+        let rig = RouteRig { candidate in
+            if case .fallback = candidate.route { return nil }   // no fallback engine linked
+            return candidate.id == "a" ? .failsToLoad(PlaybackFailure(.format, "no decoder")) : .plays(duration: 50)
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"]), startupTimeout: .seconds(2), makeEngine: { rig.make($0) })
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b" && coordinator.phase == .playing)
+        #expect(coordinator.failedAttempts.map(\.failure.kind) == [.format], "the failure AVPlayer gave is reported, as before")
+        #expect(coordinator.notice?.contains("“a” didn't work") == true)
+        await coordinator.stop()
+    }
+
+    @Test func aNetworkFailureIsNotRetriedInTheFallbackEngine() async {
+        let rig = RouteRig { candidate in
+            if case .fallback = candidate.route { return .plays(duration: 100) }
+            return candidate.id == "a" ? .failsToLoad(boom) : .plays(duration: 50)
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"], retriesInFallbackEngine: true), startupTimeout: .seconds(2),
+                                              makeEngine: { rig.make($0) })
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b" && coordinator.failedAttempts.map(\.failure) == [boom])
+        #expect(rig.made.count == 2, "a then b, both through AVPlayer")
+        await coordinator.stop()
     }
 
     @Test func aStreamThatNeverStartsTimesOut() async {

@@ -96,7 +96,7 @@ public final class StreamPickerViewModel {
         settings = await services.settings.load()
         let (asked, responses) = await services.streams.fetch(request)
         guard !Task.isCancelled, generation == loadGeneration else { return }
-        var config = settings.policy(fallbackEngineLinked: services.fallbackEngineLinked)
+        var config = settings.policy(fallbackEngineLinked: services.fallbackEngineLinked, decodesAV1InHardware: services.decodesAV1InHardware)
         config.installedPlayers = installedPlayers
         listing = StreamListing(asking: asked, config: config, preferences: settings.rankingPreferences)
         nobodyCanAnswer = asked.isEmpty

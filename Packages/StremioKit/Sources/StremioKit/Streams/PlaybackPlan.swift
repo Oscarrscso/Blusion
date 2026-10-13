@@ -46,6 +46,12 @@ public struct PlaybackCandidate: Sendable, Equatable, Identifiable {
     }
 
     public var url: URL? { route.playableURL }
+
+    /// The same stream on another route, with the same id, title and headers. The coordinator uses it to retry a stream in another engine.
+    public func rerouted(to route: PlaybackRoute) -> PlaybackCandidate {
+        PlaybackCandidate(id: id, title: title, addonName: addonName, route: route, headers: headers, subtitles: subtitles, filename: filename,
+                          videoHash: videoHash, videoSize: videoSize, bingeContext: bingeContext)
+    }
 }
 
 /// What to play and what to fall back on: the chosen stream first, then every other playable stream in rank order.
@@ -54,18 +60,21 @@ public struct PlaybackPlan: Sendable, Equatable, Identifiable, Hashable {
     public let id: UUID
     public let request: StreamRequest
     public let candidates: [PlaybackCandidate]
+    /// A stream AVPlayer cannot open is retried once in the fallback engine. False when no engine is linked and enabled in Settings.
+    public let retriesInFallbackEngine: Bool
 
-    public init(id: UUID = UUID(), request: StreamRequest, candidates: [PlaybackCandidate]) {
+    public init(id: UUID = UUID(), request: StreamRequest, candidates: [PlaybackCandidate], retriesInFallbackEngine: Bool = false) {
         self.id = id
         self.request = request
         self.candidates = candidates
+        self.retriesInFallbackEngine = retriesInFallbackEngine
     }
 
-    /// `nil` when `chosen` isn't playable.
+    /// `nil` when `chosen` isn't playable. The retry follows the same policy that routed the streams, so Settings decides it too.
     public static func make(request: StreamRequest, chosen: RankedStream, from listing: StreamListing) -> PlaybackPlan? {
         guard let first = PlaybackCandidate(chosen) else { return nil }
         let rest = listing.playable.filter { $0.id != chosen.id }.compactMap(PlaybackCandidate.init)
-        return PlaybackPlan(request: request, candidates: [first] + rest)
+        return PlaybackPlan(request: request, candidates: [first] + rest, retriesInFallbackEngine: listing.config.fallbackEngineAvailable)
     }
 
     public static func == (lhs: PlaybackPlan, rhs: PlaybackPlan) -> Bool { lhs.id == rhs.id }
