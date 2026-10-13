@@ -279,6 +279,9 @@ private struct HomeWidgetEditor: View {
                     ProgressView()
                 }
             }
+            // The title shows while the editor loads, matching the editor's own title once it loads.
+            .navigationTitle("Edit Widget")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
         .task {
