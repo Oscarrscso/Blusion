@@ -4,7 +4,7 @@ import SwiftUI
 import UIKit
 
 /// The screen that makes a row, spotlight or banner, or changes a saved one. Its middle is a sentence that describes the widget, whose
-/// words are its settings. Under it the settings are one vertical list of rows, and the open one has its editor in a panel at the foot
+/// words are its settings. Under it the settings sit in groups, two across, and the open one has its editor in a panel at the foot
 /// of the screen. `WidgetBuilderModel` holds the state and the logic; this view draws it and calls it.
 struct WidgetBuilderView: View {
     let manager: WidgetsManagerViewModel
@@ -291,31 +291,61 @@ private struct SentenceCard: View {
     }
 }
 
-/// The settings as one vertical list, in the order of the pills. The filters that narrow a TMDB list sit two across, in pairs; every other
-/// setting is a full-width row, so the rows share the sentence's margins.
+/// The settings, grouped under headings by what they decide and set two across in every group, so the whole list is half as long and a
+/// setting is found by its group instead of by scrolling. A group with an odd number ends on one full-width row rather than a gap.
 private struct PillList: View {
     let model: WidgetBuilderModel
 
-    /// The settings that narrow a TMDB list: the filters the sentence reads out.
-    private static let filters: Set<WidgetBuilderModel.Field> = [
-        .period, .genres, .keywords, .excludedKeywords, .score, .votes, .language, .runtime, .release, .providers, .region, .cast, .crew,
-        .companies,
+    /// One heading and the settings under it, in the order they are drawn.
+    private struct Group: Identifiable {
+        let title: String
+        let fields: [WidgetBuilderModel.Field]
+        var id: String { title }
+    }
+
+    /// Every setting belongs to one group. A setting the widget's source does not have is simply not drawn, and a group with none is left out.
+    private static let groups = [
+        Group(title: "List", fields: [.source, .ordering, .catalogGenre, .traktSort]),
+        Group(title: "Content", fields: [.genres, .keywords, .excludedKeywords, .language, .runtime]),
+        Group(title: "Ratings", fields: [.score, .votes]),
+        Group(title: "Dates and availability", fields: [.period, .release, .region, .providers]),
+        Group(title: "People and studios", fields: [.cast, .crew, .companies]),
+        Group(title: "Appearance", fields: [.title, .limit, .style, .cards, .posters]),
     ]
     private static let columns = [GridItem(.flexible(), spacing: Theme.Spacing.s), GridItem(.flexible(), spacing: Theme.Spacing.s)]
 
     var body: some View {
+        let pills = Dictionary(model.pills.map { ($0.field, $0) }, uniquingKeysWith: { first, _ in first })
+        let grouped = Set(Self.groups.flatMap(\.fields))
+        // A setting added later without a group still shows, at the end, rather than vanishing.
+        let ungrouped = model.pills.filter { !grouped.contains($0.field) }
         GlassEffectContainer(spacing: Theme.Spacing.s) {
-            VStack(spacing: Theme.Spacing.s) {
-                ForEach(Self.runs(model.pills)) { run in
-                    if run.isFilters {
-                        LazyVGrid(columns: Self.columns, spacing: Theme.Spacing.s) {
-                            ForEach(run.pills) { pill in row(pill) }
-                        }
-                    } else {
-                        ForEach(run.pills) { pill in row(pill) }
-                    }
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                ForEach(Self.groups) { group in
+                    let shown = group.fields.compactMap { pills[$0] }
+                    if !shown.isEmpty { section(group.title, shown) }
+                }
+                if !ungrouped.isEmpty { section("More", ungrouped) }
+            }
+        }
+    }
+
+    private func section(_ title: String, _ pills: [WidgetBuilderModel.Pill]) -> some View {
+        // The pairs fill the grid; an odd one out takes the full width under them.
+        let paired = pills.count.isMultiple(of: 2) ? pills : Array(pills.dropLast())
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text(title)
+                .font(Theme.Typography.eyebrow)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+                .padding(.leading, Theme.Spacing.xs)
+                .accessibilityAddTraits(.isHeader)
+            if !paired.isEmpty {
+                LazyVGrid(columns: Self.columns, spacing: Theme.Spacing.s) {
+                    ForEach(paired) { pill in row(pill) }
                 }
             }
+            if paired.count != pills.count, let last = pills.last { row(last) }
         }
     }
 
@@ -323,27 +353,6 @@ private struct PillList: View {
         PillButton(model: model, pill: pill)
             .id(pill.field)
     }
-
-    /// The pills in runs of one layout: consecutive filters share a run, and every other pill is a run of its own.
-    private static func runs(_ pills: [WidgetBuilderModel.Pill]) -> [PillRun] {
-        var runs: [PillRun] = []
-        for pill in pills {
-            let isFilter = filters.contains(pill.field)
-            if isFilter, let last = runs.last, last.isFilters {
-                runs[runs.count - 1].pills.append(pill)
-            } else {
-                runs.append(PillRun(id: pill.field.rawValue, isFilters: isFilter, pills: [pill]))
-            }
-        }
-        return runs
-    }
-}
-
-/// Pills drawn together: a run of filters, two across, or one other setting as a full-width row.
-private struct PillRun: Identifiable {
-    let id: String
-    let isFilters: Bool
-    var pills: [WidgetBuilderModel.Pill]
 }
 
 /// One setting in the list: its icon, its name over its value, and a chevron that shows whether its editor is open. A row fills the page's
@@ -364,12 +373,15 @@ private struct PillButton: View {
             model.select(pill.field)
         } label: {
             HStack(spacing: Theme.Spacing.s) {
+                // A size at which the widest symbols (three people, the masks) stay inside the box, so no icon runs into its title.
                 Image(systemName: pill.systemImage)
-                    .font(.body.weight(.semibold))
-                    .frame(width: 22)
+                    .font(.footnote.weight(.semibold))
+                    .frame(width: 28)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(pill.title)
                         .font(.subheadline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(pill.value)
                         .font(.caption)
                         .foregroundStyle(.secondary)
