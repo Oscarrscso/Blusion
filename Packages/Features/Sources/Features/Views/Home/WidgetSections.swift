@@ -32,6 +32,8 @@ struct WidgetRow: View {
     let onSetBetterPosters: ((Bool) -> Void)?
     /// Removes this row from the layout, from its menu, as the widgets page does.
     let onRemove: () -> Void
+    /// Opens this row in the widget editor, from its menu.
+    let onEdit: () -> Void
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
@@ -61,7 +63,7 @@ struct WidgetRow: View {
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
                     Divider()
                 }
-                removeButton
+                rowActions
             }
         } else {
             Group {
@@ -87,12 +89,21 @@ struct WidgetRow: View {
                     }
                 }
             }
-            // A row that is still loading, failed or empty can be removed too, so a broken row does not stay on Home. Its menu opens
-            // across the whole row, not only over the text it shows.
+            // A row that is still loading, failed or empty can be edited or removed too, so a broken row does not stay on Home. Its menu
+            // opens across the whole row, not only over the text it shows.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
-            .contextMenu { removeButton }
+            .contextMenu { rowActions }
         }
+    }
+
+    /// The row's own actions, after its settings: the editor, then the destructive removal, set apart from it.
+    @ViewBuilder
+    private var rowActions: some View {
+        Button("Edit Widget", action: onEdit)
+            .accessibilityIdentifier("board.editWidget.\(section.widget.id)")
+        Divider()
+        removeButton
     }
 
     /// Removes the row from the layout, with no confirmation, as the widgets page does.

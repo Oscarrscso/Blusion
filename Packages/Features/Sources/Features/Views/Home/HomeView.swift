@@ -21,7 +21,11 @@ struct HomeView: View {
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     @Environment(TitleActions.self) private var actions: TitleActions?
+    /// The widget editor opened from a row's menu.
+    @State private var editing: HomeWidget?
+    private let services: AppServices
     init(services: AppServices) {
+        self.services = services
         _model = State(initialValue: HomeViewModel(services: services))
     }
 
@@ -65,6 +69,10 @@ struct HomeView: View {
                 guard let depth = router.spotlightDepth, count < depth else { return }
                 router.spotlightDepth = nil
                 router.spotlightRevision += 1
+            }
+            // The editor saves to the layout Home shows, so Home loads it again when the editor closes.
+            .sheet(item: $editing, onDismiss: { Task { await model.load() } }) { widget in
+                HomeWidgetEditor(widget: widget, services: services)
             }
     }
 
@@ -214,7 +222,7 @@ struct HomeView: View {
             HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
-                      onRemove: { removeWidget(section) })
+                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget })
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
@@ -243,6 +251,40 @@ struct HomeView: View {
 
     private func retry(_ section: HomeViewModel.Section) {
         Task { await model.retry(sectionID: section.id) }
+    }
+}
+
+/// The widget editor for one Home row, opened from the row's menu. It is the widgets page's editor, with its own widgets model. The model
+/// loads first, since the editor reads the addons and catalogs that loading finds.
+private struct HomeWidgetEditor: View {
+    let widget: HomeWidget
+    let services: AppServices
+    @State private var model: WidgetsManagerViewModel
+    @State private var loaded = false
+    @Environment(\.dismiss) private var dismiss
+
+    init(widget: HomeWidget, services: AppServices) {
+        self.widget = widget
+        self.services = services
+        _model = State(initialValue: WidgetsManagerViewModel(services: services))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if loaded {
+                    // The saved copy of the row, in case the layout changed since Home loaded.
+                    WidgetEditorView(widget: model.widgets.first(where: { $0.id == widget.id }) ?? widget, model: model, services: services)
+                } else {
+                    ProgressView()
+                }
+            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+        .task {
+            await model.load()
+            loaded = true
+        }
     }
 }
 
