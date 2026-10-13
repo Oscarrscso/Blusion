@@ -23,22 +23,14 @@ struct QualityBadge: View {
             Image(systemName: symbol)
                 .font(.system(size: 9, weight: .semibold))
         }
-        .qualityBadgeChrome(tint: tint)
-    }
-}
-
-extension View {
-    /// The hairline capsule that a quality marker and a service badge share: the tint lightly filled, with a fine edge of the same colour.
-    func qualityBadgeChrome(tint: Color) -> some View {
-        self
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tint.opacity(0.92))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.10), in: Capsule())
-            .overlay { Capsule().strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
-            .accessibilityElement(children: .combine)
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(tint.opacity(0.92))
+        .lineLimit(1)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.10), in: Capsule())
+        .overlay { Capsule().strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
+        .accessibilityElement(children: .combine)
     }
 }
 

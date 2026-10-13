@@ -27,35 +27,35 @@ extension StreamProvider {
     }
 }
 
-/// A service's mark: its logo on a small tile in the service's colour.
+/// A service's logo at the height of a quality tag's line of text, so it lines up with the tags beside it.
 struct StreamProviderMark: View {
     let provider: StreamProvider
+    /// The height of the tags' text at the caption size, scaled with Dynamic Type the same way the tags' text is.
+    @ScaledMetric(relativeTo: .caption2) private var height: CGFloat = 13
 
     var body: some View {
         Image(provider.logoName)
             .renderingMode(.template)
             .resizable()
-            .scaledToFit()
-            .frame(maxWidth: 40, maxHeight: 14)
+            .aspectRatio(contentMode: .fit)
+            .frame(height: height)
             .fixedSize()
             .foregroundStyle(provider.markInk)
-            .padding(.horizontal, 4)
-            .frame(minWidth: 18, minHeight: 15)
-            .background(provider.tint, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .accessibilityHidden(true)
     }
 }
 
-/// A web release's streaming service: its mark and name in the service's colour, where the source badge would stand.
+/// A web release's streaming service: its logo on a pill in the service's colour, the same height and capsule shape as the quality tags beside
+/// it. The pill is the badge itself, so the logo carries no second border and no name; VoiceOver reads the service's name.
 struct StreamProviderBadge: View {
     let provider: StreamProvider
 
     var body: some View {
-        HStack(spacing: 5) {
-            StreamProviderMark(provider: provider)
-            Text(provider.name)
-        }
-        .qualityBadgeChrome(tint: provider.tint)
+        StreamProviderMark(provider: provider)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(provider.tint, in: Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(provider.name)
     }
 }
 #endif
