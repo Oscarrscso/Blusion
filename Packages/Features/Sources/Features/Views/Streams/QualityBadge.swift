@@ -23,14 +23,32 @@ struct QualityBadge: View {
             Image(systemName: symbol)
                 .font(.system(size: 9, weight: .semibold))
         }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(tint.opacity(0.92))
-        .lineLimit(1)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(tint.opacity(0.10), in: Capsule())
-        .overlay { Capsule().strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
-        .accessibilityElement(children: .combine)
+        .qualityBadgeChrome(tint: tint)
+    }
+}
+
+extension View {
+    /// The hairline capsule that a quality marker and the Dolby Atmos badge share: the tint lightly filled, with a fine edge of the same colour.
+    func qualityBadgeChrome(tint: Color) -> some View {
+        self
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint.opacity(0.92))
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(tint.opacity(0.10), in: Capsule())
+            .overlay { Capsule().strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
+            .accessibilityElement(children: .combine)
+    }
+}
+
+/// Dolby Atmos on a stream, as the AirPods symbol alone: the tags' chrome, so it is the height of the text tags beside it. VoiceOver
+/// still says "Dolby Atmos", since the symbol has no text of its own.
+struct SpatialAudioBadge: View {
+    var body: some View {
+        Image(systemName: "airpodspro")
+            .qualityBadgeChrome(tint: .white)
+            .accessibilityLabel(Text(verbatim: "Dolby Atmos"))
     }
 }
 

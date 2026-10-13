@@ -3,7 +3,8 @@ import SwiftUI
 import StremioKit
 
 /// One stream as a card, in the title page's design: a "Best match" label for the stream Auto Pick recommends, small badges for sharpness,
-/// REMUX and source (a web release's streaming service in its place), the release name in up to two lines, one grey line of facts (size,
+/// REMUX and source (a web release's streaming service in its place), an AirPods mark for Dolby Atmos, the release name in up to two lines,
+/// one grey line of facts (size,
 /// codec, audio), and a note when the stream opens elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap
 /// does. The technical details fold away in a section of their own, so tapping the card always plays.
 struct StreamRow: View {
@@ -37,6 +38,7 @@ struct StreamRow: View {
                         } else if let source = item.quality.source {
                             QualityBadge.source(source)
                         }
+                        if item.quality.hasAtmos { SpatialAudioBadge() }
                     }
                 }
                 Text(Self.headline(for: item))
@@ -73,7 +75,7 @@ struct StreamRow: View {
     /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.
     private var hasBadges: Bool {
         item.quality.resolutionLabel != nil || item.quality.isHDR || item.quality.isDolbyVision || isRemux || item.quality.source != nil
-            || provider != nil
+            || provider != nil || item.quality.hasAtmos
     }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
@@ -88,7 +90,7 @@ struct StreamRow: View {
         return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
-    /// The grey line of facts: "38.2 GB · HEVC · Atmos TrueHD". The parts the stream does not give are left out.
+    /// The grey line of facts: "38.2 GB · HEVC · TrueHD". The parts the stream does not give are left out.
     private var facts: String {
         var parts: [String] = []
         if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
@@ -97,15 +99,13 @@ struct StreamRow: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The audio as the release names it. Lossless Atmos (TrueHD) and streaming Atmos (DD+) each read as one name, and the codec they
-    /// already name is left out of it. Otherwise "Atmos" when the marker is there, and the first audio codec the release names.
+    /// The audio codec for the grey line. Dolby Atmos is not named here, since its AirPods badge stands for it: lossless Atmos reads as its
+    /// TrueHD track and streaming Atmos as its DD+ track. Otherwise the first audio codec the release names.
     private var audioText: String? {
         switch item.quality.atmosFormat {
-        case .lossless: return "Atmos TrueHD"
-        case .streaming: return "Atmos DD+"
-        case nil:
-            let parts = [item.quality.hasAtmos ? "Atmos" : nil, item.quality.audioCodecs.first?.label].compactMap { $0 }
-            return parts.isEmpty ? nil : parts.joined(separator: " ")
+        case .lossless: "TrueHD"
+        case .streaming: "DD+"
+        case nil: item.quality.audioCodecs.first?.label
         }
     }
 
