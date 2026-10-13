@@ -23,7 +23,6 @@ struct SearchView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                    pageTitle
                     if model.isOffline {
                         OfflineBanner()
                     } else if !model.failures.isEmpty {
@@ -41,12 +40,7 @@ struct SearchView: View {
                     } else {
                         results
                         if model.phase == .searching {
-                            HStack(spacing: Theme.Spacing.s) {
-                                ProgressView().controlSize(.small)
-                                Text("Searching…").font(.footnote).foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal, metrics.pageMargin)
-                            .accessibilityElement(children: .combine)
+                            Text("Searching…").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, metrics.pageMargin)
                             SkeletonRow()
                         } else if model.showsNoResults {
                             ContentUnavailableView.search(text: model.query)
@@ -59,21 +53,14 @@ struct SearchView: View {
             // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results.
             .scrollDismissesKeyboard(.immediately)
             .screenBackground()
-            // The title is drawn in the content, as on Library and Discover, so the bar stays free of text.
-            .navigationTitle("")
-            #if targetEnvironment(macCatalyst)
+            .navigationTitle("Search")
             .searchable(text: $model.query, isPresented: $isSearchPresented,
                         placement: .navigationBarDrawer(displayMode: .always), prompt: "Shows, Movies, and More")
-            #else
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: .title)
-            // The system's own place for a search tab's field: it takes the tab bar's place at the foot of the screen, above the keyboard.
-            .searchable(text: $model.query, isPresented: $isSearchPresented, prompt: "Shows, Movies, and More")
-            #endif
             .searchFocused($isSearchFocused)
             // Coming from another tab, Search starts on an empty field.
             .onChange(of: router.searchBrowseRevision) { model.query = "" }
-            // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up.
+            // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up. The field
+            // stays where it is, under the title.
             .onChange(of: router.searchFocusRevision, initial: true) { focusField() }
             .onChange(of: model.query) {
                 selectedGroup = nil
@@ -97,15 +84,6 @@ struct SearchView: View {
         }
     }
 
-    /// The page's title, drawn in the content so the navigation bar stays free of text.
-    private var pageTitle: some View {
-        Text("Search")
-            .font(Theme.Typography.largeTitle)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, metrics.pageMargin)
-            .accessibilityAddTraits(.isHeader)
-    }
-
     /// Puts the cursor in the field. The field is not there in the frame the tab changes, so the focus is asked for again a moment later.
     private func focusField() {
         isSearchPresented = true
@@ -117,46 +95,61 @@ struct SearchView: View {
         }
     }
 
+    /// Two across on a phone, as many as fit on a wide window.
+    private var categoryColumns: [GridItem] {
+        metrics.isRegular
+            ? [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: Theme.Spacing.s)]
+            : Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.s), count: 2)
+    }
+
     private var browse: some View {
         VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
             if !model.recentQueries.isEmpty {
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    HStack(alignment: .firstTextBaseline) {
-                        SectionHeader("Recent")
-                        Button("Clear") { model.clearRecents() }
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Clear recent searches")
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    HStack {
+                        SectionHeader("Recent Searches")
+                        Button("Clear", systemImage: "xmark") { model.clearRecents() }
+                            .labelStyle(.iconOnly)
+                            .glassCircleButton(.small)
+                            .help("Clear")
                             .accessibilityIdentifier("search.clearRecents")
                     }
-                    // Recent searches as chips that wrap, so a dozen take three lines instead of a screen of rows.
-                    FlowLayout(spacing: Theme.Spacing.s) {
-                        ForEach(model.recentQueries, id: \.self) { query in
-                            GlassChip(query, systemImage: "clock", isCompact: true) {
-                                model.query = query
-                                Task { await model.submit() }
-                            }
-                            .accessibilityIdentifier("search.recent.\(query)")
-                            .contextMenu {
-                                Button("Remove", role: .destructive) { model.removeRecent(query) }
-                            }
+                    .padding(.horizontal, metrics.pageMargin)
+                    ForEach(model.recentQueries, id: \.self) { query in
+                        Button {
+                            model.query = query
+                            Task { await model.submit() }
+                        } label: {
+                            // The inset is part of the label, so the whole row from edge to edge answers a tap, not only the text.
+                            Label(query, systemImage: "clock")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .padding(.horizontal, metrics.pageMargin)
+                                .contentShape(Rectangle())
+                                .pointerInteraction(cornerRadius: Theme.Radius.card)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("search.recent.\(query)")
+                        .contextMenu {
+                            Button("Remove", role: .destructive) { model.removeRecent(query) }
                         }
                     }
                 }
-                .padding(.horizontal, metrics.pageMargin)
             }
             if model.browseGenres.isEmpty {
                 EmptyStateView("Search your addons", systemImage: "magnifyingglass", message: "Find something to watch by title.")
             } else {
-                SectionHeader("Browse").padding(.horizontal, metrics.pageMargin)
-                LazyVGrid(columns: metrics.wideGridColumns, spacing: metrics.cardSpacing) {
-                    ForEach(model.browseGenres) { genre in
-                        NavigationLink(value: CatalogListRequest(title: genre.name, sources: [genre.source])) {
-                            CollectionTile(title: genre.name).stretched()
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    SectionHeader("Browse Categories")
+                    // Compact rows on the page's own surface, each with its category's glyph in a small coloured badge: calmer than a
+                    // wall of picture-sized colour tiles, and twice as many fit on a screen.
+                    LazyVGrid(columns: categoryColumns, spacing: Theme.Spacing.s) {
+                        ForEach(model.browseGenres) { genre in
+                            NavigationLink(value: CatalogListRequest(title: genre.name, sources: [genre.source])) {
+                                CategoryRow(title: genre.name)
+                            }
+                            .buttonStyle(PressableCardStyle(lifts: false))
+                            .accessibilityIdentifier("search.genre.\(genre.name)")
                         }
-                        .buttonStyle(PressableCardStyle())
-                        .accessibilityIdentifier("search.genre.\(genre.name)")
                     }
                 }
                 .padding(.horizontal, metrics.pageMargin)
@@ -183,6 +176,40 @@ struct SearchView: View {
                 }
             }
         }
+    }
+}
+
+/// One category on the Search page: its glyph in a small badge of its colour, its name, and a chevron.
+private struct CategoryRow: View {
+    let title: String
+
+    var body: some View {
+        let accent = CollectionTile.accent(for: title)
+        HStack(spacing: Theme.Spacing.m) {
+            Image(systemName: accent.symbol)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .background(accent.colour.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .cardSurface(cornerRadius: Theme.Radius.card + 2)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(.isButton)
     }
 }
 #endif

@@ -102,6 +102,15 @@ struct CollectionTile: View {
     }
 }
 
+extension CollectionTile {
+    /// The colour and glyph a tile without a picture uses for `title`, for a compact row that stands for the same category. A category
+    /// with no glyph of its own gets a plain grid.
+    static func accent(for title: String) -> (colour: Color, symbol: String) {
+        let look = TileLook.look(for: title)
+        return (look.top, look.symbol ?? "square.grid.2x2.fill")
+    }
+}
+
 /// The colours of a tile without a picture: ten hand-picked pairs, a bright corner fading to a deep one, chosen by a stable hash of
 /// the title. Hand-picked, because a hue taken straight from a hash gives garish yellows and lime greens.
 private struct TileLook {
