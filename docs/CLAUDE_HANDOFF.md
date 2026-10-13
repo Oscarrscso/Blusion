@@ -91,7 +91,8 @@ Three subagents separately added Trakt account support, review-site support, and
   `scripts/profile-iphone.sh` while the phone is frozen. `scripts/install-iphone.sh --release` installs the optimised build, since the
   Debug build is several times slower for card-heavy SwiftUI.
 - **One branch:** work from 2026-10-08 on lands on `claude/blusion-github-e2e-sqx5r4`. The title page keeps the inline Play row
-  (Play with Save, Watched and Trailer on one line) from `worktree-detail-backdrop-blur`, which this work was merged with.
+  (Play with Save, Watched and Trailer on one line) from `worktree-detail-backdrop-blur`, which this work was merged with. A TV show adds
+  Shuffle beside the season picker, which picks a random aired episode and shows its streams.
 - **Home:** Returning after a cancelled load starts a fresh observation; cancellation no longer replaces rows with errors. Two regression tests cover reload and retry. Home launch routes wait for their navigation stack; a stale Settings model preserves account credentials when changing playback.
 
 ## Test the current app

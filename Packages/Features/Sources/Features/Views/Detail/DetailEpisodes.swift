@@ -11,6 +11,10 @@ struct DetailEpisodes: View {
     let contentMargin: CGFloat
     /// True while an episode's menu is open, so the page can blur behind it. Cleared when this view leaves the screen.
     @Binding var isHoldingEpisode: Bool
+    /// Shuffle hands the episode it picks to the page's stream flow, the one Play uses.
+    let play: (StreamRequest) -> Void
+    /// True while Play's streams are loading. Shuffle waits then, since a tap would call that lookup off.
+    var isLoadingStreams = false
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
     /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
@@ -33,6 +37,7 @@ struct DetailEpisodes: View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             HStack(spacing: Theme.Spacing.m) {
                 seasonMenu
+                shuffleButton
                 Spacer(minLength: 0)
                 episodeWidthToggle
             }
@@ -82,6 +87,27 @@ struct DetailEpisodes: View {
         .frame(height: Self.secondaryControlHeight)
         .pointerFeedback()
         .accessibilityIdentifier("detail.seasonPicker")
+    }
+
+    /// Shuffle, beside the season picker: a random episode that has aired, whose streams show as Play's do. It is dimmed while there is
+    /// nothing to pick, and off while streams are loading. Only shown for a series, as this whole list is.
+    private var shuffleButton: some View {
+        let isReady = model.canShuffle && !isLoadingStreams
+        return Button {
+            if let request = model.shuffledRequest() { play(request) }
+        } label: {
+            Image(systemName: "shuffle")
+                .font(.body.weight(.semibold))
+        }
+        .glassCircleButton(.regular)
+        .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
+        .disabled(!isReady)
+        .opacity(isReady ? 1 : 0.4)
+        .titleTapHaptic()
+        .help("Shuffle")
+        .accessibilityLabel("Shuffle")
+        .accessibilityHint("Picks a random episode that has aired")
+        .accessibilityIdentifier("detail.shuffleButton")
     }
 
     /// Switches the episode cards between their fixed width and the width of the text. The symbol shows the layout in use: a row of

@@ -430,6 +430,18 @@ public final class DetailViewModel {
         return "Airs \(airDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
+    // MARK: shuffle
+
+    /// Whether Shuffle has an episode to pick: a series whose episodes have arrived, with at least one aired.
+    public var canShuffle: Bool { isSeries && !detail.episodesCountingAsWatched().isEmpty }
+
+    /// Shuffle's pick: a random episode that has aired, from the episodes "watched" covers, so specials stay out. An episode that has not
+    /// aired is never picked, as it is never the next one. Nil for a movie and when `canShuffle` is false.
+    public func shuffledRequest(now: Date = Date()) -> StreamRequest? {
+        guard isSeries else { return nil }
+        return detail.episodesCountingAsWatched(by: now).randomElement().map { request(for: $0) }
+    }
+
     /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.
     public func progressFraction(for request: StreamRequest) -> Double? { progressFractions[request.identity] }
 

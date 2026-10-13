@@ -181,7 +181,8 @@ struct DetailView: View {
                                     .accessibilityHidden(true)
                                 if model.isSeries {
                                     DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin,
-                                                   isHoldingEpisode: $isHoldingEpisode)
+                                                   isHoldingEpisode: $isHoldingEpisode, play: showStreams,
+                                                   isLoadingStreams: pickedRequest != nil && !streamsAreReady)
                                         .padding(.top, metrics.titleRatingsGap)
                                 }
                                 VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {

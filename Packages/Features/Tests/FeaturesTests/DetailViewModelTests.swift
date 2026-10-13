@@ -258,6 +258,53 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(model.isSeriesWatched, "the show counts as watched once everything that has aired is")
     }
 
+    /// A series from a stub addon, loaded as Detail loads it.
+    private func stubbedSeries(_ json: String, id: String) async throws -> DetailViewModel {
+        let transport = StubTransport { request, _ in StubTransport.response(Data(json.utf8), for: request) }
+        let manifest = Manifest(id: "test.stubshuffle", name: "Stub", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["series"])
+        let (registry, client) = try await makeStubbedRegistry(manifests: [manifest], transport: transport)
+        let model = DetailViewModel(preview: MetaPreview(id: id, type: "series", name: "S"), services: AppServices(registry: registry, client: client))
+        await model.load()
+        return model
+    }
+
+    @Test func shuffleOnlyPicksAnEpisodeThatHasAiredAndNeverASpecial() async throws {
+        let model = try await stubbedSeries(#"""
+        {"meta":{"id":"tt7000002","type":"series","name":"Mixed","videos":[
+          {"id":"tt7000002:1:1","title":"Out","season":1,"episode":1,"released":"2001-01-01T00:00:00.000Z"},
+          {"id":"tt7000002:1:2","title":"Soon","season":1,"episode":2,"released":"2999-01-01T00:00:00.000Z"},
+          {"id":"tt7000002:0:1","title":"Special","season":0,"episode":1,"released":"2001-01-01T00:00:00.000Z"}]}}
+        """#, id: "tt7000002")
+        #expect(model.canShuffle)
+        for _ in 0..<20 {
+            #expect(model.shuffledRequest()?.id == "tt7000002:1:1", "the only regular episode that has aired")
+        }
+    }
+
+    @Test func shuffleHasNothingToPickBeforeAnEpisodeAirs() async throws {
+        let model = try await stubbedSeries(#"""
+        {"meta":{"id":"tt7000003","type":"series","name":"Upcoming","videos":[
+          {"id":"tt7000003:1:1","title":"Soon","season":1,"episode":1,"released":"2999-01-01T00:00:00.000Z"}]}}
+        """#, id: "tt7000003")
+        #expect(!model.canShuffle)
+        #expect(model.shuffledRequest() == nil)
+    }
+
+    @Test func shuffleDrawsFromEverySeasonOfTheSeriesButNotForAMovie() async throws {
+        let services = try await installedServices()
+        let series = await loadedSeries(services)
+        #expect(series.canShuffle)
+        let aired = Set(series.detail.episodesCountingAsWatched().map(\.id))
+        let picks = Set((0..<200).compactMap { _ in series.shuffledRequest()?.id })
+        #expect(picks.isSubset(of: aired), "only episodes that have aired")
+        let pickedSeasons = Set(series.detail.videos.filter { picks.contains($0.id) }.compactMap(\.season))
+        #expect(pickedSeasons == [1, 2], "the shuffle reaches both seasons, not only the one shown")
+        let movie = DetailViewModel(preview: MetaPreview(id: "mock:movie4", type: "movie", name: "P"), services: services)
+        await movie.load()
+        #expect(!movie.canShuffle)
+        #expect(movie.shuffledRequest() == nil)
+    }
+
     @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
         let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)
