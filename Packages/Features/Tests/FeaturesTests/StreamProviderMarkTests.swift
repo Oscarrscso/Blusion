@@ -4,23 +4,19 @@ import Testing
 @testable import Features
 
 @Suite struct StreamProviderMarkTests {
-    @Test func everyServiceHasALogoOrInitials() {
+    @Test func everyServiceHasALogo() {
         for provider in StreamProvider.allCases {
-            let hasLogo = provider.logoName?.isEmpty == false
-            let hasInitials = provider.markText?.isEmpty == false
-            #expect(hasLogo != hasInitials, "\(provider.name) needs exactly one of a logo or initials")
+            #expect(provider.logoName.hasPrefix("StreamLogo"), "\(provider.name) needs a logo in the asset catalog")
         }
     }
 
-    @Test func logoNamesAreUnique() {
-        let names = StreamProvider.allCases.compactMap(\.logoName)
-        #expect(Set(names).count == names.count)
+    @Test func eachServiceHasItsOwnLogoExceptHulu() {
+        let logos = StreamProvider.allCases.filter { $0 != .hulu }.map(\.logoName)
+        #expect(Set(logos).count == logos.count, "two services share a logo")
     }
 
-    @Test func disneyHuluAndPeacockKeepInitialsUntilTheirLogosArrive() {
-        #expect(StreamProvider.disneyPlus.logoName == nil)
-        #expect(StreamProvider.hulu.logoName == nil)
-        #expect(StreamProvider.peacock.logoName == nil)
+    @Test func huluShowsTheDisneyPlusLogo() {
+        #expect(StreamProvider.hulu.logoName == StreamProvider.disneyPlus.logoName)
     }
 }
 #endif
