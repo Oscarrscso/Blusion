@@ -87,7 +87,10 @@ struct WidgetRow: View {
                     }
                 }
             }
-            // A row that is still loading, failed or empty can be removed too, so a broken row does not stay on Home.
+            // A row that is still loading, failed or empty can be removed too, so a broken row does not stay on Home. Its menu opens
+            // across the whole row, not only over the text it shows.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
             .contextMenu { removeButton }
         }
     }

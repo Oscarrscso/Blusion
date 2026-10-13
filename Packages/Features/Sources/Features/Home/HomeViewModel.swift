@@ -117,11 +117,11 @@ public final class HomeViewModel {
         await services.widgets.save(sections.map(\.widget))
     }
 
-    /// Removes a row from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
-    /// elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is refused,
-    /// and Home shows the automatic layout again.
+    /// Removes a catalog row from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit
+    /// made elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is
+    /// refused, and Home shows the automatic layout again. From the automatic layout, the first removal saves the whole layout minus the row.
     public func removeWidget(sectionID: String) async {
-        guard sections.contains(where: { $0.id == sectionID }) else { return }
+        guard let section = sections.first(where: { $0.id == sectionID }), case .row = section.widget.content else { return }
         let saved = await services.widgets.load()
         guard saved != nil || !isCustomised else {
             await load()
@@ -132,10 +132,16 @@ public final class HomeViewModel {
             await load()
             return
         }
-        sections.removeAll { $0.id == sectionID }
         isCustomised = true
         await services.widgets.save(current.filter { $0.id != sectionID })
         await services.widgetContent.invalidate()
+        // Home drops the row in place only when it shows the list that was saved from. Otherwise the saved layout is loaded again, so
+        // the screen matches it. A reload fetches every row, so it is not the usual path.
+        guard current == sections.map(\.widget) else {
+            await load()
+            return
+        }
+        sections.removeAll { $0.id == sectionID }
     }
 
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
