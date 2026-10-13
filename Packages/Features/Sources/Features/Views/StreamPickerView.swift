@@ -628,7 +628,8 @@ struct StreamPickerView: View {
     /// One stream as a card on the title page's surface: the top plays it, the technical details fold away underneath. `order` is the
     /// card's place in the list, which sets when its entrance animation starts.
     private func streamButton(_ item: RankedStream, isRecommended: Bool, order: Int) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let look = StreamLook(item.quality)
+        return VStack(alignment: .leading, spacing: 0) {
             Button {
                 // A swipe that travelled across the card ends as a touch-up here too. It plays nothing.
                 guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
@@ -643,6 +644,7 @@ struct StreamPickerView: View {
             StreamTechnicalDetails(item: item)
         }
         .cardSurface()
+        .streamLookGlow(look)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface, style: .continuous))
         .overlay {
             if isRecommended {
@@ -651,6 +653,8 @@ struct StreamPickerView: View {
                     .allowsHitTesting(false)
             }
         }
+        // The Best match keeps its brand edge; the card's service or disc edge shows on every other stream.
+        .streamLookEdge(isRecommended ? .plain : look)
         .streamCardEntrance(id: AnyHashable(item.id), order: order, log: entranceLog)
     }
 

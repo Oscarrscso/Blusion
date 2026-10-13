@@ -3,9 +3,9 @@ import SwiftUI
 import StremioKit
 
 /// One stream as a card, in the title page's design: a "Best match" label for the stream Auto Pick recommends, small badges for sharpness,
-/// REMUX and source, the release name in up to two lines, one grey line of facts (size, codec, audio), and a note when the stream opens
-/// elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap does. The technical details fold away in a
-/// section of their own, so tapping the card always plays.
+/// REMUX and source (a web release's streaming service in its place), the release name in up to two lines, one grey line of facts (size,
+/// codec, audio), and a note when the stream opens elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap
+/// does. The technical details fold away in a section of their own, so tapping the card always plays.
 struct StreamRow: View {
     let item: RankedStream
     /// True for the stream Auto Pick recommends, shown with a "Best match" label.
@@ -31,7 +31,12 @@ struct StreamRow: View {
                         }
                         if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
                         if isRemux { QualityBadge.remux }
-                        if let source = item.quality.source { QualityBadge.source(source) }
+                        // A web release's service takes the place of its source badge, so the row keeps the same number of badges.
+                        if let provider = provider {
+                            QualityBadge.provider(provider)
+                        } else if let source = item.quality.source {
+                            QualityBadge.source(source)
+                        }
                     }
                 }
                 Text(Self.headline(for: item))
@@ -57,6 +62,12 @@ struct StreamRow: View {
         .padding(Theme.Spacing.l)
         .contentShape(Rectangle())
         .help(item.route.handoffTarget.map { "Play in \($0.player.displayName)" } ?? "Choose this stream")
+    }
+
+    /// The streaming service a web release names, when its card takes the service's look.
+    private var provider: StreamProvider? {
+        if case .streaming(let provider) = StreamLook(item.quality) { return provider }
+        return nil
     }
 
     /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.

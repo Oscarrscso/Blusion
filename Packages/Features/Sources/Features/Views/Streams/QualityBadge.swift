@@ -55,6 +55,11 @@ extension QualityBadge {
         }
     }
 
+    /// A web release's streaming service, in the service's own colour, where the source badge would stand.
+    static func provider(_ provider: StreamProvider) -> QualityBadge {
+        QualityBadge(provider.name, symbol: "play.tv", tint: provider.tint)
+    }
+
     static let remux = QualityBadge("REMUX", symbol: "square.stack.3d.down.right")
 
     static func hdr(dolbyVision: Bool) -> QualityBadge {

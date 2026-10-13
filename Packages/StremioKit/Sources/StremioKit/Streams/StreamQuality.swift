@@ -95,6 +95,8 @@ public struct StreamQuality: Sendable, Equatable {
     public var seeders: Int?
     /// Peers still downloading the file, as the addon's text gives them.
     public var peers: Int?
+    /// The streaming service the text names, by its release tag ("NF", "AMZN") or its name. Nil when none does.
+    public var provider: StreamProvider?
 
     public init(resolution: Int? = nil, isHDR: Bool = false, isDolbyVision: Bool = false, source: StreamSourceKind? = nil,
                 videoCodec: VideoCodec? = nil, audioCodecs: [AudioCodec] = [], hasAtmos: Bool = false, sizeBytes: Int64? = nil,
@@ -158,11 +160,14 @@ public struct StreamQuality: Sendable, Equatable {
         quality.seeders = swarmCount(seedersPattern, in: text) ?? swarmCount(seedersCountedPattern, in: text)
             ?? swarmCount(seedersLabelledPattern, in: text)
         quality.peers = swarmCount(#"(?:\bpeers?:|\bp:)\s*(\d{1,3}(?:,\d{3})+|\d+)"#, in: text)
+        quality.provider = StreamProvider.detect(in: texts)
         return quality
     }
 
     public static func parse(_ stream: AddonStream) -> StreamQuality {
         var quality = parse(from: [stream.name, stream.description, stream.behaviorHints.filename])
+        // The service comes from the name or file name first: a description can name a service the release is not from.
+        quality.provider = StreamProvider.detect(in: [stream.name, stream.behaviorHints.filename, stream.description])
         // The addon's exact byte count is the one authority; the size written in its text is rounded, and only a fallback.
         if let size = stream.behaviorHints.videoSize, size > 0 { quality.sizeBytes = size }
         return quality
