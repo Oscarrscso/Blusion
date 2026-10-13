@@ -307,19 +307,30 @@ private struct PillList: View {
     /// One heading and the settings under it, in the order they are drawn.
     private struct Group: Identifiable {
         let title: String
+        /// The colour of the group's symbols, so a setting's job is read from its colour before its name.
+        let tint: Color
         let fields: [WidgetBuilderModel.Field]
         var id: String { title }
     }
 
     /// Every setting belongs to one group. A setting the widget's source does not have is simply not drawn, and a group with none is left out.
     private static let groups = [
-        Group(title: "List", fields: [.source, .ordering, .catalogGenre, .traktSort]),
-        Group(title: "Content", fields: [.genres, .keywords, .excludedKeywords, .language, .runtime]),
-        Group(title: "Ratings", fields: [.score, .votes]),
-        Group(title: "Dates and availability", fields: [.period, .release, .region, .providers]),
-        Group(title: "People and studios", fields: [.cast, .crew, .companies]),
-        Group(title: "Appearance", fields: [.title, .limit, .style, .cards, .posters]),
+        // Where the list comes from: blue, the colour of a link or a source.
+        Group(title: "List", tint: .blue, fields: [.source, .ordering, .catalogGenre, .traktSort]),
+        // What the titles are about: purple.
+        Group(title: "Content", tint: .purple, fields: [.genres, .keywords, .excludedKeywords, .language, .runtime]),
+        // Scores: the yellow of a star.
+        Group(title: "Ratings", tint: .yellow, fields: [.score, .votes]),
+        // When and where a title can be watched: green, as for something that is available.
+        Group(title: "Dates and availability", tint: .green, fields: [.period, .release, .region, .providers]),
+        // The people who made it: orange.
+        Group(title: "People and studios", tint: .orange, fields: [.cast, .crew, .companies]),
+        // How the widget looks on Home: teal.
+        Group(title: "Appearance", tint: .teal, fields: [.title, .limit, .style, .cards, .posters]),
     ]
+
+    /// A setting whose own job says more than its group's: Exclude takes titles away, so it is red wherever it sits.
+    private static let ownTints: [WidgetBuilderModel.Field: Color] = [.excludedKeywords: .red]
     private static let columns = [GridItem(.flexible(), spacing: Theme.Spacing.s), GridItem(.flexible(), spacing: Theme.Spacing.s)]
 
     var body: some View {
@@ -331,14 +342,14 @@ private struct PillList: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 ForEach(Self.groups) { group in
                     let shown = group.fields.compactMap { pills[$0] }
-                    if !shown.isEmpty { section(group.title, shown) }
+                    if !shown.isEmpty { section(group.title, shown, tint: group.tint) }
                 }
-                if !ungrouped.isEmpty { section("More", ungrouped) }
+                if !ungrouped.isEmpty { section("More", ungrouped, tint: .secondary) }
             }
         }
     }
 
-    private func section(_ title: String, _ pills: [WidgetBuilderModel.Pill]) -> some View {
+    private func section(_ title: String, _ pills: [WidgetBuilderModel.Pill], tint: Color) -> some View {
         // The pairs fill the grid; an odd one out takes the full width under them.
         let paired = pills.count.isMultiple(of: 2) ? pills : Array(pills.dropLast())
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -350,15 +361,15 @@ private struct PillList: View {
                 .accessibilityAddTraits(.isHeader)
             if !paired.isEmpty {
                 LazyVGrid(columns: Self.columns, spacing: Theme.Spacing.s) {
-                    ForEach(paired) { pill in row(pill) }
+                    ForEach(paired) { pill in row(pill, tint: tint) }
                 }
             }
-            if paired.count != pills.count, let last = pills.last { row(last) }
+            if paired.count != pills.count, let last = pills.last { row(last, tint: tint) }
         }
     }
 
-    private func row(_ pill: WidgetBuilderModel.Pill) -> some View {
-        PillButton(model: model, pill: pill)
+    private func row(_ pill: WidgetBuilderModel.Pill, tint: Color) -> some View {
+        PillButton(model: model, pill: pill, tint: Self.ownTints[pill.field] ?? tint)
             .id(pill.field)
     }
 }
@@ -369,6 +380,8 @@ private struct PillList: View {
 private struct PillButton: View {
     let model: WidgetBuilderModel
     let pill: WidgetBuilderModel.Pill
+    /// The symbol's colour, which says what kind of setting this is. The name and the value stay white.
+    let tint: Color
 
     /// The least height of every row, so the rows of the list line up.
     static let minHeight: CGFloat = 52
@@ -384,6 +397,7 @@ private struct PillButton: View {
                 // A size at which the widest symbols (three people, the masks) stay inside the box, so no icon runs into its title.
                 Image(systemName: pill.systemImage)
                     .font(.footnote.weight(.semibold))
+                    .foregroundStyle(tint)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(pill.title)
