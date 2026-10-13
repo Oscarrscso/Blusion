@@ -74,7 +74,9 @@ Three subagents separately added Trakt account support, review-site support, and
   "Watched" now exists for shows (every aired episode; specials aside), per season (season menu), and from a poster's long-press menu.
 - **Stream picker:** restyled as cards (resolution tile, quality headline, formatted facts, the addon's notes underneath), an ambient poster
   header, and resolution filter chips when the list holds more than one sharpness. The "Play Best" bar is unchanged.
-- **Settings is a tab:** the tab bar is Home, Discover, Library, Settings, Search. There is no gear, sheet or Done button any more
+- **Settings is a tab:** the tab bar is Home, Discover, Library, Settings, Search. On iPhone it shows the icons alone, with each title as its
+  accessibility label (`RootTabView.tabItem`); the iPad and Mac sidebar keep the titles, since a sidebar row needs them, so this part is
+  intentionally iOS-only. There is no gear, sheet or Done button any more
   (`AppRouter.showSettings/showAddons/showWidgets` select the tab and set its stack's path), which ends the doubled Done for good.
   Home and Search reload when the viewer leaves the Settings tab, as they did when the sheet closed.
 - **Best Blu-ray edition:** `BestBluraysClient` (StremioKit) reads bestblurays.com's public pages (its robots.txt allows `/films` and

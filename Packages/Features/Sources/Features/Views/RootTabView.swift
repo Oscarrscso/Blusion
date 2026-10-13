@@ -192,6 +192,8 @@ public struct RootTabView: View {
         return false
         #endif
     }
+    /// Phones show each tab's icon alone (see `tabItem`). The iPad and the Mac keep the titles, as their sidebar rows need them.
+    private var showsTabTitles: Bool { UIDevice.current.userInterfaceIdiom != .phone }
 
     public init(services: AppServices, route: LaunchRoute = .home, addonLink: Binding<String?> = .constant(nil), userStateRevision: Int = 0) {
         self.services = services
@@ -220,12 +222,7 @@ public struct RootTabView: View {
                     router.presentLaunchRoute()
                 }
             } label: {
-                Label {
-                    Text("Home")
-                } icon: {
-                    Image(systemName: router.tab == .home ? "play.house.fill" : "play.house")
-                        .environment(\.symbolVariants, .none)
-                }
+                tabItem("Home", router.tab == .home ? "play.house.fill" : "play.house")
             }
             Tab(value: LaunchRoute.Tab.discover) {
                 NavigationStack(path: $router.discoverPath) {
@@ -235,12 +232,7 @@ public struct RootTabView: View {
                 .zoomTransitions()
                 .macPlayBar(resume)
             } label: {
-                Label {
-                    Text("Discover")
-                } icon: {
-                    Image(systemName: router.tab == .discover ? "square.grid.2x2.fill" : "square.grid.2x2")
-                        .environment(\.symbolVariants, .none)
-                }
+                tabItem("Discover", router.tab == .discover ? "square.grid.2x2.fill" : "square.grid.2x2")
             }
             TabSection("Library") {
                 Tab(value: LaunchRoute.Tab.library) {
@@ -251,12 +243,7 @@ public struct RootTabView: View {
                     .zoomTransitions()
                     .macPlayBar(resume)
                 } label: {
-                    Label {
-                        Text("Library")
-                    } icon: {
-                        Image(systemName: router.tab == .library ? "books.vertical.fill" : "books.vertical")
-                            .environment(\.symbolVariants, .none)
-                    }
+                    tabItem("Library", router.tab == .library ? "books.vertical.fill" : "books.vertical")
                 }
             }
             // Settings is a tab like the rest, so there is no sheet to dismiss and no Done button.
@@ -274,12 +261,7 @@ public struct RootTabView: View {
                 }
                 .macPlayBar(resume)
             } label: {
-                Label {
-                    Text("Settings")
-                } icon: {
-                    Image(systemName: router.tab == .settings ? "gearshape.fill" : "gearshape")
-                        .environment(\.symbolVariants, .none)
-                }
+                tabItem("Settings", router.tab == .settings ? "gearshape.fill" : "gearshape")
             }
             #if targetEnvironment(macCatalyst)
             // The Mac sidebar's Widgets item, at its bottom. On iPhone the widgets manager stays in Settings and behind Home's button.
@@ -353,6 +335,19 @@ public struct RootTabView: View {
         // Read outside the line above: inside it, the sides are no longer a safe area to report. Screens that run under the notch or the
         // status bar take these from the environment (see `windowSafeArea`).
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { windowSafeArea = $0 }
+    }
+
+    /// A tab's item. On a phone the tab bar shows the icon alone, and the title stays the item's accessibility label, which the UI tests
+    /// find by. The sidebar shows the title beside the icon.
+    private func tabItem(_ title: LocalizedStringKey, _ symbol: String) -> some View {
+        Group {
+            if showsTabTitles {
+                Label { Text(title) } icon: { Image(systemName: symbol) }
+            } else {
+                Image(systemName: symbol).accessibilityLabel(title)
+            }
+        }
+        .environment(\.symbolVariants, .none)
     }
 
     private func refreshUserState() async {
