@@ -33,7 +33,7 @@ struct StreamRow: View {
                         if isRemux { QualityBadge.remux }
                         // A web release's service takes the place of its source badge, so the row keeps the same number of badges.
                         if let provider = provider {
-                            QualityBadge.provider(provider)
+                            StreamProviderBadge(provider: provider)
                         } else if let source = item.quality.source {
                             QualityBadge.source(source)
                         }
