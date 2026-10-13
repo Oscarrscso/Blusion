@@ -2190,6 +2190,17 @@
         }
       }
     },
+    "Picks a random episode that has aired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picks a random episode that has aired"
+          }
+        }
+      }
+    },
     "Picture in Picture": {
       "extractionState": "manual",
       "localizations": {
@@ -2901,6 +2912,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shows the widgets"
+          }
+        }
+      }
+    },
+    "Shuffle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuffle"
           }
         }
       }
