@@ -739,10 +739,12 @@ struct StreamPickerView: View {
     }
 
     private func present(_ choice: StreamPickerViewModel.Choice, for item: RankedStream) {
-        // In ghost mode nothing is handed to another player (Infuse keeps its own history and its own Trakt): the stream plays here
-        // when Blusion can play it, and otherwise does not start.
+        // In ghost mode nothing is handed to another player except Infuse, which the viewer allows: Infuse keeps its own history and its own
+        // Trakt. Anything else that would leave Blusion plays here when Blusion can play it, and otherwise does not start.
         if GhostMode.isOn {
             switch choice {
+            case .openInPlayer(.infuse, _):
+                break
             case .openInPlayer, .openExternal:
                 if case .play(let next)? = model.inAppChoice(for: item) { plan = next } else { ghostBlocked = true }
                 return
