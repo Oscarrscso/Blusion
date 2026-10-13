@@ -20,6 +20,12 @@ No third-party code is linked into the **default** build: the dependency list is
 |---|---|---|
 | IMDb `title.ratings.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Downloaded to the device once a day, kept out of backups, never uploaded or redistributed. Credit line in Settings → IMDb ratings and Acknowledgements. ☐ A public or commercial release needs IMDb's permission or a licence: do not ship this to others on the current terms. |
 
+## Brand marks in the app
+
+| Marks | Terms | Notes |
+|---|---|---|
+| Six streaming service logos in `App/Assets.xcassets` (`StreamLogoNetflix`, `StreamLogoPrimeVideo`, `StreamLogoAppleTV`, `StreamLogoHBOMax`, `StreamLogoParamountPlus`, `StreamLogoCrunchyroll`), from Simple Icons 13.21.0 | Icon files CC0-1.0 (the package licence). Each mark is still that service's trademark, and CC0 does not cover it. Simple Icons asks users to seek permission for brand use. | Shown on a stream's card to name the service it comes from. ☐ A release needs sign-off that each service's mark may be shown. Disney+, Hulu and Peacock have no logo in this package, so they show initials. |
+
 ## Fallback engine (ADR-006) — in the iPhone install
 
 `scripts/install-iphone.sh` builds the fallback engine in, so MKV, AVI, DTS, TrueHD and AV1 play in the iPhone app. `scripts/install-mac.sh` leaves it out: the MPVKit versions `from: "0.40.0"` allows fetch a Libuavs3d with no Mac Catalyst slice. The default `project.yml` and `scripts/archive.sh` still leave it out: a release that ships it needs the sign-off below.

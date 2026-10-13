@@ -3,49 +3,61 @@ import StremioKit
 import SwiftUI
 
 extension StreamProvider {
-    /// The initials on the service's mark, as the service sets them. Apple TV+ has none: its mark is Apple's own logo.
-    var markText: String? {
+    /// The service's logo in the app's asset catalog, drawn as a template in the mark's ink. Nil for a service with no logo here, which
+    /// shows its initials instead.
+    var logoName: String? {
         switch self {
-        case .netflix: "N"
-        case .primeVideo: "prime"
-        case .appleTV: nil
-        case .disneyPlus: "D+"
-        case .hboMax: "HBO"
-        case .hulu: "hulu"
-        case .paramountPlus: "P+"
-        case .peacock: "P"
-        case .crunchyroll: "CR"
+        case .netflix: "StreamLogoNetflix"
+        case .primeVideo: "StreamLogoPrimeVideo"
+        case .appleTV: "StreamLogoAppleTV"
+        case .hboMax: "StreamLogoHBOMax"
+        case .paramountPlus: "StreamLogoParamountPlus"
+        case .crunchyroll: "StreamLogoCrunchyroll"
+        case .disneyPlus, .hulu, .peacock: nil
         }
     }
 
-    /// The ink on the mark, dark on the lighter tiles so the initials stay legible.
+    /// The initials of a service with no logo here, as the service sets them.
+    var markText: String? {
+        switch self {
+        case .disneyPlus: "D+"
+        case .hulu: "hulu"
+        case .peacock: "P"
+        case .netflix, .primeVideo, .appleTV, .hboMax, .paramountPlus, .crunchyroll: nil
+        }
+    }
+
+    /// The ink on the mark, dark on the lighter tiles so the logo or initials stay legible.
     var markInk: Color {
         switch self {
-        case .appleTV, .hulu, .peacock: .black
-        case .netflix, .primeVideo, .disneyPlus, .hboMax, .paramountPlus, .crunchyroll: .white
+        case .appleTV, .primeVideo, .hulu, .peacock: .black
+        case .netflix, .disneyPlus, .hboMax, .paramountPlus, .crunchyroll: .white
         }
     }
 }
 
-/// A service's mark: a small tile in the service's colour with its initials, or Apple's logo for Apple TV+.
+/// A service's mark: a small tile in the service's colour with its logo, or its initials where there is no logo.
 struct StreamProviderMark: View {
     let provider: StreamProvider
 
     var body: some View {
         Group {
-            if let text = provider.markText {
+            if let logo = provider.logoName {
+                Image(logo)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 11)
+            } else if let text = provider.markText {
                 Text(text)
                     .font(.system(size: 8, weight: .heavy, design: .rounded))
-            } else {
-                Image(systemName: "applelogo")
-                    .font(.system(size: 8, weight: .bold))
             }
         }
         .foregroundStyle(provider.markInk)
         .lineLimit(1)
         .fixedSize()
-        .padding(.horizontal, 3)
-        .frame(minWidth: 16, minHeight: 13)
+        .padding(.horizontal, 4)
+        .frame(minWidth: 18, minHeight: 15)
         .background(provider.tint, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
         .accessibilityHidden(true)
     }
