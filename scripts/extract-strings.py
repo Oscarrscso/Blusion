@@ -17,7 +17,7 @@ import sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 catalog_path = os.path.join(root, "App", "Localizable.xcstrings")
 views = os.path.join(root, "Packages", "Features", "Sources", "Features", "Views")
-CALLS = (r'\b(?:Text|Label|Button|Section|Toggle|Picker|TextField|LabeledContent|NavigationLink|Link|ContentUnavailableView|ProgressView'
+CALLS = (r'\b(?:Text|Label|Button|Section|Toggle|Picker|TextField|LabeledContent|NavigationLink|Link|ContentUnavailableView|ProgressView|tabItem'
          r'|navigationTitle|accessibilityLabel|accessibilityHint|accessibilityValue|confirmationDialog|alert|searchable\(text: [^,]+, prompt)'
          r'\(\s*')
 pattern = re.compile(CALLS + r'"(?!"")((?:[^"\\]|\\.)*)"')
