@@ -84,7 +84,7 @@ public struct TraktClient: Sendable {
     /// One page of a Trakt feed. Trending entries are wrapped with a watcher count; popular entries are the media themselves.
     public func feedItems(_ feed: TraktFeed, clientID: String, page: Int = 1, limit: Int = 50) async throws -> [MetaPreview] {
         guard let url = apiURL(feed.path, page: page, limit: limit) else { throw AddonError.invalidURL }
-        let result = try await client.get(url, headers: Self.headers(clientID))
+        let result = try await client.get(url, headers: TraktHeaders.common(clientID: clientID))
         return try Self.feedPreviews(from: result.data, feed: feed)
     }
 
@@ -92,7 +92,7 @@ public struct TraktClient: Sendable {
     public func listInfo(username: String, listSlug: String, clientID: String) async throws -> (name: String, traktID: Int?) {
         guard let user = Self.segment(username), let slug = Self.segment(listSlug),
               let url = apiURL("users/\(user)/lists/\(slug)", page: 1, limit: 1, paged: false) else { throw AddonError.invalidURL }
-        let result = try await client.get(url, headers: Self.headers(clientID))
+        let result = try await client.get(url, headers: TraktHeaders.common(clientID: clientID))
         do {
             let info = try JSONDecoder().decode(TraktListInfo.self, from: result.data)
             return (info.name ?? listSlug, info.ids?.trakt)
@@ -172,7 +172,7 @@ public struct TraktClient: Sendable {
             var base = baseURL.absoluteString
             while base.hasSuffix("/") { base.removeLast() }
             guard let url = URL(string: "\(base)/\(relative)") else { throw AddonError.invalidURL }
-            result = try await client.get(url, headers: Self.headers(clientID))
+            result = try await client.get(url, headers: TraktHeaders.common(clientID: clientID))
         }
         await cache?.store(result, for: key)
         return result
@@ -188,10 +188,6 @@ public struct TraktClient: Sendable {
 
     private static func pageQuery(_ page: Int, _ limit: Int) -> String {
         "page=\(max(page, 1))&limit=\(min(max(limit, 1), 100))"
-    }
-
-    private static func headers(_ clientID: String) -> [String: String] {
-        ["trakt-api-version": "2", "trakt-api-key": clientID, "Content-Type": "application/json"]
     }
 
     private static func segment(_ text: String) -> String? {

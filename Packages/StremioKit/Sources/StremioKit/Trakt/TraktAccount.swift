@@ -465,10 +465,8 @@ public actor TraktAccount {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        for (field, value) in TraktHeaders.common(clientID: clientID) { request.setValue(value, forHTTPHeaderField: field) }
         request.setValue("Blusion/1.0", forHTTPHeaderField: "User-Agent")
-        request.setValue("2", forHTTPHeaderField: "trakt-api-version")
-        if let clientID { request.setValue(clientID, forHTTPHeaderField: "trakt-api-key") }
         if let accessToken { request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization") }
         if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
         do {
