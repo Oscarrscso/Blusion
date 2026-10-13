@@ -213,7 +213,8 @@ struct HomeView: View {
         case .banner(let row):
             HeroBannerSection(section: section, row: row, onRetry: { retry(section) })
         case .row(let row):
-            WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section))
+            WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
+                      onRemove: { removeWidget(section) })
         case .collection(let items):
             CollectionRow(widget: section.widget, items: items)
         case .continueWatching:
@@ -237,6 +238,8 @@ struct HomeView: View {
     private func refreshPlayback() { Task { await model.refreshContinueWatching(force: true) } }
 
     private func removeContinue(_ item: ContinueWatchingEntry) { Task { await model.removeFromContinueWatching(item) } }
+
+    private func removeWidget(_ section: HomeViewModel.Section) { Task { await model.removeWidget(sectionID: section.id) } }
 
     private func retry(_ section: HomeViewModel.Section) {
         Task { await model.retry(sectionID: section.id) }

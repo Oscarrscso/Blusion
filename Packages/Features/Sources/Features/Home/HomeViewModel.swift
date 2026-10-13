@@ -117,6 +117,27 @@ public final class HomeViewModel {
         await services.widgets.save(sections.map(\.widget))
     }
 
+    /// Removes a row from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
+    /// elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is refused,
+    /// and Home shows the automatic layout again.
+    public func removeWidget(sectionID: String) async {
+        guard sections.contains(where: { $0.id == sectionID }) else { return }
+        let saved = await services.widgets.load()
+        guard saved != nil || !isCustomised else {
+            await load()
+            return
+        }
+        let current = saved ?? sections.map(\.widget)
+        guard current.contains(where: { $0.id == sectionID }) else {
+            await load()
+            return
+        }
+        sections.removeAll { $0.id == sectionID }
+        isCustomised = true
+        await services.widgets.save(current.filter { $0.id != sectionID })
+        await services.widgetContent.invalidate()
+    }
+
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
     public func continueWatchingRefreshInterval() async -> Int {
         let settings = await services.settings.load()

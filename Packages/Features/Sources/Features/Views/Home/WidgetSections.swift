@@ -30,6 +30,8 @@ struct WidgetRow: View {
     let onRetry: () -> Void
     /// Turns Better Posters on or off for this row, from its menu. Nil when the layout is automatic, where the menu offers nothing.
     let onSetBetterPosters: ((Bool) -> Void)?
+    /// Removes this row from the layout, from its menu, as the widgets page does.
+    let onRemove: () -> Void
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
@@ -57,31 +59,43 @@ struct WidgetRow: View {
                 if presentation.aspectRatio == .poster, let onSetBetterPosters {
                     Toggle("Better Posters", isOn: Binding(get: { presentation.usesBetterPosters }, set: onSetBetterPosters))
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
+                    Divider()
                 }
+                removeButton
             }
         } else {
-            switch section.state {
-            case .idle, .loading:
-                RowPlaceholder(header: widget.hideTitle ? .none : .title(widget.title), aspect: presentation.aspectRatio.cardAspect,
-                               size: presentation.cardStyle.cardSize)
-            case .failed(let error):
-                RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
-                    InlineErrorView(error.shortDescription, retry: onRetry)
-                        .padding(.horizontal, metrics.pageMargin)
-                }
-            case .loaded:
-                RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
-                    if let issue = section.issue {
-                        IssueMessage(issue: issue)
-                    } else {
-                        Text("Nothing here yet")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+            Group {
+                switch section.state {
+                case .idle, .loading:
+                    RowPlaceholder(header: widget.hideTitle ? .none : .title(widget.title), aspect: presentation.aspectRatio.cardAspect,
+                                   size: presentation.cardStyle.cardSize)
+                case .failed(let error):
+                    RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
+                        InlineErrorView(error.shortDescription, retry: onRetry)
                             .padding(.horizontal, metrics.pageMargin)
+                    }
+                case .loaded:
+                    RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
+                        if let issue = section.issue {
+                            IssueMessage(issue: issue)
+                        } else {
+                            Text("Nothing here yet")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, metrics.pageMargin)
+                        }
                     }
                 }
             }
+            // A row that is still loading, failed or empty can be removed too, so a broken row does not stay on Home.
+            .contextMenu { removeButton }
         }
+    }
+
+    /// Removes the row from the layout, with no confirmation, as the widgets page does.
+    private var removeButton: some View {
+        Button("Remove Widget", role: .destructive, action: onRemove)
+            .accessibilityIdentifier("board.removeWidget.\(section.widget.id)")
     }
 
     private var seeAllRequest: CatalogListRequest {
