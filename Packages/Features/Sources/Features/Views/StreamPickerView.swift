@@ -14,9 +14,8 @@ struct StreamPickerView: View {
     @State private var autoPickTask: Task<Void, Never>?
     @State private var hasSelectedManually = false
     @State private var isOpeningPlayer = false
-    /// The Auto Pick button's height and the switch's own size, as laid out: the switch is scaled to the button's height.
+    /// The Auto Pick button's height, as laid out.
     @State private var autoPickButtonHeight: CGFloat = 0
-    @State private var autoPickSwitchSize: CGSize = .zero
     /// The sharpness the chips narrow the list to; nil shows every stream.
     @State private var resolutionFilter: Band?
     /// A stream whose format Blusion can't play: the alert offers another player, or the next stream.
@@ -407,12 +406,6 @@ struct StreamPickerView: View {
 
     // MARK: the main action
 
-    /// How much the switch is scaled so it is as tall as the Auto Pick button. 1 until both have been measured.
-    private var autoPickSwitchScale: CGFloat {
-        guard autoPickButtonHeight > 0, autoPickSwitchSize.height > 0 else { return 1 }
-        return autoPickButtonHeight / autoPickSwitchSize.height
-    }
-
     /// Embedded in a title page: a small round X, as tall as Auto Pick, that takes the streams away and puts the details back.
     @ViewBuilder
     private var closeButton: some View {
@@ -466,20 +459,6 @@ struct StreamPickerView: View {
                     .accessibilityLabel(model.recommendedStreamLabel.map { "Auto Pick, \($0)" } ?? "Auto Pick")
                     .accessibilityIdentifier("streams.playBest")
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { autoPickButtonHeight = $0 }
-                    // Saves the choice to start the best stream at once next time; it starts nothing itself.
-                    Toggle("Always pick the best stream", isOn: Binding(get: { model.autoPlaysBestStream }, set: { value in
-                        Task { await model.setAutoPlaysBestStream(value) }
-                    }))
-                    .labelsHidden()
-                    .fixedSize()
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { autoPickSwitchSize = $0 }
-                    // The switch has one size of its own, so it is scaled to stand exactly as tall as the button beside it.
-                    .scaleEffect(autoPickSwitchScale)
-                    .frame(width: autoPickSwitchSize.width > 0 ? autoPickSwitchSize.width * autoPickSwitchScale : nil,
-                           height: autoPickSwitchSize.height > 0 ? autoPickSwitchSize.height * autoPickSwitchScale : nil)
-                    .accessibilityLabel("Always pick the best stream")
-                    .accessibilityHint("Starts the best stream at once whenever you open a title's streams")
-                    .accessibilityIdentifier("streams.autoPickAlways")
                 }
                 if let message = model.autoPickMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
             }

@@ -135,6 +135,8 @@ struct DetailView: View {
                         }
                         #endif
                         if let request = pickedRequest {
+                            // The page scrolls to here once the streams are ready, so the picker's top sits two-fifths down the screen.
+                            Color.clear.frame(height: 0).id(Self.streamsScrollID)
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
                             // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
                             // streams are ready.
@@ -212,6 +214,15 @@ struct DetailView: View {
                         withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailTrailerPanel.scrollID) }
                     }
                 }
+                // Once the streams are ready they take the details' place, so the page moves down to bring the stream list into view.
+                // The short wait lets them lay out first.
+                .onChange(of: streamsAreReady) { _, ready in
+                    guard ready else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(50))
+                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.streamsScrollID, anchor: UnitPoint(x: 0.5, y: 0.4)) }
+                    }
+                }
             }
         }
         .onGeometryChange(for: [CGFloat].self) {
@@ -271,6 +282,9 @@ struct DetailView: View {
     }
 
     // MARK: - Streams
+
+    /// The id the page scrolls to once the streams are ready: an empty row just above the picker.
+    private static let streamsScrollID = "detail.streams"
 
     /// True once the streams have taken the details' place.
     private var showsStreams: Bool { pickedRequest != nil && streamsAreReady }

@@ -276,17 +276,6 @@
         }
       }
     },
-    "Always pick the best stream": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always pick the best stream"
-          }
-        }
-      }
-    },
     "Any": {
       "extractionState": "manual",
       "localizations": {
@@ -3066,17 +3055,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speed"
-          }
-        }
-      }
-    },
-    "Starts the best stream at once whenever you open a title's streams": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Starts the best stream at once whenever you open a title's streams"
           }
         }
       }
