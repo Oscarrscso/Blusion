@@ -88,7 +88,7 @@ extension View {
     func glassCardSurface(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return glassEffect(.regular, in: shape)
-            .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
+            .glassHairline(shape)
     }
 
     /// A translucent rounded surface for a panel that holds glass controls, with the same hairline as `glassCardSurface`. It is the
@@ -96,7 +96,16 @@ extension View {
     func translucentPanelSurface(cornerRadius: CGFloat = Theme.Radius.surface) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return background(.regularMaterial, in: shape)
-            .overlay { shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7) }
+            .glassHairline(shape)
+    }
+
+    /// The translucent hairline that edges a glass card or panel, drawn just inside `shape`.
+    func glassHairline(_ shape: some InsettableShape) -> some View {
+        overlay {
+            shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
     /// The same inset, one-pixel hairline for posters, cards and tiles. Full-screen hero artwork does not use it.

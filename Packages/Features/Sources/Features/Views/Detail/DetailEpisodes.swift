@@ -13,11 +13,16 @@ struct DetailEpisodes: View {
     @Binding var isHoldingEpisode: Bool
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
+    /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
+    @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
 
     /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
     private static let secondaryControlHeight: CGFloat = 36
     /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
     private static let previewPadding: CGFloat = Theme.Spacing.m
+    /// The corner radius of the panel the system draws an episode's menu preview in: 32 pt, measured on an iPhone on iOS 27. The system
+    /// does not say what it is and does not let a preview set it. The preview's still and its hairline use it, so they follow the panel.
+    private static let previewPanelRadius: CGFloat = 32
 
     var body: some View {
         let width = episodeWidth(pageWidth: pageWidth)
@@ -119,10 +124,15 @@ struct DetailEpisodes: View {
                 }
             }
         } preview: {
-            // The same card, the full width between the page margins, inset by its padding so the menu's corners do not cut into it. The
-            // preview is on screen only while the menu is open.
-            episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater)
+            // The same card, the full width between the page margins, inset by its padding so the menu's corners do not cut into it. Its
+            // still takes the panel's corner radius, and the panel gets the hairline the app's glass cards have. The preview is on screen
+            // only while the menu is open.
+            episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater,
+                        stillRadius: Self.previewPanelRadius)
                 .padding(Self.previewPadding)
+                .glassHairline(RoundedRectangle(cornerRadius: Self.previewPanelRadius, style: .continuous))
+                // Without the store the IMDb mark forgot the coloured-logos setting and changed colour while the card was held.
+                .environment(ratings)
                 .onAppear { isHoldingEpisode = true }
                 .onDisappear { isHoldingEpisode = false }
         }
@@ -135,10 +145,10 @@ struct DetailEpisodes: View {
     }
 
     /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width.
-    private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool) -> EpisodeRow {
+    private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool, stillRadius: CGFloat = Theme.Radius.small) -> EpisodeRow {
         EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
                    artwork: model.backdropURL, score: model.score(for: video), width: width,
-                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater)
+                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater, stillRadius: stillRadius)
     }
 }
 
@@ -155,6 +165,11 @@ private struct EpisodeRow: View {
     var showsWholeOverview = false
     /// Set for an episode that has not aired: its still is dimmed, and the card cannot be opened.
     var airsLater = false
+    /// The still's corner radius. The menu's preview gives it its panel's, which is rounder than a card's.
+    var stillRadius: CGFloat = Theme.Radius.small
+
+    /// How far the progress line and the watched mark move in from the still's edges, so a rounder corner does not cut into them.
+    private var overlayInset: CGFloat { max(0, stillRadius - Theme.Radius.small) * 0.3 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -186,13 +201,13 @@ private struct EpisodeRow: View {
             .opacity(airsLater ? 0.45 : 1)
             .overlay {
                 if !watched, let fraction {
-                    PlaybackProgressOverlay(fraction: fraction, width: width)
+                    PlaybackProgressOverlay(fraction: fraction, width: width, inset: overlayInset)
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if watched { checkmark }
+                if watched { checkmark.padding(overlayInset) }
             }
-            .mediaArtwork(cornerRadius: Theme.Radius.small)
+            .mediaArtwork(cornerRadius: stillRadius)
     }
 
     private var checkmark: some View {

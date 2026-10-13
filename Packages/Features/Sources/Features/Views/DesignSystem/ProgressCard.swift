@@ -87,10 +87,13 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
 /// decoration: taps pass through and VoiceOver skips it.
 struct CardCaption<Content: View>: View {
     let width: CGFloat
+    /// Extra room between the content and the card's edges, for a card whose corners are rounder than usual.
+    let inset: CGFloat
     let content: Content
 
-    init(width: CGFloat, @ViewBuilder content: () -> Content) {
+    init(width: CGFloat, inset: CGFloat = 0, @ViewBuilder content: () -> Content) {
         self.width = width
+        self.inset = inset
         self.content = content()
     }
 
@@ -99,8 +102,8 @@ struct CardCaption<Content: View>: View {
             .overlay(alignment: .bottomLeading) {
                 content
                     .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.s)
-                    .padding(.vertical, Theme.Spacing.s)
+                    .padding(.horizontal, Theme.Spacing.s + inset)
+                    .padding(.vertical, Theme.Spacing.s + inset)
                     .frame(width: width, alignment: .leading)
             }
             .allowsHitTesting(false)
@@ -114,6 +117,8 @@ struct PlaybackProgressOverlay: View {
     var duration: TimeInterval?
     var episode: String?
     let width: CGFloat
+    /// Extra room between the line and the card's edges (see `CardCaption`).
+    var inset: CGFloat = 0
 
     private var hasProgress: Bool { fraction.isFinite && fraction > 0 && fraction < 1 }
 
@@ -125,7 +130,7 @@ struct PlaybackProgressOverlay: View {
 
     var body: some View {
         if hasProgress {
-            CardCaption(width: width) {
+            CardCaption(width: width, inset: inset) {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 9, weight: .semibold))
