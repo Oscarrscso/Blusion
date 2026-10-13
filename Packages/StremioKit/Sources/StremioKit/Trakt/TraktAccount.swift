@@ -153,15 +153,6 @@ public actor TraktAccount {
 
     public func redirectURI() async -> String { (try? await secrets.get(Keys.redirectURI)) ?? "" }
 
-    public func saveRedirectURI(_ value: String) async throws {
-        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value != (try await secrets.get(Keys.redirectURI) ?? "") else { return }
-        credentialsRevision += 1
-        pendingPKCE = nil
-        try await secrets.remove(Keys.token)
-        if value.isEmpty { try await secrets.remove(Keys.redirectURI) } else { try await secrets.set(value, for: Keys.redirectURI) }
-    }
-
     /// The verifier stays in memory for one browser sign-in; only tokens are saved.
     public func beginPKCESignIn(redirectURI: String, codeVerifier: String, codeChallenge: String) async throws -> URL {
         let (clientID, _) = try await credentials()

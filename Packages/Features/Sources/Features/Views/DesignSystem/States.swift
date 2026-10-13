@@ -95,28 +95,6 @@ struct InlineErrorView: View {
     }
 }
 
-/// A grey placeholder shaped like one card, shown while its content loads: the same width, height and caption lines as the real
-/// card, so nothing moves when the content arrives. It does not shimmer itself: put `shimmering()` on the container of a group,
-/// as `SkeletonRow` does, so a long grid does not run one highlight per item. `showsTitle` follows `MediaCard`: nil means the
-/// aspect's default (no caption lines for a poster).
-struct SkeletonCard: View {
-    let aspect: CardAspect
-    let size: CardSize
-    let showsTitle: Bool?
-
-    init(aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil) {
-        self.aspect = aspect
-        self.size = size
-        self.showsTitle = showsTitle
-    }
-
-    var body: some View {
-        SkeletonShapes(aspect: aspect, size: size, showsTitle: showsTitle)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Loading")
-    }
-}
-
 /// A row of grey card placeholders with the same margins and gaps as `MediaRow`. One shimmer sweeps the whole row.
 struct SkeletonRow: View {
     let aspect: CardAspect

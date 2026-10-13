@@ -72,33 +72,6 @@ struct PosterImage: View {
     }
 }
 
-/// A poster with its name and year, sized as a medium poster `MediaCard`.
-struct PosterCard: View {
-    let item: MetaPreview
-
-    var body: some View {
-        MediaCard(item: item)
-    }
-}
-
-/// Poster that opens Detail.
-struct PosterLink: View {
-    let item: MetaPreview
-
-    var body: some View {
-        MediaCardLink(item: item)
-    }
-}
-
-struct PosterGrid: View {
-    let items: [MetaPreview]
-    var onLastAppear: (() -> Void)?
-
-    var body: some View {
-        MediaGrid(items: items, aspect: .poster, onLastAppear: onLastAppear)
-    }
-}
-
 /// The first-run state: no addon is installed, so there is nothing to browse yet.
 struct EmptyAddonsView: View {
     let onOpenAddons: () -> Void

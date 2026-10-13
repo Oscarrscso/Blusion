@@ -15,15 +15,6 @@ public enum TestAddons {
             idPrefixes: ["mock:"])
         return InstalledAddon(manifestURL: base.appendingPathComponent("manifest.json"), baseURL: base, manifest: manifest, isEnabled: enabled)
     }
-
-    public static func streamAddon(base: URL, name: String = "Mock Streams") -> InstalledAddon {
-        let manifest = Manifest(
-            id: "test.\(name)", name: name, version: "1.0.0",
-            resources: [ResourceDescriptor(name: "stream", types: ["movie", "series"], idPrefixes: ["mock:"]),
-                        ResourceDescriptor(name: "subtitles", types: ["movie"], idPrefixes: ["mock:"])],
-            types: ["movie", "series"])
-        return InstalledAddon(manifestURL: base.appendingPathComponent("manifest.json"), baseURL: base, manifest: manifest)
-    }
 }
 
 /// Seconds since `start`, for ordering assertions.

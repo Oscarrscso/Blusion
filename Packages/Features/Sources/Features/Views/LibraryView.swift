@@ -138,18 +138,6 @@ struct LibraryView: View {
         FilterMenuLabel(title, systemImage: systemImage, tint: tint, isActive: isActive, minHeight: BrowseFilterBar<EmptyView>.menuHeight)
     }
 
-    private func membership<Value: Hashable>(_ value: Value, in keyPath: WritableKeyPath<LibraryFilter, Set<Value>>) -> Binding<Bool> {
-        Binding {
-            model.filter[keyPath: keyPath].contains(value)
-        } set: { included in
-            if included {
-                model.filter[keyPath: keyPath].insert(value)
-            } else {
-                model.filter[keyPath: keyPath].remove(value)
-            }
-        }
-    }
-
     private var savedSection: some View {
         LazyVGrid(columns: metrics.gridColumns(for: .poster, inLandscape: isLandscape), spacing: metrics.cardSpacing) {
             ForEach(model.saved) { item in
@@ -226,14 +214,6 @@ struct ReleaseYearOptions: View {
 
     @ViewBuilder private func choice(_ title: String, isOn: Bool) -> some View {
         if isOn { Label(title, systemImage: "checkmark") } else { Text(title) }
-    }
-}
-
-struct ProgressRow: View {
-    let item: WatchProgress
-
-    var body: some View {
-        ProgressCard(title: item.title, artwork: item.poster, fraction: item.fraction)
     }
 }
 #endif
