@@ -125,8 +125,8 @@ public final class PlaybackCoordinator {
 
     // MARK: Candidates
 
-    /// `failure` is set when this is a retry: AVPlayer could not open the stream, so it plays in the fallback engine. With no fallback engine
-    /// linked, a retry reports the failure AVPlayer gave, as the first attempt would.
+    /// `failure` is set when this is a retry: AVPlayer could not open the stream, so it plays in the fallback engine. If no engine can be
+    /// made for the retry, the failure AVPlayer gave is reported, as the first attempt would.
     private func tryCandidate(at index: Int, startPosition: TimeInterval, retryingAfter failure: PlaybackFailure? = nil) async {
         guard !stopped else { return }
         engineGeneration += 1

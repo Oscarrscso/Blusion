@@ -129,6 +129,20 @@ import PlayerKitTestSupport
         await coordinator.stop()
     }
 
+    @Test func aRetryThatCannotBeMadeReportsTheFailureAVPlayerGaveAndPlaysTheNextStream() async {
+        let rig = RouteRig { candidate in
+            if case .fallback = candidate.route { return nil }   // the plan allows a retry, but no engine can be made for it
+            return candidate.id == "a" ? .failsToLoad(PlaybackFailure(.format, "no decoder")) : .plays(duration: 50)
+        }
+        let coordinator = PlaybackCoordinator(plan: plan(["a", "b"], retriesInFallbackEngine: true), startupTimeout: .seconds(2),
+                                              makeEngine: { rig.make($0) })
+        await coordinator.start()
+        #expect(coordinator.current?.id == "b" && coordinator.phase == .playing)
+        #expect(rig.made.map(\.id) == ["a", "a", "b"], "AVPlayer, the retry that could not be made, then the next stream")
+        #expect(coordinator.failedAttempts.map(\.id) == ["a"] && coordinator.failedAttempts.map(\.failure.kind) == [.format], "recorded once")
+        await coordinator.stop()
+    }
+
     @Test func withoutAFallbackEngineAFormatFailureIsReportedAndTheNextStreamPlays() async {
         let rig = RouteRig { candidate in
             if case .fallback = candidate.route { return nil }   // no fallback engine linked
