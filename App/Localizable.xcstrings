@@ -364,6 +364,17 @@
         }
       }
     },
+    "Back to details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to details"
+          }
+        }
+      }
+    },
     "Best Blu-ray": {
       "extractionState": "manual",
       "localizations": {
@@ -1178,6 +1189,17 @@
         }
       }
     },
+    "Ghost mode is on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghost mode is on"
+          }
+        }
+      }
+    },
     "Hide title": {
       "extractionState": "manual",
       "localizations": {
@@ -1959,6 +1981,17 @@
         }
       }
     },
+    "Nothing you watch is saved to Continue Watching or sent to Trakt.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing you watch is saved to Continue Watching or sent to Trakt."
+          }
+        }
+      }
+    },
     "Numbered (top list)": {
       "extractionState": "manual",
       "localizations": {
@@ -1966,6 +1999,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Numbered (top list)"
+          }
+        }
+      }
+    },
+    "OK": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
           }
         }
       }
@@ -2861,6 +2905,17 @@
         }
       }
     },
+    "Shows the widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows the widgets"
+          }
+        }
+      }
+    },
     "Sign In": {
       "extractionState": "manual",
       "localizations": {
@@ -3213,6 +3268,17 @@
         }
       }
     },
+    "This stream only opens in another app, which keeps its own history. Pick another stream, or turn ghost mode off in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This stream only opens in another app, which keeps its own history. Pick another stream, or turn ghost mode off in Settings."
+          }
+        }
+      }
+    },
     "Tiles": {
       "extractionState": "manual",
       "localizations": {
@@ -3396,6 +3462,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try the next stream"
+          }
+        }
+      }
+    },
+    "Turn Off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Off"
           }
         }
       }
@@ -3726,6 +3803,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "·"
+          }
+        }
+      }
+    },
+    "👻": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "👻"
           }
         }
       }
