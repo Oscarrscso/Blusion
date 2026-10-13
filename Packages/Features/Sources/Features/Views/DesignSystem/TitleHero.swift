@@ -40,10 +40,10 @@ enum TitleHero {
     /// lays the page out scales it with Dynamic Type (`@ScaledMetric`), so a larger line gets a taller band and stays clear of the page dots.
     /// The line starts `portraitDrop` below the picture's edge, so its text sits in what is left of the band.
     static let captionBelow: CGFloat = 72
-    /// The scale a title page starts from when it opens from the spotlight: a little larger, then it settles at rest (see `heroSettle`).
+    /// The scale a hero starts from before it settles at rest (see `heroSettle`): a little larger. The title page starts there when it opens
+    /// from the spotlight, and the spotlight when a title closes back to it. Never smaller than rest: a hero that started smaller showed the
+    /// black page round its picture until it had settled.
     static let settleLarger: Double = 1.025
-    /// The scale the spotlight starts from when a title closes back to it: a little smaller, so going back reads as pulling away.
-    static let settleSmaller: Double = 0.975
 
     // MARK: Landscape title page (iPhone only; the Mac keeps its original sizes)
     /// The share of the content width (after the gap) the landscape picture takes.
@@ -121,12 +121,12 @@ private struct HeroSettle<Trigger: Equatable & Sendable>: ViewModifier {
 }
 
 extension View {
-    /// The settle a screen plays when `trigger` changes: the picture starts at `scale` and springs to rest at its own size. The title page
-    /// opens from the spotlight a little larger (`TitleHero.settleLarger`, the default). Home's spotlight, when a title closes back to it,
-    /// starts a little smaller (`TitleHero.settleSmaller`), so going back reads as pulling away. Scale only, so the picture and logo are
-    /// never hidden or faded. Plays each time `trigger` changes, never on first appearance.
-    func heroSettle(trigger: some Equatable & Sendable, from scale: Double = TitleHero.settleLarger) -> some View {
-        modifier(HeroSettle(trigger: trigger, from: scale))
+    /// The settle a screen plays when `trigger` changes: the picture starts a little larger (`TitleHero.settleLarger`) and springs to rest
+    /// at its own size. The title page plays it when it opens from the spotlight, and Home's spotlight when a title closes back to it. The
+    /// caller clips it to the hero's frame, so the larger start only crops the edges. Scale only, so the picture and logo are never hidden
+    /// or faded. Plays each time `trigger` changes, never on first appearance.
+    func heroSettle(trigger: some Equatable & Sendable) -> some View {
+        modifier(HeroSettle(trigger: trigger, from: TitleHero.settleLarger))
     }
 }
 
@@ -195,11 +195,12 @@ final class HeroLoader {
     /// The logo of `url` if one has been loaded this session.
     static func storedLogo(_ url: URL) -> UIImage? { logos[key(url, logoPixelSize)] }
 
-    /// The logo cropped to its visible pixels (see `LogoTrim`), so every title's logo-to-text gap is the same.
+    /// The logo cropped to its visible pixels (see `LogoTrim`), so every title's logo-to-text gap is the same, and turned light when it is
+    /// drawn in black (see `LogoLegibility`): it sits on the black end of the picture's fade, where black lettering cannot be read.
     private static func trimmedLogo(_ image: UIImage) -> UIImage {
         guard let cgImage = image.cgImage else { return image }
-        let trimmed = LogoTrim.trimmed(cgImage)
-        return trimmed === cgImage ? image : UIImage(cgImage: trimmed, scale: image.scale, orientation: image.imageOrientation)
+        let prepared = LogoLegibility.legible(LogoTrim.trimmed(cgImage))
+        return prepared === cgImage ? image : UIImage(cgImage: prepared, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// Trims and stores a logo, returning the stored image.

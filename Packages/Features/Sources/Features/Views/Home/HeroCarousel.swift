@@ -141,8 +141,9 @@ struct HeroCarousel: View {
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     // Plays once each time Home returns from a title (the revision changes), never on first appearance. It starts a little
-                    // smaller, so going back reads as pulling away; the page behind it is black, as the spotlight's own edges are.
-                    .heroSettle(trigger: router.spotlightRevision, from: TitleHero.settleSmaller)
+                    // larger and the frame below clips it, so the picture always reaches the screen's edges: started smaller, it showed
+                    // black borders round the picture until it settled.
+                    .heroSettle(trigger: router.spotlightRevision)
                     .frame(width: geometry.size.width, height: height)
                     .clipped()
                     .offset(y: -pull)
