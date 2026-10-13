@@ -73,6 +73,7 @@ struct StreamRow: View {
     /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.
     private var hasBadges: Bool {
         item.quality.resolutionLabel != nil || item.quality.isHDR || item.quality.isDolbyVision || isRemux || item.quality.source != nil
+            || provider != nil
     }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.

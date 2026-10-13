@@ -10,7 +10,7 @@ public enum StreamLook: Sendable, Equatable {
     case disc
     /// A 4K REMUX: a disc, with the blurred 4K treatment.
     case fourKDisc
-    /// A WEB-DL or WEBRip the text ties to a streaming service.
+    /// A web release the text ties to a streaming service.
     case streaming(StreamProvider)
 
     public init(_ quality: StreamQuality) {
@@ -22,7 +22,9 @@ public enum StreamLook: Sendable, Equatable {
         if quality.isRemux || quality.source == .bluray {
             let is4K = (quality.resolution ?? 0) >= 2160
             self = (is4K && quality.isRemux) ? .fourKDisc : .disc
-        } else if let provider = quality.provider, quality.source == .webDL || quality.source == .webRip {
+        } else if let provider = quality.provider,
+                  quality.source == nil || quality.source == .webDL || quality.source == .webRip {
+            // A service's tag is itself a web release, so a release that gives no WEB-DL or WEBRip still takes its service's look.
             self = .streaming(provider)
         } else {
             self = .plain

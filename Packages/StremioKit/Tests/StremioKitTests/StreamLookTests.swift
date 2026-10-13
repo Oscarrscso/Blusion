@@ -64,6 +64,23 @@ import Testing
         #expect(look("Movie 2160p REMUX") == .fourKDisc, "the name says REMUX, whatever source it gives")
     }
 
+    @Test func serviceTagsWithoutAWebSourceStillTakeTheLook() {
+        #expect(look("Movie.2024.2160p.NF.WEB.H265") == .streaming(.netflix), "WEB alone is no source, the tag says it")
+        #expect(look("Movie.2024.1080p.NF") == .streaming(.netflix))
+        #expect(look("Movie 2160p NF") == .streaming(.netflix), "a service tag is itself a web release")
+    }
+
+    /// Torrentio-shaped streams: the addon's name is its quality label, and the release line sits in the description.
+    @Test func readsAStreamsServiceFromItsDescriptionLine() {
+        let hash = "0123456789abcdef0123456789abcdef01234567"
+        let stream = AddonStream(name: "Torrentio\n1080p", description: "Show.S01E01.1080p.WEB-DL NF\n👤 3 💾 1.1 GB ⚙️ Torrentio",
+                                 source: .torrent(infoHash: hash, fileIndex: nil, sources: []))
+        #expect(StreamLook(StreamQuality.parse(stream)) == .streaming(.netflix))
+        let amazon = AddonStream(name: "Torrentio\n2160p", description: "🎬 Show S01E01\n📺 AMZN WEB-DL 2160p",
+                                 source: .torrent(infoHash: hash, fileIndex: nil, sources: []))
+        #expect(StreamLook(StreamQuality.parse(amazon)) == .streaming(.primeVideo))
+    }
+
     @Test func webReleasesFromAServiceTakeItsLook() {
         #expect(look("Dark.Knight.2008.2160p.NF.WEB-DL.DDP5.1") == .streaming(.netflix))
         #expect(look("Movie.2020.1080p.AMZN.WEBRip.x264") == .streaming(.primeVideo))
@@ -77,7 +94,7 @@ import Testing
 
     @Test func unknownSourcesKeepThePlainCard() {
         #expect(look("Movie 1080p WEB-DL") == .plain, "a web release with no service named")
-        #expect(look("Movie 2160p NF") == .plain, "a service named, but no web release")
+        #expect(look("Movie 720p HDTV NF") == .plain, "a service named beside a TV source keeps the plain card")
         #expect(look("Movie 720p HDTV") == .plain)
         #expect(look("Movie 480p DVDRip") == .plain)
         #expect(look("Movie 1080p HDCAM") == .plain)
