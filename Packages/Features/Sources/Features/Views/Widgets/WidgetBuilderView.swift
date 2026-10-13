@@ -353,12 +353,20 @@ private struct PillList: View {
         // The pairs fill the grid; an odd one out takes the full width under them.
         let paired = pills.count.isMultiple(of: 2) ? pills : Array(pills.dropLast())
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text(title)
-                .font(Theme.Typography.eyebrow)
-                .textCase(.uppercase)
-                .foregroundStyle(.secondary)
-                .padding(.leading, Theme.Spacing.xs)
-                .accessibilityAddTraits(.isHeader)
+            // A small dot in the group's colour leads its heading, so the heading and its symbols read as one set.
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(Theme.Typography.eyebrow)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.leading, Theme.Spacing.xs)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
             if !paired.isEmpty {
                 LazyVGrid(columns: Self.columns, spacing: Theme.Spacing.s) {
                     ForEach(paired) { pill in row(pill, tint: tint) }
