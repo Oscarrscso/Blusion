@@ -106,6 +106,14 @@ struct WidgetBuilderView: View {
     private func save() {
         Task {
             await model.commit()
+            // Add can be pressed on the Trakt browser, which sits over this screen. That page goes first: asked to leave from under
+            // it, this screen stayed, and the only sign of the widget being added was the haptic. Then this screen leaves too, back
+            // to the Widgets list, which shows the new row and its Saved mark, as after a widget made here.
+            if showsTraktBrowser || showsPicker {
+                showsTraktBrowser = false
+                showsPicker = false
+                try? await Task.sleep(for: .milliseconds(450))
+            }
             dismiss()
         }
     }

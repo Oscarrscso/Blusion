@@ -23,6 +23,8 @@ struct StreamPickerView: View {
     @State private var unsupported: RankedStream?
     /// A hand-off whose player app is not installed: the alert offers its App Store page, or playing the stream in Blusion.
     @State private var missing: MissingPlayer?
+    /// True when ghost mode stopped a stream that only opens in another app.
+    @State private var ghostBlocked = false
     /// The stream cards that have already come in, so a card scrolled away and back does not animate again.
     @State private var entranceLog = StreamCardEntranceLog()
     private let services: AppServices
@@ -267,6 +269,11 @@ struct StreamPickerView: View {
                 .preferredColorScheme(.dark)
             }
             .fullScreenCover(item: $plan) { PlayerScreen(plan: $0, services: services) }
+            .alert("Ghost mode is on", isPresented: $ghostBlocked) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("This stream only opens in another app, which keeps its own history. Pick another stream, or turn ghost mode off in Settings.")
+            }
             .alert("This format isn't supported yet", isPresented: isShowingUnsupported, presenting: unsupported) { item in
                 if let player = model.alternativePlayers(for: item).first {
                     Button("Open in \(player.displayName)") { openIn(player, item) }
@@ -749,6 +756,17 @@ struct StreamPickerView: View {
     }
 
     private func present(_ choice: StreamPickerViewModel.Choice, for item: RankedStream) {
+        // In ghost mode nothing is handed to another player (Infuse keeps its own history and its own Trakt): the stream plays here
+        // when Blusion can play it, and otherwise does not start.
+        if GhostMode.isOn {
+            switch choice {
+            case .openInPlayer, .openExternal:
+                if case .play(let next)? = model.inAppChoice(for: item) { plan = next } else { ghostBlocked = true }
+                return
+            case .play, .unsupported:
+                break
+            }
+        }
         switch choice {
         case .play(let next):
             plan = next

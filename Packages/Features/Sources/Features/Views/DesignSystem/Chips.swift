@@ -10,15 +10,18 @@ struct GlassChip: View {
     let fillsWidth: Bool
     /// The small size, for a row of removable filters that sits above a list.
     let isCompact: Bool
+    /// False keeps a full-width chip at the regular height instead of the large one, for a row that shares the screen with other controls.
+    let isTall: Bool
     let action: () -> Void
 
     init(_ title: String, systemImage: String? = nil, isSelected: Bool = false, fillsWidth: Bool = false, isCompact: Bool = false,
-         action: @escaping () -> Void) {
+         isTall: Bool = true, action: @escaping () -> Void) {
         self.title = title
         self.systemImage = systemImage
         self.isSelected = isSelected
         self.fillsWidth = fillsWidth
         self.isCompact = isCompact
+        self.isTall = isTall
         self.action = action
     }
 
@@ -31,7 +34,7 @@ struct GlassChip: View {
             }
         }
         .buttonBorderShape(.capsule)
-        .controlSize(isCompact ? .small : fillsWidth ? .large : .regular)
+        .controlSize(isCompact ? .small : fillsWidth && isTall ? .large : .regular)
         .pointerFeedback()
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("chip.\(title)")

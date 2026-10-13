@@ -102,6 +102,9 @@ struct TraktListBrowserView: View {
             if browser.tab == .lists && browser.trimmedQuery.isEmpty && browser.browsedUser == nil { scopeChips }
         }
         .padding(.vertical, Theme.Spacing.s)
+        // Solid, up under the navigation bar: the rows scroll out of sight beneath the controls. With nothing behind them the rows showed
+        // through and between the glass buttons.
+        .background { Theme.background.ignoresSafeArea(edges: .top) }
         .sensoryFeedback(.selection, trigger: sort)
     }
 
@@ -114,9 +117,12 @@ struct TraktListBrowserView: View {
                 .accessibilityIdentifier("widgetEditor.title")
         }
         .padding(.horizontal, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .frame(maxWidth: .infinity, minHeight: Self.controlHeight)
         .glassEffect(.regular.interactive(), in: .capsule)
     }
+
+    /// The height of the title field and the Sort menu: a compact row, since three rows of controls stand above the results.
+    private static let controlHeight: CGFloat = 36
 
     private var sortMenu: some View {
         Menu {
@@ -125,7 +131,7 @@ struct TraktListBrowserView: View {
                 ForEach(TraktListSort.allCases) { option in Text(option.title).tag(TraktListSort?.some(option)) }
             }
         } label: {
-            FilterMenuLabel(sort?.title ?? "Sort", systemImage: "arrow.up.arrow.down", isActive: sort != nil)
+            FilterMenuLabel(sort?.title ?? "Sort", systemImage: "arrow.up.arrow.down", isActive: sort != nil, minHeight: Self.controlHeight)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Sort by \(sort?.title ?? "list default")")
@@ -137,7 +143,7 @@ struct TraktListBrowserView: View {
         let scopes = TraktBrowserViewModel.ListScope.allCases.filter { $0 != .mine }
         return ChipRow(fittingColumns: scopes.count) {
             ForEach(scopes) { scope in
-                GlassChip(scope.rawValue, isSelected: browser.scope == scope, fillsWidth: true) { browser.scope = scope }
+                GlassChip(scope.rawValue, isSelected: browser.scope == scope, fillsWidth: true, isTall: false) { browser.scope = scope }
             }
         }
         .accessibilityIdentifier("traktBrowser.scope")
