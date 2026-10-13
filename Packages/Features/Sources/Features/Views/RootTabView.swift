@@ -74,8 +74,10 @@ public final class AppRouter {
         // before a change made on another tab, so it is not kept.
         case .widgets: popToRoot(\.widgetsPath, instantly: true)
         case .search:
+            // Every tap on Search brings the keyboard up. Coming from another tab it also starts afresh, on an empty field.
             popToRoot(\.searchPath)
-            if isShowing { searchFocusRevision += 1 } else { searchBrowseRevision += 1 }
+            if !isShowing { searchBrowseRevision += 1 }
+            searchFocusRevision += 1
         }
         tabTapRevisions[tab, default: 0] += 1
         self.tab = tab
@@ -156,6 +158,18 @@ public final class AppRouter {
 /// The component gallery's place in a navigation stack (debug aid, see `DesignGalleryView`).
 struct GalleryDestination: Hashable {
     var section: String?
+}
+
+/// A phone gets the plain tab bar, where Search always stands apart from the other tabs as a button of its own. The sidebar style, which
+/// an iPad and the Mac need, drew Search inside the bar with the rest on a phone whenever the bar was at full size.
+private struct TabBarStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            content.tabViewStyle(.tabBarOnly)
+        } else {
+            content.tabViewStyle(.sidebarAdaptable)
+        }
+    }
 }
 
 public struct RootTabView: View {
@@ -295,8 +309,9 @@ public struct RootTabView: View {
                 .macPlayBar(resume)
             }
         }
-        .tabViewStyle(.sidebarAdaptable)
-        .tabViewSearchActivation(.automatic)
+        .modifier(TabBarStyle())
+        // Choosing Search goes straight to its field, with the keyboard up.
+        .tabViewSearchActivation(.searchTabSelection)
         .scrollEdgeEffectHidden(isPhoneLandscape || Self.isMacCatalyst, for: .top)
         .pageTopBar(hidden: isPhoneLandscape)
         .tabBarMinimizeBehavior(.onScrollDown)
