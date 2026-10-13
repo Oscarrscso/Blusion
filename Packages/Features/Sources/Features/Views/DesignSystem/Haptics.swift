@@ -175,6 +175,8 @@ struct ShelfScroll<Content: View>: View {
                 .font(.headline.weight(.semibold))
                 .frame(width: 40, height: 40)
                 .glassEffect(.regular, in: .circle)
+                // Only the circle takes the click. The square's corners pass it to the card beneath, as they would with no chevron there.
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
