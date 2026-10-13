@@ -19,6 +19,24 @@ private struct PrimaryActionButton: View {
     @Environment(\.controlSize) private var controlSize
 
     var body: some View {
+        #if targetEnvironment(macCatalyst)
+        // The Mac's own glass button is a third shorter than the round actions beside it, so the capsule is given their height: the label
+        // fills the frame and the glass follows it, as a round action's does. A small one (Auto Pick) is a step down.
+        Button(role: configuration.role) {
+            Haptics.tap()
+            configuration.trigger()
+        } label: {
+            configuration.label
+                .fontWeight(.semibold)
+                .padding(.horizontal, Theme.Spacing.s)
+                .frame(maxWidth: fillsWidth ? .infinity : nil, maxHeight: .infinity)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .frame(height: controlSize == .small || controlSize == .mini ? Self.macSmallHeight : CircleActionButton.diameter)
+        .pointerFeedback()
+        #else
         Button(role: configuration.role) {
             Haptics.tap()
             configuration.trigger()
@@ -32,7 +50,13 @@ private struct PrimaryActionButton: View {
         // A main action is one size up from the controls around it.
         .controlSize(controlSize == .regular ? .large : controlSize)
         .pointerFeedback()
+        #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// The height of a small main action on a Mac.
+    static let macSmallHeight: CGFloat = 32
+    #endif
 }
 
 /// A secondary action ("Customize", "Open on Best Blurays"): the system's Liquid Glass button as a label-sized capsule.
@@ -88,8 +112,13 @@ struct CircleActionButton: View {
     let onSystemImage: String?
     let action: () -> Void
     let isLoading: Bool
-    /// The height of the large glass capsule beside it, so the circles are level with Play and equally wide.
+    /// The height of the large glass capsule beside it, so the circles are level with Play and equally wide. Smaller on a Mac, where a
+    /// pointer needs less room than a finger and 50 points stood twice as tall as the Mac's own Play button.
+    #if targetEnvironment(macCatalyst)
+    static let diameter: CGFloat = 40
+    #else
     static let diameter: CGFloat = 50
+    #endif
 
     init(title: String, systemImage: String, isOn: Bool = false, onTitle: String? = nil, onSystemImage: String? = nil,
          action: @escaping () -> Void, isLoading: Bool = false) {

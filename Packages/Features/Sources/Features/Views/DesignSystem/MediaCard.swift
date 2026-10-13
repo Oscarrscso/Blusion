@@ -71,6 +71,11 @@ struct MediaCard: View {
     private var zoomID: String?
     /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that has not loaded (or did not).
     @State private var posterFellBack = false
+    /// Mac: TMDb's backdrop with no words on it for this title, once it has been looked up. A landscape poster shows it in place of the
+    /// addon's own, which often carries the title in some language under the logo the card draws.
+    @State private var textlessBackdrop: URL?
+    /// Optional, as the rating badges read it: a screen without the store keeps the addon's picture.
+    @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.displayScale) private var displayScale
@@ -190,8 +195,8 @@ struct MediaCard: View {
         artworkSpace
             .overlay {
                 if usesLandscapeArtwork {
-                    LandscapeArtwork(title: item.name, artwork: Self.landscapeArtworkURL(for: item), logo: Self.landscapeLogoURL(for: item),
-                                     maxPixelSize: pixelSize)
+                    LandscapeArtwork(title: item.name, artwork: textlessBackdrop ?? Self.landscapeArtworkURL(for: item),
+                                     logo: Self.landscapeLogoURL(for: item), maxPixelSize: pixelSize)
                 } else {
                     // One picture view whether or not the card uses BetterPosters, so turning the setting on or off keeps the picture on show
                     // until the other one has loaded: the usual poster stays while the BetterPosters picture loads, and no placeholder shows.
@@ -207,7 +212,37 @@ struct MediaCard: View {
             }
             .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
             .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
+            #if targetEnvironment(macCatalyst)
+            .task(id: "\(item.identity)|\(usesLandscapeArtwork)") { await findTextlessBackdrop() }
+            #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Mac: looks up the title's wordless backdrop for a landscape poster. A title already looked up this session answers at once; any other
+    /// waits until the card has been on screen for a moment and takes its turn among the lookups, as a hero prewarm does.
+    private func findTextlessBackdrop() async {
+        guard usesLandscapeArtwork, let ratingsStore, ratingsStore.canLookUpHeroArtwork else {
+            textlessBackdrop = nil
+            return
+        }
+        if let known = ratingsStore.cachedHeroArtwork(for: item) {
+            textlessBackdrop = Self.cardSized(known.textlessBackdrop)
+            return
+        }
+        textlessBackdrop = nil
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        await ratingsStore.prewarmHeroArtwork(for: item)
+        guard !Task.isCancelled else { return }
+        textlessBackdrop = Self.cardSized(ratingsStore.cachedHeroArtwork(for: item)?.textlessBackdrop)
+    }
+
+    /// TMDb's original-size picture at the size a card needs.
+    private static func cardSized(_ url: URL?) -> URL? {
+        guard let url, url.host == "image.tmdb.org" else { return url }
+        return URL(string: url.absoluteString.replacingOccurrences(of: "/t/p/original/", with: "/t/p/w780/")) ?? url
+    }
+    #endif
 
     /// The artwork's box. A fixed card already knows its width, so its height is set outright: an aspect-ratio box would take
     /// its height from whatever the enclosing row proposes, and cards after the first in a row came out squeezed. Only a grid
@@ -361,8 +396,12 @@ private struct PrewarmHeroArtworkModifier: ViewModifier {
 /// How cards answer a touch or a pointer: pressed, they dim and shrink a little with a quick spring; under a pointer (Mac, iPad
 /// trackpad) they lift slightly and highlight. Reduce Motion keeps the card still.
 struct PressableCardStyle: ButtonStyle {
+    /// False keeps the card its own size under a pointer and only highlights it: a card as wide as its column (a stream) would grow past
+    /// the column's edges.
+    var lifts = true
+
     func makeBody(configuration: Configuration) -> some View {
-        PressableCardLabel(configuration: configuration)
+        PressableCardLabel(configuration: configuration, lifts: lifts)
             .pointerFeedback()
     }
 }
@@ -370,6 +409,7 @@ struct PressableCardStyle: ButtonStyle {
 /// A view of its own because the hover state needs somewhere to live.
 private struct PressableCardLabel: View {
     let configuration: ButtonStyleConfiguration
+    let lifts: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -377,7 +417,7 @@ private struct PressableCardLabel: View {
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
-            .pointerInteraction(lifts: !configuration.isPressed)
+            .pointerInteraction(lifts: lifts && !configuration.isPressed)
     }
 }
 #endif

@@ -156,7 +156,8 @@ struct StreamTechnicalDetails: View {
                 .padding(.horizontal, Theme.Spacing.l)
                 .padding(.vertical, Theme.Spacing.m)
                 .contentShape(Rectangle())
-                .pointerInteraction(cornerRadius: Theme.Radius.surface)
+                // The row is the card's foot: a plain highlight the card's own corners clip, and no ring of its own.
+                .pointerInteraction(cornerRadius: 0, showsFocus: false)
             }
             .buttonStyle(.plain)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")

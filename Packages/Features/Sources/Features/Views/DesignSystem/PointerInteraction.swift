@@ -6,6 +6,7 @@ private struct PointerInteractionModifier: ViewModifier {
     let cornerRadius: CGFloat
     let lifts: Bool
     let highlightColor: Color
+    let showsFocus: Bool
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.isFocused) private var isFocused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,7 +19,7 @@ private struct PointerInteractionModifier: ViewModifier {
                     .fill(highlightColor.opacity(isEnabled && isHovering ? 0.08 : 0))
                     .overlay {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(highlightColor.opacity(isEnabled && isFocused ? 0.8 : 0), lineWidth: 2)
+                            .strokeBorder(highlightColor.opacity(isEnabled && isFocused && showsFocus ? 0.8 : 0), lineWidth: 2)
                     }
                     .allowsHitTesting(false)
             }
@@ -41,8 +42,10 @@ extension View {
         #endif
     }
 
-    func pointerInteraction(cornerRadius: CGFloat = Theme.Radius.card, lifts: Bool = false, highlightColor: Color = .white) -> some View {
-        modifier(PointerInteractionModifier(cornerRadius: cornerRadius, lifts: lifts, highlightColor: highlightColor))
+    /// `showsFocus` false leaves out the ring a focused control gets, for a row inside a card whose own corners would cut the ring.
+    func pointerInteraction(cornerRadius: CGFloat = Theme.Radius.card, lifts: Bool = false, highlightColor: Color = .white,
+                            showsFocus: Bool = true) -> some View {
+        modifier(PointerInteractionModifier(cornerRadius: cornerRadius, lifts: lifts, highlightColor: highlightColor, showsFocus: showsFocus))
     }
 }
 #endif

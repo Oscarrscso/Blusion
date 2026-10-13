@@ -11,6 +11,18 @@ struct PersonView: View {
     @State private var isBiographyTruncated = false
     @Environment(\.layoutMetrics) private var metrics
 
+    /// The Mac page reads from the left, 60 points from the sidebar like the title page, with its credits in columns. iPhone and iPad
+    /// keep the centred page with one column.
+    #if targetEnvironment(macCatalyst)
+    private static let isDesktop = true
+    #else
+    private static let isDesktop = false
+    #endif
+    /// The page's side margin.
+    private var margin: CGFloat { Self.isDesktop ? 60 : metrics.pageMargin }
+    /// Where the name, the summary and the biography sit across the page.
+    private var leading: Bool { Self.isDesktop }
+
     init(destination: PersonDestination, services: AppServices) {
         _model = State(initialValue: PersonViewModel(destination: destination, services: services))
     }
@@ -19,18 +31,18 @@ struct PersonView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
-                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.horizontal, margin)
                 if !model.photoStrip.isEmpty {
                     photos.padding(.top, Theme.Spacing.xxl)
                 }
                 synopsis
-                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.horizontal, margin)
                     .padding(.top, model.photoStrip.isEmpty ? Theme.Spacing.m : Theme.Spacing.xl)
                 if !model.knownFor.isEmpty {
                     knownFor.padding(.top, Theme.Spacing.xxl)
                 }
                 credits
-                    .padding(.horizontal, metrics.pageMargin)
+                    .padding(.horizontal, margin)
                     .padding(.top, Theme.Spacing.xxl)
             }
             .padding(.bottom, Theme.Spacing.xxl)
@@ -48,23 +60,23 @@ struct PersonView: View {
 
     /// The portrait while it loads is the one the card already showed, so the page never opens on an empty frame.
     private var header: some View {
-        VStack(spacing: Theme.Spacing.xs) {
+        VStack(alignment: leading ? .leading : .center, spacing: Theme.Spacing.xs) {
             Text(name)
                 .font(Theme.Typography.heroTitle)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(leading ? .leading : .center)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("person.name")
             if let line = summaryLine {
                 Text(line).font(Theme.Typography.metaLine).foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
         .padding(.top, Theme.Spacing.l)
     }
 
     /// The biography and any note on why the page is short, below the photos.
     private var synopsis: some View {
-        VStack(spacing: Theme.Spacing.m) {
+        VStack(alignment: leading ? .leading : .center, spacing: Theme.Spacing.m) {
             if let biography = model.person?.biography {
                 biographyText(biography)
             }
@@ -72,11 +84,11 @@ struct PersonView: View {
                 Text(reason)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(leading ? .leading : .center)
                     .accessibilityIdentifier("person.unavailable")
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
     }
 
     /// "Directing · 42 credits". Parts that are not known yet are left out.
@@ -103,7 +115,7 @@ struct PersonView: View {
                 }
         }
         .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
     }
 
     // MARK: - Photos
@@ -122,7 +134,7 @@ struct PersonView: View {
             .scrollTargetLayout()
         }
         .shelfIndicators()
-        .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+        .contentMargins(.horizontal, margin, for: .scrollContent)
         .scrollClipDisabled()
         .softSnappingScroll()
         .accessibilityIdentifier("person.photos")
@@ -134,7 +146,7 @@ struct PersonView: View {
     private var knownFor: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             SectionHeader("Known For")
-                .padding(.horizontal, metrics.pageMargin)
+                .padding(.horizontal, margin)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: metrics.cardSpacing) {
                     ForEach(model.knownFor) { credit in
@@ -152,7 +164,7 @@ struct PersonView: View {
                 .scrollTargetLayout()
             }
             .shelfIndicators()
-            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .contentMargins(.horizontal, margin, for: .scrollContent)
             .scrollClipDisabled()
             .softSnappingScroll()
         }
@@ -185,9 +197,13 @@ struct PersonView: View {
                             .font(.title3.bold())
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("person.year.\(section.id)")
-                        ForEach(section.credits) { credit in
-                            CreditRow(credit: credit, isUnreleased: model.isUnreleased(credit))
-                                .onAppear { if credit.id == triggerID { model.loadMore() } }
+                        // A year's credits are one column on a phone, and as many columns as fit on a Mac, where one row across the
+                        // whole window left each title a long way from its rating.
+                        LazyVGrid(columns: creditColumns, alignment: .leading, spacing: Theme.Spacing.m) {
+                            ForEach(section.credits) { credit in
+                                CreditRow(credit: credit, isUnreleased: model.isUnreleased(credit))
+                                    .onAppear { if credit.id == triggerID { model.loadMore() } }
+                            }
                         }
                     }
                 }
@@ -199,6 +215,12 @@ struct PersonView: View {
                 }
             }
         }
+    }
+
+    private var creditColumns: [GridItem] {
+        Self.isDesktop
+            ? [GridItem(.adaptive(minimum: 340, maximum: 520), spacing: Theme.Spacing.m, alignment: .top)]
+            : [GridItem(.flexible(), alignment: .top)]
     }
 
     /// Two compact menus side by side: the kind of title, and the role. Each shows what it is set to.

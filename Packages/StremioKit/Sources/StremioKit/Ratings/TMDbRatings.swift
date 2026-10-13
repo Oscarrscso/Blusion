@@ -6,6 +6,9 @@ public struct TMDbArtwork: Sendable, Hashable {
     public let logo: URL?
     /// The portrait is a poster that already carries the title's English wording, so the separate logo is not shown in portrait.
     public var portraitHidesLogo = false
+    /// The best backdrop that carries no words in any language, at original size. Nil when TMDb has none: `backdrop` may then be one
+    /// with English or other wording on it.
+    public var textlessBackdrop: URL?
 }
 
 public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
@@ -195,7 +198,8 @@ public struct TMDbRatings: Sendable {
         return TMDbArtwork(backdrop: BackdropPicker.best(Self.backdropCandidates(backdrops)),
                            portrait: portrait?.url,
                            logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"),
-                           portraitHidesLogo: portrait?.hidesLogo ?? false)
+                           portraitHidesLogo: portrait?.hidesLogo ?? false,
+                           textlessBackdrop: BackdropPicker.best(Self.backdropCandidates(backdrops.filter(\.isTextless))))
     }
 
     /// The portrait hero, in this order: the best textless poster; else the best textless backdrop, which the view fills and crops;

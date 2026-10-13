@@ -24,6 +24,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     let trailer: (CGFloat) -> Trailer
     @ViewBuilder let synopsis: Synopsis
     @ViewBuilder let information: Information
+    /// True when the overview over the picture is cut short at its three lines. Only then is the whole synopsis set under the hero: one
+    /// that fits is already read in full above, and a second copy under it said the same thing twice.
+    @State private var overviewIsCut = false
 
     /// The hero's height: most of the window, kept between 440 and 620 points.
     private var heroHeight: CGFloat { min(max(size.height * 0.62, 440), 620) }
@@ -62,8 +65,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         }
     }
 
-    /// The picture across the window, with the title and the controls over its lower left edge, and the ratings beside the picture's
-    /// bottom right corner.
+    /// The picture across the window, with the title and the controls over its lower left edge. The title's scores are the linked buttons
+    /// under the overview, and nowhere else on the page.
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
             HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, alignment: .center, preview: model.preview,
@@ -82,9 +85,6 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         .frame(maxWidth: .infinity)
         .frame(height: heroHeight)
         .clipped()
-        .overlay(alignment: .bottomTrailing) {
-            PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
-        }
     }
 
     /// The title, the metadata line and, once the details show, the overview and the ratings, then the actions: one column over the
@@ -116,7 +116,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     @ViewBuilder
     private var overview: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
-            JustifiedText(text: description, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3)
+            JustifiedText(text: description, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("detail.overview")
         }
@@ -139,7 +139,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     @ViewBuilder
     private var details: some View {
         layout {
-            detailsColumn
+            // With no trailer and an overview that fits above, the column would be empty, so the information leads instead.
+            if model.trailer.showsPanel || overviewIsCut { detailsColumn }
             information
                 .frame(maxWidth: hasTwoColumns ? Self.informationWidth : Self.detailsMax, alignment: .leading)
         }
@@ -163,7 +164,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
                 trailer(detailsWidth)
                     .transition(Self.trailerTransition)
             }
-            synopsis
+            if overviewIsCut { synopsis }
         }
         .frame(width: detailsWidth, alignment: .leading)
     }

@@ -406,11 +406,34 @@ struct StreamPickerView: View {
         return autoPickButtonHeight / autoPickSwitchSize.height
     }
 
+    /// Embedded in a title page: a small round X, as tall as Auto Pick, that takes the streams away and puts the details back.
+    @ViewBuilder
+    private var closeButton: some View {
+        if isEmbedded, let onClose {
+            let side = autoPickButtonHeight > 0 ? autoPickButtonHeight : 34
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .glassCircleButton(.small)
+            .frame(width: side, height: side)
+            .accessibilityLabel("Back to details")
+            .help("Back to details")
+            .accessibilityIdentifier("streams.close")
+        }
+    }
+
     @ViewBuilder
     private var playBestButton: some View {
-        if !model.listing.items.isEmpty {
+        if model.listing.items.isEmpty {
+            // With no stream to pick, the X still stands where the row would, so the details are one tap away.
+            if !model.isLoading { closeButton.padding(.horizontal, streamMargin) }
+        } else {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 HStack(spacing: Theme.Spacing.m) {
+                    closeButton
                     Button {
                         // The same swipe check as a stream card: a swipe that ends on Auto Pick plays nothing.
                         guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
@@ -627,7 +650,7 @@ struct StreamPickerView: View {
             } label: {
                 StreamRow(item: item, isBest: isRecommended, isRemux: item.quality.isRemux)
             }
-            .buttonStyle(PressableCardStyle())
+            .buttonStyle(PressableCardStyle(lifts: false))
             .contextMenu { contextActions(for: item) }
             .accessibilityIdentifier("stream.row.\(item.title)")
             .accessibilityHint(hint(for: item))

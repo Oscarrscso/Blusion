@@ -145,7 +145,10 @@ struct HomeView: View {
                 .padding(.bottom, Theme.Spacing.xxl)
                 // In the content, not the navigation bar: it scrolls away with the page instead of staying pinned, and it is one glass
                 // circle instead of a glass button inside the bar's own glass.
+                #if !targetEnvironment(macCatalyst)
+                // The Mac has Widgets in its sidebar, so Home carries no button for it there.
                 .overlay(alignment: .topTrailing) { customizeButton }
+                #endif
                 .id(Self.topID)
             }
             .accessibilityIdentifier("board.rows")

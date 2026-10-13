@@ -38,15 +38,8 @@ struct ResumeAccessoryModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
-        content.safeAreaInset(edge: .bottom) {
-            if let newest = model.newest {
-                ContinueWatchingAccessory(item: newest, onRemove: { Task { await model.remove(newest) } })
-                    .padding(.vertical, Theme.Spacing.s)
-                    .glassEffect(.regular, in: .capsule)
-                    .padding(.horizontal, Theme.Spacing.l)
-                    .padding(.bottom, Theme.Spacing.s)
-            }
-        }
+        // The Mac's bar belongs to each tab's page (see `macPlayBar`), so it stops at the sidebar.
+        content
         #else
         if #available(iOS 26.1, *) {
             content.tabViewBottomAccessory(isEnabled: model.newest != nil) {
@@ -57,6 +50,27 @@ struct ResumeAccessoryModifier: ViewModifier {
         } else {
             content
         }
+        #endif
+    }
+}
+
+extension View {
+    /// Mac: the play bar along the bottom of a tab's page. It is set on the page, not on the window, so it runs from the sidebar's edge
+    /// to the window's and never under the sidebar. iPhone has the tab bar's accessory instead (see `ResumeAccessoryModifier`).
+    @ViewBuilder
+    func macPlayBar(_ model: ContinueWatchingModel) -> some View {
+        #if targetEnvironment(macCatalyst)
+        safeAreaInset(edge: .bottom) {
+            if let newest = model.newest {
+                ContinueWatchingAccessory(item: newest, onRemove: { Task { await model.remove(newest) } })
+                    .padding(.vertical, Theme.Spacing.s)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.horizontal, Theme.Spacing.l)
+                    .padding(.bottom, Theme.Spacing.s)
+            }
+        }
+        #else
+        self
         #endif
     }
 }

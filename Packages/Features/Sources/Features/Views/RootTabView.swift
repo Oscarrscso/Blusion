@@ -199,6 +199,7 @@ public struct RootTabView: View {
                         .navigationDestination(for: GalleryDestination.self) { DesignGalleryView(section: $0.section) }
                 }
                 .zoomTransitions()
+                .macPlayBar(resume)
                 .task {
                     await Task.yield()
                     guard !Task.isCancelled else { return }
@@ -218,6 +219,7 @@ public struct RootTabView: View {
                         .appDestinations(services: services, path: \.discoverPath)
                 }
                 .zoomTransitions()
+                .macPlayBar(resume)
             } label: {
                 Label {
                     Text("Discover")
@@ -233,6 +235,7 @@ public struct RootTabView: View {
                             .appDestinations(services: services, path: \.libraryPath)
                     }
                     .zoomTransitions()
+                    .macPlayBar(resume)
                 } label: {
                     Label {
                         Text("Library")
@@ -255,6 +258,7 @@ public struct RootTabView: View {
                             }
                         }
                 }
+                .macPlayBar(resume)
             } label: {
                 Label {
                     Text("Settings")
@@ -272,6 +276,7 @@ public struct RootTabView: View {
                         .id(router.tabTapRevisions[.widgets, default: 0])
                 }
                 .zoomTransitions()
+                .macPlayBar(resume)
             } label: {
                 Label {
                     Text("Widgets")
@@ -287,6 +292,7 @@ public struct RootTabView: View {
                         .appDestinations(services: services, path: \.searchPath)
                 }
                 .zoomTransitions()
+                .macPlayBar(resume)
             }
         }
         .tabViewStyle(.sidebarAdaptable)
