@@ -58,30 +58,25 @@ struct StreamProviderBox: View {
     }
 }
 
-/// A disc's box, in the place a service's box takes: "Blu-ray", or "4K Blu-ray" for a 4K REMUX. It is text, not the disc format's own logo.
+/// A disc's box, in the place a service's box takes: the Blu-ray mark, or the Ultra HD Blu-ray mark for a 4K REMUX, on the disc's own colour.
 struct StreamDiscBox: View {
     let is4K: Bool
+    /// The box's size, as the service's box has it. The mark is fitted inside a margin within it.
     @ScaledMetric(relativeTo: .subheadline) private var width: CGFloat = 52
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 36
 
     var body: some View {
-        VStack(spacing: 0) {
-            if is4K {
-                Text("4K")
-                    .font(.system(size: 10, weight: .heavy, design: .rounded))
-                    .minimumScaleFactor(0.6)
-            }
-            Text("Blu-ray")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .minimumScaleFactor(0.6)
-        }
-        .foregroundStyle(.white)
-        .lineLimit(1)
-        .frame(width: width, height: height)
-        .background(is4K ? Color(red: 0.62, green: 0.48, blue: 0.16) : Color(red: 0.05, green: 0.27, blue: 0.55),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(is4K ? "4K Blu-ray" : "Blu-ray")
+        Image(is4K ? "StreamLogoUHDBluRay" : "StreamLogoBluRay")
+            .renderingMode(.template)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: width - 12, maxHeight: height - 14)
+            .foregroundStyle(.white)
+            .frame(width: width, height: height)
+            .background(is4K ? Color(red: 0.62, green: 0.48, blue: 0.16) : Color(red: 0.05, green: 0.27, blue: 0.55),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(is4K ? "4K Blu-ray" : "Blu-ray")
     }
 }
 #endif
