@@ -79,9 +79,9 @@ struct DetailActions: View {
                     .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             }
             .buttonStyle(.primaryAction)
-            // The glass takes the title's colour from its poster, read while its card was on show. A title opened without its card keeps the
-            // plain style; the colour is not animated in, so the button never changes colour once the page is open.
-            .tint(PlayColourStore.shared.colour(for: model.preview.identity))
+            // The title's colour from its poster is the button's background, behind the glass. Not a tint: a tint also colours the label.
+            // A title opened without its card keeps the plain style; the colour is not animated in.
+            .background(PlayColourStore.shared.colour(for: model.preview.identity) ?? Color.clear, in: Capsule())
             .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
         } else if let airs = model.unairedAirLabel {
