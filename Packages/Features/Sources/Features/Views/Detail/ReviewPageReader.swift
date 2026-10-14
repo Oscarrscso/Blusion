@@ -6,9 +6,14 @@ import StremioKit
 enum ReviewPageReader {
     static func supports(_ site: ReviewSite) -> Bool { site == .rottenTomatoes || site == .metacritic }
 
+    /// Whether the reader shows its own list of the reviews over the page. Rotten Tomatoes' own page is shown instead: the reader only takes
+    /// a search to the title's audience reviews.
+    static func reads(_ site: ReviewSite) -> Bool { site == .metacritic }
+
     static func script(for site: ReviewSite, item: MetaPreview) -> String {
         guard supports(site) else { return "" }
-        var options: [String: Any] = ["site": site.rawValue, "title": item.name, "kind": item.type == "movie" ? "movie" : "tv"]
+        var options: [String: Any] = ["site": site.rawValue, "title": item.name, "kind": item.type == "movie" ? "movie" : "tv",
+                                      "reads": reads(site)]
         if let year = item.releaseInfo.flatMap({ Int($0.prefix(4)) }) { options["year"] = year }
         guard let data = try? JSONSerialization.data(withJSONObject: options, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return "" }
@@ -99,6 +104,10 @@ enum ReviewPageReader {
         if (!ranked.length || (ranked[1] && ranked[0].rank === ranked[1].rank)) return false
         // Give a dynamically loaded result time to receive its year before accepting a unique title without a year.
         if (options.year && ranked[0].rank === 1 && performance.now() - started < 2500) return false
+        // Rotten Tomatoes' own page is shown for a film: the search goes straight to its audience reviews, one page fewer.
+        if (rt && !options.reads && options.kind === 'movie') {
+          return go(new URL(ranked[0].url.pathname.replace(/\/$/, '') + '/reviews/all-audience', location.origin))
+        }
         return go(ranked[0].url)
       }
       const pageMatches = () => {
@@ -286,6 +295,8 @@ enum ReviewPageReader {
       const inspect = () => {
         if (stopped) return
         if (resolveSearch() || openReviews()) return
+        // The site's own page is the reviews: nothing is drawn over it.
+        if (!options.reads) { if (reviewPath.test(location.pathname)) stop(); return }
         render(extract())
       }
       function stop() {

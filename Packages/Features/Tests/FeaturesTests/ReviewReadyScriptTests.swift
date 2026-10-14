@@ -29,7 +29,7 @@ import Testing
     var window = { innerHeight: 800, scrollY: 0, webkit: { messageHandlers: { painted: { postMessage: function (m) { posted = m; } } } } };
     var page = { cards: 0, readyState: 'interactive', stylesLoaded: true };
     var styleSheet = { get sheet() { return page.stylesLoaded ? {} : null; } };
-    var location = { hostname: 'm.imdb.com' };
+    var location = { hostname: 'm.imdb.com', pathname: '/title/tt0372784/reviews/' };
     function element(text, laidOut) {
       return { textContent: text, nextElementSibling: null, parentElement: null,
                getClientRects: function () { return laidOut ? [1] : []; },
@@ -41,6 +41,9 @@ import Testing
       body: {},
       get readyState() { return page.readyState; },
       querySelector: function (selector) {
+        if (selector.indexOf('review-card-audience') >= 0 && page.cards > 0) {
+          return element('Jack F @MovieFan111 4 days ago I am giving it 50/50 because I do not know what to think about it at all.', true);
+        }
         if (selector !== '.review-date' || page.cards === 0) return null;
         var card = element('Shinra788 · Jun 6, 2005 · The Batman film I have been waiting for, and it was worth every minute of it.', true);
         var date = element('Jun 6, 2005', true);
@@ -62,10 +65,11 @@ import Testing
     }
     """#
 
-    private func page(cards: Int, readyState: String = "interactive", host: String = "m.imdb.com") throws -> JSContext {
+    private func page(cards: Int, readyState: String = "interactive", host: String = "m.imdb.com",
+                      path: String = "/title/tt0372784/reviews/") throws -> JSContext {
         let context = try #require(JSContext())
         context.evaluateScript(Self.harness)
-        context.evaluateScript("page.cards = \(cards); page.readyState = '\(readyState)'; location.hostname = '\(host)';")
+        context.evaluateScript("page.cards = \(cards); page.readyState = '\(readyState)'; location.hostname = '\(host)'; location.pathname = '\(path)';")
         context.evaluateScript(try Self.paintedScript())
         return context
     }
@@ -94,9 +98,32 @@ import Testing
     }
 
     @Test func anotherSiteIsNotReadyOnACardThatLooksLikeIMDbs() throws {
-        let context = try page(cards: 1, host: "www.rottentomatoes.com")
+        let context = try page(cards: 1, host: "www.metacritic.com", path: "/movie/barbie/user-reviews/")
         context.evaluateScript("run(1000)")
         #expect(posted(context) == nil, "it waits for its own heading")
+    }
+
+    /// Rotten Tomatoes' own page is shown now: it is ready on its first review card, as IMDb is.
+    @Test func rottenTomatoesIsReadyOnItsFirstReviewCard() throws {
+        let context = try page(cards: 1, host: "www.rottentomatoes.com", path: "/m/barbie/reviews/all-audience")
+        context.evaluateScript("run(200)")
+        #expect(posted(context)?.reason == "card")
+    }
+
+    /// Its search page leads on to the reviews, so it does not open the panel itself, even once it has loaded.
+    @Test func rottenTomatoesSearchWaitsForTheReviewsPage() throws {
+        let context = try page(cards: 1, readyState: "complete", host: "www.rottentomatoes.com", path: "/search")
+        context.evaluateScript("run(7000)")
+        #expect(posted(context) == nil)
+        context.evaluateScript("run(1200)")
+        #expect(posted(context)?.reason == "no-heading", "after 8 s it opens on whatever is there")
+    }
+
+    /// A series' title page leads on to its audience reviews too.
+    @Test func rottenTomatoesTitlePageWaitsForTheReviewsPage() throws {
+        let context = try page(cards: 1, readyState: "complete", host: "www.rottentomatoes.com", path: "/tv/the_simpsons")
+        context.evaluateScript("run(3000)")
+        #expect(posted(context) == nil)
     }
 
     /// IMDb's check starts with the page, before its style sheets have arrived: a card laid out without them is its bare text.

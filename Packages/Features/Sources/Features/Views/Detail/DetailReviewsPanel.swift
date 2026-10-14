@@ -213,11 +213,22 @@ extension ReviewPageRules {
         return true;
       }
 
-      // IMDb's first review card, once it is laid out with its text: the card that holds the first review date. IMDb's pages only.
+      var isIMDb = /(^|\.)imdb\.com$/.test(location.hostname);
+      var isRottenTomatoes = /(^|\.)rottentomatoes\.com$/.test(location.hostname);
+      // Rotten Tomatoes' search and title pages lead on to its reviews: they wait for that page rather than open early themselves.
+      var leadsOn = isRottenTomatoes && !/\/reviews(\/|$)/.test(location.pathname);
+
+      // The first review card, once it is laid out with its text: on IMDb the card that holds the first review date, on Rotten Tomatoes
+      // its first review card. Those sites' pages only.
       function firstCard() {
-        if (!/(^|\.)imdb\.com$/.test(location.hostname) || !document.body || !stylesLoaded()) return null;
-        var date = document.querySelector('.review-date');
-        var card = date && date.closest('.ipc-list-card, article');
+        if (!(isIMDb || isRottenTomatoes) || !document.body || !stylesLoaded()) return null;
+        var card = null;
+        if (isIMDb) {
+          var date = document.querySelector('.review-date');
+          card = date && date.closest('.ipc-list-card, article');
+        } else if (!leadsOn) {
+          card = document.querySelector('review-card-audience, review-card-critic');
+        }
         if (!card || (card.textContent || '').trim().length < 60 || card.getClientRects().length === 0) return null;
         return card.getBoundingClientRect().height > 0 ? card : null;
       }
@@ -281,7 +292,11 @@ extension ReviewPageRules {
         if (firstCard()) return finishAfterPaint('card');
         if (!headingNode || headingNode.getClientRects().length === 0) headingNode = findHeading();
         if (!headingNode) {
-          if (now - started >= 6000 || (now - started >= 2500 && document.readyState === 'complete')) finish('no-heading');
+          if (leadsOn) {
+            if (now - started >= 8000) finish('no-heading');
+          } else if (now - started >= 6000 || (now - started >= 2500 && document.readyState === 'complete')) {
+            finish('no-heading');
+          }
           return;
         }
         if (!headingAt) headingAt = now;
@@ -347,13 +362,14 @@ struct ReviewWebView: UIViewRepresentable {
         // with the page: its reviews arrive with the page's first bytes, well before the page has finished loading its scripts.
         let waitsForHeading = site.waitsForReviewsHeading(at: url)
         configuration.userContentController.addUserScript(WKUserScript(source: waitsForHeading ? ReviewPageRules.paintedScript : ReviewPageRules.loadedScript,
-                                                                       injectionTime: waitsForHeading && site == .imdb ? .atDocumentStart : .atDocumentEnd,
+                                                                       injectionTime: waitsForHeading && (site == .imdb || site == .rottenTomatoes)
+                                                                           ? .atDocumentStart : .atDocumentEnd,
                                                                        forMainFrameOnly: true))
         configuration.userContentController.add(handler, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
-        // IMDb's reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
-        view.overrideUserInterfaceStyle = site == .imdb ? .dark : .unspecified
+        // IMDb's and Rotten Tomatoes' reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
+        view.overrideUserInterfaceStyle = ReviewPageRules.isShownDark(site) ? .dark : .unspecified
         return view
     }
 

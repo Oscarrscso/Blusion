@@ -22,12 +22,19 @@ enum ReviewPageRules {
     /// "User reviews" heading. Only IMDb's pages hide them, so the reviews panel starts at the count and "Add a review".
     private static let imdbHeaderSlots = "#imdbHeader, [data-testid=atf-wrapper-bg], .ipc-scroll-to-top-button"
 
+    /// Rotten Tomatoes' own bars: its header (the leaderboard ad and the navigation bar), the app banner, the notification bar, and its
+    /// cookie banner and the shade behind it, which cover the page. Only Rotten Tomatoes' pages hide them, so the reviews panel starts at the
+    /// reviews' heading.
+    private static let rottenTomatoesHeaderSlots = "#main > header, rt-header, mobile-android-banner, notification-alert, back-to-top, "
+        + "#onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter"
+
     /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the ad slots are hidden where they
-    /// remain. IMDb's header is hidden on IMDb's pages only.
+    /// remain. IMDb's header is hidden on IMDb's pages only, and Rotten Tomatoes' bars on its pages only.
     static var contentRules: String {
         let blocks = adHosts.map { #"{"trigger": {"url-filter": "\#($0)"}, "action": {"type": "block"}}"# }
         let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "\#(adSlots)"}}"#,
-                     #"{"trigger": {"url-filter": "imdb[.]com"}, "action": {"type": "css-display-none", "selector": "\#(imdbHeaderSlots)"}}"#]
+                     #"{"trigger": {"url-filter": "imdb[.]com"}, "action": {"type": "css-display-none", "selector": "\#(imdbHeaderSlots)"}}"#,
+                     #"{"trigger": {"url-filter": "rottentomatoes[.]com"}, "action": {"type": "css-display-none", "selector": "\#(rottenTomatoesHeaderSlots)"}}"#]
         return "[\n" + (blocks + hides).joined(separator: ",\n") + "\n]"
     }
 
@@ -42,13 +49,18 @@ enum ReviewPageRules {
         }
     }
 
-    /// The dark treatment, for IMDb's pages only: the page is inverted, then its pictures are inverted back, so text reads light on a dark
-    /// ground. Nil for every other site, which keep their own look. Runs before the page is drawn, so no white flashes.
+    /// The dark treatment, for IMDb's and Rotten Tomatoes' pages: the page is inverted, then its pictures are inverted back, so text reads
+    /// light on a dark ground. Nil for every other site, which keep their own look. Runs before the page is drawn, so no white flashes.
     static func darkModeScript(for site: ReviewSite) -> String? {
-        site == .imdb ? imdbDarkScript : nil
+        isShownDark(site) ? invertedDarkScript : nil
     }
 
-    private static let imdbDarkScript = """
+    /// Whether a site's page is shown in the dark treatment, and its web view in dark mode.
+    static func isShownDark(_ site: ReviewSite) -> Bool {
+        site == .imdb || site == .rottenTomatoes
+    }
+
+    private static let invertedDarkScript = """
     (function () {
       var style = document.createElement('style');
       style.textContent = 'html{background:#fff !important;filter:invert(1) hue-rotate(180deg) !important}' +
