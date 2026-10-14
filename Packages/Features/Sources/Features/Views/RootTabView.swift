@@ -321,6 +321,10 @@ public struct RootTabView: View {
             await Task.yield()
             guard !Task.isCancelled else { return }
             router.presentLaunchRoute(includeHomeDestinations: false)
+            #if canImport(UIKit)
+            // The reviews page's rules and WebKit's process start now, after the first frame, so the first reviews page waits for neither.
+            ReviewPageRules.prewarm()
+            #endif
         }
         .environment(router)
         .environment(services.posterRatings)

@@ -113,17 +113,54 @@ struct DetailReviewsPanel: View {
 }
 
 extension ReviewPageRules {
-    /// Compiles the content rules and attaches them to a web view, then calls `ready`. The rules are small, so compiling them on each open is
-    /// quick. If they do not compile, `ready` still runs, and the page loads without them.
+    /// The compiled rules, kept once WebKit has compiled them, so each open attaches them without a wait.
+    @MainActor private static var compiled: WKContentRuleList?
+    /// A web view kept from launch: it holds a WebKit process that has already started, so the first reviews page does not wait for one.
+    @MainActor private static var warmed: WKWebView?
+
+    /// Attaches the content rules to a web view, then calls `ready`. The first open compiles them, which WebKit then keeps; later opens attach
+    /// them at once. If they do not compile, `ready` still runs, and the page loads without them.
     @MainActor
     static func attach(to view: WKWebView, then ready: @escaping @MainActor () -> Void) {
+        if let compiled {
+            view.configuration.userContentController.add(compiled)
+            ready()
+            return
+        }
         WKContentRuleListStore.default().compileContentRuleList(forIdentifier: identifier, encodedContentRuleList: contentRules) { list, _ in
             MainActor.assumeIsolated {
-                if let list { view.configuration.userContentController.add(list) }
+                if let list {
+                    compiled = list
+                    view.configuration.userContentController.add(list)
+                }
                 ready()
             }
         }
     }
+
+    /// Compiles the rules and starts a WebKit process at launch, after Home has shown, so the first reviews page waits for neither.
+    @MainActor
+    static func prewarm() {
+        guard warmed == nil else { return }
+        let view = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        warmed = view
+        attach(to: view) { view.loadHTMLString("", baseURL: nil) }
+    }
+
+    /// Tells the app that the page has painted: after its load and two frames. The reviews panel opens on this, not on the load, because the
+    /// page draws its reviews after it loads, and that is the black the reader saw.
+    static let paintedScript = """
+    (function () {
+      function painted() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            window.webkit.messageHandlers.painted.postMessage('painted');
+          });
+        });
+      }
+      if (document.readyState === 'complete') { painted(); } else { window.addEventListener('load', painted); }
+    })();
+    """
 }
 
 /// A rating's site, loaded in the app with its ads and trackers blocked. The page opens its user reviews when it can. It loads once per
@@ -148,11 +185,15 @@ struct ReviewWebView: UIViewRepresentable {
            let fallback = ReviewPageRules.notFoundScript(fallback: search) {
             configuration.userContentController.addUserScript(WKUserScript(source: fallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
+        // The panel opens once the page has painted (see `paintedScript`), so the spinner stays until the reader can see the page.
+        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.paintedScript, injectionTime: .atDocumentEnd,
+                                                                       forMainFrameOnly: true))
+        let coordinator = context.coordinator
+        configuration.userContentController.add(coordinator, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
         // IMDb's reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
         view.overrideUserInterfaceStyle = site == .imdb ? .dark : .unspecified
-        let coordinator = context.coordinator
         coordinator.onLoaded = onLoaded
         view.navigationDelegate = coordinator
         coordinator.requested = url
@@ -179,19 +220,23 @@ struct ReviewWebView: UIViewRepresentable {
         coordinator.requested = nil
         view.stopLoading()
         view.navigationDelegate = nil
+        // WebKit keeps a message handler until it is removed, so the view's handler goes with it.
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "painted")
     }
 
     /// The address last asked for, whether the rules are in place, and what to call when the page has loaded, so a re-render does not
     /// load the page again.
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var requested: URL?
         var isReady = false
         var onLoaded: () -> Void = {}
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { onLoaded() }
+        /// The load itself does not open the panel: the page has still to paint, and `painted` says so.
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {}
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { onLoaded() }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { onLoaded() }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) { onLoaded() }
     }
 }
 #endif
