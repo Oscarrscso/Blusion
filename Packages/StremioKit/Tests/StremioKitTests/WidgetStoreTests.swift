@@ -167,6 +167,24 @@ import StremioKitTestSupport
         #expect(loaded[1] == plain, "a title without adult animation is unchanged")
     }
 
+    /// The Adult Animation row saved on a phone: it left out TMDb's "kids" keyword, which The Simpsons carries, so the show never reached it.
+    @Test func aSavedAdultAnimationListLetsTheSimpsonsThroughTheKidsKeyword() async throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let saved = TMDbDiscoverQuery(kind: .series, keywords: [.init(id: 161919, name: "adult animation")],
+                                      excludedKeywords: [.init(id: 208349, name: "kids"), .init(id: 210024, name: "anime")],
+                                      excludedGenres: [.init(id: 10751, name: "Family")])
+        let row = HomeWidget(id: "adult", title: "Adult Animation", content: .row(RowConfiguration(source: .tmdbDiscover(saved))))
+        await DefaultsWidgetStore(defaults: defaults).save([row])
+        let loaded = try #require(await DefaultsWidgetStore(defaults: defaults).load())
+        guard case .row(let configuration) = loaded[0].content, case .tmdbDiscover(let query) = configuration.source else {
+            Issue.record("the adult animation row should load as a TMDb discover row")
+            return
+        }
+        #expect(query.excludedKeywords == [.init(id: 210024, name: "anime")],
+                "anime stays out; the kids keyword does not, so The Simpsons is in the list")
+    }
+
     /// A collection saved with repeated tile ids (before the import fix) loads with every id unique, the same way on each load. A collection
     /// with unique ids loads unchanged.
     @Test func aSavedCollectionWithRepeatedTileIDsLoadsWithUniqueOnes() async throws {

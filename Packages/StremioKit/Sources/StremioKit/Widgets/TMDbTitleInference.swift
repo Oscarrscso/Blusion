@@ -79,6 +79,8 @@ extension TMDbDiscoverQuery {
     /// TMDb's "adult animation" keyword, which Fusion's adult animation list is built on, and the keywords it leaves out: anime and hentai.
     static let adultAnimationKeyword = Named(id: 161919, name: "adult animation")
     static let adultAnimationExcludedKeywords = [Named(id: 210024, name: "anime"), Named(id: 198385, name: "hentai")]
+    /// TMDb's "kids" keyword. The Simpsons carries it, so an adult animation list must not leave it out.
+    static let kidsKeyword = Named(id: 208349, name: "kids")
 
     /// The genres adult animation leaves out for a list of this kind: the family titles, and for TV the kids' shows as well. A genre the
     /// list already names is not left out.
@@ -170,9 +172,10 @@ extension WidgetSource {
         switch self {
         case .unsupported(let kind) where kind == "tmdbDiscover":
             return .tmdbDiscover(TMDbDiscoverQuery.inferred(fromTitle: title))
-        case .tmdbDiscover(var query) where (query.excludedGenres.isEmpty || query.keywords.isEmpty) && TMDbDiscoverQuery.namesAdultAnimation(title):
-            // A list saved before its title's adult animation left out the family titles, or before it named the keyword, is given them,
-            // as a Fusion title reads them.
+        case .tmdbDiscover(var query) where TMDbDiscoverQuery.namesAdultAnimation(title):
+            // A list saved before its title's adult animation left out the family titles, or named no keyword, is given them, as a Fusion title
+            // reads them. A list that leaves out TMDb's "kids" keyword drops The Simpsons, which carries it, so that keyword is let back in: a
+            // show's kids' show is already left out by its genre. Each step does nothing to a list that already has it.
             if query.excludedGenres.isEmpty {
                 query.excludedGenres = TMDbDiscoverQuery.adultAnimationExclusions(query.kind, namedGenres: query.genres)
             }
@@ -180,6 +183,7 @@ extension WidgetSource {
                 query.keywords = [TMDbDiscoverQuery.adultAnimationKeyword]
                 query.excludedKeywords = TMDbDiscoverQuery.adultAnimationExcludedKeywords
             }
+            query.excludedKeywords.removeAll { $0.id == TMDbDiscoverQuery.kidsKeyword.id }
             return .tmdbDiscover(query)
         default:
             return self
