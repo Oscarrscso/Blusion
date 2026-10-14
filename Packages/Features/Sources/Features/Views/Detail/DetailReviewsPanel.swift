@@ -147,20 +147,59 @@ extension ReviewPageRules {
         attach(to: view) { view.loadHTMLString("", baseURL: nil) }
     }
 
-    /// Tells the app that the page has painted: after its load and two frames. The reviews panel opens on this, not on the load, because the
-    /// page draws its reviews after it loads, and that is the black the reader saw.
-    static let paintedScript = """
+    /// Tells the app that the reviews are on screen and have settled. The panel opens on this, not on the load: the page draws its reviews
+    /// after it loads, and a panel that opened earlier showed the black the reader saw. The reviews are on screen when their heading (the
+    /// one the reviews scroll looks for) is in the viewport, and settled when nothing has changed for about 300 ms: no DOM change and no
+    /// scroll. A page with no such heading posts after 10 seconds, so it is not held to the 25-second limit.
+    static let paintedScript = #"""
     (function () {
-      function painted() {
+      var heading = /^\s*(user|audience) reviews?\s*$/i;
+      var timer = null;
+      var done = false;
+      var observer = null;
+
+      function reviewsOnScreen() {
+        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
+        for (var i = 0; i < nodes.length; i++) {
+          if (!heading.test(nodes[i].textContent || '')) continue;
+          var top = nodes[i].getBoundingClientRect().top;
+          if (top >= 0 && top <= window.innerHeight * 0.9) return true;
+        }
+        return false;
+      }
+
+      function finish() {
+        done = true;
+        clearTimeout(timer);
+        if (observer) observer.disconnect();
+        window.removeEventListener('scroll', settle);
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
             window.webkit.messageHandlers.painted.postMessage('painted');
           });
         });
       }
-      if (document.readyState === 'complete') { painted(); } else { window.addEventListener('load', painted); }
+
+      function settle() {
+        if (done) return;
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          if (!done && reviewsOnScreen()) finish();
+        }, 300);
+      }
+
+      observer = new MutationObserver(settle);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      window.addEventListener('scroll', settle, { passive: true });
+      setTimeout(function () {
+        if (done) return;
+        done = true;
+        if (observer) observer.disconnect();
+        window.webkit.messageHandlers.painted.postMessage('painted');
+      }, 10000);
+      settle();
     })();
-    """
+    """#
 }
 
 /// A rating's site, loaded in the app with its ads and trackers blocked. The page opens its user reviews when it can. It loads once per

@@ -75,9 +75,10 @@ done
 
 # Stray Mac copies are deleted, not only unlisted: the build product this install copied from, and any Mac Blusion.app left in Xcode's
 # DerivedData or in this repo's build/ folder. Spotlight finds a copy on disk, so each one is a second "Blusion" until it is gone.
-# Only the Mac (Catalyst) products are named here; iPhone builds are left alone.
-for stray in "$APP" "$HOME"/Library/Developer/Xcode/DerivedData/Blusion-*/Build/Products/*maccatalyst/Blusion.app \
-             "$ROOT"/build/*/Build/Products/*maccatalyst/Blusion.app "$ROOT"/build/*/DerivedData/Build/Products/*maccatalyst/Blusion.app; do
+# Xcode's own build products go too (any platform: Xcode's Debug iPhone and Mac builds are both listed as Blusion). The iPhone install's
+# build folder, build/iphone*.noindex, is left alone: that install builds it afresh each time.
+for stray in "$APP" "$HOME"/Library/Developer/Xcode/DerivedData/Blusion-*/Build/Products/*/Blusion.app \
+             "$ROOT"/build/*/DerivedData/Build/Products/*maccatalyst/Blusion.app; do
   [[ -e "$stray" && "$stray" != "$DEST" ]] || continue
   "$LSREGISTER" -u "$stray" >/dev/null 2>&1 || true
   rm -rf "$stray"
