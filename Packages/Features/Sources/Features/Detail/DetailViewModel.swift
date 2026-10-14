@@ -474,16 +474,6 @@ public final class DetailViewModel {
         await episodeAppeared(video)
     }
 
-    /// The episode Shuffle has picked, highlighted in the episode list. It is shown, not played: Play still starts a stream.
-    public private(set) var highlightedEpisodeID: String?
-
-    /// Shuffle: picks a random episode that has aired, opens its season and highlights its card. Nothing starts playing.
-    public func shuffleEpisode(now: Date = Date()) {
-        guard isSeries, let video = detail.episodesCountingAsWatched(by: now).randomElement() else { return }
-        if let season = video.season { selectedSeason = season }
-        highlightedEpisodeID = video.id
-    }
-
     /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.
     public func progressFraction(for request: StreamRequest) -> Double? { progressFractions[request.identity] }
 
