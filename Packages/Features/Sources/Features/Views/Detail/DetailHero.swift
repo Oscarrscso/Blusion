@@ -81,8 +81,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
         synopsis
             .padding(.horizontal, contentMargin)
             .padding(.top, Theme.Spacing.s)
-        DetailRatings(model: model, startsLoading: model.hasSettledHero)
-            .frame(maxWidth: landscapeWidths.controls, alignment: .leading)
+        DetailRatings(model: model, startsLoading: model.hasSettledHero, buttonsWidth: landscapeWidths.controls)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, contentMargin)
             .padding(.top, Theme.Spacing.m)

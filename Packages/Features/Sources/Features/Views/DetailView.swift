@@ -311,6 +311,13 @@ struct DetailView: View {
             }
             showsTrailerCover = fullScreen
         }
+        // A trailer already playing inline goes full screen when the phone turns sideways, as one that starts then does.
+        .onChange(of: isPhoneInLandscape) { _, landscape in
+            guard landscape, model.trailer.isPlaying, model.trailer.playback != nil else { return }
+            model.trailer.isFullScreen = true
+            playerIsCovered = true
+            showsTrailerCover = true
+        }
         .fullScreenCover(isPresented: $showsTrailerCover, onDismiss: {
             playerIsCovered = false
             model.trailer.isFullScreen = false

@@ -23,6 +23,17 @@
         }
       }
     },
+    "4K": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4K"
+          }
+        }
+      }
+    },
     "A key adds the IMDb score of each episode, one request per season. The free key allows 1,000 requests a day, counted on this device and reset at midnight UTC.": {
       "extractionState": "manual",
       "localizations": {
@@ -404,6 +415,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Better Posters"
+          }
+        }
+      }
+    },
+    "Blu-ray": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blu-ray"
           }
         }
       }

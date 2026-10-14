@@ -41,11 +41,15 @@ struct StreamRow: View {
                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
                     if let provider = provider {
                         StreamProviderBox(provider: provider)
+                    } else if let disc = disc {
+                        // A disc gets the same box a service does, with its format's name in it.
+                        StreamDiscBox(is4K: disc == .fourKDisc)
                     }
                     Text(Self.headline(for: item))
                         .font(.subheadline.weight(.semibold))
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.7)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !facts.isEmpty {
@@ -72,6 +76,14 @@ struct StreamRow: View {
     private var provider: StreamProvider? {
         if case .streaming(let provider) = StreamLook(item.quality) { return provider }
         return nil
+    }
+
+    /// The disc a release is, when its card takes a disc's look: a Blu-ray, or a 4K REMUX.
+    private var disc: StreamLook? {
+        switch StreamLook(item.quality) {
+        case .disc, .fourKDisc: StreamLook(item.quality)
+        case .plain, .streaming: nil
+        }
     }
 
     /// Whether iOS sends this stream's Dolby Atmos to AirPods as spatial audio, so the AirPods mark stands for it. That is streaming Atmos

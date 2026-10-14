@@ -10,6 +10,8 @@ struct DetailRatings: View {
     let model: DetailViewModel
     /// False holds the lookup back until the screen allows it (the title page waits for its hero).
     var startsLoading = true
+    /// The most width the rating buttons take. The reviews are not held to it: they take the page's full width.
+    var buttonsWidth: CGFloat?
 
     var body: some View {
         // No spacing between the buttons and the reviews: the gap is the reviews' own top padding, added only once they show, so the screen
@@ -19,6 +21,7 @@ struct DetailRatings: View {
                              isLoading: model.reviewsLoading) { site, url, isSearch in
                 model.toggleReviews(site, url: url, isSearch: isSearch)
             }
+            .frame(maxWidth: buttonsWidth ?? .infinity, alignment: .leading)
             if let reviews = model.openedReviews {
                 DetailReviewsPanel(reviews: reviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                    onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
