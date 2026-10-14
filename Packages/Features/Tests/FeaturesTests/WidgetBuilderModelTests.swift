@@ -148,10 +148,10 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         #expect(model.mode == .edit && model.customTitle == "Old", "a title that differs from the source's name is custom")
         model.setCustomTitle("New")
         await model.commit()
-        #expect(manager.widgets.map(\.id) == ["w1"], "an update replaces the widget rather than adding one")
-        #expect(manager.widgets.first?.title == "New")
+        #expect(manager.widgets.map(\.id) == [HomeLayout.continueWatchingID, "w1"], "an update replaces the widget rather than adding one")
+        #expect(manager.widgets.last?.title == "New")
         let saved = await services.widgets.load()
-        #expect(saved?.map(\.title) == ["New"])
+        #expect(saved?.map(\.title) == ["Continue", "New"])
     }
 
     @Test func removeWidgetRemovesTheWidgetFromHome() async throws {
@@ -159,7 +159,7 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         let (manager, _) = try await loadedManager(widgets: [original])
         let model = builder(.edit, widget: original, manager: manager)
         await model.removeWidget()
-        #expect(manager.widgets.isEmpty)
+        #expect(manager.widgets.map(\.id) == [HomeLayout.continueWatchingID], "only Continue Watching, which Home always shows, is left")
     }
 
     @Test func anUnsupportedSourceCannotBeCommitted() async throws {

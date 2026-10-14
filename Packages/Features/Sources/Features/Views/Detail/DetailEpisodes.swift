@@ -11,10 +11,14 @@ struct DetailEpisodes: View {
     let contentMargin: CGFloat
     /// True while an episode's menu is open, so the page can blur behind it. Cleared when this view leaves the screen.
     @Binding var isHoldingEpisode: Bool
-    /// Shuffle hands the episode it picks to the page's stream flow, the one Play uses.
+    /// Shuffle and a tapped episode hand their episode to the page's stream flow, the one Play uses: a spinner until the streams are
+    /// ready, then the streams take the details' place.
     let play: (StreamRequest) -> Void
-    /// True while Play's streams are loading. Shuffle waits then, since a tap would call that lookup off.
-    var isLoadingStreams = false
+    /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and the episodes wait then, since a tap would
+    /// call that lookup off or start a second one.
+    var loadingRequest: StreamRequest?
+
+    private var isLoadingStreams: Bool { loadingRequest != nil }
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
     /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
@@ -141,8 +145,14 @@ struct DetailEpisodes: View {
 
     private func episodeRow(_ video: Video, width: CGFloat) -> some View {
         let airsLater = !video.hasAired()
-        return NavigationLink(value: model.request(for: video)) {
-            episodeCard(video, width: width, airsLater: airsLater)
+        let request = model.request(for: video)
+        return Button {
+            // As Shuffle does: the episode's streams load on this page, with a spinner on its card, and replace the details once ready.
+            // One lookup at a time, so a second tap does not call it off or open another.
+            guard !isLoadingStreams else { return }
+            play(request)
+        } label: {
+            episodeCard(video, width: width, airsLater: airsLater, isLoadingStreams: loadingRequest?.id == request.id)
         }
         .buttonStyle(PressableCardStyle())
         // An episode that has not aired cannot be opened: its card shows the air date instead.
@@ -178,10 +188,12 @@ struct DetailEpisodes: View {
     }
 
     /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width.
-    private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool, stillRadius: CGFloat = Theme.Radius.small) -> EpisodeRow {
+    private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool, isLoadingStreams: Bool = false,
+                             stillRadius: CGFloat = Theme.Radius.small) -> EpisodeRow {
         EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
                    artwork: model.backdropURL, score: model.score(for: video), width: width,
-                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater, stillRadius: stillRadius)
+                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater, isLoadingStreams: isLoadingStreams,
+                   stillRadius: stillRadius)
     }
 }
 
@@ -198,6 +210,8 @@ private struct EpisodeRow: View {
     var showsWholeOverview = false
     /// Set for an episode that has not aired: its still is dimmed, and the card cannot be opened.
     var airsLater = false
+    /// Set while this episode's streams load: a spinner over its still, as Play has one.
+    var isLoadingStreams = false
     /// The still's corner radius. The menu's preview gives it one that follows its panel's, which is rounder than a card's.
     var stillRadius: CGFloat = Theme.Radius.small
 
@@ -240,6 +254,17 @@ private struct EpisodeRow: View {
             .overlay(alignment: .topTrailing) {
                 if watched { checkmark.padding(overlayInset) }
             }
+            .overlay {
+                if isLoadingStreams {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        ProgressView().controlSize(.large).tint(.white)
+                    }
+                    .transition(.opacity)
+                    .accessibilityLabel("Loading streams")
+                }
+            }
+            .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             .mediaArtwork(cornerRadius: stillRadius)
     }
 

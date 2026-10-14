@@ -58,12 +58,57 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         try #require(model.catalogChoices.first(where: { $0.id == id }))
     }
 
+    /// Continue Watching, which every saved layout keeps (`HomeLayout`).
+    private let continueWatching = HomeWidget(id: "cw", title: "Continue", content: .continueWatching)
+
     private func plainRow(_ id: String) -> HomeWidget {
         let reference = AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")
         return HomeWidget(id: id, title: id, content: .row(RowConfiguration(source: .addonCatalog(reference))))
     }
 
     // MARK: Loading and editing
+
+    private func spotlight(_ id: String = "hero") -> HomeWidget {
+        let reference = AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")
+        return HomeWidget(id: id, title: "Spotlight", hideTitle: true, content: .hero(RowConfiguration(source: .addonCatalog(reference))))
+    }
+
+    /// A saved layout that lost Continue Watching (it was deleted from the widgets page) gets it back after the showcase, once.
+    @Test func aLayoutWithoutContinueWatchingIsRepairedOnceOnLoad() async throws {
+        let saved = [spotlight(), plainRow("a"), plainRow("b"), plainRow("c")]
+        let services = try await services(widgets: saved)
+        let model = await loaded(services)
+        let expected = ["hero", HomeLayout.continueWatchingID, "a", "b", "c"]
+        #expect(model.widgets.map(\.id) == expected)
+        let stored = try #require(await services.widgets.load())
+        #expect(stored.map(\.id) == expected, "the repair is saved")
+        #expect(Array(stored.dropFirst(2)) == Array(saved.dropFirst()), "every other row keeps its order and settings")
+        let again = await loaded(services)
+        #expect(again.widgets == stored, "a second load changes nothing")
+        #expect(await services.widgets.load() == stored)
+    }
+
+    @Test func aLayoutThatKeepsTheRulesIsNotSavedOnLoad() async throws {
+        let saved = [spotlight(), plainRow("a"), HomeWidget(id: "cw", title: "Continue", content: .continueWatching), plainRow("b")]
+        let services = try await services(widgets: saved)
+        let model = await loaded(services)
+        #expect(model.widgets == saved, "Continue Watching keeps its own place")
+        #expect(model.saveRevision == 0)
+    }
+
+    @Test func continueWatchingCannotBeRemovedButMoves() async throws {
+        let continueWatching = HomeWidget(id: "cw", title: "Continue", content: .continueWatching)
+        let services = try await services(widgets: [spotlight(), continueWatching, plainRow("a"), plainRow("b")])
+        let model = await loaded(services)
+        await model.remove(id: "cw")
+        await model.remove(atOffsets: IndexSet(integer: 1))
+        #expect(model.widgets.map(\.id) == ["hero", "cw", "a", "b"], "neither removal takes it")
+        await model.move(fromOffsets: IndexSet(integer: 1), toOffset: 4)
+        #expect(model.widgets.map(\.id) == ["hero", "a", "b", "cw"])
+        #expect(await services.widgets.load()?.map(\.id) == ["hero", "a", "b", "cw"])
+        await model.move(fromOffsets: IndexSet(integer: 0), toOffset: 3)
+        #expect(model.widgets.map(\.id) == ["hero", "a", "b", "cw"], "the showcase does not move")
+    }
 
     @Test func theAutomaticLayoutShowsUntilTheFirstChange() async throws {
         let services = try await services()
@@ -88,35 +133,35 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
     }
 
     @Test func mutationsPersistAndKeepTheirOrder() async throws {
-        let services = try await services(widgets: [plainRow("a"), plainRow("b"), plainRow("c")])
+        let services = try await services(widgets: [plainRow("a"), plainRow("b"), plainRow("c"), continueWatching])
         let model = await loaded(services)
         #expect(model.isCustomised)
 
         await model.add(plainRow("d"))
-        await model.update(HomeWidget(id: "b", title: "Renamed", content: .continueWatching))
-        #expect(model.widgets.map(\.id) == ["a", "b", "c", "d"])
+        await model.update(HomeWidget(id: "b", title: "Renamed", content: .banner(RowConfiguration(source: .tmdbDiscover(TMDbDiscoverQuery())))))
+        #expect(model.widgets.map(\.id) == ["a", "b", "c", "cw", "d"])
         #expect(model.widgets[1].title == "Renamed", "update replaces in place")
 
         await model.remove(id: "c")
-        #expect(model.widgets.map(\.id) == ["a", "b", "d"])
+        #expect(model.widgets.map(\.id) == ["a", "b", "cw", "d"])
         await model.remove(atOffsets: IndexSet(integer: 0))
-        #expect(model.widgets.map(\.id) == ["b", "d"])
+        #expect(model.widgets.map(\.id) == ["b", "cw", "d"])
         let saved = await services.widgets.load()
-        #expect(saved?.map(\.id) == ["b", "d"], "every change is saved")
+        #expect(saved?.map(\.id) == ["b", "cw", "d"], "every change is saved")
     }
 
     @Test func moveFollowsTheOnMoveShape() async throws {
-        let model = await loaded(try await services(widgets: [plainRow("a"), plainRow("b"), plainRow("c"), plainRow("d")]))
+        let model = await loaded(try await services(widgets: [plainRow("a"), plainRow("b"), plainRow("c"), plainRow("d"), continueWatching]))
         await model.move(fromOffsets: IndexSet(integer: 0), toOffset: 3)
-        #expect(model.widgets.map(\.id) == ["b", "c", "a", "d"])
+        #expect(model.widgets.map(\.id) == ["b", "c", "a", "d", "cw"])
         await model.move(fromOffsets: IndexSet([2, 3]), toOffset: 0)
-        #expect(model.widgets.map(\.id) == ["a", "d", "b", "c"])
+        #expect(model.widgets.map(\.id) == ["a", "d", "b", "c", "cw"])
         await model.move(fromOffsets: IndexSet(integer: 3), toOffset: 0)
-        #expect(model.widgets.map(\.id) == ["c", "a", "d", "b"])
-        await model.move(fromOffsets: IndexSet(integer: 0), toOffset: 4)
-        #expect(model.widgets.map(\.id) == ["a", "d", "b", "c"], "a destination past the end moves to the end")
+        #expect(model.widgets.map(\.id) == ["c", "a", "d", "b", "cw"])
+        await model.move(fromOffsets: IndexSet(integer: 0), toOffset: 9)
+        #expect(model.widgets.map(\.id) == ["a", "d", "b", "cw", "c"], "a destination past the end moves to the end")
         await model.move(fromOffsets: IndexSet(integer: 9), toOffset: 0)
-        #expect(model.widgets.map(\.id) == ["a", "d", "b", "c"], "an offset outside the list changes nothing")
+        #expect(model.widgets.map(\.id) == ["a", "d", "b", "cw", "c"], "an offset outside the list changes nothing")
     }
 
     @Test func updatingAnUnknownWidgetOrRemovingNothingChangesNothing() async throws {
@@ -132,10 +177,10 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
     }
 
     @Test func addingAWidgetWithAUsedIDGivesItANewOne() async throws {
-        let model = await loaded(try await services(widgets: [plainRow("a")]))
+        let model = await loaded(try await services(widgets: [plainRow("a"), continueWatching]))
         await model.add(plainRow("a"))
-        #expect(model.widgets.count == 2)
-        #expect(Set(model.widgets.map(\.id)).count == 2, "ids stay unique")
+        #expect(model.widgets.count == 3)
+        #expect(Set(model.widgets.map(\.id)).count == 3, "ids stay unique")
         #expect(model.widgets[0].id == "a")
     }
 
@@ -190,13 +235,14 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
     }
 
     @Test func aFusionExportAppendsAndGivesRepeatedIDsNewOnes() async throws {
-        let services = try await services(widgets: [plainRow("daily")])
+        let services = try await services(widgets: [plainRow("daily"), continueWatching])
         let model = await loaded(services)
         await model.importJSON(fusionExport, mode: .append)
-        #expect(model.widgets.count == 4)
+        #expect(model.widgets.count == 4, "the file's Continue Watching is not added a second time")
         #expect(model.widgets[0].id == "daily", "the widget already there keeps its id")
         #expect(Set(model.widgets.map(\.id)).count == 4, "the imported copy gets a new id")
-        #expect(model.message == "Imported 3 widgets, skipped 1.")
+        #expect(model.widgets.filter(HomeLayout.isContinueWatching).map(\.id) == ["cw"])
+        #expect(model.message == "Imported 2 widgets, skipped 1.")
     }
 
     @Test func aFileThatRepeatsAnIDKeepsEveryWidget() async throws {
@@ -249,10 +295,10 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         #expect(model.message == "Imported 1 widget.")
         let stored = await services.widgets.load()
         let saved = try #require(stored)
-        #expect(saved.map(\.id) == ["tv"])
+        #expect(saved.map(\.id) == [HomeLayout.continueWatchingID, "tv"], "Continue Watching comes with every layout")
         let text = String(decoding: try JSONEncoder().encode(saved), as: UTF8.self)
         #expect(!text.contains("TOKEN") && !text.contains("manifest.json"), "what is saved holds the host, never the link")
-        let source = try #require(saved.first?.content.rowSource)
+        let source = try #require(saved.last?.content.rowSource)
         #expect(model.describe(source) == "Catalog from tv.example.com (addon not installed)")
     }
 
@@ -272,7 +318,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         #expect(installed == ["test.cinemeta", "test.tv"])
         let stored = await services.widgets.load()
         let saved = try #require(stored)
-        let source = try #require(saved.first?.content.rowSource)
+        let source = try #require(saved.last?.content.rowSource)
         guard case .addonCatalog(let reference) = source else {
             Issue.record("the imported row should read an addon catalog")
             return
@@ -292,7 +338,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         let message = model.message ?? ""
         #expect(!message.contains("TOKEN") && !message.contains("http"))
         let stored = await services.widgets.load()
-        #expect(stored?.count == 1, "the widget is still saved, showing its addon as missing")
+        #expect(stored?.map(\.id) == [HomeLayout.continueWatchingID, "tv"], "the widget is still saved, showing its addon as missing")
     }
 
     @Test func anAddonInstalledMeanwhileIsNotAFailure() async throws {
@@ -305,7 +351,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
         await model.installMissingAddonsAndFinishImport()
         #expect(model.message == "Imported 1 widget.", "already installed is neither a failure nor a new install")
         let stored = await services.widgets.load()
-        #expect(stored?.count == 1)
+        #expect(stored?.map(\.id) == [HomeLayout.continueWatchingID, "tv"])
     }
 
     @Test func aWebLinkImportsItsFileWithinTheLimit() async throws {
@@ -352,7 +398,7 @@ private let tvManifest = Manifest(id: "test.tv", name: "TV Catalogs", version: "
                                                          limit: 30))
         await author.add(WidgetsManagerViewModel.makeHero(choice: popular))
         await author.add(WidgetsManagerViewModel.makeGenreCollection(title: "Genres", choice: popular))
-        await author.add(HomeWidget(id: "ctw", title: "Continue Watching", content: .continueWatching))
+        #expect(author.widgets.contains(where: HomeLayout.isContinueWatching), "an empty layout has Continue Watching")
         let text = try #require(author.exportJSON())
         #expect(text.contains("fusionWidgets") && !text.contains("TOKEN"))
 

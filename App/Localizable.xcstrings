@@ -1662,6 +1662,17 @@
         }
       }
     },
+    "Loading streams": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading streams"
+          }
+        }
+      }
+    },
     "Manifest": {
       "extractionState": "manual",
       "localizations": {

@@ -352,8 +352,13 @@ import StremioKitTestSupport
     }
 
     @Test func aRateLimitedOMDbIsNotAvailableForEpisodesAndAsksTheCardsAgain() async throws {
+        // Its own count of today's requests: the test runner's shared one passes the daily allowance after enough runs in a day.
+        let name = "PosterRatingsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
         let transport = StubTransport(data: omdbSeason, status: 429)
-        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "k"))
+        let store = PosterRatingsStore(omdb: OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "k",
+                                                         usage: OMDbUsage(defaults: defaults)))
         let before = store.reviewServicesRevision
         #expect(store.omdbAllowsEpisodeRequests)
         _ = await store.episodeRatings(for: "tt0944947", season: 2)

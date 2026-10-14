@@ -68,7 +68,8 @@ struct WidgetEditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if mode == .edit {
+            // Continue Watching has no removal: Home shows it whether the layout lists it or not (see the widgets page).
+            if mode == .edit, WidgetsManagerViewModel.isRemovable(widget) {
                 Section {
                     Button("Remove Widget", role: .destructive) {
                         Task { await model.remove(id: widget.id); dismiss() }

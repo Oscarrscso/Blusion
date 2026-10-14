@@ -80,32 +80,23 @@ public final class WidgetsManagerViewModel {
     public func load() async {
         let saved = await services.widgets.load()
         let addons = await readAddons()
-        // A saved order with its showcase out of place, or more than one showcase, is put right as it is shown.
-        let shown = WidgetsManagerViewModel.normalisedShowcase(saved ?? DefaultWidgets.make(for: addons))
+        // A saved layout that breaks Home's rules (its showcase out of place, a second showcase, or no Continue Watching) is put right as
+        // it is shown, and saved once. The automatic layout keeps them already.
+        let shown = saved.map { HomeLayout.normalised($0) } ?? DefaultWidgets.make(for: addons)
         widgets = shown
         isCustomised = saved != nil
-        if let saved, shown.map(\.id) != saved.map(\.id) { await commit(shown) }
-    }
-
-    /// Home's showcase is the large spotlight. It is always the first widget, and there is only one: the first one listed is kept and any
-    /// other is dropped.
-    nonisolated public static func normalisedShowcase(_ list: [HomeWidget]) -> [HomeWidget] {
-        var showcase: HomeWidget?
-        var rest: [HomeWidget] = []
-        for widget in list {
-            if isShowcase(widget) {
-                if showcase == nil { showcase = widget }
-            } else {
-                rest.append(widget)
-            }
-        }
-        return (showcase.map { [$0] } ?? []) + rest
+        if let saved, shown != saved { await services.widgets.save(shown) }
     }
 
     /// Whether a widget is Home's showcase: a spotlight.
     nonisolated public static func isShowcase(_ widget: HomeWidget) -> Bool {
-        if case .hero = widget.content { return true }
-        return false
+        HomeLayout.isShowcase(widget)
+    }
+
+    /// Continue Watching is not removed: Home shows it whether the layout lists it or not, so removing it would only move it above the
+    /// showcase. It is moved like any other widget.
+    nonisolated public static func isRemovable(_ widget: HomeWidget) -> Bool {
+        !HomeLayout.isContinueWatching(widget)
     }
 
     /// The list as it is saved now, or nil when the change must not be made. Another manager or an editor may have saved since this one
@@ -120,9 +111,11 @@ public final class WidgetsManagerViewModel {
             changedElsewhere()
             return nil
         }
-        widgets = saved
+        // Read with Home's rules kept, as `load` shows it, so a change compares like with like.
+        let normal = HomeLayout.normalised(saved)
+        widgets = normal
         isCustomised = true
-        return saved
+        return normal
     }
 
     /// The change was made from a list that has since changed elsewhere. Nothing is saved, and the list now shows the saved one.
@@ -162,7 +155,7 @@ public final class WidgetsManagerViewModel {
 
     public func remove(id: String) async {
         guard let current = await savedList() else { return }
-        guard current.contains(where: { $0.id == id }) else { return }
+        guard let widget = current.first(where: { $0.id == id }), WidgetsManagerViewModel.isRemovable(widget) else { return }
         await commit(current.filter { $0.id != id })
     }
 
@@ -170,7 +163,9 @@ public final class WidgetsManagerViewModel {
         let shown = widgets.map(\.id)
         guard let current = await savedList() else { return }
         guard current.map(\.id) == shown else { changedElsewhere(); return }
-        let kept = current.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        let kept = current.enumerated()
+            .filter { !offsets.contains($0.offset) || !WidgetsManagerViewModel.isRemovable($0.element) }
+            .map(\.element)
         guard kept.count < current.count else { return }
         await commit(kept)
     }
@@ -320,7 +315,10 @@ public final class WidgetsManagerViewModel {
             guard let saved = await savedList() else { return nil }
             current = saved
         }
-        let imported = WidgetsManagerViewModel.withFreshIDs(result.widgets, existing: current)
+        // Home has one Continue Watching: an append does not add a second.
+        let incoming = current.contains(where: HomeLayout.isContinueWatching)
+            ? result.widgets.filter { !HomeLayout.isContinueWatching($0) } : result.widgets
+        let imported = WidgetsManagerViewModel.withFreshIDs(incoming, existing: current)
         await commit(mode == .append ? current + imported : imported)
         return imported.count
     }
@@ -566,8 +564,9 @@ public final class WidgetsManagerViewModel {
 
     /// Shows and saves a new list. The first change to the automatic layout saves the whole layout with the change.
     private func commit(_ list: [HomeWidget]) async {
-        // Every saved order keeps the showcase first and alone, so an import with several showcases keeps only the first.
-        let normal = WidgetsManagerViewModel.normalisedShowcase(list)
+        // Every saved layout keeps Home's rules: the showcase first and alone (an import's other showcases become banners), and Continue
+        // Watching in the list.
+        let normal = HomeLayout.normalised(list)
         widgets = normal
         isCustomised = true
         clearMessage()

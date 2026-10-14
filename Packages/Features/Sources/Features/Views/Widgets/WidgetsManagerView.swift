@@ -1,7 +1,11 @@
 #if canImport(UIKit)
+import os
 import StremioKit
 import SwiftUI
 import UIKit
+
+/// Each lift, swap and drop of a widget card, so a try on the phone can be read back from its log.
+private let dragLog = Logger(subsystem: "app.blusion.player", category: "widgets.drag")
 
 struct WidgetsManagerView: View {
     let services: AppServices
@@ -25,16 +29,11 @@ struct WidgetsManagerView: View {
     @State private var gridWidth: CGFloat = 0
     @State private var liftCount = 0
     @State private var swapCount = 0
-    @State private var contentOffsetY: CGFloat = 0
-    @State private var viewportHeight: CGFloat = 0
-    /// The grid's top edge in the window, and the scroll content's height, for the edge scrolling.
-    @State private var gridMinY: CGFloat = 0
-    @State private var contentHeight: CGFloat = 0
-    private static let scrollSpace = "widgetScroll"
-    @State private var scrollPosition = ScrollPosition()
+    /// The page's UIKit scroll view: the iPhone's press that lifts a card sits on it, and it scrolls while a card is held near an edge.
+    @State private var scroller = GridScroller()
     @State private var autoScroll: Task<Void, Never>?
-    /// Set when a drag moved the pointer, so the tap that ends it does not open the card.
-    @State private var didDrag = false
+    /// Taps and the delete button do nothing until then: the touch that lifted and dropped a card is not also a tap.
+    @State private var quietUntil = Date.distantPast
     /// True while the dragged card settles into its slot after it is let go.
     @State private var landing = false
 
@@ -153,16 +152,21 @@ struct WidgetsManagerView: View {
 
     // MARK: Drag
 
+    /// Whether a touch at this point may lift a card: on a card, not the showcase, and not while another card is held or settling.
+    private func canLift(at point: CGPoint) -> Bool {
+        guard drag == nil, !landing, let index = layout.index(at: point), order.indices.contains(index),
+              layout.frame(for: index).contains(point) else { return false }
+        return !showcaseIDs.contains(order[index])
+    }
+
     /// Starts a drag on the card under the point. The showcase and the gutters do not start one.
     private func beginDrag(at point: CGPoint) {
-        guard drag == nil, let index = layout.index(at: point), order.indices.contains(index) else { return }
+        guard canLift(at: point), let index = layout.index(at: point) else { return }
         let id = order[index]
-        guard !showcaseIDs.contains(id) else { return }
         let centre = layout.center(for: index)
-        didDrag = false
         liftCount += 1
-        drag = GridDrag(id: id, start: point, grabOffset: CGSize(width: point.x - centre.x, height: point.y - centre.y),
-                        pointer: point, originalOrder: order)
+        drag = GridDrag(id: id, grabOffset: CGSize(width: point.x - centre.x, height: point.y - centre.y), pointer: point, originalOrder: order)
+        dragLog.notice("began \(id, privacy: .public) in slot \(index)")
         startAutoScroll()
     }
 
@@ -170,21 +174,20 @@ struct WidgetsManagerView: View {
     private func updateDrag(to point: CGPoint) {
         guard !landing, var current = drag else { return }
         current.pointer = point
-        if abs(point.x - current.start.x) > 6 || abs(point.y - current.start.y) > 6 { didDrag = true }
         drag = current
         retarget()
     }
 
     /// Puts the dragged card in the slot under the pointer. A pointer in a gutter keeps the card where it is, and the showcase keeps slot 0.
     private func retarget() {
-        guard let current = drag, let from = order.firstIndex(of: current.id) else { return }
-        let reached = layout.index(at: current.pointer) ?? from
-        let target = max(reached, pinnedCount)
+        guard !landing, let current = drag, let from = order.firstIndex(of: current.id) else { return }
+        let target = layout.target(at: current.pointer, from: from, pinned: pinnedCount)
         guard target != from else { return }
         withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
             order = WidgetSlotLayout.moved(order, from: from, to: target)
         }
         swapCount += 1
+        dragLog.notice("swap \(current.id, privacy: .public) from \(from) to \(target)")
     }
 
     /// Ends the drag. A drag that was not cancelled saves the order once, and settles the card into its slot. A cancelled one puts the cards
@@ -193,16 +196,17 @@ struct WidgetsManagerView: View {
         guard !landing, let current = drag else { return }
         autoScroll?.cancel()
         autoScroll = nil
+        quietUntil = Date().addingTimeInterval(0.4)
         if cancelled {
+            dragLog.notice("cancelled \(current.id, privacy: .public)")
             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
                 order = current.originalOrder
                 drag = nil
             }
-            // A cancelled touch ends without a tap, so the flag is cleared here rather than left for the next tap to swallow.
-            didDrag = false
             syncOrder()
             return
         }
+        dragLog.notice("dropped \(current.id, privacy: .public): \(order.joined(separator: ","), privacy: .public)")
         let saved = model.widgets.map(\.id)
         if let from = saved.firstIndex(of: current.id), let to = order.firstIndex(of: current.id), from != to {
             let destination = to > from ? to + 1 : to
@@ -217,38 +221,21 @@ struct WidgetsManagerView: View {
             try? await Task.sleep(for: .milliseconds(300))
             drag = nil
             landing = false
-            // A tap right after the drop is the drop's own, so the flag is cleared once the card has settled.
-            didDrag = false
-            // If the save was refused, the grid goes back to the saved order here.
+            // A save that was refused leaves the saved order as it was: the grid goes back to it.
             syncOrder()
         }
     }
 
-    /// While a card is held near the top or bottom of the window, the page scrolls, and the card's place follows the pointer as the
+    /// While a card is held near the top or bottom of what is visible, the page scrolls, and the card's place follows the pointer as the
     /// content moves under it.
     private func startAutoScroll() {
         autoScroll?.cancel()
         autoScroll = Task { @MainActor in
-            let zone: CGFloat = 60
-            while !Task.isCancelled, drag != nil {
-                // The finger's place in the window: the grid's top edge in the window, plus the pointer's place in the grid.
-                let windowY = (drag?.pointer.y ?? 0) + gridMinY
-                var step: CGFloat = 0
-                if windowY < zone {
-                    step = -(2 + 18 * (zone - windowY) / zone)
-                } else if windowY > viewportHeight - zone {
-                    step = 2 + 18 * (windowY - (viewportHeight - zone)) / zone
-                }
-                if step != 0 {
-                    let limit = max(0, contentHeight - viewportHeight)
-                    let next = min(max(0, contentOffsetY + step), limit)
-                    let delta = next - contentOffsetY
-                    if delta != 0 {
-                        scrollPosition.scrollTo(y: next)
-                        contentOffsetY = next
-                        drag?.pointer.y += delta
-                        retarget()
-                    }
+            while !Task.isCancelled, let current = drag, !landing {
+                let moved = scroller.autoScrollStep(at: current.pointer)
+                if moved != 0 {
+                    drag?.pointer.y += moved
+                    retarget()
                 }
                 try? await Task.sleep(for: .milliseconds(16))
             }
@@ -260,13 +247,22 @@ struct WidgetsManagerView: View {
         CGPoint(x: current.pointer.x - current.grabOffset.width, y: current.pointer.y - current.grabOffset.height)
     }
 
-    /// A card's tap opens its settings, unless the touch was a drag.
+    /// Whether a tap or the delete button counts now: not while a card is held, nor just after one was dropped.
+    private var takesTaps: Bool { drag == nil && Date() >= quietUntil }
+
+    /// A card's tap opens its settings, unless the touch lifted a card.
     private func tapped(_ id: String) {
-        if didDrag {
-            didDrag = false
-            return
+        guard takesTaps, let widget = widgetsByID[id] else { return }
+        openedWidget = widget
+    }
+
+    /// The delete action of a card, or nil for Continue Watching, which Home always shows.
+    private func deleteAction(for widget: HomeWidget) -> (() -> Void)? {
+        guard WidgetsManagerViewModel.isRemovable(widget) else { return nil }
+        return {
+            guard takesTaps else { return }
+            Task { await model.remove(id: widget.id) }
         }
-        if let widget = widgetsByID[id] { openedWidget = widget }
     }
 
     // MARK: Grid
@@ -278,7 +274,7 @@ struct WidgetsManagerView: View {
                 let index = order.firstIndex(of: id) ?? 0
                 let isShowcase = showcaseIDs.contains(id)
                 if let widget = widgetsByID[id] {
-                    WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                    WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget))
                         .frame(width: layout.cardWidth, height: layout.cardHeight)
                         .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                         .opacity(drag?.id == id ? 0 : 1)
@@ -294,7 +290,7 @@ struct WidgetsManagerView: View {
                 }
             }
             if let current = drag, let widget = widgetsByID[current.id] {
-                WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget))
                     .frame(width: layout.cardWidth, height: layout.cardHeight)
                     .scaleEffect(landing ? 1 : 1.05)
                     .shadow(color: .black.opacity(landing ? 0 : 0.35), radius: 16, y: 10)
@@ -305,10 +301,13 @@ struct WidgetsManagerView: View {
             }
         }
         .coordinateSpace(name: Self.coordinateSpace)
-        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.scrollSpace)).minY } action: { gridMinY = $0 }
         .frame(width: layout.contentSize.width, height: layout.contentSize.height)
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: order)
         .contentShape(Rectangle())
+        .background(
+            GridScrollAnchor(scroller: scroller, canLift: { canLift(at: $0) }, began: { beginDrag(at: $0) },
+                             changed: { updateDrag(to: $0) }, ended: { endDrag(cancelled: $0) })
+        )
         #if targetEnvironment(macCatalyst)
         .simultaneousGesture(
             DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.coordinateSpace))
@@ -320,13 +319,7 @@ struct WidgetsManagerView: View {
         )
         .sensoryFeedback(.alignment, trigger: swapCount)
         #else
-        .gesture(
-            GridLongPress(
-                began: { beginDrag(at: $0) },
-                changed: { updateDrag(to: $0) },
-                ended: { endDrag(cancelled: $0) }
-            )
-        )
+        // The press that lifts a card is on the page's scroll view (see `GridScroller`), not here.
         .sensoryFeedback(.impact(weight: .medium), trigger: liftCount)
         .sensoryFeedback(.selection, trigger: swapCount)
         #endif
@@ -362,11 +355,6 @@ struct WidgetsManagerView: View {
             .padding(16)
             .onGeometryChange(for: CGFloat.self) { max(0, $0.size.width - 32) } action: { gridWidth = $0 }
         }
-        .coordinateSpace(name: Self.scrollSpace)
-        .scrollPosition($scrollPosition)
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, new in contentOffsetY = new }
-        .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, new in viewportHeight = new }
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, new in contentHeight = new }
         #if !targetEnvironment(macCatalyst)
         .scrollDisabled(drag != nil)
         #endif
@@ -419,31 +407,82 @@ struct WidgetsManagerView: View {
 /// A card being dragged: which one, where the grab was, where the pointer is now, and the order before the drag.
 private struct GridDrag: Equatable {
     let id: String
-    /// Where the drag began, in the grid's coordinates.
-    let start: CGPoint
     /// The pointer minus the card's centre when the drag began, so the card keeps its place under the finger.
     let grabOffset: CGSize
     var pointer: CGPoint
     let originalOrder: [String]
 }
 
-#if !targetEnvironment(macCatalyst)
-/// A long press that becomes the drag on iPhone. It works alongside the scroll view, so a quick swipe still scrolls and cancels the press.
-private struct GridLongPress: UIGestureRecognizerRepresentable {
-    let began: (CGPoint) -> Void
-    let changed: (CGPoint) -> Void
+/// The grid's link to the page's UIKit scroll view, found from a plain view behind the grid (`GridScrollAnchor`).
+///
+/// On iPhone the long press that lifts a card is put on that scroll view, outside SwiftUI's gestures. Attached to the grid, it came after the
+/// cards' own taps, delete buttons and menus, which could keep it from ever starting. A quick swipe still scrolls: the press fails once
+/// the finger moves 10 points before it has been held for 0.2 s. On iPhone and the Mac, the page scrolls while a held card is near the top
+/// or bottom of what is visible.
+@MainActor
+private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
+    /// Whether a touch at this point, in the grid's coordinates, may lift a card.
+    var canLift: (CGPoint) -> Bool = { _ in false }
+    var began: (CGPoint) -> Void = { _ in }
+    var changed: (CGPoint) -> Void = { _ in }
     /// Called with true when the press was cancelled, and false when it ended.
-    let ended: (Bool) -> Void
+    var ended: (Bool) -> Void = { _ in }
 
-    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
-        let recognizer = UILongPressGestureRecognizer()
+    private weak var anchor: UIView?
+    private weak var scrollView: UIScrollView?
+    #if !targetEnvironment(macCatalyst)
+    private lazy var press: UILongPressGestureRecognizer = {
+        let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
         recognizer.minimumPressDuration = 0.2
         recognizer.allowableMovement = 10
+        recognizer.delegate = self
         return recognizer
+    }()
+    #endif
+
+    /// Finds the scroll view around the anchor, and puts the press on it.
+    func attach(_ anchor: UIView) {
+        self.anchor = anchor
+        var view = anchor.superview
+        while let current = view, !(current is UIScrollView) { view = current.superview }
+        let found = view as? UIScrollView
+        guard found !== scrollView else { return }
+        detach()
+        scrollView = found
+        dragLog.notice("grid \(found == nil ? "found no scroll view" : "attached to its scroll view", privacy: .public)")
+        #if !targetEnvironment(macCatalyst)
+        found?.addGestureRecognizer(press)
+        #endif
     }
 
-    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
-        let point = context.converter.location(in: .named("reorderGrid"))
+    /// The anchor left the window, for a pushed screen or a fading grid: the press comes off the scroll view. An anchor that a newer one
+    /// has replaced (a grid hidden and shown again while it faded) changes nothing, so it cannot take the newer grid's press away.
+    func detach(from anchor: UIView) {
+        guard anchor === self.anchor else { return }
+        detach()
+    }
+
+    /// The anchor is gone for good: the press comes off, and the grid's actions are let go, so they do not keep the page's state alive.
+    func release(_ anchor: UIView) {
+        guard anchor === self.anchor else { return }
+        detach()
+        canLift = { _ in false }
+        began = { _ in }
+        changed = { _ in }
+        ended = { _ in }
+    }
+
+    private func detach() {
+        #if !targetEnvironment(macCatalyst)
+        press.view?.removeGestureRecognizer(press)
+        #endif
+        scrollView = nil
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    @objc private func pressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard let anchor else { return }
+        let point = recognizer.location(in: anchor)
         switch recognizer.state {
         case .began: began(point)
         case .changed: changed(point)
@@ -452,15 +491,92 @@ private struct GridLongPress: UIGestureRecognizerRepresentable {
         default: break
         }
     }
+
+    /// Only a touch on a card that can be lifted: everywhere else, the press does not take part at all.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let anchor else { return false }
+        return canLift(touch.location(in: anchor))
+    }
+
+    /// The navigation stack's swipes back wait for the press to fail, so a card carried sideways never takes the page back. The scroll
+    /// view's own pan does not wait: a quick swipe scrolls at once.
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        guard let scrollView, other is UIPanGestureRecognizer, let view = other.view else { return false }
+        return !view.isDescendant(of: scrollView)
+    }
+    #endif
+
+    /// Scrolls the page one step while `point`, in the grid's coordinates, is near the top or bottom of what is visible, faster nearer
+    /// the edge. Returns how far the page moved, so the held card's place can follow the content under it.
+    func autoScrollStep(at point: CGPoint) -> CGFloat {
+        guard let anchor, let scrollView else { return 0 }
+        let insets = scrollView.adjustedContentInset
+        let y = anchor.convert(point, to: scrollView).y - scrollView.contentOffset.y
+        let top = insets.top
+        let bottom = scrollView.bounds.height - insets.bottom
+        let zone: CGFloat = 70
+        var step: CGFloat = 0
+        if y < top + zone {
+            step = -(2 + 18 * min(1, (top + zone - y) / zone))
+        } else if y > bottom - zone {
+            step = 2 + 18 * min(1, (y - (bottom - zone)) / zone)
+        }
+        guard step != 0 else { return 0 }
+        let lowest = -insets.top
+        let highest = max(lowest, scrollView.contentSize.height + insets.bottom - scrollView.bounds.height)
+        let next = min(max(scrollView.contentOffset.y + step, lowest), highest)
+        let moved = next - scrollView.contentOffset.y
+        if moved != 0 { scrollView.contentOffset.y = next }
+        return moved
+    }
 }
-#endif
+
+/// A plain view behind the grid, the same size, that hands `GridScroller` the page's scroll view and the grid's coordinates. It takes no
+/// touches itself.
+private struct GridScrollAnchor: UIViewRepresentable {
+    let scroller: GridScroller
+    let canLift: (CGPoint) -> Bool
+    let began: (CGPoint) -> Void
+    let changed: (CGPoint) -> Void
+    let ended: (Bool) -> Void
+
+    final class AnchorView: UIView {
+        weak var scroller: GridScroller?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil { scroller?.detach(from: self) } else { scroller?.attach(self) }
+        }
+    }
+
+    func makeUIView(context: Context) -> AnchorView {
+        let view = AnchorView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.scroller = scroller
+        return view
+    }
+
+    func updateUIView(_ view: AnchorView, context: Context) {
+        view.scroller = scroller
+        scroller.canLift = canLift
+        scroller.began = began
+        scroller.changed = changed
+        scroller.ended = ended
+    }
+
+    static func dismantleUIView(_ view: AnchorView, coordinator: ()) {
+        view.scroller?.release(view)
+    }
+}
 
 /// A widget as a card: a 2x2 collage of its own posters under a dark gradient, its name and style, and a delete button. Tapping the card
 /// opens the widget's settings, where every setting of it is.
 private struct WidgetCard: View {
     let widget: HomeWidget
     let services: AppServices
-    let onDelete: () -> Void
+    /// Nil for Continue Watching, which has no delete button: Home always shows it.
+    let onDelete: (() -> Void)?
     /// The posters the card shows, read when the card first appears.
     @State private var items: [MetaPreview] = []
 
@@ -482,20 +598,28 @@ private struct WidgetCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(alignment: .bottomTrailing) {
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
-                    .frame(width: Self.trashSize, height: Self.trashSize)
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
+                        .frame(width: Self.trashSize, height: Self.trashSize)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .padding(12)
+                .accessibilityLabel("Delete \(widget.title)")
+                .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .padding(12)
-            .accessibilityLabel("Delete \(widget.title)")
-            .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
         }
+        #if targetEnvironment(macCatalyst)
+        // A right click on the Mac. iPhone has no menu here: its long press lifts the card, and a menu under the finger with Delete in it
+        // was one slide away from removing the card.
         .contextMenu {
-            Button(role: .destructive, action: onDelete) { Label("Delete", systemImage: "trash") }
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) { Label("Delete", systemImage: "trash") }
+            }
         }
+        #endif
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("widgets.row.\(widget.id)")
         .task(id: widget.id) { await loadItems() }

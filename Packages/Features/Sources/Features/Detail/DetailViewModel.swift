@@ -460,10 +460,10 @@ public final class DetailViewModel {
     }
 
     /// The episode's score as its card shows it ("89"), for the stream selector's heading. Nil for a film or an episode without a score.
-    public func episodeScoreText(for request: StreamRequest) -> String? {
+    public func episodeScore(for request: StreamRequest) -> EpisodeScore? {
         guard isSeries, let season = request.season, let episode = request.episode,
               let video = detail.videos.first(where: { $0.season == season && $0.episode == episode }) else { return nil }
-        return score(for: video)?.text
+        return score(for: video)
     }
 
     /// The stream picker's episode asks for its season's scores the same way its card would, so its heading gets the score even when

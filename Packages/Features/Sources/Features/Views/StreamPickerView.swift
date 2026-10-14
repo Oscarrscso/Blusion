@@ -31,8 +31,9 @@ struct StreamPickerView: View {
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
     private let isEmbedded: Bool
-    /// The episode's score, shown after its season and episode in the heading ("S3E5 · 84"). Nil for a film.
-    private let episodeScore: String?
+    /// The episode's score, shown right after its season and episode in the heading, with the IMDb mark as its card has it. Nil for a
+    /// film, or while the score is not known.
+    private let episodeScore: DetailViewModel.EpisodeScore?
     /// False draws nothing yet: the picker is on the page and loading, and the page shows it once `onReady` has been called.
     private let isRevealed: Bool
     /// Embedded only: takes the streams away and shows the title's details again, as Escape does on Mac. Back leaves the title's page, so
@@ -59,7 +60,7 @@ struct StreamPickerView: View {
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
-         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: String? = nil) {
+         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: DetailViewModel.EpisodeScore? = nil) {
         self.episodeScore = episodeScore
         self.services = services
         self.isEmbedded = isEmbedded
@@ -341,12 +342,16 @@ struct StreamPickerView: View {
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
                 }
-                Text(episodeHeading ?? model.request.title)
-                    .font(.headline)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
+                if let episodeHeading {
+                    episodeLine(episodeHeading, lineLimit: 2)
+                } else {
+                    Text(model.request.title)
+                        .font(.headline)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 status
             }
         }
@@ -365,12 +370,7 @@ struct StreamPickerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let episodeHeading {
                     // Under the title page's hero, so this is one line: a longer text is cut short rather than wrapped.
-                    Text(episodeHeading)
-                        .font(.headline)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityAddTraits(.isHeader)
+                    episodeLine(episodeHeading, lineLimit: 1)
                 }
                 status
             }
@@ -384,8 +384,40 @@ struct StreamPickerView: View {
         guard let season = model.request.season, let episode = model.request.episode else { return nil }
         // A request without the series' name has it at the front of its title, which is "Series · Episode".
         let series = model.request.seriesName ?? model.request.title.components(separatedBy: " · ").first ?? model.request.title
-        let heading = "\(series) · S\(season)E\(episode)"
-        return episodeScore.map { "\(heading) · \($0)" } ?? heading
+        return "\(series) · S\(season)E\(episode)"
+    }
+
+    /// The episode's heading, then its score right after the season and episode: the IMDb mark and a whole number, as its card shows it
+    /// (a star when the score is not IMDb's). A long series name is cut short, never the score. A score that arrives later fades in at
+    /// the end of the line, so nothing before it moves.
+    private func episodeLine(_ heading: String, lineLimit: Int) -> some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.s) {
+            Text(heading)
+                .font(.headline)
+                .multilineTextAlignment(.leading)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+            if let episodeScore {
+                HStack(spacing: 4) {
+                    if episodeScore.isIMDb {
+                        ReviewSiteIcon(site: .imdb, size: 16)
+                    } else {
+                        Image(systemName: "star.fill").font(.system(size: 11, weight: .bold))
+                    }
+                    Text(episodeScore.text)
+                        .font(.headline)
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: episodeScore)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([heading, episodeScore.map { "\($0.isIMDb ? "IMDb rating" : "Rating") \($0.text)" }]
+            .compactMap { $0 }.joined(separator: ", "))
+        .accessibilityAddTraits(.isHeader)
     }
 
     /// Only while the addons are still answering: the stream count is not shown once they have.

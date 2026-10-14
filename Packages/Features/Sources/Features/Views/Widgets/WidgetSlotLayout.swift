@@ -54,6 +54,12 @@ struct WidgetSlotLayout: Equatable {
         return index < count ? index : count - 1
     }
 
+    /// The slot a held card goes to with the pointer at `point`: the slot under it, or the card's own slot `from` while the pointer is in a
+    /// gutter or beside the grid. Never one of the first `pinned` slots, which the showcase keeps.
+    func target(at point: CGPoint, from: Int, pinned: Int) -> Int {
+        max(index(at: point) ?? from, pinned)
+    }
+
     /// The order with the item at `from` taken out and put back so it ends at `to`.
     static func moved<Item>(_ items: [Item], from: Int, to: Int) -> [Item] {
         guard items.indices.contains(from), items.indices.contains(to), from != to else { return items }

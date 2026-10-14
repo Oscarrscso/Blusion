@@ -60,7 +60,17 @@ public final class HomeViewModel {
         generation += 1
         let current = generation
         let addons = await services.registry.addons
-        let saved = await services.widgets.load()
+        var saved = await services.widgets.load()
+        // A saved layout without Continue Watching would have it drawn above the showcase, and one with its showcase out of place would
+        // lead with another row: it is put right once, and saved, so the widgets page shows the same list. A layout that keeps Home's
+        // rules is left as it is.
+        if let list = saved {
+            let repaired = HomeLayout.normalised(list)
+            if repaired != list {
+                await services.widgets.save(repaired)
+                saved = repaired
+            }
+        }
         let local = await services.progress.all()
         let inProgress = LibraryViewModel.continueWatching(from: local)
         guard current == generation, !Task.isCancelled else { return }

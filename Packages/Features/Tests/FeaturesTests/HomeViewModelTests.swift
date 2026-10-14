@@ -60,15 +60,22 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
                                                                                                             catalogID: catalog)))))
 }
 
+/// Continue Watching as a saved layout has it, last.
+private let savedContinueWatching = HomeWidget(id: "cw", title: "Continue", content: .continueWatching)
+
 @MainActor
 @Suite struct HomeViewModelTests {
-    private func services(_ manifests: [Manifest], transport: StubTransport, widgets: [HomeWidget]? = nil,
+    /// A saved layout gets Continue Watching last, as every saved layout has it (`HomeLayout`), unless `addsContinueWatching` is false.
+    private func services(_ manifests: [Manifest], transport: StubTransport, widgets: [HomeWidget]? = nil, addsContinueWatching: Bool = true,
                           progress: [WatchProgress] = [], snapshots: (any WidgetSnapshotStore)? = nil) async throws -> AppServices {
         let (registry, client) = try await makeStubbedRegistry(manifests: manifests, transport: transport)
         let settings = InMemorySettingsStore()
         let content = WidgetContentService(registry: registry, client: client, settings: settings, snapshots: snapshots)
+        let layout = widgets.map { list in
+            addsContinueWatching && !list.contains(where: HomeLayout.isContinueWatching) ? list + [savedContinueWatching] : list
+        }
         return AppServices(registry: registry, client: client, settings: settings, progress: InMemoryProgressStore(progress),
-                           widgets: InMemoryWidgetStore(widgets), widgetContent: content)
+                           widgets: InMemoryWidgetStore(layout), widgetContent: content)
     }
 
     /// Every catalog answers with two movies. A path containing a key of `failing` answers with that status instead.
@@ -84,13 +91,32 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
 
     // MARK: Phases and the automatic layout
 
+    /// The phone's layout on 14 October: Continue Watching was deleted from the widgets page, so Home drew it above the showcase. Home puts
+    /// it back right after the showcase, saves that once, and leaves every other row where it was.
+    @Test func aSavedLayoutWithoutContinueWatchingGetsItBackAfterTheShowcase() async throws {
+        let hero = HomeWidget(id: "hero", title: "Spotlight", hideTitle: true, content: .hero(RowConfiguration(source: .addonCatalog(
+            AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")))))
+        let rows = [catalogRow("a", catalog: "top"), catalogRow("b", type: "series", catalog: "trending")]
+        let services = try await services([cinemeta], transport: answering(), widgets: [hero] + rows, addsContinueWatching: false)
+        let model = HomeViewModel(services: services)
+        await model.load()
+        let expected = ["hero", HomeLayout.continueWatchingID, "a", "b"]
+        #expect(model.sections.map(\.id) == expected)
+        #expect(model.sections[1].widget.content == .continueWatching)
+        let stored = try #require(await services.widgets.load())
+        #expect(stored.map(\.id) == expected)
+        await model.load()
+        #expect(model.sections.map(\.id) == expected, "a second load changes nothing")
+        #expect(await services.widgets.load() == stored)
+    }
+
     @Test func aSavedBannerLoadsItsItemsLikeAHero() async throws {
         let banner = HomeWidget(id: "banner", title: "Featured", content: .banner(RowConfiguration(source: .addonCatalog(AddonCatalogReference(
             manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")))))
         let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: [banner]))
         await model.load()
         #expect(model.isCustomised && model.phase == .ready)
-        #expect(model.sections.map(\.id) == ["banner"])
+        #expect(model.sections.map(\.id) == ["banner", "cw"])
         #expect(model.sections[0].state.value?.count == 2)
     }
 
@@ -130,7 +156,7 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: saved))
         await model.load()
         #expect(model.isCustomised && model.phase == .ready)
-        #expect(model.sections.map(\.id) == ["mine"])
+        #expect(model.sections.map(\.id) == ["mine", "cw"])
         #expect(model.sections[0].state.value?.count == 2)
     }
 
@@ -166,10 +192,11 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         #expect(saved == nil, "nothing is saved, so the layout keeps following the addons")
     }
 
-    @Test func aSavedListWithNothingInItIsReadyAndEmpty() async throws {
-        let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: []))
+    @Test func aSavedListWithNothingInItShowsOnlyContinueWatching() async throws {
+        let model = HomeViewModel(services: try await services([cinemeta], transport: answering(), widgets: [], addsContinueWatching: false))
         await model.load()
-        #expect(model.phase == .ready && model.sections.isEmpty && model.isCustomised)
+        #expect(model.phase == .ready && model.isCustomised)
+        #expect(model.sections.map(\.id) == [HomeLayout.continueWatchingID])
     }
 
     @Test func continueWatchingComesFromSavedProgress() async throws {
@@ -245,7 +272,7 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         ]
         let model = HomeViewModel(services: try await services([cinemeta], transport: transport, widgets: saved))
         await model.load()
-        #expect(model.sections.map(\.issue) == [.needsTraktSignIn, .unsupported(kind: "anilistCatalog")])
+        #expect(model.sections.map(\.issue) == [.needsTraktSignIn, .unsupported(kind: "anilistCatalog"), nil])
         #expect(model.sections.allSatisfy { $0.state == .loaded([]) })
         #expect(transport.callCount == 0)
     }
@@ -358,13 +385,13 @@ private func catalogRow(_ id: String, manifestID: String = "test.cinemeta", type
         let first = Task { await model.load() }
         try await waitUntil { model.sections.first?.state.isLoading == true }
 
-        await services.widgets.save([catalogRow("fast", manifestID: "test.slow", catalog: "fast")])
+        await services.widgets.save([catalogRow("fast", manifestID: "test.slow", catalog: "fast"), savedContinueWatching])
         await model.load()
-        #expect(model.sections.map(\.id) == ["fast"])
+        #expect(model.sections.map(\.id) == ["fast", "cw"])
         #expect(model.sections[0].state.value?.count == 2)
 
         await first.value
-        #expect(model.sections.map(\.id) == ["fast"], "the slow load finished last and changed nothing")
+        #expect(model.sections.map(\.id) == ["fast", "cw"], "the slow load finished last and changed nothing")
         #expect(model.sections[0].state.value?.count == 2)
     }
 
