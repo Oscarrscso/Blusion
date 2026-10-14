@@ -18,8 +18,8 @@ struct DetailActions: View {
     let play: (StreamRequest) -> Void
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
-    /// The show's average colour, from its picture, for the Play button's faint tint.
-    @State private var showTint: Color?
+    /// The Play button's colours, from the show's picture: a subtle shade for the glass, and a label that contrasts with it.
+    @State private var playPalette: ArtworkTint.Palette?
 
     /// Whether the text and the actions lead. Beside the artwork on iPhone in landscape; always on the Mac, whose title page sets them over
     /// the picture's left edge.
@@ -81,9 +81,11 @@ struct DetailActions: View {
                     .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             }
             .buttonStyle(.primaryAction)
-            // The glass takes a faint tint of the show's own colours, from its picture; nothing else about the button changes.
-            .tint(showTint.map { $0.opacity(0.25) })
-            .task(id: model.backdropURL) { showTint = await ArtworkTint.color(for: model.backdropURL) }
+            // The glass takes a subtle shade of the show's colour from its picture, and the label contrasts with it; size, shape and
+            // behaviour are unchanged.
+            .tint(playPalette?.background)
+            .foregroundStyle(playPalette?.label ?? .primary)
+            .task(id: model.backdropURL) { playPalette = await ArtworkTint.palette(for: model.backdropURL) }
             .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
         } else if let airs = model.unairedAirLabel {

@@ -433,13 +433,12 @@ private struct NoITunesTransport: HTTPTransport {
         transport.requests.filter { $0.url?.host == "api.themoviedb.org" }.count
     }
 
-    @Test func tmdbEpisodeScoresAreNotAskedForWhileOMDbIsAvailable() async throws {
+    @Test func tmdbFillsTheEpisodesOMDbHasNoScoreFor() async throws {
         let (model, transport) = try await tmdbFallbackModel(omdbKey: true)
         let episode = try #require(model.episodes.first)
         await model.episodeAppeared(episode)
         #expect(transport.requests.contains { $0.url?.host == "www.omdbapi.com" })
-        #expect(tmdbRequests(transport) == 0, "an empty OMDb answer does not bring TMDb in")
-        #expect(model.score(for: episode) == nil)
+        #expect(tmdbRequests(transport) >= 1, "an episode OMDb has no score for is filled from TMDb, OMDb being available or not")
     }
 
     @Test func tmdbEpisodeScoresAreUsedWithoutAnOMDbKey() async throws {
