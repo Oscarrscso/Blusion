@@ -14,11 +14,14 @@ enum ReviewPageRules {
         "pubmatic[.]com", "rubiconproject[.]com", "openx[.]net", "moatads[.]com", "scorecardresearch[.]com",
     ]
 
+    /// The ad slots: Google's, and IMDb's sticky bottom ad, a fixed "adhesion" wrapper with inline ad frames inside it.
+    private static let adSlots = "ins.adsbygoogle, div[id^=div-gpt-ad], div[id^=adhesion_], div[class*=AdhesionAdSlot], iframe[id^=inline]"
+
     /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the common ad slots are hidden
     /// where they remain.
     static var contentRules: String {
         let blocks = adHosts.map { #"{"trigger": {"url-filter": "\#($0)"}, "action": {"type": "block"}}"# }
-        let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "ins.adsbygoogle, div[id^=div-gpt-ad]"}}"#]
+        let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "\#(adSlots)"}}"#]
         return "[\n" + (blocks + hides).joined(separator: ",\n") + "\n]"
     }
 
