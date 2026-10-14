@@ -150,7 +150,7 @@ extension ReviewPageRules {
     /// Tells the app that the reviews are on screen and have settled. The panel opens on this, not on the load: the page draws its reviews
     /// after it loads, and a panel that opened earlier showed the black the reader saw. The reviews are on screen when their heading (the
     /// one the reviews scroll looks for) is in the viewport, and settled when nothing has changed for about 300 ms: no DOM change and no
-    /// scroll. A page with no such heading posts after 10 seconds, so it is not held to the 25-second limit.
+    /// scroll. A page with no such heading posts after six seconds, well inside the 25-second limit.
     static let paintedScript = #"""
     (function () {
       var heading = /^\s*(user|audience) reviews?\s*$/i;
@@ -162,8 +162,10 @@ extension ReviewPageRules {
         var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
         for (var i = 0; i < nodes.length; i++) {
           if (!heading.test(nodes[i].textContent || '')) continue;
+          // A hidden heading has no box, so it does not count. A heading a little above the top edge counts as scrolled to.
+          if (nodes[i].getClientRects().length === 0) continue;
           var top = nodes[i].getBoundingClientRect().top;
-          if (top >= 0 && top <= window.innerHeight * 0.9) return true;
+          if (top >= -2 && top <= window.innerHeight * 0.9) return true;
         }
         return false;
       }
@@ -196,8 +198,22 @@ extension ReviewPageRules {
         done = true;
         if (observer) observer.disconnect();
         window.webkit.messageHandlers.painted.postMessage('painted');
-      }, 10000);
+      }, 6000);
       settle();
+    })();
+    """#
+
+    /// Letterboxd's reviews have no heading the script can find, so its page reports ready after its load and two frames, as it always did.
+    static let loadedScript = #"""
+    (function () {
+      function painted() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            window.webkit.messageHandlers.painted.postMessage('painted');
+          });
+        });
+      }
+      if (document.readyState === 'complete') { painted(); } else { window.addEventListener('load', painted); }
     })();
     """#
 }
@@ -225,7 +241,8 @@ struct ReviewWebView: UIViewRepresentable {
             configuration.userContentController.addUserScript(WKUserScript(source: fallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
         // The panel opens once the page has painted (see `paintedScript`), so the spinner stays until the reader can see the page.
-        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.paintedScript, injectionTime: .atDocumentEnd,
+        configuration.userContentController.addUserScript(WKUserScript(source: site == .letterboxd ? ReviewPageRules.loadedScript : ReviewPageRules.paintedScript,
+                                                                       injectionTime: .atDocumentEnd,
                                                                        forMainFrameOnly: true))
         let coordinator = context.coordinator
         configuration.userContentController.add(coordinator, name: "painted")

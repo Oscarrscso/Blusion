@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import StremioKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct WidgetsManagerView: View {
     let services: AppServices
@@ -14,6 +15,9 @@ struct WidgetsManagerView: View {
     /// True while the toolbar's button has hidden every widget's card, leaving one line that says how many there are. Kept between
     /// visits, so a long list stays out of the way until it is shown again.
     @AppStorage("widgets.hidesRows") private var hidesWidgets = false
+    /// The card being dragged, and the order the cards show while it is dragged. Nil when nothing is being dragged.
+    @State private var dragging: String?
+    @State private var liveOrder: [String]?
 
     /// Two cards across, with the same gutter between them as at the edges.
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
@@ -83,12 +87,20 @@ struct WidgetsManagerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Moves the widget dragged onto another card into that card's place. The order is saved at once, as the list's move was.
-    private func reorder(_ draggedID: String, onto targetID: String) {
-        guard let from = model.widgets.firstIndex(where: { $0.id == draggedID }),
-              let to = model.widgets.firstIndex(where: { $0.id == targetID }), from != to else { return }
-        // Moving down lands after the card it is dropped on; moving up lands before it.
-        let destination = from < to ? to + 1 : to
+    /// The widgets in the order they show: the saved order, or the order a drag has reached while a card is being dragged.
+    private var shownWidgets: [HomeWidget] {
+        guard let liveOrder else { return model.widgets }
+        let byID = Dictionary(uniqueKeysWithValues: model.widgets.map { ($0.id, $0) })
+        return liveOrder.compactMap { byID[$0] }
+    }
+
+    /// Moves a widget one place earlier or later. VoiceOver and keyboard users reorder this way, as dragging does for everyone else.
+    private func move(_ id: String, by step: Int) {
+        guard let from = model.widgets.firstIndex(where: { $0.id == id }) else { return }
+        let to = from + step
+        guard model.widgets.indices.contains(to) else { return }
+        // Moving down lands after the card it passes; moving up lands before it.
+        let destination = step > 0 ? to + 1 : to
         Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
     }
 
@@ -98,18 +110,24 @@ struct WidgetsManagerView: View {
                 if hidesWidgets && !model.widgets.isEmpty { hiddenRowsLine }
                 if !hidesWidgets && !model.widgets.isEmpty {
                     LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(model.widgets) { widget in
+                        ForEach(shownWidgets) { widget in
                             WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
-                                // Dragged onto another card, it takes that card's place and the others move aside. A tap still opens it.
-                                .draggable(widget.id)
-                                .dropDestination(for: String.self) { ids, _ in
-                                    guard let dragged = ids.first else { return false }
-                                    reorder(dragged, onto: widget.id)
-                                    return true
+                                // Long-press and drag: the other cards move aside as it passes them, with a tick for each step. Dropped, the
+                                // order is saved. A tap still opens the widget.
+                                .onDrag {
+                                    dragging = widget.id
+                                    liveOrder = model.widgets.map(\.id)
+                                    Haptics.tap()
+                                    return NSItemProvider(object: widget.id as NSString)
                                 }
+                                .onDrop(of: [.plainText], delegate: WidgetDropDelegate(target: widget.id, dragging: $dragging,
+                                                                                       liveOrder: $liveOrder, model: model))
+                                .accessibilityAction(named: "Move earlier") { move(widget.id, by: -1) }
+                                .accessibilityAction(named: "Move later") { move(widget.id, by: 1) }
                         }
                     }
-                    .animation(.snappy(duration: 0.3), value: model.widgets.map(\.id))
+                    .animation(.snappy(duration: 0.3), value: shownWidgets.map(\.id))
+                    .onDrop(of: [.plainText], delegate: WidgetGridDropDelegate(dragging: $dragging, liveOrder: $liveOrder, model: model))
                     .accessibilityIdentifier("widgets.list")
                 }
                 VStack(alignment: .leading, spacing: 4) {
@@ -282,6 +300,69 @@ private struct WidgetCard: View {
         case .hero(let row), .banner(let row), .row(let row): row
         default: nil
         }
+    }
+}
+
+/// A card's drop target. A dragged card takes the place of each card it passes, with a tick each time, and the order is saved when it is
+/// dropped on a card.
+private struct WidgetDropDelegate: DropDelegate {
+    let target: String
+    @Binding var dragging: String?
+    @Binding var liveOrder: [String]?
+    let model: WidgetsManagerViewModel
+
+    func dropEntered(info: DropInfo) {
+        guard let dragged = dragging, dragged != target, var order = liveOrder,
+              let from = order.firstIndex(of: dragged), let to = order.firstIndex(of: target) else { return }
+        withAnimation(.snappy(duration: 0.3)) {
+            order.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            liveOrder = order
+        }
+        Haptics.selection()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let saved = model.widgets.map(\.id)
+        if let order = liveOrder, let dragged = dragging, let from = saved.firstIndex(of: dragged), let to = order.firstIndex(of: dragged),
+           from != to {
+            // The saved order moves the card to where the drag left it.
+            let destination = to > from ? to + 1 : to
+            Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
+        }
+        dragging = nil
+        liveOrder = nil
+        return true
+    }
+}
+
+/// The grid as a whole: a drop in a gap between cards saves the order the drag reached, and a drag that leaves the grid without a drop puts
+/// the cards back in their saved order.
+private struct WidgetGridDropDelegate: DropDelegate {
+    @Binding var dragging: String?
+    @Binding var liveOrder: [String]?
+    let model: WidgetsManagerViewModel
+
+    func dropExited(info: DropInfo) {
+        withAnimation(.snappy(duration: 0.3)) {
+            dragging = nil
+            liveOrder = nil
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let saved = model.widgets.map(\.id)
+        if let order = liveOrder, let dragged = dragging, let from = saved.firstIndex(of: dragged), let to = order.firstIndex(of: dragged),
+           from != to {
+            let destination = to > from ? to + 1 : to
+            Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
+        }
+        dragging = nil
+        liveOrder = nil
+        return true
     }
 }
 

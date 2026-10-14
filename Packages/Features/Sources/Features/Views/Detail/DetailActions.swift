@@ -27,6 +27,16 @@ struct DetailActions: View {
     private var leadsText: Bool { isLandscape }
     #endif
 
+    /// The least width of the Play button's glass on the Mac, so a title's Play is the long button a Mac page needs. iPhone sizes Play
+    /// to the row instead.
+    private static let playMinWidth: CGFloat = {
+        #if targetEnvironment(macCatalyst)
+        return 280
+        #else
+        return 0
+        #endif
+    }()
+
     var body: some View {
         // In portrait the Play row keeps the same gap from the line above it as from the overview below it (see `TitleHero.playRowGap`).
         VStack(alignment: leadsText ? .leading : .center, spacing: leadsText ? Theme.Spacing.s : TitleHero.playRowGap) {
@@ -78,7 +88,7 @@ struct DetailActions: View {
                     }
                     .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             }
-            .buttonStyle(.primaryAction)
+            .buttonStyle(PrimaryActionButtonStyle(minWidth: Self.playMinWidth))
             // The title's colour from its poster is the button's background, behind the glass. Not a tint: a tint also colours the label.
             // A title opened without its card keeps the plain style; the colour is not animated in.
             .background(PlayColourStore.shared.colour(for: model.preview.identity) ?? Color.clear, in: Capsule())
@@ -142,9 +152,7 @@ struct DetailActions: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 #if targetEnvironment(macCatalyst)
-                // On the Mac, Play keeps its own width rather than stretching across the page, and is at least 280 points wide.
-                // Its height does not change.
-                .frame(minWidth: 280)
+                // On the Mac, Play keeps its own width rather than stretching across the page; its glass is at least `playMinWidth` wide.
                 .fixedSize()
                 #else
                 .frame(maxWidth: .infinity)

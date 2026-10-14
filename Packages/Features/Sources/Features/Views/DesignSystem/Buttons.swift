@@ -6,9 +6,11 @@ import SwiftUI
 struct PrimaryActionButtonStyle: PrimitiveButtonStyle {
     /// False sizes the button to its label (empty states, inline calls to action) instead of the full width.
     var fillsWidth = true
+    /// The least width the button takes on the Mac, so the glass itself is that wide; zero leaves it to its label.
+    var minWidth: CGFloat = 0
 
     func makeBody(configuration: Configuration) -> some View {
-        PrimaryActionButton(configuration: configuration, fillsWidth: fillsWidth)
+        PrimaryActionButton(configuration: configuration, fillsWidth: fillsWidth, minWidth: minWidth)
     }
 }
 
@@ -16,6 +18,7 @@ struct PrimaryActionButtonStyle: PrimitiveButtonStyle {
 private struct PrimaryActionButton: View {
     let configuration: PrimitiveButtonStyleConfiguration
     let fillsWidth: Bool
+    let minWidth: CGFloat
     @Environment(\.controlSize) private var controlSize
 
     var body: some View {
@@ -29,7 +32,7 @@ private struct PrimaryActionButton: View {
             configuration.label
                 .fontWeight(.semibold)
                 .padding(.horizontal, Theme.Spacing.s)
-                .frame(maxWidth: fillsWidth ? .infinity : nil, maxHeight: .infinity)
+                .frame(minWidth: minWidth, maxWidth: fillsWidth ? .infinity : nil, maxHeight: .infinity)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
