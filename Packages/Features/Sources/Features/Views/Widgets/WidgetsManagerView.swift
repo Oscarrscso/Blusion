@@ -682,8 +682,13 @@ private struct WidgetCard: View {
         }
     }
 
-    /// The posters a row or banner shows, from the copy Home keeps when there is one, else a short fetch from the same source.
+    /// The posters a row or banner shows, from the copy Home keeps when there is one, else a short fetch from the same source. Continue
+    /// Watching shows its newest four titles, from the progress saved on this device (Trakt's paused titles are kept there too).
     private func loadItems() async {
+        if case .continueWatching = widget.content {
+            items = ContinueWatchingEntry.cardItems(from: ContinueWatchingEntry.merge(local: await services.progress.all(), remote: []))
+            return
+        }
         guard let row = rowConfiguration else { return }
         if let known = await services.widgetContent.lastKnownItems(for: row.source, limit: 4), !known.isEmpty {
             items = Array(known.prefix(4))

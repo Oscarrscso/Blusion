@@ -16,16 +16,18 @@ mkdir -p build
 DEVICES="$(mktemp)"
 trap 'rm -f "$DEVICES"' EXIT
 xcrun devicectl list devices --json-output "$DEVICES" >/dev/null 2>&1 || fail "could not list devices (is Xcode set up?)"
-UDID="$(python3 -I - "$DEVICES" <<'PY'
+# oscar's iPhone only, as scripts/install-iphone.sh: another paired phone is never profiled.
+TARGET_UDID="${BLUSION_IPHONE_UDID:-00008150-000A1D593A46401C}"
+UDID="$(python3 -I - "$DEVICES" "$TARGET_UDID" <<'PY'
 import json, sys
 for device in json.load(open(sys.argv[1])).get("result", {}).get("devices", []):
     hardware = device.get("hardwareProperties", {})
-    if hardware.get("platform") == "iOS" and hardware.get("reality") == "physical":
+    if hardware.get("udid") == sys.argv[2]:
         print(hardware.get("udid", ""))
         break
 PY
 )"
-[[ -n "$UDID" ]] || fail "no iPhone or iPad is paired with this Mac"
+[[ -n "$UDID" ]] || fail "oscar's iPhone ($TARGET_UDID) is not paired with this Mac"
 # Asking for the lock state wakes the connection, which Instruments needs.
 xcrun devicectl device info lockState --device "$UDID" >/dev/null 2>&1 || true
 

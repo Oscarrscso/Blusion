@@ -23,24 +23,9 @@ struct FlowLayout: Layout {
     }
 
     private func arrange(in width: CGFloat, subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
-        var frames: [CGRect] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var widest: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            widest = max(widest, x - spacing)
+        FlowArrangement.arrange(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, in: width, spacing: spacing) { index, width in
+            subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
         }
-        return (CGSize(width: widest, height: frames.isEmpty ? 0 : y + rowHeight), frames)
     }
 }
 #endif

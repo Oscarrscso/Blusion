@@ -35,6 +35,18 @@ public struct ContinueWatchingEntry: Identifiable, Equatable, Sendable {
     }
 }
 
+extension ContinueWatchingEntry {
+    /// The pictures of Continue Watching's card on the widgets page: its newest four titles, newest first, as Home's row lists them. Each
+    /// carries the title's backdrop and poster, so the card's top row shows the first two backdrops and its bottom row the next two posters.
+    static func cardItems(from entries: [ContinueWatchingEntry]) -> [MetaPreview] {
+        entries.prefix(4).map { entry in
+            let id = ContentID(entry.request.id).baseID
+            return MetaPreview(id: id, type: entry.request.type, name: entry.request.seriesName ?? entry.request.title,
+                               poster: entry.request.poster, background: MetahubArtwork.background(imdbID: id))
+        }
+    }
+}
+
 extension AppServices {
     /// Takes one title off Continue Watching everywhere it is kept. Trakt's paused record is removed by sync, now or when Trakt can next
     /// be reached, and stays hidden here until then.

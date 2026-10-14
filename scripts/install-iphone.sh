@@ -11,6 +11,9 @@
 # with the Apple ID it is signed in with. With a free Apple ID the app stops opening after seven days: run this again.
 # The device has to be paired, connected (cable or the same network) and unlocked. macOS + Xcode + xcodegen only.
 #
+# It installs on oscar's iPhone ("Oscar") only, by its UDID, never on another paired device: another family phone is paired with this
+# Mac too, and picking the first connected device once put a build on it. BLUSION_IPHONE_UDID names a different device on purpose.
+#
 # The install is built with the fallback engine (MPVKit, ADR-006), so MKV, AVI, DTS, TrueHD and AV1 play in the app. The spec comes from
 # scripts/enable-fallback.sh; project.yml itself stays the default build without third-party code.
 set -euo pipefail
@@ -39,21 +42,22 @@ if [[ -d build/iphone && ! -d "$WORK" ]]; then
   mv build/iphone "$WORK"
 fi
 
-# The first paired, connected physical device: "<udid> <name>".
+# oscar's iPhone, and only it, when it is paired and connected: "<udid> <name>".
+TARGET_UDID="${BLUSION_IPHONE_UDID:-00008150-000A1D593A46401C}"
 DEVICES="$(mktemp)"
 trap 'rm -f "$DEVICES"' EXIT
 xcrun devicectl list devices --json-output "$DEVICES" >/dev/null 2>&1 || fail "could not list devices (is Xcode set up?)"
-DEVICE="$(python3 - "$DEVICES" <<'PY'
+DEVICE="$(python3 - "$DEVICES" "$TARGET_UDID" <<'PY'
 import json, sys
 for device in json.load(open(sys.argv[1])).get("result", {}).get("devices", []):
     hardware, connection = device.get("hardwareProperties", {}), device.get("connectionProperties", {})
-    if hardware.get("platform") == "iOS" and hardware.get("reality") == "physical" and connection.get("tunnelState") == "connected":
+    if hardware.get("udid") == sys.argv[2] and connection.get("tunnelState") == "connected":
         print(hardware.get("udid", ""), device.get("deviceProperties", {}).get("name", "device"))
         break
 PY
 )"
 UDID="${DEVICE%% *}"; NAME="${DEVICE#* }"
-[[ -n "$UDID" ]] || fail "no connected iPhone or iPad: connect it, unlock it and trust this Mac"
+[[ -n "$UDID" ]] || fail "oscar's iPhone ($TARGET_UDID) is not connected: unlock it, keep it on this Mac's network or cable, and try again. No other device is used."
 
 ./scripts/enable-fallback.sh >/dev/null || fail "could not generate the Xcode project with the fallback engine (scripts/enable-fallback.sh)"
 # The commit shown in Settings › About; "-dirty" when the working tree has uncommitted changes.

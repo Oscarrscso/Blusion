@@ -122,8 +122,11 @@ enum ReviewTimingLog {
 
     static func append(_ timing: [String: Any], site: ReviewSite?) {
         guard let url = fileURL else { return }
-        // A timing log that has grown this large is kept as it is: it is a debugging aid, not a history.
-        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 256_000 { return }
+        // A debugging aid, not a history: past 256 KB only its newest half is kept, so the latest opens are always in it.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 256_000,
+           let old = try? Data(contentsOf: url) {
+            try? old.suffix(128_000).write(to: url)
+        }
         let reason = timing["reason"] as? String ?? "?"
         let headingMs = timing["headingMs"] as? Int ?? -1
         let readyMs = timing["readyMs"] as? Int ?? -1
@@ -174,10 +177,15 @@ extension ReviewPageRules {
         attach(to: view) { view.loadHTMLString("", baseURL: nil) }
     }
 
-    /// Tells the app that the reviews are on screen and have settled. The panel opens on this, not on the load: the page draws its reviews
-    /// after it loads, and a panel that opened earlier showed the black the reader saw. The reviews are on screen when their heading (the
-    /// one the reviews scroll looks for) is in the viewport, and settled when nothing has changed for about 300 ms: no DOM change and no
-    /// scroll. A page with no such heading posts after six seconds, well inside the 25-second limit.
+    /// Tells the app that the reviews are on screen and have settled. The panel opens on this, not on the load: a panel that opened before
+    /// the page had drawn showed the black the reader saw.
+    ///
+    /// IMDb's reviews are cards with a date, drawn by the server, so they are in the document when this runs. IMDb's header, which holds its
+    /// "User reviews" heading, is hidden by the content rules, so the heading is never seen there: every IMDb open waited out the six-second
+    /// limit. IMDb is ready once its first card is laid out with its text, and two frames have been drawn.
+    ///
+    /// The other sites are ready when their reviews heading is in the viewport, its first review has text, and those have not moved for
+    /// 120 ms. A page that has finished loading without a heading or a card opens after 2.5 s; one still loading, after six.
     static let paintedScript = #"""
     (function () {
       var heading = /^\s*(user|audience) reviews?\s*$/i;
@@ -187,7 +195,17 @@ extension ReviewPageRules {
       var lastSignature = '';
       var stableFor = 0;
       var done = false;
+      var painting = false;
       var interval = null;
+
+      // IMDb's first review card, once it is laid out with its text: the card that holds the first review date. IMDb's pages only.
+      function firstCard() {
+        if (!/(^|\.)imdb\.com$/.test(location.hostname)) return null;
+        var date = document.querySelector('.review-date');
+        var card = date && date.closest('.ipc-list-card, article');
+        if (!card || (card.textContent || '').trim().length < 60 || card.getClientRects().length === 0) return null;
+        return card.getBoundingClientRect().height > 0 ? card : null;
+      }
 
       // A visible element whose top is in the viewport: the heading has been scrolled to.
       function onScreen(el) {
@@ -229,14 +247,25 @@ extension ReviewPageRules {
         });
       }
 
+      // Ready once the next two frames have been drawn, so what is laid out is on screen when the panel opens. Should frames not be drawn,
+      // a quarter of a second does instead, so the panel always opens.
+      function finishAfterPaint(reason) {
+        if (done || painting) return;
+        painting = true;
+        clearInterval(interval);
+        requestAnimationFrame(function () { requestAnimationFrame(function () { finish(reason); }); });
+        setTimeout(function () { finish(reason); }, 250);
+      }
+
       // Every 60 ms, look only at the heading, the first review and the scroll position. Ready when the heading is on screen, the first
       // review has text, and those have not moved for 120 ms. A hard cap of 1.2 s after the heading first shows ends the wait regardless.
       function check() {
-        if (done) return;
+        if (done || painting) return;
         var now = Date.now();
+        if (firstCard()) return finishAfterPaint('card');
         if (!headingNode || headingNode.getClientRects().length === 0) headingNode = findHeading();
         if (!headingNode) {
-          if (now - started >= 6000) finish('no-heading');
+          if (now - started >= 6000 || (now - started >= 2500 && document.readyState === 'complete')) finish('no-heading');
           return;
         }
         if (!headingAt) headingAt = now;
