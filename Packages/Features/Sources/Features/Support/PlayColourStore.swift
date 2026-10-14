@@ -1,5 +1,6 @@
 #if canImport(UIKit)
 import Foundation
+import StremioKit
 import SwiftUI
 
 /// The Play button colour of each title, read once from the poster its card shows and kept in memory and on disk. A title's page reads it
@@ -30,28 +31,34 @@ final class PlayColourStore {
         return Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
     }
 
-    /// Reads a title's colour on the spot, when its page opens before its card's read has run. The poster is used only when it is already in
+    /// The pictures a title's card can show, first choice first: the BetterPosters picture a row may show, then the usual poster that stands in
+    /// for it. The colour is read from whichever is in the image cache.
+    static func pictures(for item: MetaPreview) -> [URL] {
+        [BetterPosters.posterURL(id: item.id, type: item.type), PosterQuality.poster(for: item)].compactMap { $0 }
+    }
+
+    /// Reads a title's colour on the spot, when its page opens before its card's read has run. A picture is used only when it is already in
     /// the image cache. The read is a few pixels, so it is done here, on the main thread, without a wait.
-    func readNow(identity: String, poster: URL?) {
-        guard entries[identity] == nil, let poster, let hex = Self.hex(from: poster) else { return }
+    func readNow(identity: String, pictures: [URL]) {
+        guard entries[identity] == nil, let hex = Self.hex(from: pictures) else { return }
         entries[identity] = hex
         save()
     }
 
-    /// Reads a title's colour from its poster, when the poster is already in the image cache because its card has shown it. The picture is
+    /// Reads a title's colour from its picture, when a picture is already in the image cache because its card has shown it. The picture is
     /// read off the main thread, once per title; a title whose picture is not cached yet is read the next time its card appears.
-    func read(identity: String, poster: URL?) async {
-        guard entries[identity] == nil, !reading.contains(identity), let poster else { return }
+    func read(identity: String, pictures: [URL]) async {
+        guard entries[identity] == nil, !reading.contains(identity), !pictures.isEmpty else { return }
         reading.insert(identity)
         defer { reading.remove(identity) }
-        guard let hex = await Task.detached(priority: .utility, operation: { PlayColourStore.hex(from: poster) }).value else { return }
+        guard let hex = await Task.detached(priority: .utility, operation: { PlayColourStore.hex(from: pictures) }).value else { return }
         entries[identity] = hex
         save()
     }
 
-    /// The colour of a poster as "rrggbb": "" when it has no vivid colour, nil when its picture is not in the image cache yet.
-    nonisolated static func hex(from poster: URL) -> String? {
-        guard let image = ImagePipeline.shared.cachedImageAtAnySize(for: poster), let picture = image.cgImage,
+    /// The colour of the first cached picture as "rrggbb": "" when it has no vivid colour, nil when none of them is in the image cache yet.
+    nonisolated static func hex(from pictures: [URL]) -> String? {
+        guard let picture = pictures.lazy.compactMap({ ImagePipeline.shared.cachedImageAtAnySize(for: $0)?.cgImage }).first,
               let pixels = PlayColour.pixels(of: picture) else { return nil }
         guard let colour = PlayColour.pick(from: pixels) else { return "" }
         let rgb = PlayColour.rgb(colour)
