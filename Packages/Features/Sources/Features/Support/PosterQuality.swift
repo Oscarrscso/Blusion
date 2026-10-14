@@ -36,4 +36,23 @@ enum PosterQuality {
     static func poster(for item: MetaPreview) -> URL? {
         smallest(item.poster ?? MetahubArtwork.poster(imdbID: item.id))
     }
+
+    /// A landscape picture (a wide card's or a row's backdrop) at the size the Mac draws it. On the Mac, TMDb's original and w1280 pictures
+    /// become w780, so a Home full of wide cards downloads and decodes less. iPhone keeps the picture as it came. Only the URL changes.
+    static func landscape(_ url: URL?) -> URL? {
+        #if targetEnvironment(macCatalyst)
+        return smallerLandscape(url)
+        #else
+        return url
+        #endif
+    }
+
+    /// The Mac's size for a landscape picture: TMDb's original and w1280 become w780. Any other address is returned as it came.
+    static func smallerLandscape(_ url: URL?) -> URL? {
+        guard let url, url.host?.lowercased() == "image.tmdb.org" else { return url }
+        let text = url.absoluteString
+            .replacingOccurrences(of: "/t/p/original/", with: "/t/p/w780/")
+            .replacingOccurrences(of: "/t/p/w1280/", with: "/t/p/w780/")
+        return URL(string: text) ?? url
+    }
 }

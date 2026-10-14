@@ -272,7 +272,10 @@ import StremioKitTestSupport
 
     @Test @MainActor func rottenTomatoesAndMetacriticComeFromOMDbForATitleWithAKey() async throws {
         let transport = StubTransport(data: omdbTitle)
-        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        // Its own usage counter, so it does not share the app's OMDb count with the other tests.
+        let usage = OMDbUsage(defaults: UserDefaults(suiteName: "tests.omdb.title") ?? .standard)
+        let omdb = OMDbRatings(client: makeClient(transport), apiKey: "test-key", usage: usage)
+        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, omdb: omdb)
         let item = MetaPreview(id: "tt0944947", type: "movie", name: "Hail Mary")
         _ = store.ratings(for: item, includeReviews: true)
         try await waitUntil { store.ratings(for: item).rottenTomatoes != nil }

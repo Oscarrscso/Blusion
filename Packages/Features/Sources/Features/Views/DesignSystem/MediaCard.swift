@@ -166,14 +166,14 @@ struct MediaCard: View {
     private static let logoPixelSize: CGFloat = 400
 
     private static func landscapeArtworkURL(for item: MetaPreview) -> URL? {
-        item.background ?? MetahubArtwork.background(imdbID: item.id) ?? PosterQuality.poster(for: item)
+        PosterQuality.landscape(item.background) ?? MetahubArtwork.background(imdbID: item.id) ?? PosterQuality.poster(for: item)
     }
 
     private static func landscapeLogoURL(for item: MetaPreview) -> URL? { item.logo ?? MetahubArtwork.logo(imdbID: item.id) }
 
     private static func artworkURL(for item: MetaPreview, aspect: CardAspect) -> URL? {
         switch aspect {
-        case .wide: item.background ?? PosterQuality.poster(for: item)
+        case .wide: PosterQuality.landscape(item.background) ?? PosterQuality.poster(for: item)
         case .poster, .square: PosterQuality.poster(for: item)
         }
     }

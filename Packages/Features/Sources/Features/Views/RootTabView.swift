@@ -284,7 +284,7 @@ public struct RootTabView: View {
                 }
             }
             #endif
-            Tab(value: LaunchRoute.Tab.search) {
+            Tab(value: LaunchRoute.Tab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView(services: services, initialQuery: initialQuery)
                         .appDestinations(services: services, path: \.searchPath)
