@@ -162,8 +162,9 @@ public final class PosterRatingsStore {
         if tmdb != nil, ["movie", "series"].contains(item.type), source == nil {
             enqueue(item, provider: .tmdb, includeReviews: includeReviews)
         }
-        // OMDb gives Rotten Tomatoes and Metacritic for a film, when the user has a key and today's allowance is not spent. Shows have none here.
-        if let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit, item.type == "movie", LetterboxdRatings.isIMDbID(item.id),
+        // OMDb gives Rotten Tomatoes and Metacritic for a film. Only the title page asks: every poster card calls this on each redraw, so it
+        // must not do any work here. The allowance and any refusal are checked when the lookup runs.
+        if includeReviews, omdb != nil, item.type == "movie", LetterboxdRatings.isIMDbID(item.id),
            source == nil || source == .rottenTomatoes || source == .metacritic {
             enqueue(item, provider: .omdb, includeReviews: includeReviews)
         }
@@ -327,7 +328,8 @@ public final class PosterRatingsStore {
                         answer = CachedRating(rating: nil, fetchedAt: now(),
                                               reviews: try await tmdb.ratings(imdbID: lookup.item.id, type: lookup.item.type))
                     case .omdb:
-                        guard let omdb else { return }
+                        // The allowance and any refusal are checked here, off the view's redraw path.
+                        guard let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit else { return }
                         answer = CachedRating(rating: nil, fetchedAt: now(), reviews: try await omdb.ratings(imdbID: lookup.item.id))
                     }
                     guard !Task.isCancelled else { return }
