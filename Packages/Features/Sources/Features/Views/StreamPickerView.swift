@@ -473,6 +473,8 @@ struct StreamPickerView: View {
                     // Saves the choice to start the best stream at once next time; it starts nothing itself.
                     Toggle("Always pick the best stream", isOn: Binding(get: { model.autoPlaysBestStream }, set: { value in
                         Task { await model.setAutoPlaysBestStream(value) }
+                        // Turning it on picks now, as Auto Pick does, so the switch does what it says the moment it is tapped.
+                        if value { autoPick() }
                     }))
                     .labelsHidden()
                     .fixedSize()
