@@ -204,7 +204,8 @@ struct RatingButtonsRow: View {
     }
 
     private func buttons(ratings: TitleRatings?) -> some View {
-        let sites = ReviewSite.allCases.filter { $0 == .imdb || ratings?.shortText(for: $0) != nil }
+        // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed.
+        let sites = ReviewSite.allCases.filter { $0 == .imdb || ReviewPageReader.supports($0) || ratings?.shortText(for: $0) != nil }
         let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in
             // A divider stands between each two buttons, with the same gap on either side of it as between the buttons themselves.
@@ -263,7 +264,7 @@ struct RatingButton: View {
                         .minimumScaleFactor(0.75)
                 }
                 // After the score, a little greyed, so it reads as a control rather than as part of the rating.
-                if showsLinkIcon || (site == .imdb && score == nil) {
+                if showsLinkIcon || ((site == .imdb || ReviewPageReader.supports(site)) && score == nil) {
                     Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white.opacity(0.6))

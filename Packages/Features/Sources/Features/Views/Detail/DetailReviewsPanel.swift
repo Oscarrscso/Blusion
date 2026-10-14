@@ -121,6 +121,8 @@ struct ReviewWebView: UIViewRepresentable {
                                                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
+        // The review pages are shown in the dark, whatever the device's setting, so they match the title page's dark look.
+        view.overrideUserInterfaceStyle = .dark
         let coordinator = context.coordinator
         coordinator.requested = url
         ReviewPageRules.attach(to: view) {
