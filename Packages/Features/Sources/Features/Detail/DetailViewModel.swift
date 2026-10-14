@@ -47,6 +47,9 @@ public final class DetailViewModel {
     public private(set) var hasSettledHero = false
     /// The title's trailer: its loading, the player in the page's panel, and a failure. The trailer button and the panel share it.
     public let trailer: TrailerLoader
+    /// The title's Play colour as "rrggbb" when the page opened ("" or nil for the plain button). Read once, so the button keeps its colour
+    /// while the page is open even if a card's read decides it later.
+    public let playColourHex: String?
 
     public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false,
                 trailerPreparer: (any TrailerPreparing)? = nil) {
@@ -55,7 +58,11 @@ public final class DetailViewModel {
         self.services = services
         // The title's Play colour from its poster, when the poster is already in the image cache, so the page is coloured from its first frame.
         #if canImport(UIKit)
-        PlayColourStore.shared.readNow(identity: preview.identity, pictures: PlayColourStore.pictures(for: preview))
+        PlayColourStore.shared.readNow(identity: preview.identity, pictures: PlayColourStore.pictures(for: preview),
+                                       logos: PlayColourStore.logos(for: preview))
+        playColourHex = PlayColourStore.shared.hex(for: preview.identity)
+        #else
+        playColourHex = nil
         #endif
         self.trailer = TrailerLoader(preparer: trailerPreparer ?? UnavailableTrailerPreparer())
         // An artwork handed over by Home, or one looked up earlier this session, is used at once: the page then has nothing to wait for.

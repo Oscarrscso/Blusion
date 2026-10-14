@@ -6,7 +6,12 @@ import Foundation
 /// `ZoomTransition.swift`, and it sees every touch, so a swipe is caught even when no back swipe recognized it.
 struct SwipeRecord {
     /// How far a touch may travel and still be a tap.
-    static let slop: CGFloat = 10
+    static let slop: CGFloat = 8
+    /// How far a touch that starts at the screen's leading edge may travel and still be a tap: one there is most often the start of a
+    /// swipe back.
+    static let edgeSlop: CGFloat = 4
+    /// The strip along the screen's leading side where a touch counts as starting at the edge.
+    static let edgeWidth: CGFloat = 24
     /// How long after a swipe lifts it still blocks a tap.
     static let lingerAfterLift: Duration = .milliseconds(400)
     /// How long a swipe still under the finger blocks a tap. Past this, the swipe has lost its end and no longer blocks anything.
@@ -18,15 +23,17 @@ struct SwipeRecord {
     private var began: ContinuousClock.Instant?   // set while the latest touch is down
     private var lifted: ContinuousClock.Instant?  // set once it lifts
     private var travelled = false
+    private var startedAtEdge = false
 
-    mutating func touchBegan(at now: ContinuousClock.Instant) {
+    mutating func touchBegan(at now: ContinuousClock.Instant, atEdge: Bool = false) {
         began = now
         lifted = nil
         travelled = false
+        startedAtEdge = atEdge
     }
 
     mutating func touchMoved(distance: CGFloat) {
-        if distance > Self.slop { travelled = true }
+        if distance > (startedAtEdge ? Self.edgeSlop : Self.slop) { travelled = true }
     }
 
     mutating func touchEnded(at now: ContinuousClock.Instant) {

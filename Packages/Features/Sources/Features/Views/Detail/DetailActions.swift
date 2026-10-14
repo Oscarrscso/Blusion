@@ -75,6 +75,8 @@ struct DetailActions: View {
     private var primaryAction: some View {
         if let request = model.primaryRequest {
             Button {
+                // A swipe that ends on Play, such as one going back, starts nothing, as on a stream's card.
+                guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
                 play(request)
             } label: {
                 // The label keeps its place under the spinner, so the button keeps its size.
@@ -93,7 +95,8 @@ struct DetailActions: View {
             .allowsHitTesting(!blocksPlay)
             // The title's colour from its poster is the button's background, behind the glass. Not a tint: a tint also colours the label.
             // A title opened without its card keeps the plain style; the colour is not animated in.
-            .background(PlayColourStore.shared.colour(for: model.preview.identity) ?? Color.clear, in: Capsule())
+            // The colour is the one known when the page opened, so it never changes while the page is open.
+            .background(PlayColourStore.colour(hex: model.playColourHex) ?? Color.clear, in: Capsule())
             .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
         } else if let airs = model.unairedAirLabel {

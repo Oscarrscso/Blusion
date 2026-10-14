@@ -66,21 +66,27 @@ import Testing
         #expect(hueDistance(hue(colour), yellow) <= 12, "still a yellow, turned at most a little towards gold")
     }
 
-    /// The Simpsons' poster: a blue sky to every edge, and the yellow family in the middle of it. The family is the poster's colour.
-    @Test func theSubjectWinsOverTheBackgroundAroundIt() throws {
+    /// The poster's most common colour is the button's, wherever it is: a blue sky that covers most of the poster wins over a smaller
+    /// yellow family in front of it, as asked.
+    @Test func theMostCommonColourWins() throws {
         let sky = (0.25, 0.62, 0.92)
         let family = (0.996, 0.851, 0.059)
-        let colour = try #require(PlayColour.pick(from: poster(background: sky, subject: family, subjectShare: 0.3),
-                                                  width: PlayColour.sampleWidth))
-        let yellow = PlayColour.Lab(red: family.0, green: family.1, blue: family.2).hue
-        #expect(hueDistance(hue(colour), yellow) <= 12, "yellow, not the sky's blue")
+        let colour = try #require(PlayColour.pick(from: poster(background: sky, subject: family, subjectShare: 0.3)))
+        #expect(hueDistance(hue(colour), PlayColour.Lab(red: sky.0, green: sky.1, blue: sky.2).hue) <= 5, "the sky has most of the poster")
+    }
+
+    @Test func ofTwoColoursWithNearlyTheSameShareTheMoreVividOneWins() throws {
+        let dull = (0.55, 0.45, 0.35)
+        let vivid = (0.1, 0.35, 0.95)
+        let poster = pixels(52, red: dull.0, green: dull.1, blue: dull.2) + pixels(48, red: vivid.0, green: vivid.1, blue: vivid.2)
+        let colour = try #require(PlayColour.pick(from: poster))
+        #expect(hueDistance(hue(colour), PlayColour.Lab(red: vivid.0, green: vivid.1, blue: vivid.2).hue) <= 5)
     }
 
     /// Barbie's pink fills the poster to its edges and there is nothing else: it is still the colour.
     @Test func aColourThatFillsThePosterIsStillItsColour() throws {
         let pink = (0.93, 0.36, 0.67)
-        let colour = try #require(PlayColour.pick(from: pixels(PlayColour.sampleWidth * PlayColour.sampleHeight, red: pink.0, green: pink.1, blue: pink.2),
-                                                  width: PlayColour.sampleWidth))
+        let colour = try #require(PlayColour.pick(from: pixels(PlayColour.sampleWidth * PlayColour.sampleHeight, red: pink.0, green: pink.1, blue: pink.2)))
         #expect(hueDistance(hue(colour), PlayColour.Lab(red: pink.0, green: pink.1, blue: pink.2).hue) < 5)
     }
 
@@ -105,6 +111,24 @@ import Testing
         let rgb = PlayColour.rgb(colour)
         let source = PlayColour.Lab(red: 0.12, green: 0.25, blue: 0.6)
         #expect(abs(PlayColour.Lab(red: rgb.red, green: rgb.green, blue: rgb.blue).lightness - source.lightness) < 0.02)
+    }
+
+    /// A logo is mostly see-through: its colour is read from its letters alone, however little of the picture they cover.
+    @Test func aLogoIsReadFromItsOpaquePixels() throws {
+        let logo = pixels(2_800, red: 0, green: 0, blue: 0, alpha: 0) + pixels(272, red: 0.85, green: 0.12, blue: 0.1)
+        let colour = try #require(PlayColour.mostCommonColour(in: logo))
+        #expect(hueDistance(colour.hue, PlayColour.Lab(red: 0.85, green: 0.12, blue: 0.1).hue) < 5)
+        #expect(!PlayColour.isDull(colour))
+    }
+
+    /// A poster whose most common colour is barely a colour, or nearly white, is dull: the title's logo is tried for its colour then.
+    @Test func aBarelyColouredOrNearlyWhiteColourIsDull() throws {
+        let beige = try #require(PlayColour.mostCommonColour(in: pixels(864, red: 0.66, green: 0.58, blue: 0.47)))
+        #expect(PlayColour.isDull(beige), "barely coloured")
+        let paleYellow = try #require(PlayColour.mostCommonColour(in: pixels(864, red: 1, green: 0.97, blue: 0.82)))
+        #expect(PlayColour.isDull(paleYellow), "nearly white")
+        let red = try #require(PlayColour.mostCommonColour(in: pixels(864, red: 0.85, green: 0.12, blue: 0.1)))
+        #expect(!PlayColour.isDull(red))
     }
 
     @Test func transparentPixelsAreIgnored() {
@@ -135,7 +159,7 @@ import Testing
         let picture = try #require(context.makeImage())
         let sample = try #require(PlayColour.pixels(of: picture))
         #expect(sample.count == PlayColour.sampleWidth * PlayColour.sampleHeight)
-        let colour = try #require(PlayColour.pick(from: sample, width: PlayColour.sampleWidth))
+        let colour = try #require(PlayColour.pick(from: sample))
         #expect(hueDistance(hue(colour), PlayColour.Lab(red: 0.9, green: 0.1, blue: 0.1).hue) < 6, "a red picture gives a red button")
     }
 }

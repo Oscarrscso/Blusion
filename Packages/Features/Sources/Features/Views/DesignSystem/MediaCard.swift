@@ -216,7 +216,10 @@ struct MediaCard: View {
             .task(id: "\(item.identity)|\(usesLandscapeArtwork)") { await findTextlessBackdrop() }
             #endif
             // The title's Play colour is read from its poster while the card is on show, so its page has the colour on the first frame.
-            .task(id: item.identity) { await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item)) }
+            .task(id: item.identity) {
+                await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item),
+                                                  logos: PlayColourStore.logos(for: item))
+            }
     }
 
     #if targetEnvironment(macCatalyst)

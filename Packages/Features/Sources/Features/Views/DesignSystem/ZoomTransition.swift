@@ -185,8 +185,12 @@ private final class SwipeWatch: UIGestureRecognizer {
         super.touchesBegan(touches, with: event)
         guard let view, let touch = touches.first else { return }
         tracked = touch
-        start = touch.location(in: view)
-        SwipeRecord.latest.touchBegan(at: ContinuousClock.now)
+        let point = touch.location(in: view)
+        start = point
+        // The leading edge only, where a swipe back starts.
+        let atEdge = view.effectiveUserInterfaceLayoutDirection == .rightToLeft
+            ? point.x > view.bounds.width - SwipeRecord.edgeWidth : point.x < SwipeRecord.edgeWidth
+        SwipeRecord.latest.touchBegan(at: ContinuousClock.now, atEdge: atEdge)
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {

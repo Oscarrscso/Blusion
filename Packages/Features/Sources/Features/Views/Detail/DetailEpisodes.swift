@@ -101,6 +101,7 @@ struct DetailEpisodes: View {
     private var shuffleButton: some View {
         let isShuffling = loadingTrigger == .shuffle
         return Button {
+            guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
             if let request = model.shuffledRequest() { play(request, .shuffle) }
         } label: {
             Image(systemName: "shuffle")
@@ -161,8 +162,9 @@ struct DetailEpisodes: View {
         let request = model.request(for: video)
         return Button {
             // As Shuffle does: the episode's streams load on this page, with a spinner on its card only, and replace the details once
-            // ready. One lookup at a time, so a second tap does not call it off or open another.
-            guard !isLoadingStreams else { return }
+            // ready. One lookup at a time, so a second tap does not call it off or open another. A swipe that ends on the card, such as
+            // one going back, plays nothing, as on a stream's card.
+            guard !isLoadingStreams, !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
             play(request, .episode)
         } label: {
             episodeCard(video, width: width, airsLater: airsLater,
