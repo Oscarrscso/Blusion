@@ -95,6 +95,10 @@ struct DetailReviewsPanel: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(maxWidth: .infinity)
+        // Collapsed while the page loads, so it opens only once the page is ready. The page keeps its full size underneath, so it still loads.
+        .frame(height: isLoading ? 1 : nil, alignment: .top)
+        .clipped()
+        .animation(.snappy(duration: 0.35), value: isLoading)
         .id(Self.scrollID)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("detail.reviewsPanel")
@@ -129,8 +133,9 @@ struct ReviewWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site, item: item),
                                                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.darkModeScript,
-                                                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if let dark = ReviewPageRules.darkModeScript(for: site) {
+            configuration.userContentController.addUserScript(WKUserScript(source: dark, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         // Metacritic's direct address for a title can be wrong; a "Page Not Found" falls back to its search.
         if site == .metacritic, let search = site.url(for: item),
            let fallback = ReviewPageRules.notFoundScript(fallback: search) {
@@ -138,8 +143,8 @@ struct ReviewWebView: UIViewRepresentable {
         }
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
-        // The review pages are shown in the dark, whatever the device's setting, so they match the title page's dark look.
-        view.overrideUserInterfaceStyle = .dark
+        // IMDb's reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
+        view.overrideUserInterfaceStyle = site == .imdb ? .dark : .unspecified
         let coordinator = context.coordinator
         coordinator.onLoaded = onLoaded
         view.navigationDelegate = coordinator

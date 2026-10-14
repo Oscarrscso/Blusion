@@ -517,20 +517,34 @@ public final class DetailViewModel {
         trailer.cancel()
         openedReviews = OpenedReviews(site: site, url: url, isSearch: isSearch)
         reviewsLoading = true
+        startReviewsTimeout()
     }
 
     /// Closes the reviews opened from a rating.
     public func closeReviews() {
         openedReviews = nil
+        reviewsDidLoad()
+    }
+
+    /// True from a rating's tap until its page has loaded (or failed to), so the rating shows a spinner, and the reviews stay collapsed.
+    public private(set) var reviewsLoading = false
+    @ObservationIgnored private var reviewsLoadTimeout: Task<Void, Never>?
+
+    /// The reviews' page has loaded, or failed to: the spinner stops and the reviews open.
+    public func reviewsDidLoad() {
+        reviewsLoadTimeout?.cancel()
+        reviewsLoadTimeout = nil
         reviewsLoading = false
     }
 
-    /// True from a rating's tap until its page has loaded (or failed to), so the rating and its reviews show a spinner.
-    public private(set) var reviewsLoading = false
-
-    /// The reviews' page has loaded, or failed to: the spinner stops.
-    public func reviewsDidLoad() {
-        reviewsLoading = false
+    /// A page that never finishes must not hold the spinner forever, so the reviews open after this long regardless.
+    private func startReviewsTimeout() {
+        reviewsLoadTimeout?.cancel()
+        reviewsLoadTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(25))
+            guard !Task.isCancelled else { return }
+            self?.reviewsDidLoad()
+        }
     }
 
     /// The trailer button's tap: loads the title's trailer into the page, or closes it while it plays. A YouTube video is checked

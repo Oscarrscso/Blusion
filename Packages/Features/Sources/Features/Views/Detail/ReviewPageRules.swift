@@ -15,15 +15,19 @@ enum ReviewPageRules {
         "pubmatic[.]com", "rubiconproject[.]com", "openx[.]net", "moatads[.]com", "scorecardresearch[.]com",
     ]
 
-    /// The ad slots: Google's, and IMDb's sticky bottom ad, a fixed "adhesion" wrapper with inline ad frames inside it. IMDb's own header bar
-    /// (with its sign-in and app links) is hidden too, so the page shows only the reviews.
-    private static let adSlots = "ins.adsbygoogle, div[id^=div-gpt-ad], div[id^=adhesion_], div[class*=AdhesionAdSlot], iframe[id^=inline], #imdbHeader"
+    /// The ad slots on every site: Google's, and IMDb's sticky bottom ad, a fixed "adhesion" wrapper with inline ad frames inside it.
+    private static let adSlots = "ins.adsbygoogle, div[id^=div-gpt-ad], div[id^=adhesion_], div[class*=AdhesionAdSlot], iframe[id^=inline]"
 
-    /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the common ad slots are hidden
-    /// where they remain.
+    /// IMDb's own header on its reviews page: the header bar with sign-in and app links, and the white block with Back, the title and the
+    /// "User reviews" heading. Only IMDb's pages hide them, so the reviews panel starts at the count and "Add a review".
+    private static let imdbHeaderSlots = "#imdbHeader, [data-testid=atf-wrapper-bg]"
+
+    /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the ad slots are hidden where they
+    /// remain. IMDb's header is hidden on IMDb's pages only.
     static var contentRules: String {
         let blocks = adHosts.map { #"{"trigger": {"url-filter": "\#($0)"}, "action": {"type": "block"}}"# }
-        let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "\#(adSlots)"}}"#]
+        let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "\#(adSlots)"}}"#,
+                     #"{"trigger": {"url-filter": "imdb[.]com"}, "action": {"type": "css-display-none", "selector": "\#(imdbHeaderSlots)"}}"#]
         return "[\n" + (blocks + hides).joined(separator: ",\n") + "\n]"
     }
 
@@ -38,9 +42,13 @@ enum ReviewPageRules {
         }
     }
 
-    /// Shows the page in the dark: the page is inverted, then its pictures are inverted back, so text reads light on a dark ground. A close
-    /// match rather than the sites' own dark themes, which some pages do not offer. Runs before the page is drawn, so no white flashes.
-    static let darkModeScript = """
+    /// The dark treatment, for IMDb's pages only: the page is inverted, then its pictures are inverted back, so text reads light on a dark
+    /// ground. Nil for every other site, which keep their own look. Runs before the page is drawn, so no white flashes.
+    static func darkModeScript(for site: ReviewSite) -> String? {
+        site == .imdb ? imdbDarkScript : nil
+    }
+
+    private static let imdbDarkScript = """
     (function () {
       var style = document.createElement('style');
       style.textContent = 'html{background:#fff !important;filter:invert(1) hue-rotate(180deg) !important}' +

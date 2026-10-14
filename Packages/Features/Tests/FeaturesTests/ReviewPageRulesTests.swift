@@ -14,8 +14,10 @@ import WebKit
             #expect(!filter.contains("|"), "WebKit rejects alternation in a url-filter: \(filter)")
         }
         let last = try #require(rules.last?["action"] as? [String: String])
-        #expect(last["type"] == "css-display-none")
-        for rule in rules.dropLast() {
+        #expect(last["type"] == "css-display-none", "IMDb's header, on IMDb's pages")
+        let adSlots = try #require(rules.dropLast().last?["action"] as? [String: String])
+        #expect(adSlots["type"] == "css-display-none", "the ad slots, on every site")
+        for rule in rules.dropLast(2) {
             let action = try #require(rule["action"] as? [String: String])
             #expect(action["type"] == "block")
         }
@@ -34,10 +36,21 @@ import WebKit
         #expect(compiled, "WebKit compiles every rule, so none is silently dropped")
     }
 
-    @Test func theDarkModeScriptInvertsThePageAndItsPicturesBack() {
-        let script = ReviewPageRules.darkModeScript
-        #expect(script.contains("filter:invert(1)"), "the page is inverted")
+    @Test func theDarkModeScriptInvertsIMDbAndItsPicturesBackAndNoOtherSite() {
+        let script = ReviewPageRules.darkModeScript(for: .imdb) ?? ""
+        #expect(script.contains("filter:invert(1)"), "IMDb's page is inverted")
         #expect(script.contains("img,video"), "pictures are inverted back")
+        for site in [ReviewSite.letterboxd, .rottenTomatoes, .metacritic, .tmdb] {
+            #expect(ReviewPageRules.darkModeScript(for: site) == nil, "\(site.name) keeps its own look")
+        }
+    }
+
+    @Test func theImdbHeaderIsHiddenOnlyOnIMDbPages() throws {
+        let rules = try #require(JSONSerialization.jsonObject(with: Data(ReviewPageRules.contentRules.utf8)) as? [[String: Any]])
+        let imdb = rules.first { ($0["trigger"] as? [String: Any])?["url-filter"] as? String == "imdb[.]com" }
+        let selector = ((imdb?["action"] as? [String: Any])?["selector"]) as? String
+        #expect(selector?.contains("[data-testid=atf-wrapper-bg]") == true, "the white header block is hidden on IMDb")
+        #expect(selector?.contains("#imdbHeader") == true, "and IMDb's header bar")
     }
 
     @Test func theLetterboxdScriptGoesOnFromAFilmToItsReviews() {
