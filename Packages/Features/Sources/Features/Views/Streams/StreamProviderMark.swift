@@ -26,8 +26,8 @@ extension StreamProvider {
         }
     }
 
-    /// How large the logo is drawn against a tag's text height. Prime Video's icon is square, so it reads smaller than the wordmarks beside
-    /// it and is drawn larger inside the same pill.
+    /// How large the logo is drawn within its box. Prime Video's icon is square, so it reads smaller than the wordmarks beside it and is
+    /// drawn larger in the same box.
     var logoScale: CGFloat {
         switch self {
         case .primeVideo: 1.3
@@ -36,35 +36,23 @@ extension StreamProvider {
     }
 }
 
-/// A service's logo at the height of a quality tag's line of text, so it lines up with the tags beside it.
-struct StreamProviderMark: View {
+/// A web release's streaming service: its logo in a box of the service's colour, set to the left of the release name. VoiceOver reads
+/// the service's name.
+struct StreamProviderBox: View {
     let provider: StreamProvider
-    /// The height of the tags' text at the caption size, scaled with Dynamic Type the same way the tags' text is.
-    @ScaledMetric(relativeTo: .caption2) private var height: CGFloat = 13
+    /// The box's size. The logo is fitted inside a margin within it, so a wide wordmark and a square icon both sit in the box.
+    @ScaledMetric(relativeTo: .subheadline) private var width: CGFloat = 52
+    @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 36
 
     var body: some View {
         Image(provider.logoName)
             .renderingMode(.template)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(height: height * provider.logoScale)
-            .fixedSize()
+            .frame(maxWidth: (width - 12) * provider.logoScale, maxHeight: (height - 14) * provider.logoScale)
             .foregroundStyle(provider.markInk)
-    }
-}
-
-/// A web release's streaming service: its logo on a pill in the service's colour, the height and capsule shape of the quality tags beside it.
-/// The pill is the badge itself, so the logo carries no second border and no name; VoiceOver reads the service's name.
-struct StreamProviderBadge: View {
-    let provider: StreamProvider
-    /// A quality tag's height: its caption text with 3 pt of padding above and below. A logo can grow inside this height, never the pill.
-    @ScaledMetric(relativeTo: .caption2) private var pillHeight: CGFloat = 19
-
-    var body: some View {
-        StreamProviderMark(provider: provider)
-            .padding(.horizontal, 7)
-            .frame(height: pillHeight)
-            .background(provider.tint, in: Capsule())
+            .frame(width: width, height: height)
+            .background(provider.tint, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(provider.name)
     }

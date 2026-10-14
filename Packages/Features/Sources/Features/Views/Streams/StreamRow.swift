@@ -3,10 +3,10 @@ import SwiftUI
 import StremioKit
 
 /// One stream as a card, in the title page's design: a "Best match" label for the stream Auto Pick recommends, small badges for sharpness,
-/// REMUX and source (a web release's streaming service in its place), an AirPods mark for Dolby Atmos, the release name in up to two lines,
-/// one grey line of facts (size,
-/// codec, audio), and a note when the stream opens elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap
-/// does. The technical details fold away in a section of their own, so tapping the card always plays.
+/// REMUX, source and, where iOS plays it over AirPods, Dolby Atmos. A web release's streaming service sits in a box to the left of the
+/// release name, which is in up to two lines, with one grey line of facts (size, codec, audio). A note appears when the stream opens
+/// elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap does. The technical details fold away in a
+/// section of their own, so tapping the card always plays.
 struct StreamRow: View {
     let item: RankedStream
     /// True for the stream Auto Pick recommends, shown with a "Best match" label.
@@ -32,20 +32,22 @@ struct StreamRow: View {
                         }
                         if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
                         if isRemux { QualityBadge.remux }
-                        // A web release's service takes the place of its source badge, so the row keeps the same number of badges.
-                        if let provider = provider {
-                            StreamProviderBadge(provider: provider)
-                        } else if let source = item.quality.source {
+                        if let source = item.quality.source {
                             QualityBadge.source(source)
                         }
-                        if item.quality.hasAtmos { SpatialAudioBadge() }
+                        if playsAtmosOverAirPods { SpatialAudioBadge() }
                     }
                 }
-                Text(Self.headline(for: item))
-                    .font(.subheadline.weight(.semibold))
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                    if let provider = provider {
+                        StreamProviderBox(provider: provider)
+                    }
+                    Text(Self.headline(for: item))
+                        .font(.subheadline.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !facts.isEmpty {
                     Text(facts)
                         .font(Theme.Typography.metaLine)
@@ -72,10 +74,18 @@ struct StreamRow: View {
         return nil
     }
 
+    /// Whether iOS sends this stream's Dolby Atmos to AirPods as spatial audio, so the AirPods mark stands for it. That is streaming Atmos
+    /// (E-AC-3 with JOC) that Blusion's native player plays. Lossless TrueHD from a disc does not reach AirPods as Atmos on iOS, and a
+    /// stream the fallback engine or another app plays is not claimed here.
+    private var playsAtmosOverAirPods: Bool {
+        guard item.quality.atmosFormat == .streaming, case .native = item.route else { return false }
+        return true
+    }
+
     /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.
     private var hasBadges: Bool {
         item.quality.resolutionLabel != nil || item.quality.isHDR || item.quality.isDolbyVision || isRemux || item.quality.source != nil
-            || provider != nil || item.quality.hasAtmos
+            || playsAtmosOverAirPods
     }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
@@ -90,7 +100,7 @@ struct StreamRow: View {
         return item.stream.description?.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.title
     }
 
-    /// The grey line of facts: "38.2 GB · HEVC · TrueHD". The parts the stream does not give are left out.
+    /// The grey line of facts: "38.2 GB · HEVC · Atmos TrueHD". The parts the stream does not give are left out.
     private var facts: String {
         var parts: [String] = []
         if let size = item.quality.sizeBytes { parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)) }
@@ -99,13 +109,17 @@ struct StreamRow: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The audio codec for the grey line. Dolby Atmos is not named here, since its AirPods badge stands for it: lossless Atmos reads as its
-    /// TrueHD track and streaming Atmos as its DD+ track. Otherwise the first audio codec the release names.
+    /// The audio for the grey line. Atmos that the AirPods mark stands for is left to the mark, so only its codec is named; any other Atmos
+    /// keeps its name. Otherwise the first audio codec the release names, with "Atmos" beside it when the release marks Atmos.
     private var audioText: String? {
         switch item.quality.atmosFormat {
-        case .lossless: "TrueHD"
-        case .streaming: "DD+"
-        case nil: item.quality.audioCodecs.first?.label
+        case .lossless:
+            return "Atmos TrueHD"
+        case .streaming:
+            return playsAtmosOverAirPods ? "DD+" : "Atmos DD+"
+        case nil:
+            let parts = [item.quality.hasAtmos ? "Atmos" : nil, item.quality.audioCodecs.first?.label].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " ")
         }
     }
 
