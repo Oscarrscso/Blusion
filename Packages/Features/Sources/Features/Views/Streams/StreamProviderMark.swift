@@ -73,10 +73,14 @@ struct StreamDiscBox: View {
             .frame(maxWidth: width - 12, maxHeight: height - 14)
             .foregroundStyle(.white)
             .frame(width: width, height: height)
-            .background(is4K ? Color(red: 0.62, green: 0.48, blue: 0.16) : Color(red: 0.05, green: 0.27, blue: 0.55),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(is4K ? Color.black : Self.blue, in: shape)
+            // The 4K box has a dark grey edge; the Blu-ray box's edge is its own blue, the same as its background.
+            .overlay { shape.strokeBorder(is4K ? Color(white: 0.28) : Self.blue, lineWidth: 1) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(is4K ? "4K Blu-ray" : "Blu-ray")
     }
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 10, style: .continuous) }
+    private static let blue = Color(red: 0.05, green: 0.27, blue: 0.55)
 }
 #endif
