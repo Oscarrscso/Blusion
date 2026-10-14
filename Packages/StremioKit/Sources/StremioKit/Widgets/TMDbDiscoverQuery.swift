@@ -96,12 +96,16 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     public var companies: [Named]
     /// Genres TMDb leaves out, sent as `without_genres`. Adult animation leaves out the family titles (see `inferred(fromTitle:)`).
     public var excludedGenres: [Named]
+    /// True when the title names neither films nor shows: the list then holds both, interleaved, so a show such as The Simpsons is in an
+    /// animation list as a film is. Written only when set, so a saved list keeps its encoding.
+    public var spansBothKinds: Bool
 
     public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],
                 excludedKeywords: [Named] = [], minimumScore: Double? = nil, maximumScore: Double? = nil, minimumVotes: Int? = nil,
                 language: String? = nil, minimumRuntime: Int? = nil, maximumRuntime: Int? = nil, releasedFrom: String? = nil,
                 releasedTo: String? = nil, providers: [Named] = [], region: String? = nil, cast: [Named] = [], crew: [Named] = [],
-                companies: [Named] = [], excludedGenres: [Named] = []) {
+                companies: [Named] = [], excludedGenres: [Named] = [], spansBothKinds: Bool = false) {
+        self.spansBothKinds = spansBothKinds
         self.kind = kind
         self.ordering = ordering
         self.period = period
@@ -127,6 +131,7 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case kind, ordering, period, genres, keywords, excludedKeywords, minimumScore, maximumScore, minimumVotes, language
         case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies, excludedGenres
+        case spansBothKinds
     }
 
     /// Every key is optional. An unknown `kind`, `ordering` or `period` falls back to its default, so a file from another version still
@@ -153,7 +158,8 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
             cast: try container.decodeIfPresent([Named].self, forKey: .cast) ?? [],
             crew: try container.decodeIfPresent([Named].self, forKey: .crew) ?? [],
             companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [],
-            excludedGenres: try container.decodeIfPresent([Named].self, forKey: .excludedGenres) ?? [])
+            excludedGenres: try container.decodeIfPresent([Named].self, forKey: .excludedGenres) ?? [],
+            spansBothKinds: try container.decodeIfPresent(Bool.self, forKey: .spansBothKinds) ?? false)
     }
 
     /// Writes the keys the synthesized encoding wrote. `excludedGenres` is written only when it has genres, so a list that leaves none
@@ -180,6 +186,7 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
         try container.encode(crew, forKey: .crew)
         try container.encode(companies, forKey: .companies)
         if !excludedGenres.isEmpty { try container.encode(excludedGenres, forKey: .excludedGenres) }
+        if spansBothKinds { try container.encode(true, forKey: .spansBothKinds) }
     }
 
     /// The excluded genres the list does not name itself. A genre the list asks for is never left out, so the two cannot contradict.

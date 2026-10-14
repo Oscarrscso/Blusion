@@ -321,6 +321,8 @@ struct DetailView: View {
         .fullScreenCover(isPresented: $showsTrailerCover, onDismiss: {
             playerIsCovered = false
             model.trailer.isFullScreen = false
+            // Leaving full screen while still sideways closes the trailer, rather than leaving an inline landscape player on the page.
+            if isPhoneInLandscape { model.trailer.close() }
         }) {
             TrailerFullScreenView(trailer: model.trailer) { showsTrailerCover = false }
         }

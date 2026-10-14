@@ -54,7 +54,8 @@ extension TMDbDiscoverQuery {
         if namesAdultAnimation(title) { excludedGenres = adultAnimationExclusions(kind, namedGenres: genres) }
 
         return TMDbDiscoverQuery(kind: kind, ordering: ordering, genres: genres, minimumScore: minimumScore, minimumVotes: minimumVotes,
-                                 releasedFrom: releasedFrom, releasedTo: releasedTo, excludedGenres: excludedGenres)
+                                 releasedFrom: releasedFrom, releasedTo: releasedTo, excludedGenres: excludedGenres,
+                                 spansBothKinds: !namesTV && !namesFilms && (has("animation") || has("animated")))
     }
 
     /// Whether a title names adult animation: "adult" then "animation" or "animated", in any case, and not negated. "Non-adult animation"

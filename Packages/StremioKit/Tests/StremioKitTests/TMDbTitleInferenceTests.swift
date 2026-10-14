@@ -75,7 +75,8 @@ import Testing
 
     @Test func adultAnimationLeavesOutTheFamilyTitlesAndForTVTheKidsShows() {
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation")
-            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")]))
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")],
+                                 spansBothKinds: true))
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation TV")
             == TMDbDiscoverQuery(kind: .series, genres: [.init(id: 16, name: "Animation")],
                                  excludedGenres: [.init(id: 10751, name: "Family"), .init(id: 10762, name: "Kids")]))
@@ -88,8 +89,9 @@ import Testing
     }
 
     @Test func aFamilyGenreTheTitleNamesIsNotLeftOut() {
+        // Naming animation with neither films nor shows asks for both kinds, so the list holds shows as well (see `spansBothKinds`).
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Family Adult Animation")
-            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation"), .init(id: 10751, name: "Family")]))
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation"), .init(id: 10751, name: "Family")], spansBothKinds: true))
     }
 
     @Test func aTitleReadFromFusionWritesBackAsBlusionsQuery() throws {

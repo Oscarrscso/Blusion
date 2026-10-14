@@ -62,23 +62,28 @@ public final class DetailViewModel {
         self.certification = services.posterRatings.cachedCertification(for: preview)
     }
 
+    /// Runs the hero's load, and gives up after five seconds, so a slow picture never holds the page.
+    private func loadHero(_ hero: @escaping @MainActor @Sendable () async -> Void) async {
+        let heroTask = Task { @MainActor in await hero() }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await heroTask.value }
+            group.addTask { try? await Task.sleep(for: .seconds(5)) }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+
     public func load(afterHero hero: (@MainActor @Sendable () async -> Void)? = nil) async {
         isLoading = true
         episodeRatingSeasons.removeAll()
         // The artwork lookup and then the hero picture and logo come first and alone: nothing else starts until they are loaded
         // (or five seconds have passed), so no other request can delay them.
         await loadArtwork()
-        if let hero, !hasSettledHero {
-            let heroTask = Task { @MainActor in await hero() }
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { await heroTask.value }
-                group.addTask { try? await Task.sleep(for: .seconds(5)) }
-                await group.next()
-                group.cancelAll()
-            }
-        }
+        // A movie's picture comes first and alone. A show's episodes come first: its picture follows them, below, so the list is not held
+        // up by the picture.
+        if !isSeries, let hero, !hasSettledHero { await loadHero(hero) }
         guard !Task.isCancelled else { return }
-        hasSettledHero = true
+        if !isSeries { hasSettledHero = true }
         async let playbackSettings = services.settings.load()
         let result = await services.browse.detail(for: preview)
         // A load that was cancelled must not overwrite what the newer load shows.
@@ -89,6 +94,11 @@ public final class DetailViewModel {
         isFallback = result.isFallback
         if !result.isFallback { services.heroMeta.record(detail.preview, for: preview) }
         isLoading = false
+        // A show's picture loads once its episodes are on the page; the rating row waits for it.
+        if isSeries {
+            if let hero, !hasSettledHero { await loadHero(hero) }
+            hasSettledHero = true
+        }
         await refreshUserState()
         // A series opens on the season of its next episode, so the list starts where the viewer left off.
         if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }

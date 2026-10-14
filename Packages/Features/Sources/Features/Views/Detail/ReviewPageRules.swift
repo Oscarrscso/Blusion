@@ -20,7 +20,7 @@ enum ReviewPageRules {
 
     /// IMDb's own header on its reviews page: the header bar with sign-in and app links, and the white block with Back, the title and the
     /// "User reviews" heading. Only IMDb's pages hide them, so the reviews panel starts at the count and "Add a review".
-    private static let imdbHeaderSlots = "#imdbHeader, [data-testid=atf-wrapper-bg]"
+    private static let imdbHeaderSlots = "#imdbHeader, [data-testid=atf-wrapper-bg], .ipc-scroll-to-top-button"
 
     /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the ad slots are hidden where they
     /// remain. IMDb's header is hidden on IMDb's pages only.

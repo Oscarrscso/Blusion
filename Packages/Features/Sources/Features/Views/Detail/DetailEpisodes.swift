@@ -98,6 +98,8 @@ struct DetailEpisodes: View {
         } label: {
             Image(systemName: "shuffle")
                 .font(.body.weight(.semibold))
+                // The same grey as the trailer's symbol beside the title's other buttons.
+                .foregroundStyle(.white.opacity(0.6))
         }
         .glassCircleButton(.regular)
         .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
@@ -119,6 +121,7 @@ struct DetailEpisodes: View {
         } label: {
             Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
                 .font(.body.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.6))
                 .contentTransition(.symbolEffect(.replace))
         }
         .glassCircleButton(.regular)

@@ -392,7 +392,7 @@ import StremioKitTestSupport
         #expect(entry.posterSites == [.letterboxd, .rottenTomatoes])
         entry.letterboxd = nil
         #expect(entry.posterSites == [.rottenTomatoes, .metacritic])
-        #expect(!entry.isEmpty && entry.shortText(for: .rottenTomatoes) == "9.1")
+        #expect(!entry.isEmpty && entry.shortText(for: .rottenTomatoes) == "91", "Rotten Tomatoes is a whole percentage")
         #expect(entry.shortText(for: .metacritic) == "82")
         entry.rottenTomatoes = nil
         #expect(entry.posterSites == [.metacritic, .tmdb])

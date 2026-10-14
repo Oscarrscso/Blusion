@@ -193,6 +193,28 @@ extension TMDbRatings {
     public func discoverItems(_ query: TMDbDiscoverQuery, limit: Int, skip: Int, defaultRegion: String, today: Date = Date(),
                               calendar: Calendar = .current) async throws -> [MetaPreview] {
         guard limit > 0, credential != nil else { return [] }
+        if query.spansBothKinds {
+            // A title that names neither films nor shows asks for both kinds, and interleaves them, so a show is in the list as a film is.
+            var films = query
+            films.kind = .movie
+            films.spansBothKinds = false
+            var shows = query
+            shows.kind = .series
+            shows.spansBothKinds = false
+            // Adult animation leaves out a show's kids' shows as well as the family titles, so the shows side does the same.
+            if query.excludedGenres.contains(where: { $0.id == 10751 }), !query.excludedGenres.contains(where: { $0.id == 10762 }) {
+                shows.excludedGenres.append(TMDbDiscoverQuery.Named(id: 10762, name: "Kids"))
+            }
+            let needed = max(skip, 0) + limit
+            let movieItems = try await discoverItems(films, limit: needed, skip: 0, defaultRegion: defaultRegion, today: today, calendar: calendar)
+            let seriesItems = try await discoverItems(shows, limit: needed, skip: 0, defaultRegion: defaultRegion, today: today, calendar: calendar)
+            var merged: [MetaPreview] = []
+            for index in 0..<max(movieItems.count, seriesItems.count) {
+                if index < movieItems.count { merged.append(movieItems[index]) }
+                if index < seriesItems.count { merged.append(seriesItems[index]) }
+            }
+            return Array(merged.dropFirst(max(skip, 0)).prefix(limit))
+        }
         let offset = max(skip, 0)
         let needed = offset + limit
         let discoverPages = (needed + 19) / 20

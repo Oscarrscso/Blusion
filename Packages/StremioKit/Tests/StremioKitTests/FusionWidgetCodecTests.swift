@@ -537,7 +537,8 @@ private let bigSample = #"""
             Issue.record("both rows should be kept")
             return
         }
-        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], excludedGenres: [family])))
+        // An adult animation row names neither films nor shows, so it holds both (see `spansBothKinds`).
+        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], excludedGenres: [family], spansBothKinds: true)))
         #expect(popular.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation])))
     }
 
