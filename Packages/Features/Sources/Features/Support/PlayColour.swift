@@ -1,8 +1,14 @@
 import CoreGraphics
 import Foundation
 
-/// The colour a title's Play button takes from its poster: the poster's most common vivid hue, kept rich and never grey. Pure arithmetic
-/// over a small sample of the picture, so it runs off the main thread and can be tested without a picture.
+/// The colour a title's Play button takes from its poster: the colour the poster is known by, kept as close to it as a white label
+/// allows. Pure arithmetic over a small sample of the picture, so it runs off the main thread and can be tested without a picture.
+///
+/// The poster's colours are read in OKLab, where distances and lightness follow what the eye sees. Each pixel counts more near the
+/// middle of the poster and where the picture has detail, so the subject outweighs a flat sky or wall around it. Colours are grouped by
+/// hue, and a group's score is its weight raised to 0.6 times its chroma, so a vivid colour can beat a larger dull one; a hue that fills
+/// the poster's edges, its background, scores less. The Simpsons' yellow family wins over its blue sky that way. The chosen hue keeps its chroma; only its lightness comes down, as far as a white label
+/// needs to read on it (3:1, the contrast for large bold text). A yellow darkened that far reads as gold, not olive.
 enum PlayColour {
     /// One sampled pixel, each channel from 0 to 1, not premultiplied.
     struct Pixel: Equatable {
@@ -19,45 +25,214 @@ enum PlayColour {
         var brightness: Double
     }
 
-    /// The poster is sampled at this size, which is a few hundred pixels: enough for the colour, cheap to read.
-    static let sampleWidth = 24
-    static let sampleHeight = 36
-    /// The hues are grouped into this many buckets, and the heaviest bucket's colour is the poster's.
-    static let hueBuckets = 12
-    /// A pixel counts as vivid when it is at least this saturated and this bright, and not too bright to tell its hue.
-    static let minimumVividSaturation = 0.25
-    static let vividBrightness = 0.15...0.95
-    /// Fewer vivid pixels than this and the poster is monochrome: no colour, so the button keeps its own style.
-    static let minimumVividPixels = 10
-    /// The button's colour, however vivid the poster: rich enough to read as a colour, never neon or grey.
-    static let saturationRange = 0.55...0.85
-    static let brightnessRange = 0.40...0.60
+    /// A colour in OKLab: `lightness` from 0 to 1, `a` and `b` its green–red and blue–yellow axes.
+    struct Lab: Equatable {
+        var lightness: Double
+        var a: Double
+        var b: Double
 
-    /// The button's colour for the pixels of a poster, or nil when no vivid colour survives.
-    static func pick(from pixels: [Pixel]) -> HSB? {
-        var weights = [Double](repeating: 0, count: hueBuckets)
-        var sums = [(red: Double, green: Double, blue: Double)](repeating: (0, 0, 0), count: hueBuckets)
-        var vividCount = 0
-        for pixel in pixels where pixel.alpha >= 0.5 {
-            let hsb = HSB(pixel)
-            guard hsb.saturation >= minimumVividSaturation, vividBrightness.contains(hsb.brightness) else { continue }
-            vividCount += 1
-            let bucket = min(hueBuckets - 1, Int(hsb.hue * Double(hueBuckets)))
-            weights[bucket] += hsb.saturation
-            sums[bucket].red += pixel.red * hsb.saturation
-            sums[bucket].green += pixel.green * hsb.saturation
-            sums[bucket].blue += pixel.blue * hsb.saturation
+        var chroma: Double { (a * a + b * b).squareRoot() }
+        /// The hue in degrees, 0 to 360.
+        var hue: Double {
+            let degrees = atan2(b, a) * 180 / .pi
+            return degrees < 0 ? degrees + 360 : degrees
         }
-        guard vividCount >= minimumVividPixels,
-              let heaviest = weights.indices.max(by: { weights[$0] < weights[$1] }), weights[heaviest] > 0 else { return nil }
-        let weight = weights[heaviest]
-        var colour = HSB(red: sums[heaviest].red / weight, green: sums[heaviest].green / weight, blue: sums[heaviest].blue / weight)
-        colour.saturation = min(max(colour.saturation, saturationRange.lowerBound), saturationRange.upperBound)
-        colour.brightness = min(max(colour.brightness, brightnessRange.lowerBound), brightnessRange.upperBound)
-        return colour
     }
 
-    /// The pixels of a picture drawn at the sample size, not premultiplied. Nil when the sample cannot be drawn.
+    /// The poster is sampled at this size: enough to tell the subject from the background, cheap to read.
+    static let sampleWidth = 48
+    static let sampleHeight = 72
+    /// A pixel counts as a colour when its chroma is at least this, and it is not near black: greys, whites and blacks have no hue.
+    static let minimumChroma = 0.04
+    static let minimumLightness = 0.15
+    /// Fewer coloured pixels than this share of the poster (and never fewer than ten) and the poster is monochrome: no colour, so the
+    /// button keeps its own style.
+    static let minimumColouredShare = 0.012
+    /// The hues are grouped in bins this many degrees wide.
+    static let hueBinWidth = 10.0
+    /// The most a hue's score is lowered for filling the poster's edges (an eighth of its width all round), where its background is.
+    static let backgroundDiscount = 0.7
+    /// The button's chroma, however vivid or dull the poster: enough to read as a colour, never neon.
+    static let chromaRange = 0.08...0.20
+    /// The button's lightness: never so dark it reads as black, and never so light that a white label stops reading (see
+    /// `minimumLabelContrast`).
+    static let minimumLightnessOfButton = 0.42
+    /// The contrast a white label keeps on the button: 3:1, enough for large bold text.
+    static let minimumLabelContrast = 3.0
+
+    /// The button's colour for the pixels of a poster, or nil when the poster has no colour. `width` is the sample's width when the pixels
+    /// are a picture's rows (as `pixels(of:)` gives them); without it every pixel counts the same.
+    static func pick(from pixels: [Pixel], width: Int? = nil) -> HSB? {
+        let labs = pixels.map { Lab(red: $0.red, green: $0.green, blue: $0.blue) }
+        let weights = self.weights(of: labs, width: width)
+        var bins = [(weight: Double, chromaSum: Double)](repeating: (0, 0), count: Int(360 / hueBinWidth))
+        var border = [Double](repeating: 0, count: bins.count)
+        var borderTotal = 0.0
+        var coloured = 0
+        for index in pixels.indices where pixels[index].alpha >= 0.5 && isColoured(labs[index]) {
+            coloured += 1
+            let bin = min(bins.count - 1, Int(labs[index].hue / hueBinWidth))
+            bins[bin].weight += weights[index]
+            bins[bin].chromaSum += weights[index] * labs[index].chroma
+        }
+        if let width, width > 0, pixels.count % width == 0 {
+            let height = pixels.count / width
+            let edge = max(1, width / 8)
+            for index in pixels.indices {
+                let x = index % width, y = index / width
+                guard x < edge || x >= width - edge || y < edge || y >= height - edge else { continue }
+                borderTotal += 1
+                guard pixels[index].alpha >= 0.5, isColoured(labs[index]) else { continue }
+                border[min(bins.count - 1, Int(labs[index].hue / hueBinWidth))] += 1
+            }
+        }
+        guard coloured >= max(10, Int(Double(pixels.count) * minimumColouredShare)) else { return nil }
+        // A hue's weight is its bin's and its two neighbours', so a colour that straddles a bin edge is not split in two.
+        let scores = bins.indices.map { index -> (score: Double, chroma: Double) in
+            let neighbours = [bins[(index + bins.count - 1) % bins.count], bins[index], bins[(index + 1) % bins.count]]
+            let weight = neighbours.reduce(0) { $0 + $1.weight }
+            guard weight > 0, bins[index].weight > 0 else { return (0, 0) }
+            let chroma = neighbours.reduce(0) { $0 + $1.chromaSum } / weight
+            // A hue that fills the poster's edges is its background, as The Simpsons' blue sky is: it counts for less than the subject in
+            // front of it, by up to `backgroundDiscount` when it fills every edge.
+            let edges = borderTotal > 0 ? (border[(index + border.count - 1) % border.count] + border[index] + border[(index + 1) % border.count]) / borderTotal : 0
+            return (pow(weight, 0.6) * chroma * (1 - backgroundDiscount * min(1, edges)), chroma)
+        }
+        guard let best = scores.indices.max(by: { scores[$0].score < scores[$1].score }), scores[best].score > 0 else { return nil }
+        // Two hues within 15% of each other: the more vivid one is the poster's colour.
+        let winner = scores.indices
+            .filter { scores[$0].score >= scores[best].score * 0.85 }
+            .max(by: { scores[$0].chroma < scores[$1].chroma }) ?? best
+        let centre = (Double(winner) + 0.5) * hueBinWidth
+        // The colour is the weighted mean of the coloured pixels within 15 degrees of that hue.
+        var sum = (lightness: 0.0, a: 0.0, b: 0.0, weight: 0.0)
+        for index in pixels.indices where pixels[index].alpha >= 0.5 && isColoured(labs[index]) {
+            let distance = abs(labs[index].hue - centre)
+            guard min(distance, 360 - distance) <= 15 else { continue }
+            let weight = weights[index] * labs[index].chroma
+            sum.lightness += labs[index].lightness * weight
+            sum.a += labs[index].a * weight
+            sum.b += labs[index].b * weight
+            sum.weight += weight
+        }
+        guard sum.weight > 0 else { return nil }
+        let poster = Lab(lightness: sum.lightness / sum.weight, a: sum.a / sum.weight, b: sum.b / sum.weight)
+        let button = buttonColour(for: poster)
+        return HSB(red: button.red, green: button.green, blue: button.blue)
+    }
+
+    /// Whether a pixel has a hue: chroma enough, and not near black.
+    static func isColoured(_ lab: Lab) -> Bool {
+        lab.chroma >= minimumChroma && lab.lightness >= minimumLightness
+    }
+
+    /// How much each pixel counts: more near the middle (a Gaussian a third of the poster wide) and more where the picture has detail
+    /// (its lightness changes from its neighbours), so a subject outweighs the flat sky or wall around it. All the same without `width`.
+    static func weights(of labs: [Lab], width: Int?) -> [Double] {
+        guard let width, width > 2, labs.count % width == 0, labs.count / width > 2 else { return Array(repeating: 1, count: labs.count) }
+        let height = labs.count / width
+        func lightness(_ x: Int, _ y: Int) -> Double {
+            labs[min(max(y, 0), height - 1) * width + min(max(x, 0), width - 1)].lightness
+        }
+        // Sobel on lightness, then a 3x3 blur, so detail spreads a little over the subject it belongs to.
+        var edges = [Double](repeating: 0, count: labs.count)
+        for y in 0..<height {
+            for x in 0..<width {
+                let gx = lightness(x + 1, y - 1) + 2 * lightness(x + 1, y) + lightness(x + 1, y + 1)
+                    - lightness(x - 1, y - 1) - 2 * lightness(x - 1, y) - lightness(x - 1, y + 1)
+                let gy = lightness(x - 1, y + 1) + 2 * lightness(x, y + 1) + lightness(x + 1, y + 1)
+                    - lightness(x - 1, y - 1) - 2 * lightness(x, y - 1) - lightness(x + 1, y - 1)
+                edges[y * width + x] = (gx * gx + gy * gy).squareRoot()
+            }
+        }
+        var detail = [Double](repeating: 0, count: labs.count)
+        for y in 0..<height {
+            for x in 0..<width {
+                var total = 0.0
+                var count = 0.0
+                for dy in -1...1 {
+                    for dx in -1...1 where (0..<width).contains(x + dx) && (0..<height).contains(y + dy) {
+                        total += edges[(y + dy) * width + x + dx]
+                        count += 1
+                    }
+                }
+                detail[y * width + x] = total / count
+            }
+        }
+        let strongest = detail.max() ?? 0
+        let sigma = 0.35
+        return labs.indices.map { index in
+            let x = (Double(index % width) + 0.5) / Double(width) - 0.5
+            let y = (Double(index / width) + 0.5) / Double(height) - 0.5
+            let centre = exp(-(x * x + y * y) / (2 * sigma * sigma))
+            let saliency = strongest > 0 ? detail[index] / strongest : 0
+            return centre * (0.25 + 0.75 * saliency)
+        }
+    }
+
+    /// The button's colour for the poster's colour: the same hue, its chroma kept between `chromaRange`, and its lightness brought down
+    /// only as far as a white label needs. A yellow brought down a long way turns a little towards orange, so it reads as gold rather
+    /// than olive. Returns sRGB components from 0 to 1.
+    static func buttonColour(for poster: Lab) -> (red: Double, green: Double, blue: Double) {
+        let chroma = min(max(poster.chroma, chromaRange.lowerBound), chromaRange.upperBound)
+        var lightness = max(poster.lightness, minimumLightnessOfButton)
+        var hue = poster.hue
+        if contrastWithWhite(lightness: lightness, chroma: chroma, hue: hue) < minimumLabelContrast {
+            // The lightest the colour can be with the label's contrast, found by halving.
+            func lightest(at hue: Double) -> Double {
+                var low = minimumLightnessOfButton
+                var high = lightness
+                for _ in 0..<24 {
+                    let middle = (low + high) / 2
+                    if contrastWithWhite(lightness: middle, chroma: chroma, hue: hue) >= minimumLabelContrast { low = middle } else { high = middle }
+                }
+                return low
+            }
+            var darker = lightest(at: hue)
+            if (85...115).contains(hue) {
+                // Turned towards gold by how far it comes down, then measured again at its new hue.
+                hue -= 10 * min(1, (lightness - darker) / 0.2)
+                darker = lightest(at: hue)
+            }
+            lightness = darker
+        }
+        return inGamut(Lab(lightness: lightness, a: chroma * cos(hue * .pi / 180), b: chroma * sin(hue * .pi / 180)))
+    }
+
+    /// The contrast of a white label on this colour, as WCAG measures it.
+    static func contrastWithWhite(lightness: Double, chroma: Double, hue: Double) -> Double {
+        let rgb = inGamut(Lab(lightness: lightness, a: chroma * cos(hue * .pi / 180), b: chroma * sin(hue * .pi / 180)))
+        return 1.05 / (relativeLuminance(rgb) + 0.05)
+    }
+
+    static func relativeLuminance(_ rgb: (red: Double, green: Double, blue: Double)) -> Double {
+        0.2126 * linear(rgb.red) + 0.7152 * linear(rgb.green) + 0.0722 * linear(rgb.blue)
+    }
+
+    /// The colour in sRGB, with its chroma reduced (hue and lightness kept) until it fits.
+    static func inGamut(_ lab: Lab) -> (red: Double, green: Double, blue: Double) {
+        var colour = lab
+        for _ in 0..<40 {
+            let rgb = colour.rgb
+            if [rgb.red, rgb.green, rgb.blue].allSatisfy({ (-0.0005...1.0005).contains($0) }) {
+                return (min(max(rgb.red, 0), 1), min(max(rgb.green, 0), 1), min(max(rgb.blue, 0), 1))
+            }
+            colour.a *= 0.95
+            colour.b *= 0.95
+        }
+        let rgb = colour.rgb
+        return (min(max(rgb.red, 0), 1), min(max(rgb.green, 0), 1), min(max(rgb.blue, 0), 1))
+    }
+
+    static func linear(_ channel: Double) -> Double {
+        channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+
+    static func gamma(_ channel: Double) -> Double {
+        channel <= 0.0031308 ? channel * 12.92 : 1.055 * pow(max(channel, 0), 1 / 2.4) - 0.055
+    }
+
+    /// The pixels of a picture drawn at the sample size, row by row, not premultiplied. Nil when the sample cannot be drawn.
     static func pixels(of image: CGImage) -> [Pixel]? {
         let width = sampleWidth
         let height = sampleHeight
@@ -95,6 +270,30 @@ enum PlayColour {
         default: (red, green, blue) = (chroma, 0, secondary)
         }
         return (red + offset, green + offset, blue + offset)
+    }
+}
+
+extension PlayColour.Lab {
+    /// OKLab from sRGB components from 0 to 1 (Björn Ottosson's matrices).
+    init(red: Double, green: Double, blue: Double) {
+        let r = PlayColour.linear(red), g = PlayColour.linear(green), b = PlayColour.linear(blue)
+        let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        self.init(lightness: 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+                  a: 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+                  b: 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s)
+    }
+
+    /// sRGB components, which may fall outside 0 to 1 for a colour sRGB cannot show.
+    var rgb: (red: Double, green: Double, blue: Double) {
+        let l = pow(lightness + 0.3963377774 * a + 0.2158037573 * b, 3)
+        let m = pow(lightness - 0.1055613458 * a - 0.0638541728 * b, 3)
+        let s = pow(lightness - 0.0894841775 * a - 1.2914855480 * b, 3)
+        let red = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+        let green = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+        let blue = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+        return (PlayColour.gamma(red), PlayColour.gamma(green), PlayColour.gamma(blue))
     }
 }
 

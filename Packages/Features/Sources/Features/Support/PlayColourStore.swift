@@ -63,7 +63,7 @@ final class PlayColourStore {
     nonisolated static func hex(from pictures: [URL]) -> String? {
         guard let picture = pictures.lazy.compactMap({ ImagePipeline.shared.cachedImageAtAnySize(for: $0)?.cgImage }).first,
               let pixels = PlayColour.pixels(of: picture) else { return nil }
-        guard let colour = PlayColour.pick(from: pixels) else { return "" }
+        guard let colour = PlayColour.pick(from: pixels, width: PlayColour.sampleWidth) else { return "" }
         let rgb = PlayColour.rgb(colour)
         return [rgb.red, rgb.green, rgb.blue].map { String(format: "%02x", Int(($0 * 255).rounded())) }.joined()
     }
@@ -84,9 +84,14 @@ final class PlayColourStore {
         try? data.write(to: file, options: .atomic)
     }
 
+    /// The colours of the current way of picking them. A new way gets a new file, so every title's colour is read again from its poster;
+    /// the old file is deleted.
     static var defaultFile: URL? {
-        try? FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appendingPathComponent("play-colours.json")
+        guard let caches = try? FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
+            return nil
+        }
+        try? FileManager.default.removeItem(at: caches.appendingPathComponent("play-colours.json"))
+        return caches.appendingPathComponent("play-colours-v2.json")
     }
 }
 #endif
