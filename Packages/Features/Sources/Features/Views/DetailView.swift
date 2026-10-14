@@ -128,7 +128,8 @@ struct DetailView: View {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated, foldedLines: 5)
                         } information: {
-                            DetailInformation(model: model)
+                            // The information follows the cast, as on iPhone (see DetailCredits), not at the top of the page.
+                            EmptyView()
                         }
                         #else
                         DetailHero(model: model, size: geometry.size, contentMargin: contentMargin,

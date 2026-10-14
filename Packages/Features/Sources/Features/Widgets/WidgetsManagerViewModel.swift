@@ -80,8 +80,32 @@ public final class WidgetsManagerViewModel {
     public func load() async {
         let saved = await services.widgets.load()
         let addons = await readAddons()
-        widgets = saved ?? DefaultWidgets.make(for: addons)
+        // A saved order with its showcase out of place, or more than one showcase, is put right as it is shown.
+        let shown = WidgetsManagerViewModel.normalisedShowcase(saved ?? DefaultWidgets.make(for: addons))
+        widgets = shown
         isCustomised = saved != nil
+        if let saved, shown.map(\.id) != saved.map(\.id) { await commit(shown) }
+    }
+
+    /// Home's showcase is the large spotlight. It is always the first widget, and there is only one: the first one listed is kept and any
+    /// other is dropped.
+    nonisolated public static func normalisedShowcase(_ list: [HomeWidget]) -> [HomeWidget] {
+        var showcase: HomeWidget?
+        var rest: [HomeWidget] = []
+        for widget in list {
+            if isShowcase(widget) {
+                if showcase == nil { showcase = widget }
+            } else {
+                rest.append(widget)
+            }
+        }
+        return (showcase.map { [$0] } ?? []) + rest
+    }
+
+    /// Whether a widget is Home's showcase: a spotlight.
+    nonisolated public static func isShowcase(_ widget: HomeWidget) -> Bool {
+        if case .hero = widget.content { return true }
+        return false
     }
 
     /// The list as it is saved now, or nil when the change must not be made. Another manager or an editor may have saved since this one
@@ -109,7 +133,13 @@ public final class WidgetsManagerViewModel {
     /// Appended at the end. A widget whose id the list already uses gets a new one.
     public func add(_ widget: HomeWidget) async {
         guard let current = await savedList() else { return }
-        await commit(current + WidgetsManagerViewModel.withFreshIDs([widget], existing: current))
+        let fresh = WidgetsManagerViewModel.withFreshIDs([widget], existing: current)
+        // A showcase is kept to one, and at the top: a second one is not added.
+        if fresh.contains(where: WidgetsManagerViewModel.isShowcase), current.contains(where: WidgetsManagerViewModel.isShowcase) {
+            report("Home has a showcase already, and it stays at the top.", isError: true)
+            return
+        }
+        await commit(current + fresh)
         saveRevision += 1
     }
 
@@ -118,6 +148,11 @@ public final class WidgetsManagerViewModel {
         guard var list = await savedList() else { return }
         guard let index = list.firstIndex(where: { $0.id == widget.id }) else {
             report("This widget was removed elsewhere, so the change was not saved.", isError: true)
+            return
+        }
+        if WidgetsManagerViewModel.isShowcase(widget),
+           list.contains(where: { $0.id != widget.id && WidgetsManagerViewModel.isShowcase($0) }) {
+            report("Home has a showcase already, and it stays at the top.", isError: true)
             return
         }
         list[index] = widget
@@ -148,6 +183,8 @@ public final class WidgetsManagerViewModel {
         let moved = offsets.filter { current.indices.contains($0) }
         guard !moved.isEmpty else { return }
         let moving = moved.map { current[$0] }
+        // The showcase is pinned at the top: it cannot be moved.
+        guard !moving.contains(where: WidgetsManagerViewModel.isShowcase) else { return }
         var list = current.enumerated().filter { !moved.contains($0.offset) }.map(\.element)
         let insertion = destination - moved.filter { $0 < destination }.count
         list.insert(contentsOf: moving, at: min(max(insertion, 0), list.count))
@@ -529,10 +566,12 @@ public final class WidgetsManagerViewModel {
 
     /// Shows and saves a new list. The first change to the automatic layout saves the whole layout with the change.
     private func commit(_ list: [HomeWidget]) async {
-        widgets = list
+        // Every saved order keeps the showcase first and alone, so an import with several showcases keeps only the first.
+        let normal = WidgetsManagerViewModel.normalisedShowcase(list)
+        widgets = normal
         isCustomised = true
         clearMessage()
-        await services.widgets.save(list)
+        await services.widgets.save(normal)
         await services.widgetContent.invalidate()
     }
 

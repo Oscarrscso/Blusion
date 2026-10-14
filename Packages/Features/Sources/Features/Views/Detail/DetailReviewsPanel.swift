@@ -112,6 +112,31 @@ struct DetailReviewsPanel: View {
     }
 }
 
+/// Each open of a rating's reviews, appended to a file in the app's Caches folder: why the page was ready and how long it took from the page
+/// start. The file is copied off the device to read the timings.
+enum ReviewTimingLog {
+    static var fileURL: URL? {
+        try? FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("reviews-timings.log")
+    }
+
+    static func append(_ timing: [String: Any], site: ReviewSite?) {
+        guard let url = fileURL else { return }
+        let reason = timing["reason"] as? String ?? "?"
+        let headingMs = timing["headingMs"] as? Int ?? -1
+        let readyMs = timing["readyMs"] as? Int ?? -1
+        let line = "\(Date().formatted(.iso8601)) site=\(site?.name ?? "?") reason=\(reason) headingMs=\(headingMs) readyMs=\(readyMs)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+}
+
 extension ReviewPageRules {
     /// The compiled rules, kept once WebKit has compiled them, so each open attaches them without a wait.
     @MainActor private static var compiled: WKContentRuleList?
@@ -274,6 +299,7 @@ struct ReviewWebView: UIViewRepresentable {
                                                                        injectionTime: .atDocumentEnd,
                                                                        forMainFrameOnly: true))
         let coordinator = context.coordinator
+        coordinator.site = site
         configuration.userContentController.add(coordinator, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
@@ -316,6 +342,7 @@ struct ReviewWebView: UIViewRepresentable {
         var requested: URL?
         var isReady = false
         var onLoaded: () -> Void = {}
+        var site: ReviewSite?
 
         /// The load itself does not open the panel: the page has still to paint, and `painted` says so.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {}
@@ -323,7 +350,7 @@ struct ReviewWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { onLoaded() }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             // Per open: why the reviews were ready, and how long the heading and the ready state took from the start of the page.
-            print("reviewsReady \(message.body)")
+            if let timing = message.body as? [String: Any] { ReviewTimingLog.append(timing, site: site) }
             onLoaded()
         }
     }

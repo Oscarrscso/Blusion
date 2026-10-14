@@ -44,12 +44,10 @@ struct DetailCredits: View {
                     }
                 }
             }
-            #if !targetEnvironment(macCatalyst)
-            // The Mac page shows its information beside the synopsis, at the top of the page (see DesktopDetailHero).
+            // The information follows the cast and crew on iPhone and on the Mac alike.
             DetailInformation(model: model)
                 .frame(maxWidth: metrics.readableWidth, alignment: .leading)
                 .padding(.horizontal, contentMargin)
-            #endif
         }
     }
 }

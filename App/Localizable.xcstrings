@@ -1772,6 +1772,28 @@
         }
       }
     },
+    "Move earlier": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move earlier"
+          }
+        }
+      }
+    },
+    "Move later": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move later"
+          }
+        }
+      }
+    },
     "Mute": {
       "extractionState": "manual",
       "localizations": {

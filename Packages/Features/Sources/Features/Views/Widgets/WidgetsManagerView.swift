@@ -1,11 +1,13 @@
 #if canImport(UIKit)
 import StremioKit
 import SwiftUI
+import UIKit
 
 struct WidgetsManagerView: View {
     let services: AppServices
     @State private var model: WidgetsManagerViewModel
     @State private var creating: NewWidgetRoute?
+    @State private var openedWidget: HomeWidget?
     @State private var showsGenreCollection = false
     @State private var showsImport = false
     @State private var showsReset = false
@@ -14,28 +16,56 @@ struct WidgetsManagerView: View {
     /// True while the toolbar's button has hidden every widget's card, leaving one line that says how many there are. Kept between
     /// visits, so a long list stays out of the way until it is shown again.
     @AppStorage("widgets.hidesRows") private var hidesWidgets = false
-    /// The card being dragged, its centre where the drag began, how far the pointer has moved, and the order the cards show meanwhile.
-    @State private var dragID: String?
-    @State private var dragStart: CGPoint = .zero
-    @State private var pointer: CGSize = .zero
-    @State private var liveOrder: [String]?
-    /// Each card's frame in the grid's own coordinate space, so a drag knows which card the pointer has reached.
-    @State private var frames: [String: CGRect] = [:]
+    @Environment(\.isLandscape) private var isLandscape
 
-    private let gridSpace = "widgetGrid"
+    /// The grid's order of widget ids, as the grid shows it. It follows the saved list, and a drag changes it until the drag is saved.
+    @State private var order: [String] = []
+    @State private var drag: GridDrag?
+    /// The grid's width, measured on its container, so the slot layout never depends on its own size.
+    @State private var gridWidth: CGFloat = 0
+    @State private var liftCount = 0
+    @State private var swapCount = 0
+    @State private var contentOffsetY: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
+    @State private var scrollPosition = ScrollPosition()
+    @State private var autoScroll: Task<Void, Never>?
+    /// Set when a drag moved the pointer, so the tap that ends it does not open the card.
+    @State private var didDrag = false
+    /// True while the dragged card settles into its slot after it is let go.
+    @State private var landing = false
 
-    /// Two cards across on iPhone. On the Mac as many as fit, at a size that keeps the card's proportions.
-    private var columns: [GridItem] {
-        #if targetEnvironment(macCatalyst)
-        [GridItem(.adaptive(minimum: 170, maximum: 210), spacing: 16)]
-        #else
-        [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
-        #endif
-    }
+    private static let coordinateSpace = "reorderGrid"
 
     init(services: AppServices) {
         self.services = services
         _model = State(initialValue: WidgetsManagerViewModel(services: services))
+    }
+
+    /// Two cards across on iPhone in portrait; more on iPhone in landscape and on the Mac, at the same 2:3 proportion.
+    private var columnCount: Int {
+        #if targetEnvironment(macCatalyst)
+        return max(3, Int((gridWidth + WidgetSlotLayout.gutter) / (190 + WidgetSlotLayout.gutter)))
+        #else
+        if isLandscape { return max(3, Int((gridWidth + WidgetSlotLayout.gutter) / (160 + WidgetSlotLayout.gutter))) }
+        return 2
+        #endif
+    }
+
+    private var layout: WidgetSlotLayout {
+        WidgetSlotLayout.fitting(width: gridWidth, columns: columnCount, count: order.count)
+    }
+
+    private var widgetsByID: [String: HomeWidget] {
+        Dictionary(uniqueKeysWithValues: model.widgets.map { ($0.id, $0) })
+    }
+
+    /// The showcase, which is pinned to the top: the cards before the first ordinary one.
+    private var showcaseIDs: Set<String> {
+        Set(model.widgets.filter(WidgetsManagerViewModel.isShowcase).map(\.id))
+    }
+
+    private var pinnedCount: Int {
+        order.prefix { showcaseIDs.contains($0) }.count
     }
 
     /// The plus: a menu of the widgets that can be added.
@@ -98,88 +128,194 @@ struct WidgetsManagerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The widgets in the order they show: the saved order, or the order a drag has reached.
-    private var shownWidgets: [HomeWidget] {
-        guard let liveOrder else { return model.widgets }
-        let byID = Dictionary(uniqueKeysWithValues: model.widgets.map { ($0.id, $0) })
-        return liveOrder.compactMap { byID[$0] }
+    // MARK: Order
+
+    /// Follows the saved list, except while a card is being dragged, so a drag's order is not overwritten.
+    private func syncOrder() {
+        guard drag == nil else { return }
+        let saved = model.widgets.map(\.id)
+        if order != saved { order = saved }
     }
 
-    /// Moves a widget one place earlier or later. VoiceOver and keyboard users reorder this way, as dragging does for everyone else.
-    private func move(_ id: String, by step: Int) {
+    /// Moves a card one place earlier or later, for VoiceOver and keyboard users, and saves it.
+    private func moveCard(_ id: String, by step: Int) {
         guard let from = model.widgets.firstIndex(where: { $0.id == id }) else { return }
         let to = from + step
-        guard model.widgets.indices.contains(to) else { return }
+        guard model.widgets.indices.contains(to), !showcaseIDs.contains(id) else { return }
         // Moving down lands after the card it passes; moving up lands before it.
         let destination = step > 0 ? to + 1 : to
         Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
     }
 
-    /// The card's drag: the card follows the pointer, and when its centre reaches another card, the two swap places, with a tick on iPhone.
-    private func dragChanged(_ id: String, translation: CGSize) {
-        if dragID == nil {
-            guard let frame = frames[id] else { return }
-            dragID = id
-            dragStart = CGPoint(x: frame.midX, y: frame.midY)
-            liveOrder = model.widgets.map(\.id)
-        }
-        guard dragID == id, let order = liveOrder, let from = order.firstIndex(of: id) else { return }
-        pointer = translation
-        let point = CGPoint(x: dragStart.x + translation.width, y: dragStart.y + translation.height)
-        guard let target = order.first(where: { $0 != id && (frames[$0]?.contains(point) ?? false) }),
-              let to = order.firstIndex(of: target), to != from else { return }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-            var next = order
-            next.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
-            liveOrder = next
-        }
-        #if !targetEnvironment(macCatalyst)
-        Haptics.selection()
-        #endif
+    // MARK: Drag
+
+    /// Starts a drag on the card under the point. The showcase and the gutters do not start one.
+    private func beginDrag(at point: CGPoint) {
+        guard drag == nil, let index = layout.index(at: point), order.indices.contains(index) else { return }
+        let id = order[index]
+        guard !showcaseIDs.contains(id) else { return }
+        let centre = layout.center(for: index)
+        didDrag = false
+        liftCount += 1
+        drag = GridDrag(id: id, start: point, grabOffset: CGSize(width: point.x - centre.x, height: point.y - centre.y),
+                        pointer: point, originalOrder: order)
+        startAutoScroll()
     }
 
-    /// Saves the order the drag reached, and settles the dragged card into its place.
-    private func dragEnded() {
-        guard let id = dragID else { return }
+    /// Follows the pointer, and reorders as it reaches each slot.
+    private func updateDrag(to point: CGPoint) {
+        guard var current = drag else { return }
+        current.pointer = point
+        if abs(point.x - current.start.x) > 6 || abs(point.y - current.start.y) > 6 { didDrag = true }
+        drag = current
+        retarget()
+    }
+
+    /// Puts the dragged card in the slot under the pointer. A pointer in a gutter keeps the card where it is, and the showcase keeps slot 0.
+    private func retarget() {
+        guard let current = drag, let from = order.firstIndex(of: current.id) else { return }
+        let reached = layout.index(at: current.pointer) ?? from
+        let target = max(reached, pinnedCount)
+        guard target != from else { return }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+            order = WidgetSlotLayout.moved(order, from: from, to: target)
+        }
+        swapCount += 1
+    }
+
+    /// Ends the drag. A drag that was not cancelled saves the order once, and settles the card into its slot. A cancelled one puts the cards
+    /// back as they were.
+    private func endDrag(cancelled: Bool) {
+        guard let current = drag else { return }
+        autoScroll?.cancel()
+        autoScroll = nil
+        if cancelled {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                order = current.originalOrder
+                drag = nil
+            }
+            return
+        }
         let saved = model.widgets.map(\.id)
-        if let order = liveOrder, let from = saved.firstIndex(of: id), let to = order.firstIndex(of: id), from != to {
+        if let from = saved.firstIndex(of: current.id), let to = order.firstIndex(of: current.id), from != to {
             let destination = to > from ? to + 1 : to
             Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
         }
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-            dragID = nil
-            pointer = .zero
+        let slot = layout.center(for: order.firstIndex(of: current.id) ?? 0)
+        landing = true
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+            drag?.pointer = CGPoint(x: slot.x + current.grabOffset.width, y: slot.y + current.grabOffset.height)
         }
-        // The order stays on screen until the saved list shows it, so the cards do not jump back and forth.
-        let reached = liveOrder
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            if liveOrder == reached { withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) { liveOrder = nil } }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            drag = nil
+            landing = false
         }
     }
 
-    /// The dragged card follows the pointer, wherever the grid has laid it out.
-    private func dragOffset(for id: String) -> CGSize {
-        guard dragID == id, let frame = frames[id] else { return .zero }
-        return CGSize(width: dragStart.x + pointer.width - frame.midX, height: dragStart.y + pointer.height - frame.midY)
-    }
-
-    /// The card with the drag that reorders it. On the Mac a drag starts at once; on iPhone a press first, so the page still scrolls.
-    @ViewBuilder
-    private func reorderable<Card: View>(_ card: Card, id: String) -> some View {
-        #if targetEnvironment(macCatalyst)
-        card.simultaneousGesture(
-            DragGesture(minimumDistance: 4, coordinateSpace: .named(gridSpace))
-                .onChanged { dragChanged(id, translation: $0.translation) }
-                .onEnded { _ in dragEnded() })
-        #else
-        card.simultaneousGesture(
-            LongPressGesture(minimumDuration: 0.25)
-                .sequenced(before: DragGesture(coordinateSpace: .named(gridSpace)))
-                .onChanged { value in
-                    if case .second(true, let drag?) = value { dragChanged(id, translation: drag.translation) }
+    /// While a card is held near the top or bottom of the window, the page scrolls, and the card's place follows the pointer as the
+    /// content moves under it.
+    private func startAutoScroll() {
+        autoScroll?.cancel()
+        autoScroll = Task { @MainActor in
+            let zone: CGFloat = 60
+            while !Task.isCancelled, drag != nil {
+                let visibleY = (drag?.pointer.y ?? 0) - contentOffsetY
+                var step: CGFloat = 0
+                if visibleY < zone {
+                    step = -(2 + 18 * (zone - visibleY) / zone)
+                } else if visibleY > viewportHeight - zone {
+                    step = 2 + 18 * (visibleY - (viewportHeight - zone)) / zone
                 }
-                .onEnded { _ in dragEnded() })
+                if step != 0 {
+                    let limit = max(0, layout.contentSize.height - viewportHeight)
+                    let next = min(max(0, contentOffsetY + step), limit)
+                    let delta = next - contentOffsetY
+                    if delta != 0 {
+                        scrollPosition.scrollTo(y: next)
+                        contentOffsetY = next
+                        drag?.pointer.y += delta
+                        retarget()
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+
+    /// Where the dragged card's centre is drawn: under the pointer, or in its slot while it settles.
+    private func overlayCentre(_ current: GridDrag) -> CGPoint {
+        CGPoint(x: current.pointer.x - current.grabOffset.width, y: current.pointer.y - current.grabOffset.height)
+    }
+
+    /// A card's tap opens its settings, unless the touch was a drag.
+    private func tapped(_ id: String) {
+        if didDrag {
+            didDrag = false
+            return
+        }
+        if let widget = widgetsByID[id] { openedWidget = widget }
+    }
+
+    // MARK: Grid
+
+    private var grid: some View {
+        let layout = self.layout
+        return ZStack(alignment: .topLeading) {
+            ForEach(order, id: \.self) { id in
+                let index = order.firstIndex(of: id) ?? 0
+                let isShowcase = showcaseIDs.contains(id)
+                if let widget = widgetsByID[id] {
+                    WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                        .frame(width: layout.cardWidth, height: layout.cardHeight)
+                        .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .opacity(drag?.id == id ? 0 : 1)
+                        .position(layout.center(for: index))
+                        .onTapGesture { tapped(id) }
+                        .accessibilityActions {
+                            // The showcase does not move. The card after it cannot move earlier, above it.
+                            if !isShowcase {
+                                if index > pinnedCount { Button("Move earlier") { moveCard(id, by: -1) } }
+                                if index < order.count - 1 { Button("Move later") { moveCard(id, by: 1) } }
+                            }
+                        }
+                }
+            }
+            if let current = drag, let widget = widgetsByID[current.id] {
+                WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                    .frame(width: layout.cardWidth, height: layout.cardHeight)
+                    .scaleEffect(landing ? 1 : 1.05)
+                    .shadow(color: .black.opacity(landing ? 0 : 0.35), radius: 16, y: 10)
+                    .position(overlayCentre(current))
+                    .zIndex(1)
+                    .allowsHitTesting(false)
+                    .transaction { $0.animation = landing ? .spring(response: 0.28, dampingFraction: 0.8) : nil }
+            }
+        }
+        .coordinateSpace(name: Self.coordinateSpace)
+        .frame(width: layout.contentSize.width, height: layout.contentSize.height)
+        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: order)
+        .contentShape(Rectangle())
+        #if targetEnvironment(macCatalyst)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 3, coordinateSpace: .named(Self.coordinateSpace))
+                .onChanged { value in
+                    if drag == nil { beginDrag(at: value.startLocation) }
+                    updateDrag(to: value.location)
+                }
+                .onEnded { _ in endDrag(cancelled: false) }
+        )
+        .sensoryFeedback(.alignment, trigger: swapCount)
+        #else
+        .gesture(
+            GridLongPress(
+                began: { beginDrag(at: $0) },
+                changed: { updateDrag(to: $0) },
+                ended: { endDrag(cancelled: $0) }
+            )
+        )
+        .sensoryFeedback(.impact(weight: .medium), trigger: liftCount)
+        .sensoryFeedback(.selection, trigger: swapCount)
         #endif
     }
 
@@ -188,23 +324,8 @@ struct WidgetsManagerView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 if hidesWidgets && !model.widgets.isEmpty { hiddenRowsLine }
                 if !hidesWidgets && !model.widgets.isEmpty {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(shownWidgets) { widget in
-                            reorderable(
-                                WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
-                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(gridSpace)) } action: { frames[widget.id] = $0 }
-                                    .offset(dragOffset(for: widget.id))
-                                    .scaleEffect(dragID == widget.id ? 1.05 : 1)
-                                    .shadow(color: .black.opacity(dragID == widget.id ? 0.35 : 0), radius: 16, y: 10)
-                                    .zIndex(dragID == widget.id ? 1 : 0)
-                                    .accessibilityAction(named: "Move earlier") { move(widget.id, by: -1) }
-                                    .accessibilityAction(named: "Move later") { move(widget.id, by: 1) },
-                                id: widget.id)
-                        }
-                    }
-                    .coordinateSpace(name: gridSpace)
-                    .animation(.spring(response: 0.28, dampingFraction: 0.78), value: shownWidgets.map(\.id))
-                    .accessibilityIdentifier("widgets.list")
+                    grid
+                        .accessibilityIdentifier("widgets.list")
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Home rows").font(.title3.weight(.semibold))
@@ -226,7 +347,14 @@ struct WidgetsManagerView: View {
                 }
             }
             .padding(16)
+            .onGeometryChange(for: CGFloat.self) { max(0, $0.size.width - 32) } action: { gridWidth = $0 }
         }
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, new in contentOffsetY = new }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, new in viewportHeight = new }
+        #if !targetEnvironment(macCatalyst)
+        .scrollDisabled(drag != nil)
+        #endif
         .readableColumn()
         .screenBackground()
         .navigationTitle("Widgets")
@@ -237,12 +365,14 @@ struct WidgetsManagerView: View {
             ToolbarItem(placement: .topBarTrailing) { addMenu }
         }
         .task { await model.load() }
-        // The saved order has caught up with the order the drag reached, so the drag's order is no longer needed.
+        .onAppear { syncOrder() }
+        // The saved list has changed: the grid follows it, unless a card is being dragged. A change that makes the drag's order the saved
+        // one ends the drag's own order.
         .onChange(of: model.widgets.map(\.id)) { old, new in
-            if let liveOrder, new == liveOrder { self.liveOrder = nil }
+            syncOrder()
             if !old.isEmpty, !Set(new).isSubset(of: old) { withAnimation { hidesWidgets = false } }
         }
-        .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
+        .navigationDestination(item: $openedWidget) { WidgetEditorView(widget: $0, model: model, services: services) }
         .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
         .sheet(isPresented: $showsGenreCollection) {
             NavigationStack {
@@ -271,6 +401,45 @@ struct WidgetsManagerView: View {
     }
 }
 
+/// A card being dragged: which one, where the grab was, where the pointer is now, and the order before the drag.
+private struct GridDrag: Equatable {
+    let id: String
+    /// Where the drag began, in the grid's coordinates.
+    let start: CGPoint
+    /// The pointer minus the card's centre when the drag began, so the card keeps its place under the finger.
+    let grabOffset: CGSize
+    var pointer: CGPoint
+    let originalOrder: [String]
+}
+
+#if !targetEnvironment(macCatalyst)
+/// A long press that becomes the drag on iPhone. It works alongside the scroll view, so a quick swipe still scrolls and cancels the press.
+private struct GridLongPress: UIGestureRecognizerRepresentable {
+    let began: (CGPoint) -> Void
+    let changed: (CGPoint) -> Void
+    /// Called with true when the press was cancelled, and false when it ended.
+    let ended: (Bool) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = 0.2
+        recognizer.allowableMovement = 10
+        return recognizer
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        let point = context.converter.location(in: .named("reorderGrid"))
+        switch recognizer.state {
+        case .began: began(point)
+        case .changed: changed(point)
+        case .ended: ended(false)
+        case .cancelled, .failed: ended(true)
+        default: break
+        }
+    }
+}
+#endif
+
 /// A widget as a card: a 2x2 collage of its own posters under a dark gradient, its name and style, and a delete button. Tapping the card
 /// opens the widget's settings, where every setting of it is.
 private struct WidgetCard: View {
@@ -281,41 +450,38 @@ private struct WidgetCard: View {
     @State private var items: [MetaPreview] = []
 
     var body: some View {
-        NavigationLink(value: widget) {
-            ZStack(alignment: .topLeading) {
-                collage
-                LinearGradient(colors: [.black.opacity(0.8), .black.opacity(0.35), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(widget.title.isEmpty ? "Untitled" : widget.title)
-                        .font(.system(size: Self.titleSize, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.6)
-                    Text(styleName)
-                        .font(.body)
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-                .padding(16)
+        ZStack(alignment: .topLeading) {
+            collage
+            LinearGradient(colors: [.black.opacity(0.8), .black.opacity(0.35), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(widget.title.isEmpty ? "Untitled" : widget.title)
+                    .font(.system(size: Self.titleSize, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                Text(styleName)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.7))
             }
-            .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(alignment: .bottomTrailing) {
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
-                        .frame(width: Self.trashSize, height: Self.trashSize)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .padding(12)
-                .accessibilityLabel("Delete \(widget.title)")
-                .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
-            }
-            .contextMenu {
-                Button(role: .destructive, action: onDelete) { Label("Delete", systemImage: "trash") }
-            }
+            .padding(16)
         }
-        .buttonStyle(.plain)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(alignment: .bottomTrailing) {
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
+                    .frame(width: Self.trashSize, height: Self.trashSize)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .padding(12)
+            .accessibilityLabel("Delete \(widget.title)")
+            .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
+        }
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) { Label("Delete", systemImage: "trash") }
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("widgets.row.\(widget.id)")
         .task(id: widget.id) { await loadItems() }
     }
