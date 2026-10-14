@@ -19,6 +19,8 @@ public final class AppRouter {
     var libraryPath = NavigationPath()
     var searchBrowseRevision = 0
     var searchFocusRevision = 0
+    /// Counts the titles opened from Search, so the Search screen reads its recent searches again.
+    var recentSearchRevision = 0
     /// Untyped, because screens inside Settings push values of their own (an addon's id, a widget).
     var settingsPath = NavigationPath()
     /// The Mac Widgets tab's stack. The widgets manager registers its own editor destinations, so the stack holds nothing else.
@@ -282,7 +284,7 @@ public struct RootTabView: View {
                 }
             }
             #endif
-            Tab(value: LaunchRoute.Tab.search, role: .search) {
+            Tab(value: LaunchRoute.Tab.search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView(services: services, initialQuery: initialQuery)
                         .appDestinations(services: services, path: \.searchPath)

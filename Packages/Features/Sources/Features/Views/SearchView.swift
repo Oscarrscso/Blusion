@@ -59,6 +59,8 @@ struct SearchView: View {
             .searchFocused($isSearchFocused)
             // Coming from another tab, Search starts on an empty field.
             .onChange(of: router.searchBrowseRevision) { model.query = "" }
+            // A title opened from a search was recorded as a recent search; the list reads them again.
+            .onChange(of: router.recentSearchRevision) { model.reloadRecents() }
             // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up. The field
             // stays where it is, under the title.
             .onChange(of: router.searchFocusRevision, initial: true) { focusField() }

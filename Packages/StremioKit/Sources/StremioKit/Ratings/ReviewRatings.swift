@@ -48,7 +48,24 @@ public enum ReviewSite: String, CaseIterable, Sendable, Identifiable {
     /// `url(for:)`: the title's page, or a search.
     public func reviewsURL(for item: MetaPreview, tmdbURL: URL? = nil) -> URL? {
         if self == .imdb, LetterboxdRatings.isIMDbID(item.id) { return URL(string: "https://www.imdb.com/title/\(item.id)/reviews/") }
+        // Metacritic's user reviews sit at the title's own address. The address is a guess from the title; a page that is not there falls
+        // back to the search (see the review web view).
+        if self == .metacritic, let slug = Self.metacriticSlug(item.name) {
+            return URL(string: "https://www.metacritic.com/\(item.type == "movie" ? "movie" : "tv")/\(slug)/user-reviews/")
+        }
         return url(for: item, tmdbURL: tmdbURL)
+    }
+
+    /// The part of a Metacritic address that names a title: its words in lower case, joined by hyphens, with accents and apostrophes
+    /// dropped ("The Dark Knight" is "the-dark-knight", "Schindler's List" is "schindlers-list").
+    static func metacriticSlug(_ name: String) -> String? {
+        let plain = name.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
+            .folding(options: [.diacriticInsensitive], locale: nil)
+        let cleaned = plain.map { character -> String in
+            character.isASCII && (character.isLetter || character.isNumber) ? character.lowercased() : " "
+        }.joined()
+        let slug = cleaned.split(separator: " ").joined(separator: "-")
+        return slug.isEmpty ? nil : slug
     }
 
     public func url(for item: MetaPreview, tmdbURL: URL? = nil) -> URL? {

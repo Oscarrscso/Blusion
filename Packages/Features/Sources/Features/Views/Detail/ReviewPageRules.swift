@@ -1,3 +1,4 @@
+import Foundation
 import StremioKit
 
 /// What a rating's review page loads with: the ad and tracker requests it may not make, the ad slots it hides, and a script that opens the
@@ -35,6 +36,29 @@ enum ReviewPageRules {
         case .letterboxd: return letterboxdScript
         case .imdb, .rottenTomatoes, .metacritic, .tmdb: return reviewsHeadingScript
         }
+    }
+
+    /// Shows the page in the dark: the page is inverted, then its pictures are inverted back, so text reads light on a dark ground. A close
+    /// match rather than the sites' own dark themes, which some pages do not offer. Runs before the page is drawn, so no white flashes.
+    static let darkModeScript = """
+    (function () {
+      var style = document.createElement('style');
+      style.textContent = 'html{background:#fff !important;filter:invert(1) hue-rotate(180deg) !important}' +
+        'img,video,picture,svg image,[role=img]{filter:invert(1) hue-rotate(180deg) !important}';
+      (document.head || document.documentElement).appendChild(style);
+    })();
+    """
+
+    /// Sends a "Page Not Found" to `fallback`, the site's search for the title. Nil when the address cannot be written into a script.
+    static func notFoundScript(fallback: URL) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: [fallback.absoluteString]),
+              let encoded = String(data: data, encoding: .utf8) else { return nil }
+        let target = String(encoded.dropFirst().dropLast())
+        return """
+        (function () {
+          if (/page not found/i.test(document.title)) { location.replace(\(target)); }
+        })();
+        """
     }
 
     private static let letterboxdScript = """

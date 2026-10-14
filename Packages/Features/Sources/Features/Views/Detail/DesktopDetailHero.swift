@@ -98,7 +98,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
                 // The buttons stay over the picture. The reviews a tap opens sit under the hero, in the details, so the hero's clipping
                 // cannot cut them off.
                 RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero,
-                                 openSite: model.openedReviews?.site) { site, url, isSearch in
+                                 openSite: model.openedReviews?.site, isLoading: model.reviewsLoading) { site, url, isSearch in
                     model.toggleReviews(site, url: url, isSearch: isSearch)
                 }
                 .padding(.bottom, Theme.Spacing.s)
@@ -171,7 +171,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             }
             // Placed after the trailer's panel, so that panel keeps its place in the view tree while reviews open.
             if let reviews = model.openedReviews {
-                DetailReviewsPanel(reviews: reviews, item: model.detail.preview, onClose: model.closeReviews)
+                DetailReviewsPanel(reviews: reviews, item: model.detail.preview, isLoading: model.reviewsLoading,
+                                   onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
             }
             if overviewIsCut { synopsis }
         }

@@ -99,10 +99,15 @@ struct AppDestinations: ViewModifier {
     /// The stack's path in the router, which its back swipe pops.
     let path: ReferenceWritableKeyPath<AppRouter, NavigationPath>
     @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(AppRouter.self) private var router
 
     func body(content: Content) -> some View {
         content
-            .navigationDestination(for: MetaPreview.self) { DetailView(preview: $0, services: services) }
+            .navigationDestination(for: MetaPreview.self) { preview in
+                DetailView(preview: preview, services: services)
+                    // Only a title opened from Search is recorded as a recent search, and the title's name is what is kept.
+                    .onAppear { if path == \.searchPath { recordSearchedTitle(preview.name) } }
+            }
             .navigationDestination(for: TitleDestination.self) { destination in
                 let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
                                         artworkChecked: destination.artworkChecked, handoff: destination.handoff,
@@ -118,6 +123,12 @@ struct AppDestinations: ViewModifier {
             .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services) }
             .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services) }
             .backSwipe(path: path)
+    }
+
+    /// Puts the title at the top of the recent searches, and tells Search to read them again.
+    private func recordSearchedTitle(_ name: String) {
+        services.searchHistory.save(SearchViewModel.recording(name, into: services.searchHistory.load()))
+        router.recentSearchRevision += 1
     }
 }
 

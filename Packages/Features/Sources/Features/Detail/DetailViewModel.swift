@@ -516,11 +516,21 @@ public final class DetailViewModel {
         }
         trailer.cancel()
         openedReviews = OpenedReviews(site: site, url: url, isSearch: isSearch)
+        reviewsLoading = true
     }
 
     /// Closes the reviews opened from a rating.
     public func closeReviews() {
         openedReviews = nil
+        reviewsLoading = false
+    }
+
+    /// True from a rating's tap until its page has loaded (or failed to), so the rating and its reviews show a spinner.
+    public private(set) var reviewsLoading = false
+
+    /// The reviews' page has loaded, or failed to: the spinner stops.
+    public func reviewsDidLoad() {
+        reviewsLoading = false
     }
 
     /// The trailer button's tap: loads the title's trailer into the page, or closes it while it plays. A YouTube video is checked

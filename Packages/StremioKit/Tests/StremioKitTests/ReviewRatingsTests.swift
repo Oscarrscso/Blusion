@@ -107,6 +107,15 @@ import StremioKitTestSupport
         }
     }
 
+    @Test func metacriticUserReviewsUseTheTitlesAddressWithAGuessedSlug() {
+        let film = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight")
+        #expect(ReviewSite.metacritic.reviewsURL(for: film)?.absoluteString == "https://www.metacritic.com/movie/the-dark-knight/user-reviews/")
+        let list = MetaPreview(id: "tt0108052", type: "movie", name: "Schindler's List")
+        #expect(ReviewSite.metacritic.reviewsURL(for: list)?.absoluteString == "https://www.metacritic.com/movie/schindlers-list/user-reviews/")
+        let show = MetaPreview(id: "tt0096697", type: "series", name: "The Simpsons")
+        #expect(ReviewSite.metacritic.reviewsURL(for: show)?.absoluteString == "https://www.metacritic.com/tv/the-simpsons/user-reviews/")
+    }
+
     @Test func linksUseKnownIDsAndSearchForUnknownSlugsWithoutLeakingQuerySyntax() throws {
         let movie = MetaPreview(id: "tt0468569", type: "movie", name: "Film / #? & more")
         #expect(ReviewSite.imdb.url(for: movie)?.absoluteString == "https://www.imdb.com/title/tt0468569/")

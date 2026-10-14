@@ -78,7 +78,7 @@ import StremioKitTestSupport
         let model = try await model(manifests: [manifest("first"), manifest("second")], transport: transport)
         model.query = "q"
         let search = Task { await model.submit() }
-        try await waitUntil { model.sections.count == 1 }
+        try await waitUntil(timeout: 30) { model.sections.count == 1 }
         #expect(model.sections.map(\.addon.name) == ["second"], "the fast addon appears first while the slow one is pending")
         await search.value
         #expect(model.sections.map(\.addon.name) == ["first", "second"], "then it slots into the user's order")
@@ -193,7 +193,7 @@ import StremioKitTestSupport
         await submitted.value
         #expect(model.sections.first?.items.first?.name == "second")
         #expect(model.sections.count == 1 && model.phase == .done)
-        #expect(model.recentQueries == ["second"])
+        #expect(model.recentQueries.isEmpty, "a search records no query; a title opened from it does")
     }
 
     @Test func clearingTheFieldCancelsAnAlreadySubmittedSearch() async throws {
@@ -282,14 +282,14 @@ import StremioKitTestSupport
 
     // MARK: recent searches
 
-    @Test func aSearchWithResultsIsRememberedTrimmed() async throws {
+    @Test func aSearchRecordsNothingAndATitleIsRecordedTrimmed() async throws {
         let store = InMemorySearchHistoryStore()
         let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
         #expect(model.recentQueries.isEmpty)
         model.query = "  Dune  "
         await model.submit()
-        #expect(model.recentQueries == ["Dune"])
-        #expect(store.load() == ["Dune"], "and saved to the store")
+        #expect(model.recentQueries.isEmpty && store.load().isEmpty, "a search alone records nothing")
+        #expect(SearchViewModel.recording("  Dune  ", into: []) == ["Dune"], "a title opened is recorded trimmed")
     }
 
     @Test func aSearchThatFoundNothingOrFailedIsNotRemembered() async throws {
@@ -304,25 +304,21 @@ import StremioKitTestSupport
         #expect(failing.recentQueries.isEmpty && store.load().isEmpty)
     }
 
-    @Test func recentsAreNewestFirstWithOneCopyOfEachQuery() async throws {
-        let model = try await model(manifests: [manifest("a")], transport: stub(), history: InMemorySearchHistoryStore())
-        for query in ["dune", "arrival", "Dune"] {
-            model.query = query
-            await model.submit()
+    @Test func recentsAreNewestFirstWithOneCopyOfEachTitle() {
+        var recents: [String] = []
+        for title in ["dune", "arrival", "Dune"] {
+            recents = SearchViewModel.recording(title, into: recents)
         }
-        #expect(model.recentQueries == ["Dune", "arrival"], "a repeat moves to the top, in its newest spelling")
+        #expect(recents == ["Dune", "arrival"], "a repeat moves to the top, in its newest spelling")
     }
 
-    @Test func recentsAreCappedAtEight() async throws {
-        let store = InMemorySearchHistoryStore()
-        let model = try await model(manifests: [manifest("a")], transport: stub(), history: store)
+    @Test func recentsAreCappedAtFour() {
+        var recents: [String] = []
         for index in 1...9 {
-            model.query = "q\(index)"
-            await model.submit()
+            recents = SearchViewModel.recording("q\(index)", into: recents)
         }
-        #expect(model.recentQueries.count == 8)
-        #expect(model.recentQueries.first == "q9" && model.recentQueries.last == "q2")
-        #expect(store.load() == model.recentQueries)
+        #expect(recents.count == 4)
+        #expect(recents.first == "q9" && recents.last == "q6")
     }
 
     @Test func recentsAreLoadedFromTheStoreAndCleanedUp() async throws {
@@ -333,11 +329,9 @@ import StremioKitTestSupport
 
     @Test func recentsSurviveANewScreen() async throws {
         let store = InMemorySearchHistoryStore()
-        let first = try await model(manifests: [manifest("a")], transport: stub(), history: store)
-        first.query = "heat"
-        await first.submit()
+        store.save(SearchViewModel.recording("Heat", into: store.load()))
         let second = try await model(manifests: [manifest("a")], transport: stub(), history: store)
-        #expect(second.recentQueries == ["heat"])
+        #expect(second.recentQueries == ["Heat"])
     }
 
     @Test func clearingHistoryOutsideSearchDoesNotRestoreOldQueries() async throws {
@@ -348,7 +342,7 @@ import StremioKitTestSupport
         #expect(model.recentQueries.isEmpty)
         model.query = "New search"
         await model.submit()
-        #expect(store.load() == ["New search"])
+        #expect(store.load().isEmpty, "a search does not write to the store")
     }
 
     @Test func aRecentCanBeRemovedWhateverItsCase() async throws {

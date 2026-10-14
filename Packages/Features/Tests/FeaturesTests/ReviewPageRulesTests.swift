@@ -34,6 +34,12 @@ import WebKit
         #expect(compiled, "WebKit compiles every rule, so none is silently dropped")
     }
 
+    @Test func theDarkModeScriptInvertsThePageAndItsPicturesBack() {
+        let script = ReviewPageRules.darkModeScript
+        #expect(script.contains("filter:invert(1)"), "the page is inverted")
+        #expect(script.contains("img,video"), "pictures are inverted back")
+    }
+
     @Test func theLetterboxdScriptGoesOnFromAFilmToItsReviews() {
         let script = ReviewPageRules.script(for: .letterboxd)
         #expect(script.contains("location.replace"))

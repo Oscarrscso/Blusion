@@ -54,10 +54,10 @@ public final class SearchViewModel {
     public private(set) var hasSearchableAddons = true
     /// Genres to browse from the idle Search page. Filled by `refreshAvailability()`.
     public private(set) var browseGenres: [GenreShortcut] = []
-    /// The last searches that returned something, newest first, at most 8. Kept in the history store.
+    /// The last titles opened from Search, newest first, at most 4. Kept in the history store.
     public private(set) var recentQueries: [String]
 
-    private static let maxRecents = 8
+    private static let maxRecents = 4
     private static let maxGenres = 16
 
     private let services: AppServices
@@ -190,13 +190,17 @@ public final class SearchViewModel {
         }
         guard !Task.isCancelled else { return }
         phase = .done
-        if hasResults { remember(term) }
     }
 
-    /// Puts a query that found something at the top of the recents, in place of an older copy of it.
-    private func remember(_ term: String) {
-        recentQueries = Self.normalised([term] + recentQueries)
-        history.save(recentQueries)
+    /// Reads the recents again, for when a title was opened from Search and its name was recorded (see `recording(_:into:)`).
+    public func reloadRecents() {
+        recentQueries = Self.normalised(history.load())
+    }
+
+    /// The recents with a title added at the top, in place of an older copy of it. A title opened from Search is what is recorded, not
+    /// the letters typed on the way to it.
+    public static func recording(_ title: String, into queries: [String]) -> [String] {
+        normalised([title] + queries)
     }
 
     /// Keeps sections in the user's addon order, whatever order the addons answer in.

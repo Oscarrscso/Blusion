@@ -169,6 +169,8 @@ struct RatingButtonsRow: View {
     var startsLoading = true
     /// The site whose reviews are open under the ratings, so its button can show it is open.
     var openSite: ReviewSite?
+    /// True while the open site's reviews page loads, so its rating shows a spinner.
+    var isLoading = false
     /// Shows the site's reviews for this title, or its search: the site, its link, and whether the link is a search.
     let onOpen: (ReviewSite, URL, Bool) -> Void
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
@@ -204,8 +206,10 @@ struct RatingButtonsRow: View {
     }
 
     private func buttons(ratings: TitleRatings?) -> some View {
-        // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed.
-        let sites = ReviewSite.allCases.filter { $0 == .imdb || ReviewPageReader.supports($0) || ratings?.shortText(for: $0) != nil }
+        // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed. They sit
+        // at the far right, after the other sites.
+        let shown = ReviewSite.allCases.filter { $0 == .imdb || ReviewPageReader.supports($0) || ratings?.shortText(for: $0) != nil }
+        let sites = shown.filter { !ReviewPageReader.supports($0) } + shown.filter { ReviewPageReader.supports($0) }
         let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in
             // A divider stands between each two buttons, with the same gap on either side of it as between the buttons themselves.
@@ -224,7 +228,8 @@ struct RatingButtonsRow: View {
                         }
                         let isSearch = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
                         RatingButton(site: site, score: ratings?.shortText(for: site), isSearch: isSearch, title: item.name,
-                                     isOpen: site == openSite, horizontalInset: inset, showsLinkIcon: showsLinkIcon) {
+                                     isOpen: site == openSite, isLoading: isLoading && site == openSite,
+                                     horizontalInset: inset, showsLinkIcon: showsLinkIcon) {
                             onOpen(site, site.reviewsURL(for: item, tmdbURL: ratings?.tmdbURL) ?? url, isSearch)
                         }
                     }
@@ -246,6 +251,8 @@ struct RatingButton: View {
     let isSearch: Bool
     let title: String
     var isOpen = false
+    /// True while this rating's reviews page loads.
+    var isLoading = false
     var horizontalInset: CGFloat = 10
     var showsLinkIcon = false
     let onOpen: () -> Void
@@ -263,8 +270,11 @@ struct RatingButton: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
-                // After the score, a little greyed, so it reads as a control rather than as part of the rating.
-                if showsLinkIcon || ((site == .imdb || ReviewPageReader.supports(site)) && score == nil) {
+                // While the page loads, the rating shows a spinner in place of its chevron.
+                if isLoading {
+                    ProgressView().controlSize(.small).tint(.white)
+                } else if showsLinkIcon || ((site == .imdb || ReviewPageReader.supports(site)) && score == nil) {
+                    // After the score, a little greyed, so it reads as a control rather than as part of the rating.
                     Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white.opacity(0.6))
