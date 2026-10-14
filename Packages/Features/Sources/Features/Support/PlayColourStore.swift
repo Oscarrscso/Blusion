@@ -34,7 +34,10 @@ final class PlayColourStore {
     /// The pictures a title's card can show, first choice first: the BetterPosters picture a row may show, then the usual poster that stands in
     /// for it. The colour is read from whichever is in the image cache.
     static func pictures(for item: MetaPreview) -> [URL] {
-        [BetterPosters.posterURL(id: item.id, type: item.type), PosterQuality.poster(for: item)].compactMap { $0 }
+        // A Mac card shows the landscape picture, not the poster, so its poster is often not in the image cache: the pictures the card
+        // shows are read too, after the poster.
+        [BetterPosters.posterURL(id: item.id, type: item.type), PosterQuality.poster(for: item), PosterQuality.landscape(item.background),
+         item.background].compactMap { $0 }
     }
 
     /// Reads a title's colour on the spot, when its page opens before its card's read has run. A picture is used only when it is already in

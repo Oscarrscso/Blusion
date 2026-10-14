@@ -154,52 +154,81 @@ extension ReviewPageRules {
     static let paintedScript = #"""
     (function () {
       var heading = /^\s*(user|audience) reviews?\s*$/i;
-      var timer = null;
+      var started = Date.now();
+      var headingNode = null;
+      var headingAt = 0;
+      var lastSignature = '';
+      var stableFor = 0;
       var done = false;
-      var observer = null;
+      var interval = null;
 
-      function reviewsOnScreen() {
-        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
-        for (var i = 0; i < nodes.length; i++) {
-          if (!heading.test(nodes[i].textContent || '')) continue;
-          // A hidden heading has no box, so it does not count. A heading a little above the top edge counts as scrolled to.
-          if (nodes[i].getClientRects().length === 0) continue;
-          var top = nodes[i].getBoundingClientRect().top;
-          if (top >= -2 && top <= window.innerHeight * 0.9) return true;
-        }
-        return false;
+      // A visible element whose top is in the viewport: the heading has been scrolled to.
+      function onScreen(el) {
+        if (!el || el.getClientRects().length === 0) return false;
+        var top = el.getBoundingClientRect().top;
+        return top >= -2 && top <= window.innerHeight * 0.9;
       }
 
-      function finish() {
+      function findHeading() {
+        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
+        for (var i = 0; i < nodes.length; i++) {
+          if (heading.test(nodes[i].textContent || '') && nodes[i].getClientRects().length > 0) return nodes[i];
+        }
+        return null;
+      }
+
+      // The first review under the heading: the first visible element after it with a few lines of text.
+      function firstReview(h) {
+        var scope = h;
+        for (var up = 0; up < 4 && scope; up++) {
+          var el = scope.nextElementSibling;
+          for (var seen = 0; el && seen < 40; seen++) {
+            if ((el.textContent || '').trim().length >= 60 && el.getClientRects().length > 0) return el;
+            el = el.nextElementSibling;
+          }
+          scope = scope.parentElement;
+        }
+        return null;
+      }
+
+      function finish(reason) {
+        if (done) return;
         done = true;
-        clearTimeout(timer);
-        if (observer) observer.disconnect();
-        window.removeEventListener('scroll', settle);
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            window.webkit.messageHandlers.painted.postMessage('painted');
-          });
+        clearInterval(interval);
+        window.webkit.messageHandlers.painted.postMessage({
+          reason: reason,
+          headingMs: headingAt ? headingAt - started : -1,
+          readyMs: Date.now() - started
         });
       }
 
-      function settle() {
+      // Every 60 ms, look only at the heading, the first review and the scroll position. Ready when the heading is on screen, the first
+      // review has text, and those have not moved for 120 ms. A hard cap of 1.2 s after the heading first shows ends the wait regardless.
+      function check() {
         if (done) return;
-        clearTimeout(timer);
-        timer = setTimeout(function () {
-          if (!done && reviewsOnScreen()) finish();
-        }, 300);
+        var now = Date.now();
+        if (!headingNode || headingNode.getClientRects().length === 0) headingNode = findHeading();
+        if (!headingNode) {
+          if (now - started >= 6000) finish('no-heading');
+          return;
+        }
+        if (!headingAt) headingAt = now;
+        var review = firstReview(headingNode);
+        var h = headingNode.getBoundingClientRect();
+        var signature = Math.round(h.top) + ',' + Math.round(window.scrollY);
+        if (review) {
+          var r = review.getBoundingClientRect();
+          signature += '|' + Math.round(r.top) + ',' + Math.round(r.height);
+        }
+        if (signature === lastSignature) { stableFor += 60; } else { stableFor = 0; lastSignature = signature; }
+        var visible = onScreen(headingNode);
+        if (visible && review && stableFor >= 120) return finish('stable');
+        if (visible && now - headingAt >= 1200) return finish('cap');
+        if (!visible && now - headingAt >= 8000) finish('heading-off-screen');
       }
 
-      observer = new MutationObserver(settle);
-      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-      window.addEventListener('scroll', settle, { passive: true });
-      setTimeout(function () {
-        if (done) return;
-        done = true;
-        if (observer) observer.disconnect();
-        window.webkit.messageHandlers.painted.postMessage('painted');
-      }, 6000);
-      settle();
+      interval = setInterval(check, 60);
+      check();
     })();
     """#
 
@@ -292,7 +321,11 @@ struct ReviewWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {}
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { onLoaded() }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { onLoaded() }
-        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) { onLoaded() }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            // Per open: why the reviews were ready, and how long the heading and the ready state took from the start of the page.
+            print("reviewsReady \(message.body)")
+            onLoaded()
+        }
     }
 }
 #endif

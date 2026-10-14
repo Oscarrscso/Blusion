@@ -1,7 +1,6 @@
 #if canImport(UIKit)
 import StremioKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct WidgetsManagerView: View {
     let services: AppServices
@@ -15,12 +14,24 @@ struct WidgetsManagerView: View {
     /// True while the toolbar's button has hidden every widget's card, leaving one line that says how many there are. Kept between
     /// visits, so a long list stays out of the way until it is shown again.
     @AppStorage("widgets.hidesRows") private var hidesWidgets = false
-    /// The card being dragged, and the order the cards show while it is dragged. Nil when nothing is being dragged.
-    @State private var dragging: String?
+    /// The card being dragged, its centre where the drag began, how far the pointer has moved, and the order the cards show meanwhile.
+    @State private var dragID: String?
+    @State private var dragStart: CGPoint = .zero
+    @State private var pointer: CGSize = .zero
     @State private var liveOrder: [String]?
+    /// Each card's frame in the grid's own coordinate space, so a drag knows which card the pointer has reached.
+    @State private var frames: [String: CGRect] = [:]
 
-    /// Two cards across, with the same gutter between them as at the edges.
-    private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+    private let gridSpace = "widgetGrid"
+
+    /// Two cards across on iPhone. On the Mac as many as fit, at a size that keeps the card's proportions.
+    private var columns: [GridItem] {
+        #if targetEnvironment(macCatalyst)
+        [GridItem(.adaptive(minimum: 170, maximum: 210), spacing: 16)]
+        #else
+        [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+        #endif
+    }
 
     init(services: AppServices) {
         self.services = services
@@ -87,7 +98,7 @@ struct WidgetsManagerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The widgets in the order they show: the saved order, or the order a drag has reached while a card is being dragged.
+    /// The widgets in the order they show: the saved order, or the order a drag has reached.
     private var shownWidgets: [HomeWidget] {
         guard let liveOrder else { return model.widgets }
         let byID = Dictionary(uniqueKeysWithValues: model.widgets.map { ($0.id, $0) })
@@ -104,6 +115,74 @@ struct WidgetsManagerView: View {
         Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
     }
 
+    /// The card's drag: the card follows the pointer, and when its centre reaches another card, the two swap places, with a tick on iPhone.
+    private func dragChanged(_ id: String, translation: CGSize) {
+        if dragID == nil {
+            guard let frame = frames[id] else { return }
+            dragID = id
+            dragStart = CGPoint(x: frame.midX, y: frame.midY)
+            liveOrder = model.widgets.map(\.id)
+        }
+        guard dragID == id, let order = liveOrder, let from = order.firstIndex(of: id) else { return }
+        pointer = translation
+        let point = CGPoint(x: dragStart.x + translation.width, y: dragStart.y + translation.height)
+        guard let target = order.first(where: { $0 != id && (frames[$0]?.contains(point) ?? false) }),
+              let to = order.firstIndex(of: target), to != from else { return }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+            var next = order
+            next.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            liveOrder = next
+        }
+        #if !targetEnvironment(macCatalyst)
+        Haptics.selection()
+        #endif
+    }
+
+    /// Saves the order the drag reached, and settles the dragged card into its place.
+    private func dragEnded() {
+        guard let id = dragID else { return }
+        let saved = model.widgets.map(\.id)
+        if let order = liveOrder, let from = saved.firstIndex(of: id), let to = order.firstIndex(of: id), from != to {
+            let destination = to > from ? to + 1 : to
+            Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
+        }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+            dragID = nil
+            pointer = .zero
+        }
+        // The order stays on screen until the saved list shows it, so the cards do not jump back and forth.
+        let reached = liveOrder
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            if liveOrder == reached { withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) { liveOrder = nil } }
+        }
+    }
+
+    /// The dragged card follows the pointer, wherever the grid has laid it out.
+    private func dragOffset(for id: String) -> CGSize {
+        guard dragID == id, let frame = frames[id] else { return .zero }
+        return CGSize(width: dragStart.x + pointer.width - frame.midX, height: dragStart.y + pointer.height - frame.midY)
+    }
+
+    /// The card with the drag that reorders it. On the Mac a drag starts at once; on iPhone a press first, so the page still scrolls.
+    @ViewBuilder
+    private func reorderable<Card: View>(_ card: Card, id: String) -> some View {
+        #if targetEnvironment(macCatalyst)
+        card.simultaneousGesture(
+            DragGesture(minimumDistance: 4, coordinateSpace: .named(gridSpace))
+                .onChanged { dragChanged(id, translation: $0.translation) }
+                .onEnded { _ in dragEnded() })
+        #else
+        card.simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.25)
+                .sequenced(before: DragGesture(coordinateSpace: .named(gridSpace)))
+                .onChanged { value in
+                    if case .second(true, let drag?) = value { dragChanged(id, translation: drag.translation) }
+                }
+                .onEnded { _ in dragEnded() })
+        #endif
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
@@ -111,23 +190,20 @@ struct WidgetsManagerView: View {
                 if !hidesWidgets && !model.widgets.isEmpty {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(shownWidgets) { widget in
-                            WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
-                                // Long-press and drag: the other cards move aside as it passes them, with a tick for each step. Dropped, the
-                                // order is saved. A tap still opens the widget.
-                                .onDrag {
-                                    dragging = widget.id
-                                    liveOrder = model.widgets.map(\.id)
-                                    Haptics.tap()
-                                    return NSItemProvider(object: widget.id as NSString)
-                                }
-                                .onDrop(of: [.plainText], delegate: WidgetDropDelegate(target: widget.id, dragging: $dragging,
-                                                                                       liveOrder: $liveOrder, model: model))
-                                .accessibilityAction(named: "Move earlier") { move(widget.id, by: -1) }
-                                .accessibilityAction(named: "Move later") { move(widget.id, by: 1) }
+                            reorderable(
+                                WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(gridSpace)) } action: { frames[widget.id] = $0 }
+                                    .offset(dragOffset(for: widget.id))
+                                    .scaleEffect(dragID == widget.id ? 1.05 : 1)
+                                    .shadow(color: .black.opacity(dragID == widget.id ? 0.35 : 0), radius: 16, y: 10)
+                                    .zIndex(dragID == widget.id ? 1 : 0)
+                                    .accessibilityAction(named: "Move earlier") { move(widget.id, by: -1) }
+                                    .accessibilityAction(named: "Move later") { move(widget.id, by: 1) },
+                                id: widget.id)
                         }
                     }
-                    .animation(.snappy(duration: 0.3), value: shownWidgets.map(\.id))
-                    .onDrop(of: [.plainText], delegate: WidgetGridDropDelegate(dragging: $dragging, liveOrder: $liveOrder, model: model))
+                    .coordinateSpace(name: gridSpace)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.78), value: shownWidgets.map(\.id))
                     .accessibilityIdentifier("widgets.list")
                 }
                 VStack(alignment: .leading, spacing: 4) {
@@ -161,8 +237,9 @@ struct WidgetsManagerView: View {
             ToolbarItem(placement: .topBarTrailing) { addMenu }
         }
         .task { await model.load() }
-        // A list that has just been imported or reset is shown too.
+        // The saved order has caught up with the order the drag reached, so the drag's order is no longer needed.
         .onChange(of: model.widgets.map(\.id)) { old, new in
+            if let liveOrder, new == liveOrder { self.liveOrder = nil }
             if !old.isEmpty, !Set(new).isSubset(of: old) { withAnimation { hidesWidgets = false } }
         }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
@@ -210,7 +287,7 @@ private struct WidgetCard: View {
                 LinearGradient(colors: [.black.opacity(0.8), .black.opacity(0.35), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(widget.title.isEmpty ? "Untitled" : widget.title)
-                        .font(.system(size: 30, weight: .bold))
+                        .font(.system(size: Self.titleSize, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.6)
@@ -225,8 +302,8 @@ private struct WidgetCard: View {
             .overlay(alignment: .bottomTrailing) {
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 44, height: 44)
+                        .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
+                        .frame(width: Self.trashSize, height: Self.trashSize)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
@@ -241,6 +318,23 @@ private struct WidgetCard: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("widgets.row.\(widget.id)")
         .task(id: widget.id) { await loadItems() }
+    }
+
+    /// The name's size, and the delete button's: a little smaller on the Mac, where the cards are.
+    private static var titleSize: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        20
+        #else
+        30
+        #endif
+    }
+
+    private static var trashSize: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        36
+        #else
+        44
+        #endif
     }
 
     /// Two rows of two with a thin gap: the top row the widget's backdrops, the bottom row its posters. Empty tiles stay the card's colour.
@@ -300,69 +394,6 @@ private struct WidgetCard: View {
         case .hero(let row), .banner(let row), .row(let row): row
         default: nil
         }
-    }
-}
-
-/// A card's drop target. A dragged card takes the place of each card it passes, with a tick each time, and the order is saved when it is
-/// dropped on a card.
-private struct WidgetDropDelegate: DropDelegate {
-    let target: String
-    @Binding var dragging: String?
-    @Binding var liveOrder: [String]?
-    let model: WidgetsManagerViewModel
-
-    func dropEntered(info: DropInfo) {
-        guard let dragged = dragging, dragged != target, var order = liveOrder,
-              let from = order.firstIndex(of: dragged), let to = order.firstIndex(of: target) else { return }
-        withAnimation(.snappy(duration: 0.3)) {
-            order.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
-            liveOrder = order
-        }
-        Haptics.selection()
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let saved = model.widgets.map(\.id)
-        if let order = liveOrder, let dragged = dragging, let from = saved.firstIndex(of: dragged), let to = order.firstIndex(of: dragged),
-           from != to {
-            // The saved order moves the card to where the drag left it.
-            let destination = to > from ? to + 1 : to
-            Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
-        }
-        dragging = nil
-        liveOrder = nil
-        return true
-    }
-}
-
-/// The grid as a whole: a drop in a gap between cards saves the order the drag reached, and a drag that leaves the grid without a drop puts
-/// the cards back in their saved order.
-private struct WidgetGridDropDelegate: DropDelegate {
-    @Binding var dragging: String?
-    @Binding var liveOrder: [String]?
-    let model: WidgetsManagerViewModel
-
-    func dropExited(info: DropInfo) {
-        withAnimation(.snappy(duration: 0.3)) {
-            dragging = nil
-            liveOrder = nil
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
-
-    func performDrop(info: DropInfo) -> Bool {
-        let saved = model.widgets.map(\.id)
-        if let order = liveOrder, let dragged = dragging, let from = saved.firstIndex(of: dragged), let to = order.firstIndex(of: dragged),
-           from != to {
-            let destination = to > from ? to + 1 : to
-            Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
-        }
-        dragging = nil
-        liveOrder = nil
-        return true
     }
 }
 
