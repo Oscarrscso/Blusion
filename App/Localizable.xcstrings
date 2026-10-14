@@ -2168,6 +2168,17 @@
         }
       }
     },
+    "Order": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Order"
+          }
+        }
+      }
+    },
     "Order matters: addons higher up supply rows and streams first.": {
       "extractionState": "manual",
       "localizations": {
@@ -2593,6 +2604,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rename Addon"
+          }
+        }
+      }
+    },
+    "Reorder Widgets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reorder Widgets"
           }
         }
       }
