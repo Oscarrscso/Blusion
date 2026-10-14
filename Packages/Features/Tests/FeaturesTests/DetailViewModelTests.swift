@@ -305,6 +305,36 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(movie.shuffledRequest() == nil)
     }
 
+    @Test func aTappedRatingOpensItsSiteAndASecondTapOnTheSameSiteCloses() async throws {
+        let services = try await installedServices()
+        let movie = DetailViewModel(preview: MetaPreview(id: "mock:movie4", type: "movie", name: "P"), services: services)
+        let imdb = URL(string: "https://www.imdb.com/title/mock:movie4/")!
+        let search = URL(string: "https://letterboxd.com/search/P/")!
+        #expect(movie.openedReviews == nil)
+        movie.toggleReviews(.imdb, url: imdb, isSearch: false)
+        #expect(movie.openedReviews == DetailViewModel.OpenedReviews(site: .imdb, url: imdb, isSearch: false))
+        movie.toggleReviews(.letterboxd, url: search, isSearch: true)
+        #expect(movie.openedReviews == DetailViewModel.OpenedReviews(site: .letterboxd, url: search, isSearch: true), "another site replaces")
+        movie.toggleReviews(.letterboxd, url: search, isSearch: true)
+        #expect(movie.openedReviews == nil, "the same site again closes them")
+        movie.toggleReviews(.imdb, url: imdb, isSearch: false)
+        movie.closeReviews()
+        #expect(movie.openedReviews == nil)
+    }
+
+    @Test func openingReviewsStopsTheTrailerAndStartingTheTrailerClosesThem() async throws {
+        let services = try await installedServices()
+        let movie = DetailViewModel(preview: MetaPreview(id: "mock:movie4", type: "movie", name: "P"), services: services)
+        let imdb = URL(string: "https://www.imdb.com/title/mock:movie4/")!
+        movie.toggleTrailer()
+        #expect(movie.trailer.phase == .loading, "the trailer is loading when the rating is tapped")
+        movie.toggleReviews(.imdb, url: imdb, isSearch: false)
+        #expect(movie.trailer.phase == .idle && !movie.trailer.showsPanel, "opening reviews stops the trailer")
+        #expect(movie.openedReviews != nil)
+        movie.toggleTrailer()
+        #expect(movie.openedReviews == nil, "starting the trailer closes the reviews")
+    }
+
     @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
         let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)

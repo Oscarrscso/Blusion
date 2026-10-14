@@ -95,8 +95,13 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             metaLine
             if showsDetails {
                 overview
-                RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
-                    .padding(.bottom, Theme.Spacing.s)
+                // The buttons stay over the picture. The reviews a tap opens sit under the hero, in the details, so the hero's clipping
+                // cannot cut them off.
+                RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero,
+                                 openSite: model.openedReviews?.site) { site, url, isSearch in
+                    model.toggleReviews(site, url: url, isSearch: isSearch)
+                }
+                .padding(.bottom, Theme.Spacing.s)
             }
             controls
         }
@@ -140,7 +145,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     private var details: some View {
         layout {
             // With no trailer and an overview that fits above, the column would be empty, so the information leads instead.
-            if model.trailer.showsPanel || overviewIsCut { detailsColumn }
+            if model.trailer.showsPanel || overviewIsCut || model.openedReviews != nil { detailsColumn }
             information
                 .frame(maxWidth: hasTwoColumns ? Self.informationWidth : Self.detailsMax, alignment: .leading)
         }
@@ -163,6 +168,10 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             if model.trailer.showsPanel {
                 trailer(detailsWidth)
                     .transition(Self.trailerTransition)
+            }
+            // Placed after the trailer's panel, so that panel keeps its place in the view tree while reviews open.
+            if let reviews = model.openedReviews {
+                DetailReviewsPanel(reviews: reviews, onClose: model.closeReviews)
             }
             if overviewIsCut { synopsis }
         }

@@ -159,14 +159,18 @@ struct ReviewSiteIcon: View {
 }
 
 /// The title's scores as small buttons, for the line under its name on the detail page: a site's icon, then its score, in a small
-/// flat panel-grey capsule, as the review panels are, that opens the title on that site. IMDb is always there (its icon alone until
-/// a score arrives, so the link is never lost); every other site appears only once it has a genuine score, so an unrated title
-/// shows one button, not five.
+/// flat panel-grey capsule, as the review panels are. A tap calls `onOpen`, which shows that site's reviews on the page, under the ratings.
+/// IMDb is always there (its icon alone until a score arrives, so the link is never lost); every other site appears only once it
+/// has a genuine score, so an unrated title shows one button, not five.
 /// Meant to sit over artwork, so the text is white.
 struct RatingButtonsRow: View {
     let item: MetaPreview
     /// False holds the lookup back until the screen allows it (the title page waits for its hero).
     var startsLoading = true
+    /// The site whose reviews are open under the ratings, so its button can show it is open.
+    var openSite: ReviewSite?
+    /// Shows the site's reviews for this title, or its search: the site, its link, and whether the link is a search.
+    let onOpen: (ReviewSite, URL, Bool) -> Void
     @Environment(PosterRatingsStore.self) private var store: PosterRatingsStore?
 
     /// On a Mac the row keeps a button's natural width however wide the window is (120 pt a site, left-aligned); a phone fills its row.
@@ -217,9 +221,11 @@ struct RatingButtonsRow: View {
                                 .frame(width: 1, height: 20)
                                 .accessibilityHidden(true)
                         }
-                        RatingButton(site: site, score: ratings?.shortText(for: site), url: url,
-                                     isSearch: site.isSearch(for: item, tmdbURL: ratings?.tmdbURL), title: item.name,
-                                     horizontalInset: inset, showsLinkIcon: showsLinkIcon)
+                        let isSearch = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
+                        RatingButton(site: site, score: ratings?.shortText(for: site), isSearch: isSearch, title: item.name,
+                                     isOpen: site == openSite, horizontalInset: inset, showsLinkIcon: showsLinkIcon) {
+                            onOpen(site, url, isSearch)
+                        }
                     }
                 }
             }
@@ -230,20 +236,21 @@ struct RatingButtonsRow: View {
     }
 }
 
-/// One small rating button: the site's icon, then the score. Without a score it is the icon alone, and IMDb's gets an outward arrow so it
-/// still reads as a link to the title's page. When four or fewer sites are shown, every button gets the arrow.
+/// One small rating button: the site's icon, then the score. Without a score it is the icon alone. A tap opens the site's reviews on the
+/// page, under the buttons, so its chevron points down, or up while those reviews are open; an open site's button is lit.
 struct RatingButton: View {
     let site: ReviewSite
     let score: String?
-    let url: URL
     /// True when the link is a search on the site, not the title's own page.
     let isSearch: Bool
     let title: String
+    var isOpen = false
     var horizontalInset: CGFloat = 10
     var showsLinkIcon = false
+    let onOpen: () -> Void
 
     var body: some View {
-        Link(destination: url) {
+        Button(action: onOpen) {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
                     .foregroundStyle(.white)
@@ -255,9 +262,9 @@ struct RatingButton: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
-                // After the score, a little greyed, so it reads as a link rather than as part of the rating.
+                // After the score, a little greyed, so it reads as a control rather than as part of the rating.
                 if showsLinkIcon || (site == .imdb && score == nil) {
-                    Image(systemName: "arrow.up.right")
+                    Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.white.opacity(0.6))
                         .accessibilityHidden(true)
@@ -266,17 +273,17 @@ struct RatingButton: View {
             .padding(.horizontal, horizontalInset)
             .frame(maxWidth: .infinity)
             .frame(height: 28)
-            .background(Theme.surface, in: Capsule())
+            .background(isOpen ? Theme.surfaceStrong : Theme.surface, in: Capsule())
             .contentShape(Capsule())
             .pointerInteraction(cornerRadius: 999)
         }
         .buttonStyle(.plain)
         .titleTapHaptic()
-        .help(isSearch ? "Search \(site.name) for \(title)" : "Open \(title) on \(site.name)")
+        .help(isSearch ? "Search \(site.name) for \(title) below" : "Show \(title) on \(site.name) below")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(score.map { "\(site.name) \($0)" } ?? site.name)
-        .accessibilityHint(isSearch ? "Searches \(site.name) for this title" : "Opens this title on \(site.name)")
-        .accessibilityAddTraits(.isLink)
+        .accessibilityHint(isSearch ? "Shows a \(site.name) search for this title below" : "Shows this title's reviews on \(site.name) below")
+        .accessibilityAddTraits(isOpen ? .isSelected : [])
         .accessibilityIdentifier("detail.reviews.\(site.rawValue)")
     }
 }

@@ -81,7 +81,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
         synopsis
             .padding(.horizontal, contentMargin)
             .padding(.top, Theme.Spacing.s)
-        RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
+        DetailRatings(model: model, startsLoading: model.hasSettledHero)
             .frame(maxWidth: landscapeWidths.controls, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, contentMargin)
@@ -130,7 +130,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
             // The same gap as the Play row keeps from the line above it, so the row sits evenly between the two.
             synopsis
                 .padding(.top, TitleHero.playRowGap - Theme.Spacing.m)
-            RatingButtonsRow(item: model.detail.preview, startsLoading: model.hasSettledHero)
+            DetailRatings(model: model, startsLoading: model.hasSettledHero)
         }
         .padding(.top, Theme.Spacing.m)
         .padding(.horizontal, contentMargin)

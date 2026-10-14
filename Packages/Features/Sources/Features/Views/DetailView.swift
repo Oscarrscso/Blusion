@@ -226,6 +226,14 @@ struct DetailView: View {
                         withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailTrailerPanel.scrollID) }
                     }
                 }
+                // Reviews opened from a rating appear under the ratings, which may be below the fold, so the page moves to them the same way.
+                .onChange(of: model.openedReviews?.url) { _, url in
+                    guard url != nil else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(50))
+                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailReviewsPanel.scrollID) }
+                    }
+                }
                 // Once the streams are ready they take the details' place, so the page moves down to bring the stream list into view.
                 // The short wait lets them lay out first.
                 .onChange(of: streamsAreReady) { _, ready in

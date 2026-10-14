@@ -497,9 +497,36 @@ public final class DetailViewModel {
     /// Whether the trailer button can do anything: a trailer is known.
     public var canPlayTrailer: Bool { !trailers.isEmpty }
 
+    /// A rating's site, shown on the page under the ratings: its reviews for this title, or a search when the site has no page for it.
+    public struct OpenedReviews: Equatable, Sendable {
+        public let site: ReviewSite
+        public let url: URL
+        public let isSearch: Bool
+    }
+
+    /// The reviews opened from a rating, under the ratings. Nil when none are open.
+    public private(set) var openedReviews: OpenedReviews?
+
+    /// A rating's tap: shows its site's reviews under the ratings, or closes them when that site's are already open. Another site's reviews
+    /// replace the ones open. The inline trailer stops when reviews open, since one player or page is shown on the page at a time.
+    public func toggleReviews(_ site: ReviewSite, url: URL, isSearch: Bool) {
+        if openedReviews?.site == site {
+            closeReviews()
+            return
+        }
+        trailer.cancel()
+        openedReviews = OpenedReviews(site: site, url: url, isSearch: isSearch)
+    }
+
+    /// Closes the reviews opened from a rating.
+    public func closeReviews() {
+        openedReviews = nil
+    }
+
     /// The trailer button's tap: loads the title's trailer into the page, or closes it while it plays. A YouTube video is checked
-    /// with YouTube before it is tried in the page's embedded player.
+    /// with YouTube before it is tried in the page's embedded player. Reviews opened from a rating are closed first.
     public func toggleTrailer() {
+        openedReviews = nil
         trailer.toggle(TrailerLoader.Source(
             plan: { [weak self] in
                 guard let self else { return TrailerPlan(trailers: []) }
