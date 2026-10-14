@@ -17,7 +17,7 @@ struct DetailRatings: View {
                 model.toggleReviews(site, url: url, isSearch: isSearch)
             }
             if let reviews = model.openedReviews {
-                DetailReviewsPanel(reviews: reviews, onClose: model.closeReviews)
+                DetailReviewsPanel(reviews: reviews, item: model.detail.preview, onClose: model.closeReviews)
             }
         }
     }
@@ -27,6 +27,7 @@ struct DetailRatings: View {
 /// buttons above it, and stays until it is closed or another rating is tapped.
 struct DetailReviewsPanel: View {
     let reviews: DetailViewModel.OpenedReviews
+    let item: MetaPreview
     let onClose: () -> Void
     /// The id the page scrolls to when the reviews open, so they are in view.
     static let scrollID = "detail.reviewsPanel"
@@ -55,7 +56,7 @@ struct DetailReviewsPanel: View {
                 Text(reviews.site.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                if reviews.isSearch {
+                if reviews.isSearch && !ReviewPageReader.supports(reviews.site) {
                     Text("Search")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
@@ -76,7 +77,7 @@ struct DetailReviewsPanel: View {
             .padding(.trailing, 6)
             .padding(.vertical, 4)
             Divider()
-            ReviewWebView(site: reviews.site, url: reviews.url)
+            ReviewWebView(site: reviews.site, url: reviews.url, item: item)
                 // A new site gets a new page with its own script, so its view is rebuilt rather than reused.
                 .id(reviews.site)
                 .frame(height: pageHeightNow)
@@ -110,12 +111,13 @@ extension ReviewPageRules {
 struct ReviewWebView: UIViewRepresentable {
     let site: ReviewSite
     let url: URL
+    let item: MetaPreview
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site),
+        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site, item: item),
                                                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
@@ -136,6 +138,12 @@ struct ReviewWebView: UIViewRepresentable {
         // Before the rules are in place, the load that is waiting for them picks up this address.
         guard coordinator.isReady else { return }
         view.load(URLRequest(url: url))
+    }
+
+    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+        // A compilation callback still waiting for the content rules must not reopen a dismissed page.
+        coordinator.requested = nil
+        view.stopLoading()
     }
 
     /// The address last asked for, and whether the rules are in place, so a re-render does not load the page again.

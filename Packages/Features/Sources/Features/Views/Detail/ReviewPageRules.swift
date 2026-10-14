@@ -27,11 +27,12 @@ enum ReviewPageRules {
 
     /// The script for a site, run once the page's document is ready. Letterboxd's address for a title opens the film's page, which goes on
     /// to the film's reviews. The other sites load their user reviews after the page, so the script scrolls to their heading once it is
-    /// there. A search page has no such heading and stays where it is.
-    static func script(for site: ReviewSite) -> String {
+    /// there. RT and Metacritic can also resolve a title search and read the reviews from the page already being loaded.
+    static func script(for site: ReviewSite, item: MetaPreview? = nil) -> String {
+        if let item, ReviewPageReader.supports(site) { return ReviewPageReader.script(for: site, item: item) }
         switch site {
-        case .letterboxd: letterboxdScript
-        case .imdb, .rottenTomatoes, .metacritic, .tmdb: reviewsHeadingScript
+        case .letterboxd: return letterboxdScript
+        case .imdb, .rottenTomatoes, .metacritic, .tmdb: return reviewsHeadingScript
         }
     }
 
