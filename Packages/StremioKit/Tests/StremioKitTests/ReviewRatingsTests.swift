@@ -111,6 +111,8 @@ import StremioKitTestSupport
         let movie = MetaPreview(id: "tt0468569", type: "movie", name: "Film / #? & more")
         #expect(ReviewSite.imdb.url(for: movie)?.absoluteString == "https://www.imdb.com/title/tt0468569/")
         #expect(ReviewSite.letterboxd.url(for: movie)?.absoluteString == "https://letterboxd.com/imdb/tt0468569/")
+        #expect(ReviewSite.imdb.reviewsURL(for: movie)?.absoluteString == "https://www.imdb.com/title/tt0468569/reviews/", "IMDb's user reviews")
+        #expect(ReviewSite.letterboxd.reviewsURL(for: movie) == ReviewSite.letterboxd.url(for: movie), "Letterboxd's page opens its reviews itself")
         for site in [ReviewSite.rottenTomatoes, .metacritic, .tmdb] { #expect(site.isSearch(for: movie)) }
         let tomatoURL = try #require(ReviewSite.rottenTomatoes.url(for: movie))
         let parameters = URLComponents(url: tomatoURL, resolvingAgainstBaseURL: false)?.queryItems

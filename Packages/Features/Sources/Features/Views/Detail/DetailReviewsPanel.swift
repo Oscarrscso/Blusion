@@ -76,7 +76,9 @@ struct DetailReviewsPanel: View {
             .padding(.trailing, 6)
             .padding(.vertical, 4)
             Divider()
-            ReviewWebView(url: reviews.url)
+            ReviewWebView(site: reviews.site, url: reviews.url)
+                // A new site gets a new page with its own script, so its view is rebuilt rather than reused.
+                .id(reviews.site)
                 .frame(height: pageHeightNow)
                 .accessibilityIdentifier("detail.reviewsWeb")
         }
@@ -89,29 +91,57 @@ struct DetailReviewsPanel: View {
     }
 }
 
-/// A rating's site, loaded in the app. The page loads once per site: SwiftUI's re-renders leave the page the reader is on alone.
+extension ReviewPageRules {
+    /// Compiles the content rules and attaches them to a web view, then calls `ready`. The rules are small, so compiling them on each open is
+    /// quick. If they do not compile, `ready` still runs, and the page loads without them.
+    @MainActor
+    static func attach(to view: WKWebView, then ready: @escaping @MainActor () -> Void) {
+        WKContentRuleListStore.default().compileContentRuleList(forIdentifier: identifier, encodedContentRuleList: contentRules) { list, _ in
+            MainActor.assumeIsolated {
+                if let list { view.configuration.userContentController.add(list) }
+                ready()
+            }
+        }
+    }
+}
+
+/// A rating's site, loaded in the app with its ads and trackers blocked. The page opens its user reviews when it can. It loads once per
+/// address: SwiftUI's re-renders leave the page the reader is on alone.
 struct ReviewWebView: UIViewRepresentable {
+    let site: ReviewSite
     let url: URL
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WKWebView {
-        let view = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site),
+                                                                       injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
-        context.coordinator.requested = url
-        view.load(URLRequest(url: url))
+        let coordinator = context.coordinator
+        coordinator.requested = url
+        ReviewPageRules.attach(to: view) {
+            // The page loads once its rules are in place, at the address asked for last.
+            coordinator.isReady = true
+            if let latest = coordinator.requested { view.load(URLRequest(url: latest)) }
+        }
         return view
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard context.coordinator.requested != url else { return }
-        context.coordinator.requested = url
+        let coordinator = context.coordinator
+        guard coordinator.requested != url else { return }
+        coordinator.requested = url
+        // Before the rules are in place, the load that is waiting for them picks up this address.
+        guard coordinator.isReady else { return }
         view.load(URLRequest(url: url))
     }
 
-    /// The address last asked for, so a re-render with the same address does not load it again.
+    /// The address last asked for, and whether the rules are in place, so a re-render does not load the page again.
     final class Coordinator {
         var requested: URL?
+        var isReady = false
     }
 }
 #endif

@@ -224,7 +224,7 @@ struct RatingButtonsRow: View {
                         let isSearch = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
                         RatingButton(site: site, score: ratings?.shortText(for: site), isSearch: isSearch, title: item.name,
                                      isOpen: site == openSite, horizontalInset: inset, showsLinkIcon: showsLinkIcon) {
-                            onOpen(site, url, isSearch)
+                            onOpen(site, site.reviewsURL(for: item, tmdbURL: ratings?.tmdbURL) ?? url, isSearch)
                         }
                     }
                 }

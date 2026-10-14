@@ -44,6 +44,13 @@ public enum ReviewSite: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// The page that lists the title's user reviews, where the site has one this title can reach by address. Otherwise the same page as
+    /// `url(for:)`: the title's page, or a search.
+    public func reviewsURL(for item: MetaPreview, tmdbURL: URL? = nil) -> URL? {
+        if self == .imdb, LetterboxdRatings.isIMDbID(item.id) { return URL(string: "https://www.imdb.com/title/\(item.id)/reviews/") }
+        return url(for: item, tmdbURL: tmdbURL)
+    }
+
     public func url(for item: MetaPreview, tmdbURL: URL? = nil) -> URL? {
         if self == .imdb, LetterboxdRatings.isIMDbID(item.id) { return URL(string: "https://www.imdb.com/title/\(item.id)/") }
         if self == .letterboxd, item.type == "movie", LetterboxdRatings.isIMDbID(item.id) {
