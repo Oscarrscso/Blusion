@@ -27,6 +27,10 @@ struct WidgetsManagerView: View {
     @State private var swapCount = 0
     @State private var contentOffsetY: CGFloat = 0
     @State private var viewportHeight: CGFloat = 0
+    /// The grid's top edge in the window, and the scroll content's height, for the edge scrolling.
+    @State private var gridMinY: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    private static let scrollSpace = "widgetScroll"
     @State private var scrollPosition = ScrollPosition()
     @State private var autoScroll: Task<Void, Never>?
     /// Set when a drag moved the pointer, so the tap that ends it does not open the card.
@@ -162,9 +166,9 @@ struct WidgetsManagerView: View {
         startAutoScroll()
     }
 
-    /// Follows the pointer, and reorders as it reaches each slot.
+    /// Follows the pointer, and reorders as it reaches each slot. A card that is settling takes no more moves.
     private func updateDrag(to point: CGPoint) {
-        guard var current = drag else { return }
+        guard !landing, var current = drag else { return }
         current.pointer = point
         if abs(point.x - current.start.x) > 6 || abs(point.y - current.start.y) > 6 { didDrag = true }
         drag = current
@@ -186,7 +190,7 @@ struct WidgetsManagerView: View {
     /// Ends the drag. A drag that was not cancelled saves the order once, and settles the card into its slot. A cancelled one puts the cards
     /// back as they were.
     private func endDrag(cancelled: Bool) {
-        guard let current = drag else { return }
+        guard !landing, let current = drag else { return }
         autoScroll?.cancel()
         autoScroll = nil
         if cancelled {
@@ -194,6 +198,9 @@ struct WidgetsManagerView: View {
                 order = current.originalOrder
                 drag = nil
             }
+            // A cancelled touch ends without a tap, so the flag is cleared here rather than left for the next tap to swallow.
+            didDrag = false
+            syncOrder()
             return
         }
         let saved = model.widgets.map(\.id)
@@ -210,6 +217,10 @@ struct WidgetsManagerView: View {
             try? await Task.sleep(for: .milliseconds(300))
             drag = nil
             landing = false
+            // A tap right after the drop is the drop's own, so the flag is cleared once the card has settled.
+            didDrag = false
+            // If the save was refused, the grid goes back to the saved order here.
+            syncOrder()
         }
     }
 
@@ -220,15 +231,16 @@ struct WidgetsManagerView: View {
         autoScroll = Task { @MainActor in
             let zone: CGFloat = 60
             while !Task.isCancelled, drag != nil {
-                let visibleY = (drag?.pointer.y ?? 0) - contentOffsetY
+                // The finger's place in the window: the grid's top edge in the window, plus the pointer's place in the grid.
+                let windowY = (drag?.pointer.y ?? 0) + gridMinY
                 var step: CGFloat = 0
-                if visibleY < zone {
-                    step = -(2 + 18 * (zone - visibleY) / zone)
-                } else if visibleY > viewportHeight - zone {
-                    step = 2 + 18 * (visibleY - (viewportHeight - zone)) / zone
+                if windowY < zone {
+                    step = -(2 + 18 * (zone - windowY) / zone)
+                } else if windowY > viewportHeight - zone {
+                    step = 2 + 18 * (windowY - (viewportHeight - zone)) / zone
                 }
                 if step != 0 {
-                    let limit = max(0, layout.contentSize.height - viewportHeight)
+                    let limit = max(0, contentHeight - viewportHeight)
                     let next = min(max(0, contentOffsetY + step), limit)
                     let delta = next - contentOffsetY
                     if delta != 0 {
@@ -293,6 +305,7 @@ struct WidgetsManagerView: View {
             }
         }
         .coordinateSpace(name: Self.coordinateSpace)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.scrollSpace)).minY } action: { gridMinY = $0 }
         .frame(width: layout.contentSize.width, height: layout.contentSize.height)
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: order)
         .contentShape(Rectangle())
@@ -349,9 +362,11 @@ struct WidgetsManagerView: View {
             .padding(16)
             .onGeometryChange(for: CGFloat.self) { max(0, $0.size.width - 32) } action: { gridWidth = $0 }
         }
+        .coordinateSpace(name: Self.scrollSpace)
         .scrollPosition($scrollPosition)
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, new in contentOffsetY = new }
         .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, new in viewportHeight = new }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, new in contentHeight = new }
         #if !targetEnvironment(macCatalyst)
         .scrollDisabled(drag != nil)
         #endif

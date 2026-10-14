@@ -116,6 +116,15 @@ import StremioKitTestSupport
         #expect(ReviewSite.metacritic.reviewsURL(for: show)?.absoluteString == "https://www.metacritic.com/tv/the-simpsons/user-reviews/")
     }
 
+    @Test func onlyIMDbsReviewsPageWaitsForAHeadingNotItsSearch() {
+        let reviews = URL(string: "https://www.imdb.com/title/tt0468569/reviews/")!
+        let search = URL(string: "https://www.imdb.com/find/?q=Film")!
+        #expect(ReviewSite.imdb.waitsForReviewsHeading(at: reviews))
+        #expect(!ReviewSite.imdb.waitsForReviewsHeading(at: search), "a search page has no reviews heading to wait for")
+        #expect(!ReviewSite.letterboxd.waitsForReviewsHeading(at: reviews), "Letterboxd's reviews have no heading the script finds")
+        #expect(ReviewSite.metacritic.waitsForReviewsHeading(at: URL(string: "https://www.metacritic.com/movie/film/user-reviews/")!))
+    }
+
     @Test func linksUseKnownIDsAndSearchForUnknownSlugsWithoutLeakingQuerySyntax() throws {
         let movie = MetaPreview(id: "tt0468569", type: "movie", name: "Film / #? & more")
         #expect(ReviewSite.imdb.url(for: movie)?.absoluteString == "https://www.imdb.com/title/tt0468569/")

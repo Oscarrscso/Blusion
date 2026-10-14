@@ -45,10 +45,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     /// The page's width less its margins.
     private var contentWidth: CGFloat { max(0, size.width - contentMargin * 2) }
     private var hasTwoColumns: Bool { contentWidth >= Self.twoColumnWidth }
-    /// The synopsis and the trailer's panel share this width: beside the information when there are two columns.
+    /// The synopsis and the trailer's panel share this width. The information follows the cast on the page, so it takes no column here.
     private var detailsWidth: CGFloat {
-        let beside = hasTwoColumns ? Self.columnGap + Self.informationWidth : 0
-        return min(Self.detailsMax, contentWidth - beside)
+        min(Self.detailsMax, contentWidth)
     }
 
     /// The trailer's panel fades in and grows from its top edge, so the synopsis moves down with it rather than jumping.

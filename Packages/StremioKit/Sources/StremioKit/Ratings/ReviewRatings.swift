@@ -56,6 +56,16 @@ public enum ReviewSite: String, CaseIterable, Sendable, Identifiable {
         return url(for: item, tmdbURL: tmdbURL)
     }
 
+    /// Whether the reviews panel waits for a reviews heading on this address before it opens. IMDb's reviews page has one. Its search page,
+    /// which a title with no IMDb id opens, has none, so waiting there would only run out the clock. The other sites keep the wait.
+    public func waitsForReviewsHeading(at url: URL) -> Bool {
+        switch self {
+        case .letterboxd: false
+        case .imdb: url.pathComponents.contains("reviews")
+        case .rottenTomatoes, .metacritic, .tmdb: true
+        }
+    }
+
     /// The part of a Metacritic address that names a title: its words in lower case, joined by hyphens, with accents and apostrophes
     /// dropped ("The Dark Knight" is "the-dark-knight", "Schindler's List" is "schindlers-list").
     static func metacriticSlug(_ name: String) -> String? {

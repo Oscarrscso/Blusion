@@ -122,6 +122,8 @@ enum ReviewTimingLog {
 
     static func append(_ timing: [String: Any], site: ReviewSite?) {
         guard let url = fileURL else { return }
+        // A timing log that has grown this large is kept as it is: it is a debugging aid, not a history.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 256_000 { return }
         let reason = timing["reason"] as? String ?? "?"
         let headingMs = timing["headingMs"] as? Int ?? -1
         let readyMs = timing["readyMs"] as? Int ?? -1
@@ -294,8 +296,10 @@ struct ReviewWebView: UIViewRepresentable {
            let fallback = ReviewPageRules.notFoundScript(fallback: search) {
             configuration.userContentController.addUserScript(WKUserScript(source: fallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
-        // The panel opens once the page has painted (see `paintedScript`), so the spinner stays until the reader can see the page.
-        configuration.userContentController.addUserScript(WKUserScript(source: site == .letterboxd ? ReviewPageRules.loadedScript : ReviewPageRules.paintedScript,
+        // The panel opens once the page has painted (see `paintedScript`), so the spinner stays until the reader can see the page. A page with
+        // no reviews heading to wait for, such as a search, opens once it has loaded and painted, as Letterboxd's does.
+        let waitsForHeading = site.waitsForReviewsHeading(at: url)
+        configuration.userContentController.addUserScript(WKUserScript(source: waitsForHeading ? ReviewPageRules.paintedScript : ReviewPageRules.loadedScript,
                                                                        injectionTime: .atDocumentEnd,
                                                                        forMainFrameOnly: true))
         let coordinator = context.coordinator
