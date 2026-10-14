@@ -53,6 +53,10 @@ public final class DetailViewModel {
         self.preview = preview
         self.detail = .fallback(from: preview)
         self.services = services
+        // The title's Play colour from its poster, when the poster is already in the image cache, so the page is coloured from its first frame.
+        #if canImport(UIKit)
+        PlayColourStore.shared.readNow(identity: preview.identity, poster: PosterQuality.poster(for: preview))
+        #endif
         self.trailer = TrailerLoader(preparer: trailerPreparer ?? UnavailableTrailerPreparer())
         // An artwork handed over by Home, or one looked up earlier this session, is used at once: the page then has nothing to wait for.
         let known = artwork ?? services.posterRatings.cachedHeroArtwork(for: preview)

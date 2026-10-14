@@ -30,6 +30,14 @@ final class PlayColourStore {
         return Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
     }
 
+    /// Reads a title's colour on the spot, when its page opens before its card's read has run. The poster is used only when it is already in
+    /// the image cache. The read is a few pixels, so it is done here, on the main thread, without a wait.
+    func readNow(identity: String, poster: URL?) {
+        guard entries[identity] == nil, let poster, let hex = Self.hex(from: poster) else { return }
+        entries[identity] = hex
+        save()
+    }
+
     /// Reads a title's colour from its poster, when the poster is already in the image cache because its card has shown it. The picture is
     /// read off the main thread, once per title; a title whose picture is not cached yet is read the next time its card appears.
     func read(identity: String, poster: URL?) async {
