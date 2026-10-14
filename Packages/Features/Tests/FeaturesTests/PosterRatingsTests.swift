@@ -264,6 +264,23 @@ import StremioKitTestSupport
 
     private let omdbSeason = Data(#"{"Response":"True","Season":"2","Episodes":[{"Episode":"1","imdbRating":"8.9"},{"Episode":"2","imdbRating":"N/A"}]}"#.utf8)
 
+    private let omdbTitle = Data(#"""
+    {"Response":"True","Title":"Hail Mary","imdbRating":"7.5","Metascore":"64",
+     "Ratings":[{"Source":"Internet Movie Database","Value":"7.5/10"},
+                {"Source":"Rotten Tomatoes","Value":"81%"},{"Source":"Metacritic","Value":"64/100"}]}
+    """#.utf8)
+
+    @Test @MainActor func rottenTomatoesAndMetacriticComeFromOMDbForATitleWithAKey() async throws {
+        let transport = StubTransport(data: omdbTitle)
+        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, omdb: OMDbRatings(client: makeClient(transport), apiKey: "test-key"))
+        let item = MetaPreview(id: "tt0944947", type: "movie", name: "Hail Mary")
+        _ = store.ratings(for: item, includeReviews: true)
+        try await waitUntil { store.ratings(for: item).rottenTomatoes != nil }
+        #expect(store.ratings(for: item).rottenTomatoes == 81)
+        #expect(store.ratings(for: item).metacritic == 64)
+        #expect(transport.callCount == 1, "one OMDb request for the title")
+    }
+
     @Test func episodeScoresComeFromOMDbOncePerSeasonAndAreCached() async throws {
         let cache = InMemoryRatingsCache()
         let transport = StubTransport(data: omdbSeason)

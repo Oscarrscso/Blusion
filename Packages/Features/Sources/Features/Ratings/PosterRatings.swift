@@ -162,6 +162,11 @@ public final class PosterRatingsStore {
         if tmdb != nil, ["movie", "series"].contains(item.type), source == nil {
             enqueue(item, provider: .tmdb, includeReviews: includeReviews)
         }
+        // OMDb gives Rotten Tomatoes and Metacritic for a title, when the user has a key and today's allowance is not spent.
+        if let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit, LetterboxdRatings.isIMDbID(item.id),
+           source == nil || source == .rottenTomatoes || source == .metacritic {
+            enqueue(item, provider: .omdb, includeReviews: includeReviews)
+        }
         return entry
     }
 
@@ -321,6 +326,9 @@ public final class PosterRatingsStore {
                         guard let tmdb else { return }
                         answer = CachedRating(rating: nil, fetchedAt: now(),
                                               reviews: try await tmdb.ratings(imdbID: lookup.item.id, type: lookup.item.type))
+                    case .omdb:
+                        guard let omdb else { return }
+                        answer = CachedRating(rating: nil, fetchedAt: now(), reviews: try await omdb.ratings(imdbID: lookup.item.id))
                     }
                     guard !Task.isCancelled else { return }
                     await cache.store(answer, for: lookup.cacheKey)
@@ -334,6 +342,7 @@ public final class PosterRatingsStore {
                     let mapped = AddonError.from(error)
                     logger.log(.warning, "\(lookup.provider.rawValue) lookup failed for \(lookup.item.identity): \(mapped.shortDescription)")
                     if lookup.provider == .tmdb { reviewServiceIssue = Self.issueText(for: mapped) }
+                    if lookup.provider == .omdb { pauseOMDbIfRefused(error) }
                 }
             }
         }
@@ -521,6 +530,7 @@ public final class PosterRatingsStore {
         switch provider {
         case .letterboxd: hasScore = cached.rating != nil
         case .tmdb: hasScore = cached.reviews?.tmdb != nil
+        case .omdb: hasScore = cached.reviews?.rottenTomatoes != nil || cached.reviews?.metacritic != nil
         }
         return hasScore ? 7 * 86_400 : 3_600
     }
@@ -538,10 +548,14 @@ public final class PosterRatingsStore {
                 let item = lookup.item
                 Task { await tmdb.rememberID(from: reviews, imdbID: item.id, type: item.type) }
             }
+        case .omdb:
+            // Only scores OMDb gave are set: a title it has none for keeps whatever the other providers said.
+            if let score = cached.reviews?.rottenTomatoes { entry.rottenTomatoes = score }
+            if let score = cached.reviews?.metacritic { entry.metacritic = score }
         }
     }
 
-    private enum Provider: String { case letterboxd, tmdb }
+    private enum Provider: String { case letterboxd, tmdb, omdb }
     private struct Lookup {
         let item: MetaPreview
         let provider: Provider
@@ -551,6 +565,7 @@ public final class PosterRatingsStore {
             switch provider {
             case .letterboxd: item.id
             case .tmdb: "tmdb:\(item.identity)"
+            case .omdb: "omdb:\(item.identity)"
             }
         }
     }

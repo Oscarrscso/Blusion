@@ -12,7 +12,9 @@ struct DetailRatings: View {
     var startsLoading = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+        // No spacing between the buttons and the reviews: the gap is the reviews' own top padding, added only once they show, so the screen
+        // does not move while the page loads.
+        VStack(alignment: .leading, spacing: 0) {
             RatingButtonsRow(item: model.detail.preview, startsLoading: startsLoading, openSite: model.openedReviews?.site,
                              isLoading: model.reviewsLoading) { site, url, isSearch in
                 model.toggleReviews(site, url: url, isSearch: isSearch)
@@ -20,6 +22,7 @@ struct DetailRatings: View {
             if let reviews = model.openedReviews {
                 DetailReviewsPanel(reviews: reviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                    onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
+                    .padding(.top, model.reviewsLoading ? 0 : Theme.Spacing.m)
             }
         }
     }
@@ -95,8 +98,9 @@ struct DetailReviewsPanel: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(maxWidth: .infinity)
-        // Collapsed while the page loads, so it opens only once the page is ready. The page keeps its full size underneath, so it still loads.
-        .frame(height: isLoading ? 1 : nil, alignment: .top)
+        // Takes no room and draws nothing while the page loads, so the screen does not move; the page keeps its full size inside, so it
+        // still loads. Once it has, the reviews open.
+        .frame(height: isLoading ? 0 : nil, alignment: .top)
         .clipped()
         .animation(.snappy(duration: 0.35), value: isLoading)
         .id(Self.scrollID)
