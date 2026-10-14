@@ -297,6 +297,8 @@ struct DetailView: View {
             guard pickedRequest == nil else { return }
             model.prefetchStreams(for: model.primaryRequest)
         }
+        // IMDb's reviews load in the background once the hero has settled, so a tap on the IMDb rating shows them at once.
+        .task(id: model.hasSettledHero) { preloadReviews() }
         // The picker's episode gets its season's scores asked for, since its card may never have come on screen, so the heading shows its score.
         .task(id: pickedRequest?.id) {
             guard let request = pickedRequest else { return }
@@ -305,9 +307,12 @@ struct DetailView: View {
         .onAppear {
             Task { await model.refreshUserState() }
             if opensFromSpotlight { hasSettled = true }
+            // Back on the page from a title opened from it: its IMDb reviews load again.
+            preloadReviews()
         }
         .onDisappear {
             model.releaseStreamPrefetch()
+            if let url = imdbReviewsURL { ReviewPreloader.shared.discard(url: url) }
             // A full-screen trailer covers the page without leaving it, so its player stays. Leaving the page stops the load and player.
             if !model.trailer.isFullScreen { model.trailer.cancel() }
         }
@@ -347,6 +352,22 @@ struct DetailView: View {
             showsTrailerCover = false
             model.trailer.cancel()
         }
+    }
+
+    // MARK: - Reviews
+
+    /// IMDb's reviews page for this title, which its IMDb rating opens. Nil for a title without an IMDb id.
+    private var imdbReviewsURL: URL? {
+        let item = model.detail.preview
+        guard LetterboxdRatings.isIMDbID(item.id) else { return nil }
+        return ReviewSite.imdb.reviewsURL(for: item)
+    }
+
+    /// Loads IMDb's reviews in the background, once the hero has settled and while the reviews are not already open.
+    private func preloadReviews() {
+        guard model.hasSettledHero, model.openedReviews == nil, let url = imdbReviewsURL else { return }
+        ReviewPreloader.shared.preload(site: .imdb, url: url, item: model.detail.preview,
+                                       width: max(0, (layoutWidth > 0 ? layoutWidth : 390) - contentMargin * 2))
     }
 
     // MARK: - Streams

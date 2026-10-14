@@ -25,8 +25,10 @@ import Testing
     function setTimeout(fn, ms) { intervals.push({ fn: fn, ms: ms, next: now + ms, repeats: false }); return intervals.length; }
     function clearInterval(id) { if (id) intervals[id - 1] = null; }
     function requestAnimationFrame(fn) { frames.push(fn); }
+    var performance = { now: function () { return now - 1000; } };
     var window = { innerHeight: 800, scrollY: 0, webkit: { messageHandlers: { painted: { postMessage: function (m) { posted = m; } } } } };
-    var page = { cards: 0, readyState: 'interactive' };
+    var page = { cards: 0, readyState: 'interactive', stylesLoaded: true };
+    var styleSheet = { get sheet() { return page.stylesLoaded ? {} : null; } };
     var location = { hostname: 'm.imdb.com' };
     function element(text, laidOut) {
       return { textContent: text, nextElementSibling: null, parentElement: null,
@@ -36,6 +38,7 @@ import Testing
     }
     var hiddenHeading = element('User reviews', false);
     var document = {
+      body: {},
       get readyState() { return page.readyState; },
       querySelector: function (selector) {
         if (selector !== '.review-date' || page.cards === 0) return null;
@@ -44,7 +47,7 @@ import Testing
         date.closest = function () { return card; };
         return date;
       },
-      querySelectorAll: function () { return [hiddenHeading]; }
+      querySelectorAll: function (selector) { return selector.indexOf('stylesheet') >= 0 ? [styleSheet] : [hiddenHeading]; }
     };
     function run(ms) {
       var end = now + ms;
@@ -94,6 +97,15 @@ import Testing
         let context = try page(cards: 1, host: "www.rottentomatoes.com")
         context.evaluateScript("run(1000)")
         #expect(posted(context) == nil, "it waits for its own heading")
+    }
+
+    /// IMDb's check starts with the page, before its style sheets have arrived: a card laid out without them is its bare text.
+    @Test func aCardIsNotReadyUntilThePagesStylesHaveArrived() throws {
+        let context = try page(cards: 0)
+        context.evaluateScript("page.stylesLoaded = false; page.cards = 1; run(500)")
+        #expect(posted(context) == nil)
+        context.evaluateScript("page.stylesLoaded = true; run(200)")
+        #expect(posted(context)?.reason == "card")
     }
 
     @Test func aCardThatArrivesLaterIsReadyWhenItArrives() throws {

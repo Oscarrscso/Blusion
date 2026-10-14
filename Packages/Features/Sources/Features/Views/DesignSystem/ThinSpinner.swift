@@ -19,16 +19,12 @@ struct ThinSpinner: View {
     }
 }
 
-/// The app's loading spinner everywhere: the thin ring Shuffle and the episode cards have, in place of the system's spoked one. It takes
-/// the system spinner's room for the current control size, so a spot that showed one keeps its layout, and the system spinner's grey
-/// unless `color` is given.
+/// The app's loading spinner everywhere: the thin ring, in place of the system's spoked one, always grey. It takes the system spinner's
+/// room for the current control size, so a spot that showed one keeps its layout.
 public struct Spinner: View {
-    var color: Color?
     @Environment(\.controlSize) private var controlSize
 
-    public init(color: Color? = nil) {
-        self.color = color
-    }
+    public init() {}
 
     /// The room the system spinner takes at this control size, the ring's diameter inside it, and the ring's line.
     private var metrics: (box: CGFloat, ring: CGFloat, line: CGFloat) {
@@ -45,7 +41,7 @@ public struct Spinner: View {
         ThinSpinner(lineWidth: metrics.line)
             .frame(width: metrics.ring, height: metrics.ring)
             .frame(width: metrics.box, height: metrics.box)
-            .foregroundStyle(color.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
+            .foregroundStyle(.secondary)
     }
 }
 #endif

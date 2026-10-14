@@ -52,6 +52,8 @@ struct DetailReviewsPanel: View {
     private static let phoneLandscapeHeight: CGFloat = 300
     #endif
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    /// The height a page loaded ahead is laid out at: the panel's, as it is drawn upright.
+    static let preloadHeight: CGFloat = pageHeight
 
     private var pageHeightNow: CGFloat {
         #if targetEnvironment(macCatalyst)
@@ -94,7 +96,7 @@ struct DetailReviewsPanel: View {
                 .id(reviews.site)
                 .frame(height: pageHeightNow)
                 .overlay {
-                    if isLoading { Spinner(color: .white).controlSize(.large) }
+                    if isLoading { Spinner().controlSize(.large) }
                 }
                 .accessibilityIdentifier("detail.reviewsWeb")
         }
@@ -130,7 +132,12 @@ enum ReviewTimingLog {
         let reason = timing["reason"] as? String ?? "?"
         let headingMs = timing["headingMs"] as? Int ?? -1
         let readyMs = timing["readyMs"] as? Int ?? -1
-        let line = "\(Date().formatted(.iso8601)) site=\(site?.name ?? "?") reason=\(reason) headingMs=\(headingMs) readyMs=\(readyMs)\n"
+        // From the page's start to ready, and from the tap to the panel opening (0 when the page was loaded ahead and ready at the tap).
+        let pageMs = timing["pageMs"] as? Int ?? -1
+        let tapMs = timing["tapMs"] as? Int ?? -1
+        let preloaded = timing["preloaded"] as? Bool ?? false
+        let line = "\(Date().formatted(.iso8601)) site=\(site?.name ?? "?") reason=\(reason) headingMs=\(headingMs) readyMs=\(readyMs) "
+            + "pageMs=\(pageMs) tapMs=\(tapMs) preloaded=\(preloaded)\n"
         guard let data = line.data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
             _ = try? handle.seekToEnd()
@@ -198,9 +205,17 @@ extension ReviewPageRules {
       var painting = false;
       var interval = null;
 
+      // Whether the page's style sheets have arrived, so what is laid out is the page as it is drawn, not its bare text. IMDb's script runs
+      // as the page starts, before they have.
+      function stylesLoaded() {
+        var links = document.querySelectorAll('link[rel="stylesheet"]');
+        for (var i = 0; i < links.length; i++) { if (!links[i].sheet) return false; }
+        return true;
+      }
+
       // IMDb's first review card, once it is laid out with its text: the card that holds the first review date. IMDb's pages only.
       function firstCard() {
-        if (!/(^|\.)imdb\.com$/.test(location.hostname)) return null;
+        if (!/(^|\.)imdb\.com$/.test(location.hostname) || !document.body || !stylesLoaded()) return null;
         var date = document.querySelector('.review-date');
         var card = date && date.closest('.ipc-list-card, article');
         if (!card || (card.textContent || '').trim().length < 60 || card.getClientRects().length === 0) return null;
@@ -243,7 +258,8 @@ extension ReviewPageRules {
         window.webkit.messageHandlers.painted.postMessage({
           reason: reason,
           headingMs: headingAt ? headingAt - started : -1,
-          readyMs: Date.now() - started
+          readyMs: Date.now() - started,
+          pageMs: Math.round(performance.now())
         });
       }
 
@@ -313,7 +329,8 @@ struct ReviewWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> WKWebView {
+    /// A web view set up for a site's page: its scripts, its look, and `handler` for the page's "painted" message. Nothing is loaded yet.
+    static func configuredWebView(site: ReviewSite, url: URL, item: MetaPreview, handler: WKScriptMessageHandler) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site, item: item),
                                                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -326,19 +343,46 @@ struct ReviewWebView: UIViewRepresentable {
             configuration.userContentController.addUserScript(WKUserScript(source: fallback, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
         // The panel opens once the page has painted (see `paintedScript`), so the spinner stays until the reader can see the page. A page with
-        // no reviews heading to wait for, such as a search, opens once it has loaded and painted, as Letterboxd's does.
+        // no reviews heading to wait for, such as a search, opens once it has loaded and painted, as Letterboxd's does. IMDb's check starts
+        // with the page: its reviews arrive with the page's first bytes, well before the page has finished loading its scripts.
         let waitsForHeading = site.waitsForReviewsHeading(at: url)
         configuration.userContentController.addUserScript(WKUserScript(source: waitsForHeading ? ReviewPageRules.paintedScript : ReviewPageRules.loadedScript,
-                                                                       injectionTime: .atDocumentEnd,
+                                                                       injectionTime: waitsForHeading && site == .imdb ? .atDocumentStart : .atDocumentEnd,
                                                                        forMainFrameOnly: true))
-        let coordinator = context.coordinator
-        coordinator.site = site
-        configuration.userContentController.add(coordinator, name: "painted")
+        configuration.userContentController.add(handler, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
         // IMDb's reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
         view.overrideUserInterfaceStyle = site == .imdb ? .dark : .unspecified
+        return view
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let coordinator = context.coordinator
+        coordinator.site = site
         coordinator.onLoaded = onLoaded
+        coordinator.tappedAt = Date()
+        // The page loaded ahead when the title opened: it is shown as it is, and the panel opens once it has drawn here.
+        if let preloaded = ReviewPreloader.shared.take(site: site, url: url) {
+            let view = preloaded.view
+            view.navigationDelegate = coordinator
+            coordinator.requested = url
+            coordinator.preloadedPage = preloaded.page
+            preloaded.relay.target = coordinator
+            if preloaded.relay.hasPainted {
+                coordinator.isReady = true
+                DispatchQueue.main.async { coordinator.openWhenDrawn(view, tapped: coordinator.tappedAt ?? Date()) }
+            } else if preloaded.page.failed {
+                // The load ahead failed: the page loads again now, as it would have without it.
+                coordinator.isReady = true
+                view.load(URLRequest(url: url))
+            } else {
+                // Still loading, or about to start once the content rules are in place: it carries on, and its message opens the panel.
+                coordinator.isReady = preloaded.page.started
+            }
+            return view
+        }
+        let view = Self.configuredWebView(site: site, url: url, item: item, handler: coordinator)
         view.navigationDelegate = coordinator
         coordinator.requested = url
         ReviewPageRules.attach(to: view) {
@@ -360,8 +404,10 @@ struct ReviewWebView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
-        // A compilation callback still waiting for the content rules must not reopen a dismissed page.
+        // A compilation callback still waiting for the content rules must not reopen a dismissed page, whether it is this view's own or
+        // the one of a page loaded ahead.
         coordinator.requested = nil
+        coordinator.preloadedPage?.wanted = false
         view.stopLoading()
         view.navigationDelegate = nil
         // WebKit keeps a message handler until it is removed, so the view's handler goes with it.
@@ -376,16 +422,123 @@ struct ReviewWebView: UIViewRepresentable {
         var isReady = false
         var onLoaded: () -> Void = {}
         var site: ReviewSite?
+        /// When the rating was tapped, for the timing log.
+        var tappedAt: Date?
+        /// The page loaded ahead that this view took, if it took one.
+        var preloadedPage: ReviewPreloader.Page?
 
         /// The load itself does not open the panel: the page has still to paint, and `painted` says so.
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {}
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { onLoaded() }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { onLoaded() }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            // Per open: why the reviews were ready, and how long the heading and the ready state took from the start of the page.
-            if let timing = message.body as? [String: Any] { ReviewTimingLog.append(timing, site: site) }
+            painted(message.body, preloaded: false)
+        }
+
+        /// The page says it is ready. Per open, the timing is logged: why it was ready, and how long the page and the tap took.
+        func painted(_ body: Any, preloaded: Bool) {
+            if var timing = body as? [String: Any] {
+                timing["tapMs"] = tappedAt.map { Int(Date().timeIntervalSince($0) * 1000) } ?? -1
+                timing["preloaded"] = preloaded
+                ReviewTimingLog.append(timing, site: site)
+            }
             onLoaded()
         }
+
+        /// A page loaded ahead, ready before the tap: the panel opens once the page has drawn two frames in its new place, so it never
+        /// opens on a blank frame. A quarter of a second does instead, should frames not be drawn.
+        func openWhenDrawn(_ view: WKWebView, tapped: Date) {
+            var opened = false
+            let open = { [weak self] in
+                guard !opened, let self else { return }
+                opened = true
+                self.painted(["reason": "preloaded", "tapMs": 0], preloaded: true)
+            }
+            view.callAsyncJavaScript("await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); return 1;",
+                                     arguments: [:], in: nil, in: .page) { _ in open() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { open() }
+        }
+    }
+}
+
+/// Passes a preloaded page's "painted" message on to the panel that shows it, once there is one, and remembers that it came, so a page
+/// that was ready before the tap opens at once.
+@MainActor
+final class ReviewPaintRelay: NSObject, WKScriptMessageHandler {
+    weak var target: ReviewWebView.Coordinator?
+    private(set) var hasPainted = false
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        hasPainted = true
+        target?.painted(message.body, preloaded: true)
+    }
+}
+
+/// IMDb's reviews for the title on screen, loaded in the background once its page has settled, so a tap on its IMDb rating shows them
+/// at once instead of waiting for IMDb's heavy page. One page at a time: another title's replaces it, and leaving the title drops it.
+@MainActor
+final class ReviewPreloader {
+    static let shared = ReviewPreloader()
+
+    /// One page loaded ahead: whether its load has started (it waits for the content rules), whether it failed, and whether it is still
+    /// wanted, by this preloader or by the panel that took it.
+    final class Page: NSObject, WKNavigationDelegate {
+        let site: ReviewSite
+        let url: URL
+        let view: WKWebView
+        let relay: ReviewPaintRelay
+        var started = false
+        var failed = false
+        var wanted = true
+
+        init(site: ReviewSite, url: URL, view: WKWebView, relay: ReviewPaintRelay) {
+            self.site = site
+            self.url = url
+            self.view = view
+            self.relay = relay
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed = true }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failed = true }
+    }
+
+    private var page: Page?
+
+    /// Starts loading `url` for `site`, unless it is already the page loaded. The page is laid out at about the panel's size, so it is
+    /// drawn as it will be shown.
+    func preload(site: ReviewSite, url: URL, item: MetaPreview, width: CGFloat) {
+        if let page, page.site == site, page.url == url { return }
+        discard()
+        let relay = ReviewPaintRelay()
+        let view = ReviewWebView.configuredWebView(site: site, url: url, item: item, handler: relay)
+        view.frame = CGRect(x: 0, y: 0, width: max(320, width), height: DetailReviewsPanel.preloadHeight)
+        let page = Page(site: site, url: url, view: view, relay: relay)
+        view.navigationDelegate = page
+        self.page = page
+        // A page taken by the panel before its rules were in place still starts here; one that was dropped does not.
+        ReviewPageRules.attach(to: view) {
+            guard page.wanted else { return }
+            page.started = true
+            if let coordinator = relay.target { coordinator.isReady = true }
+            view.load(URLRequest(url: url))
+        }
+    }
+
+    /// The page loaded for `site` at `url`, handed over to the panel that shows it; nil when another page, or none, was loaded.
+    func take(site: ReviewSite, url: URL) -> (view: WKWebView, relay: ReviewPaintRelay, page: Page)? {
+        guard let page, page.site == site, page.url == url else { return nil }
+        self.page = nil
+        return (page.view, page.relay, page)
+    }
+
+    /// Drops the loaded page: all of them, or only the one at `url`.
+    func discard(url: URL? = nil) {
+        guard let page, url == nil || page.url == url else { return }
+        page.wanted = false
+        page.view.stopLoading()
+        page.view.navigationDelegate = nil
+        page.view.configuration.userContentController.removeScriptMessageHandler(forName: "painted")
+        self.page = nil
     }
 }
 #endif

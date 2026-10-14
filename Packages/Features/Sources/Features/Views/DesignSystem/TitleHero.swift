@@ -385,7 +385,7 @@ struct HeroPicture: View {
                                 .tint(.white)
                                 .accessibilityHidden(true)
                         } else {
-                            Spinner(color: .white)
+                            Spinner()
                                 .controlSize(.large)
                                 .accessibilityHidden(true)
                         }

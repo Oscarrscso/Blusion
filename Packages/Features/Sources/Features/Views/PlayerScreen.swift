@@ -41,7 +41,7 @@ struct PlayerContent: View {
             surface
             SubtitleOverlay(text: model.cueText, controlsVisible: model.controlsVisible)
             if model.isBuffering && model.failureMessage == nil {
-                Spinner(color: .white).controlSize(.large)
+                Spinner().controlSize(.large)
                     .frame(width: 64, height: 64).glassEffect(.regular, in: .circle)
                     .accessibilityIdentifier("player.buffering")
             }

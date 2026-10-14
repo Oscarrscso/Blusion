@@ -108,8 +108,8 @@ struct DetailEpisodes: View {
                 .opacity(isShuffling ? 0 : 1)
                 .overlay {
                     if isShuffling {
-                        ThinSpinner()
-                            .frame(width: 16, height: 16)
+                        Spinner()
+                            .controlSize(.small)
                             .transition(.opacity)
                     }
                 }
@@ -273,9 +273,8 @@ private struct EpisodeRow: View {
                 if isLoadingStreams {
                     ZStack {
                         Color.black.opacity(0.35)
-                        ThinSpinner(lineWidth: 2.5)
-                            .frame(width: 30, height: 30)
-                            .foregroundStyle(.white)
+                        Spinner()
+                            .controlSize(.large)
                     }
                     .transition(.opacity)
                     .accessibilityElement(children: .ignore)

@@ -147,7 +147,7 @@ struct CircleActionButton: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .opacity(isLoading ? 0 : 1)
                 if isLoading {
-                    Spinner(color: .white.opacity(0.6))
+                    Spinner()
                         .controlSize(.small)
                         .transition(.opacity)
                 }
