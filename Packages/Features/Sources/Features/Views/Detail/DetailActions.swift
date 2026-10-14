@@ -97,7 +97,7 @@ struct DetailActions: View {
                 .fill(Theme.surfaceStrong)
                 #if targetEnvironment(macCatalyst)
                 // Play keeps its own width on the Mac, so the placeholder holds about the width a title's Play takes.
-                .frame(width: 200, height: CircleActionButton.diameter)
+                .frame(width: 280, height: CircleActionButton.diameter)
                 #else
                 .frame(height: CircleActionButton.diameter)
                 #endif
@@ -142,7 +142,9 @@ struct DetailActions: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 #if targetEnvironment(macCatalyst)
-                // On the Mac, Play keeps its own width rather than stretching across the page.
+                // On the Mac, Play keeps its own width rather than stretching across the page, and is at least 280 points wide.
+                // Its height does not change.
+                .frame(minWidth: 280)
                 .fixedSize()
                 #else
                 .frame(maxWidth: .infinity)

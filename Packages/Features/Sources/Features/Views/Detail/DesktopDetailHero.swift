@@ -78,7 +78,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
                 .init(color: .clear, location: 1),
             ], startPoint: .leading, endPoint: .trailing)
             .allowsHitTesting(false)
-            BottomFade(length: 0.6)
+            // The fade starts lower than it did, so more of the picture shows above it before it fades into the page.
+            BottomFade(length: 0.42)
             textColumn
         }
         // The full width of the page, from the sidebar's edge to the window's.
