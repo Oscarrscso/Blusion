@@ -168,7 +168,7 @@ struct CapabilityBadges: View {
     }
 }
 
-/// "★ 8.4" in quiet semibold white, for a place where one number is enough. Has no backdrop of its own: it assumes dark artwork
+/// "★ 84" in quiet semibold white, for a place where one number is enough. Has no backdrop of its own: it assumes dark artwork
 /// or a fade behind it. Posters carry `PosterRatingsOverlay` instead (IMDb and Letterboxd).
 struct RatingBadge: View {
     let rating: Double
@@ -181,13 +181,13 @@ struct RatingBadge: View {
         HStack(spacing: 3) {
             Image(systemName: "star.fill")
                 .font(.system(size: 9, weight: .bold))
-            Text(rating.formatted(.number.precision(.fractionLength(1))))
+            Text(ScoreText.wholeScore(rating))
         }
         .font(.caption.weight(.semibold))
         .monospacedDigit()
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Rating \(rating.formatted(.number.precision(.fractionLength(1))))")
+        .accessibilityLabel("Rating \(ScoreText.wholeScore(rating))")
     }
 }
 

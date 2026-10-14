@@ -266,7 +266,7 @@ struct WidgetFieldPanel: View {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: 0)
-                Text(value == neutral ? "Any" : value.formatted(.number.precision(.fractionLength(0...1))))
+                Text(value == neutral ? "Any" : ScoreText.wholeScore(value))
                     .font(.subheadline)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)

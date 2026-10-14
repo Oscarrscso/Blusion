@@ -374,8 +374,8 @@ public enum LibraryFiltering {
         return low...high
     }
 
-    /// "8" for 8.0 and "7.5" for 7.5, the way the rating picker and chips show a threshold.
+    /// "80" for 8.0 and "75" for 7.5: the threshold as a whole score out of 100, the way the rating picker and chips show it.
     public static func ratingText(_ value: Double) -> String {
-        value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
+        ScoreText.wholeScore(value)
     }
 }

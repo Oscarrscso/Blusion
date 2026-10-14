@@ -73,12 +73,27 @@ import Testing
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Warriors") == TMDbDiscoverQuery())
     }
 
+    @Test func adultAnimationNamesTheKeywordAndLeavesOutAnimeAndHentai() {
+        // TMDb's "adult animation" keyword is what Fusion's list is built on; The Simpsons carries it where its genre alone does not reach the list.
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation")
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")],
+                                 keywords: [.init(id: 161919, name: "adult animation")],
+                                 excludedKeywords: [.init(id: 210024, name: "anime"), .init(id: 198385, name: "hentai")],
+                                 excludedGenres: [.init(id: 10751, name: "Family")], spansBothKinds: true))
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation").keywords.isEmpty, "a plain animation list names no keyword")
+        #expect(TMDbDiscoverQuery.inferred(fromTitle: "Non-Adult Animation").keywords.isEmpty, "a negated adult animation names no keyword")
+    }
+
     @Test func adultAnimationLeavesOutTheFamilyTitlesAndForTVTheKidsShows() {
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation")
-            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")], excludedGenres: [.init(id: 10751, name: "Family")],
-                                 spansBothKinds: true))
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation")],
+                                 keywords: [.init(id: 161919, name: "adult animation")],
+                                 excludedKeywords: [.init(id: 210024, name: "anime"), .init(id: 198385, name: "hentai")],
+                                 excludedGenres: [.init(id: 10751, name: "Family")], spansBothKinds: true))
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult Animation TV")
             == TMDbDiscoverQuery(kind: .series, genres: [.init(id: 16, name: "Animation")],
+                                 keywords: [.init(id: 161919, name: "adult animation")],
+                                 excludedKeywords: [.init(id: 210024, name: "anime"), .init(id: 198385, name: "hentai")],
                                  excludedGenres: [.init(id: 10751, name: "Family"), .init(id: 10762, name: "Kids")]))
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Adult-Animation Movies").excludedGenres == [.init(id: 10751, name: "Family")])
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Animation").excludedGenres.isEmpty)
@@ -91,7 +106,10 @@ import Testing
     @Test func aFamilyGenreTheTitleNamesIsNotLeftOut() {
         // Naming animation with neither films nor shows asks for both kinds, so the list holds shows as well (see `spansBothKinds`).
         #expect(TMDbDiscoverQuery.inferred(fromTitle: "Family Adult Animation")
-            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation"), .init(id: 10751, name: "Family")], spansBothKinds: true))
+            == TMDbDiscoverQuery(genres: [.init(id: 16, name: "Animation"), .init(id: 10751, name: "Family")],
+                                 keywords: [.init(id: 161919, name: "adult animation")],
+                                 excludedKeywords: [.init(id: 210024, name: "anime"), .init(id: 198385, name: "hentai")],
+                                 spansBothKinds: true))
     }
 
     @Test func aTitleReadFromFusionWritesBackAsBlusionsQuery() throws {

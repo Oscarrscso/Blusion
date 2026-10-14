@@ -538,7 +538,12 @@ private let bigSample = #"""
             return
         }
         // An adult animation row names neither films nor shows, so it holds both (see `spansBothKinds`).
-        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], excludedGenres: [family], spansBothKinds: true)))
+        // A saved list is given the keyword and the exclusions its title names, as a list saved before them is.
+        let adultKeyword = TMDbDiscoverQuery.Named(id: 161919, name: "adult animation")
+        let anime = TMDbDiscoverQuery.Named(id: 210024, name: "anime")
+        let hentai = TMDbDiscoverQuery.Named(id: 198385, name: "hentai")
+        #expect(adult.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation], keywords: [adultKeyword], excludedKeywords: [anime, hentai],
+                                                                excludedGenres: [family], spansBothKinds: true)))
         #expect(popular.source == .tmdbDiscover(TMDbDiscoverQuery(genres: [animation])))
     }
 

@@ -120,8 +120,8 @@ public struct Video: Sendable, Equatable, Hashable, Codable, Identifiable {
         self.ratingSource = usable == nil ? nil : (ratingSource ?? .addon)
     }
 
-    /// `8.4`, or nil without a usable rating.
-    public var ratingText: String? { rating.map { String(format: "%.1f", $0) } }
+    /// `84`, or nil without a usable rating: the score out of 100, never a decimal.
+    public var ratingText: String? { rating.map { String(Int(($0 * 10).rounded())) } }
 
     /// When the episode first aired, from `released`: ISO 8601, usually with fractional seconds. Nil when the addon gave no date
     /// or one that does not read.

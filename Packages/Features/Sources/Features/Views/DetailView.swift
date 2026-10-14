@@ -290,6 +290,11 @@ struct DetailView: View {
             guard pickedRequest == nil else { return }
             model.prefetchStreams(for: model.primaryRequest)
         }
+        // The picker's episode gets its season's scores asked for, since its card may never have come on screen, so the heading shows its score.
+        .task(id: pickedRequest?.id) {
+            guard let request = pickedRequest else { return }
+            await model.prepareEpisodeScore(for: request)
+        }
         .onAppear {
             Task { await model.refreshUserState() }
             if opensFromSpotlight { hasSettled = true }

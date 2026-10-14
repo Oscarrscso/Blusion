@@ -175,7 +175,7 @@ private struct BannerFeature: View {
     }
 
     private var rating: String? {
-        showsRating ? item.imdbRating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" } : nil
+        showsRating ? item.imdbRating.map { "★ \(ScoreText.wholeScore($0))" } : nil
     }
 }
 

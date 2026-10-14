@@ -49,11 +49,19 @@ extension TMDbDiscoverQuery {
             minimumVotes = 100
         }
 
-        // Adult animation has no genre of its own, so it is animation without the family titles, and for TV without the kids' shows too.
+        // Adult animation is animation TMDb tags "adult animation", as Fusion lists it: without the family titles (and for TV the kids'
+        // shows), and without the anime and hentai the keyword also reaches. The genre alone leaves out shows such as The Simpsons.
         var excludedGenres: [Named] = []
-        if namesAdultAnimation(title) { excludedGenres = adultAnimationExclusions(kind, namedGenres: genres) }
+        var keywords: [Named] = []
+        var excludedKeywords: [Named] = []
+        if namesAdultAnimation(title) {
+            excludedGenres = adultAnimationExclusions(kind, namedGenres: genres)
+            keywords = [TMDbDiscoverQuery.adultAnimationKeyword]
+            excludedKeywords = TMDbDiscoverQuery.adultAnimationExcludedKeywords
+        }
 
-        return TMDbDiscoverQuery(kind: kind, ordering: ordering, genres: genres, minimumScore: minimumScore, minimumVotes: minimumVotes,
+        return TMDbDiscoverQuery(kind: kind, ordering: ordering, genres: genres, keywords: keywords, excludedKeywords: excludedKeywords,
+                                 minimumScore: minimumScore, minimumVotes: minimumVotes,
                                  releasedFrom: releasedFrom, releasedTo: releasedTo, excludedGenres: excludedGenres,
                                  spansBothKinds: !namesTV && !namesFilms && (has("animation") || has("animated")))
     }
@@ -67,6 +75,10 @@ extension TMDbDiscoverQuery {
             return index == 0 || !["no", "not", "non", "without"].contains(words[index - 1])
         }
     }
+
+    /// TMDb's "adult animation" keyword, which Fusion's adult animation list is built on, and the keywords it leaves out: anime and hentai.
+    static let adultAnimationKeyword = Named(id: 161919, name: "adult animation")
+    static let adultAnimationExcludedKeywords = [Named(id: 210024, name: "anime"), Named(id: 198385, name: "hentai")]
 
     /// The genres adult animation leaves out for a list of this kind: the family titles, and for TV the kids' shows as well. A genre the
     /// list already names is not left out.
@@ -158,9 +170,16 @@ extension WidgetSource {
         switch self {
         case .unsupported(let kind) where kind == "tmdbDiscover":
             return .tmdbDiscover(TMDbDiscoverQuery.inferred(fromTitle: title))
-        case .tmdbDiscover(var query) where query.excludedGenres.isEmpty && TMDbDiscoverQuery.namesAdultAnimation(title):
-            // A list saved before its title's adult animation left out the family titles is given them, as a Fusion title reads them.
-            query.excludedGenres = TMDbDiscoverQuery.adultAnimationExclusions(query.kind, namedGenres: query.genres)
+        case .tmdbDiscover(var query) where (query.excludedGenres.isEmpty || query.keywords.isEmpty) && TMDbDiscoverQuery.namesAdultAnimation(title):
+            // A list saved before its title's adult animation left out the family titles, or before it named the keyword, is given them,
+            // as a Fusion title reads them.
+            if query.excludedGenres.isEmpty {
+                query.excludedGenres = TMDbDiscoverQuery.adultAnimationExclusions(query.kind, namedGenres: query.genres)
+            }
+            if query.keywords.isEmpty {
+                query.keywords = [TMDbDiscoverQuery.adultAnimationKeyword]
+                query.excludedKeywords = TMDbDiscoverQuery.adultAnimationExcludedKeywords
+            }
             return .tmdbDiscover(query)
         default:
             return self

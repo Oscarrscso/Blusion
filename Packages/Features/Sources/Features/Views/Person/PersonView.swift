@@ -325,7 +325,7 @@ private struct CreditRow: View {
         if isUnreleased {
             Badge("Unreleased", style: .neutral)
         } else if let average = credit.voteAverage {
-            Label(average.formatted(.number.precision(.fractionLength(1))), systemImage: "star.fill")
+            Label(ScoreText.wholeScore(average), systemImage: "star.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
         }

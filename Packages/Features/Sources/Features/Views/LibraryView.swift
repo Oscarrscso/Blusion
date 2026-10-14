@@ -172,7 +172,7 @@ struct LibraryView: View {
 
 }
 
-/// The minimum rating, out of 10. Each title is rated by its best available score, so the menu names no site.
+/// The minimum rating, shown out of 100. Each title is rated by its best available score, so the menu names no site.
 struct RatingPicker: View {
     @Binding var threshold: Double?
 

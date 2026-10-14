@@ -575,16 +575,16 @@ private struct NoITunesTransport: HTTPTransport {
         let preview = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008", imdbRating: 9.0,
                                   genres: ["Action", "Crime", "Drama"], runtime: "152 min")
         #expect(DetailViewModel.heroMetaParts(for: preview, certification: "PG-13")
-                == ["2008", "Action", "Crime", "PG-13", "152 min", "★ 9.0"], "year, two genres, certification, runtime, rating")
+                == ["2008", "Action", "Crime", "PG-13", "152 min", "★ 90"], "year, two genres, certification, runtime, rating")
         #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil)
-                == ["2008", "Action", "Crime", nil, "152 min", "★ 9.0"], "the spotlight has no certification")
+                == ["2008", "Action", "Crime", nil, "152 min", "★ 90"], "the spotlight has no certification")
     }
 
     @Test func heroMetaPartsKeepMissingPartsAsNil() {
         let bare = MetaPreview(id: "tt1", type: "movie", name: "X")
         #expect(DetailViewModel.heroMetaParts(for: bare, certification: nil) == [nil, nil, nil, nil], "nothing known adds no text")
         let rated = MetaPreview(id: "tt2", type: "movie", name: "Y", imdbRating: 7)
-        #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 7.0", "a whole rating keeps one decimal")
+        #expect(DetailViewModel.heroMetaParts(for: rated, certification: nil).last == "★ 70", "a whole rating is a whole score out of 100")
     }
 
     @Test func heroMetaGenresAreTheOnesTheLineShows() {
@@ -592,7 +592,7 @@ private struct NoITunesTransport: HTTPTransport {
                                   genres: ["Drama", "Crime", "Thriller"], runtime: "142 min")
         #expect(DetailViewModel.heroMetaGenres(for: preview) == ["Drama", "Crime"], "the first two, which the line drops first")
         #expect(DetailViewModel.heroMetaParts(for: preview, certification: "R")
-                == ["1994", "Drama", "Crime", "R", "142 min", "★ 9.3"], "the same genres sit in the line")
+                == ["1994", "Drama", "Crime", "R", "142 min", "★ 93"], "the same genres sit in the line")
     }
 
     @Test func theMetaLineIsBuiltFromTheDetailsTheSpotlightKeeps() async throws {
@@ -616,9 +616,9 @@ private struct NoITunesTransport: HTTPTransport {
 
     @Test func heroMetaPartsShowIMDbsOwnScoreWhenTheCallerHasOne() {
         let preview = MetaPreview(id: "tt0468569", type: "movie", name: "The Dark Knight", releaseInfo: "2008", imdbRating: 9.0)
-        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: 8.4).last == "★ 8.4",
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: 8.4).last == "★ 84",
                 "IMDb's own score replaces the catalog's")
-        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: nil).last == "★ 9.0",
+        #expect(DetailViewModel.heroMetaParts(for: preview, certification: nil, imdbRating: nil).last == "★ 90",
                 "without one, the catalog's score")
     }
 

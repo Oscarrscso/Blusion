@@ -462,6 +462,14 @@ public final class DetailViewModel {
         return score(for: video)?.text
     }
 
+    /// The stream picker's episode asks for its season's scores the same way its card would, so its heading gets the score even when
+    /// the card never came on screen (Play on a season the list is not showing).
+    public func prepareEpisodeScore(for request: StreamRequest) async {
+        guard isSeries, let season = request.season, let episode = request.episode,
+              let video = detail.videos.first(where: { $0.season == season && $0.episode == episode }) else { return }
+        await episodeAppeared(video)
+    }
+
     /// The episode Shuffle has picked, highlighted in the episode list. It is shown, not played: Play still starts a stream.
     public private(set) var highlightedEpisodeID: String?
 
@@ -494,10 +502,10 @@ public final class DetailViewModel {
     public var portraitHidesLogo: Bool { tmdbArtwork?.portraitHidesLogo ?? false }
 
     /// The metadata line both heroes show, for `MetaLine`: year, the first two genres, certification, runtime and the IMDb rating, in that
-    /// order ("2008", "Drama", "Crime", "PG-13", "152 min", "★ 9.0"). Missing parts
+    /// order ("2008", "Drama", "Crime", "PG-13", "152 min", "★ 90"). Missing parts
     /// stay nil and `MetaLine` leaves them out. The score is IMDb's own when the caller has it (`imdbRating`), else the catalog's.
     nonisolated public static func heroMetaParts(for preview: MetaPreview, certification: String?, imdbRating: Double? = nil) -> [String?] {
-        let rating = (imdbRating ?? preview.imdbRating).map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }
+        let rating = (imdbRating ?? preview.imdbRating).map { "★ \(ScoreText.wholeScore($0))" }
         let genres = DetailViewModel.heroMetaGenres(for: preview).map { Optional($0) }
         return [preview.releaseInfo] + genres + [certification, preview.runtime, rating]
     }
@@ -600,7 +608,7 @@ public final class DetailViewModel {
     }
 
     public var subtitle: String {
-        [detail.preview.releaseInfo, detail.preview.runtime, detail.preview.imdbRating.map { String(format: "★ %.1f", $0) }]
+        [detail.preview.releaseInfo, detail.preview.runtime, detail.preview.imdbRating.map { "★ \(ScoreText.wholeScore($0))" }]
             .compactMap { $0 }.joined(separator: " · ")
     }
 

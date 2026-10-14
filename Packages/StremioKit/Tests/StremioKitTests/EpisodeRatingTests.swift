@@ -8,7 +8,7 @@ import Testing
     @Test func readsImdbRatingAsNumberOrString() throws {
         #expect(try video(#"{"id":"tt1:1:1","imdbRating":8.4}"#).rating == 8.4)
         #expect(try video(#"{"id":"tt1:1:1","imdbRating":"7.9"}"#).rating == 7.9)
-        #expect(try video(#"{"id":"tt1:1:1","rating":9}"#).ratingText == "9.0")
+        #expect(try video(#"{"id":"tt1:1:1","rating":9}"#).ratingText == "90")
     }
 
     @Test func missingOrNonsenseRatingsAreNil() throws {

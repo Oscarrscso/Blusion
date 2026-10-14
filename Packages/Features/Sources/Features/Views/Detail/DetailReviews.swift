@@ -226,7 +226,7 @@ private struct ReviewCard: View {
                         // The stars keep their width; the name takes what is left, and wraps or cuts before the stars are squeezed.
                         .fixedSize()
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Rating \(stars.formatted(.number.precision(.fractionLength(0...1)))) out of 5 stars")
+                        .accessibilityLabel("Rating \(ScoreText.wholeScore(rating)) out of 100")
                     }
                 }
                 // The gap under the header belongs to the header, so a tap there folds or opens the card as before.
