@@ -12,6 +12,8 @@ struct DetailActions: View {
     var showsActions = true
     /// True while the streams Play asked for are on their way: Play shows a spinner in place of its label, as the trailer button does.
     var isLoadingStreams = false
+    /// True while Shuffle's or an episode's streams load: Play takes no taps then, and looks exactly as it does otherwise.
+    var blocksPlay = false
     /// False leaves the metadata line out, for a page that sets the line itself, above its overview and ratings.
     var showsMetaLine = true
     /// The main action's tap: the page shows this title's streams.
@@ -89,6 +91,7 @@ struct DetailActions: View {
                     .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             }
             .buttonStyle(PrimaryActionButtonStyle(minWidth: Self.playMinWidth))
+            .allowsHitTesting(!blocksPlay)
             // The title's colour from its poster is the button's background, behind the glass. Not a tint: a tint also colours the label.
             // A title opened without its card keeps the plain style; the colour is not animated in.
             .background(PlayColourStore.shared.colour(for: model.preview.identity) ?? Color.clear, in: Capsule())

@@ -11,12 +11,14 @@ struct DetailEpisodes: View {
     let contentMargin: CGFloat
     /// True while an episode's menu is open, so the page can blur behind it. Cleared when this view leaves the screen.
     @Binding var isHoldingEpisode: Bool
-    /// Shuffle and a tapped episode hand their episode to the page's stream flow, the one Play uses: a spinner until the streams are
-    /// ready, then the streams take the details' place.
-    let play: (StreamRequest) -> Void
-    /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and the episodes wait then, since a tap would
-    /// call that lookup off or start a second one.
+    /// Shuffle and a tapped episode hand their episode to the page's stream flow, the one Play uses, saying which of them asked: the
+    /// streams take the details' place once they are ready.
+    let play: (StreamRequest, StreamTrigger) -> Void
+    /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and the episodes take no taps then, since a tap
+    /// would call that lookup off or start a second one.
     var loadingRequest: StreamRequest?
+    /// What asked for the loading streams. Only that control shows a spinner: Shuffle in place of its symbol, an episode on its card.
+    var loadingTrigger: StreamTrigger?
 
     private var isLoadingStreams: Bool { loadingRequest != nil }
     @Environment(\.layoutMetrics) private var metrics
@@ -93,22 +95,33 @@ struct DetailEpisodes: View {
         .accessibilityIdentifier("detail.seasonPicker")
     }
 
-    /// Shuffle, beside the season picker: a random episode that has aired, whose streams show as Play's do. It is dimmed while there is
-    /// nothing to pick, and off while streams are loading. Only shown for a series, as this whole list is.
+    /// Shuffle, beside the season picker: a random episode that has aired, whose streams show as Play's do. While they load, a thin
+    /// spinner takes the place of its symbol, at the same size. It is dimmed while there is nothing to pick, and takes no taps while any
+    /// streams are loading. Only shown for a series, as this whole list is.
     private var shuffleButton: some View {
-        let isReady = model.canShuffle && !isLoadingStreams
+        let isShuffling = loadingTrigger == .shuffle
         return Button {
-            if let request = model.shuffledRequest() { play(request) }
+            if let request = model.shuffledRequest() { play(request, .shuffle) }
         } label: {
             Image(systemName: "shuffle")
                 .font(.body.weight(.semibold))
+                .opacity(isShuffling ? 0 : 1)
+                .overlay {
+                    if isShuffling {
+                        ThinSpinner()
+                            .frame(width: 16, height: 16)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.smooth(duration: 0.2), value: isShuffling)
                 // The same grey as the trailer's symbol beside the title's other buttons.
                 .foregroundStyle(.white.opacity(0.6))
         }
         .glassCircleButton(.regular)
         .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
-        .disabled(!isReady)
-        .opacity(isReady ? 1 : 0.4)
+        .disabled(!model.canShuffle)
+        .opacity(model.canShuffle ? 1 : 0.4)
+        .allowsHitTesting(!isLoadingStreams)
         .titleTapHaptic()
         .help("Shuffle")
         .accessibilityLabel("Shuffle")
@@ -147,14 +160,16 @@ struct DetailEpisodes: View {
         let airsLater = !video.hasAired()
         let request = model.request(for: video)
         return Button {
-            // As Shuffle does: the episode's streams load on this page, with a spinner on its card, and replace the details once ready.
-            // One lookup at a time, so a second tap does not call it off or open another.
+            // As Shuffle does: the episode's streams load on this page, with a spinner on its card only, and replace the details once
+            // ready. One lookup at a time, so a second tap does not call it off or open another.
             guard !isLoadingStreams else { return }
-            play(request)
+            play(request, .episode)
         } label: {
-            episodeCard(video, width: width, airsLater: airsLater, isLoadingStreams: loadingRequest?.id == request.id)
+            episodeCard(video, width: width, airsLater: airsLater,
+                        isLoadingStreams: loadingTrigger == .episode && loadingRequest?.id == request.id)
         }
         .buttonStyle(PressableCardStyle())
+        .allowsHitTesting(!isLoadingStreams)
         // An episode that has not aired cannot be opened: its card shows the air date instead.
         .disabled(airsLater)
         .titleTapHaptic()
@@ -258,9 +273,12 @@ private struct EpisodeRow: View {
                 if isLoadingStreams {
                     ZStack {
                         Color.black.opacity(0.35)
-                        ProgressView().controlSize(.large).tint(.white)
+                        ThinSpinner(lineWidth: 2.5)
+                            .frame(width: 30, height: 30)
+                            .foregroundStyle(.white)
                     }
                     .transition(.opacity)
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Loading streams")
                 }
             }

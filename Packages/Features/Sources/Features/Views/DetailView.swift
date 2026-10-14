@@ -15,6 +15,8 @@ struct DetailView: View {
     @State private var isHoldingEpisode = false
     /// The streams the page shows in place of its details after Play; nil shows the details.
     @State private var pickedRequest: StreamRequest?
+    /// What asked for the picked streams: only that control shows a spinner while they load.
+    @State private var streamTrigger: StreamTrigger?
     /// The item a Continue Watching card opens the page with. It is picked once the hero has settled (see the lookup task below), so the
     /// picker never loads ahead of the hero's images.
     @State private var pendingStreams: StreamRequest?
@@ -120,8 +122,9 @@ struct DetailView: View {
                         DesktopDetailHero(model: model, size: geometry.size, contentMargin: contentMargin, pictureSlot: pictureSlot,
                                           logoSlot: logoSlot, isRevealed: isHeroRevealed, showsDetails: !showsStreams) {
                             DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
-                                          showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
-                                          showsMetaLine: false, play: showStreams)
+                                          showsActions: !showsStreams, isLoadingStreams: loadingTrigger == .play,
+                                          blocksPlay: loadingTrigger != nil && loadingTrigger != .play,
+                                          showsMetaLine: false, play: { showStreams($0, from: .play) })
                         } trailer: { width in
                             DetailTrailerPanel(model: model, width: width, playerIsCovered: playerIsCovered)
                         } synopsis: {
@@ -137,8 +140,9 @@ struct DetailView: View {
                                    logoSlot: logoSlot, isRevealed: isHeroRevealed, hidesLogo: hidesLogo,
                                    showsDetails: !showsStreams) {
                             DetailActions(model: model, isConfirmingUnmarkShow: $isConfirmingUnmarkShow,
-                                          showsActions: !showsStreams, isLoadingStreams: pickedRequest != nil && !streamsAreReady,
-                                          play: showStreams)
+                                          showsActions: !showsStreams, isLoadingStreams: loadingTrigger == .play,
+                                          blocksPlay: loadingTrigger != nil && loadingTrigger != .play,
+                                          play: { showStreams($0, from: .play) })
                         } trailer: {
                             DetailTrailerPanel(model: model, width: trailerWidth(in: geometry.size), playerIsCovered: playerIsCovered)
                         } synopsis: {
@@ -183,8 +187,8 @@ struct DetailView: View {
                                     .accessibilityHidden(true)
                                 if model.isSeries {
                                     DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin,
-                                                   isHoldingEpisode: $isHoldingEpisode, play: showStreams,
-                                                   loadingRequest: streamsAreReady ? nil : pickedRequest)
+                                                   isHoldingEpisode: $isHoldingEpisode, play: { showStreams($0, from: $1) },
+                                                   loadingRequest: streamsAreReady ? nil : pickedRequest, loadingTrigger: loadingTrigger)
                                         .padding(.top, metrics.titleRatingsGap)
                                 }
                                 VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
@@ -286,6 +290,8 @@ struct DetailView: View {
             if let request = pendingStreams {
                 pendingStreams = nil
                 pickedRequest = request
+                // As if Play had been tapped: Play shows the spinner.
+                streamTrigger = .play
                 return
             }
             guard pickedRequest == nil else { return }
@@ -351,16 +357,20 @@ struct DetailView: View {
     /// True once the streams have taken the details' place.
     private var showsStreams: Bool { pickedRequest != nil && streamsAreReady }
 
+    /// What asked for the streams that are still loading, or nil when none are.
+    private var loadingTrigger: StreamTrigger? { pickedRequest != nil && !streamsAreReady ? streamTrigger : nil }
+
     /// Play starts loading this title's streams, and the trailer stops, since it would play behind them. The details stay, with a
     /// spinner in Play, until the streams are ready (`revealStreams`); a second tap while it spins calls the streams off. The page does
     /// not scroll, and back still leaves the page, by the button or the swipe: the streams are part of the title's page, not a screen
     /// of their own.
-    private func showStreams(_ request: StreamRequest) {
+    private func showStreams(_ request: StreamRequest, from trigger: StreamTrigger) {
         model.trailer.cancel()
         // Play is the user's own choice, so it replaces a Continue Watching item still waiting for the hero to settle.
         pendingStreams = nil
         streamsAreReady = false
         pickedRequest = pickedRequest == nil ? request : nil
+        streamTrigger = pickedRequest == nil ? nil : trigger
     }
 
     /// The streams are ready: they take the place of the details.
@@ -375,6 +385,7 @@ struct DetailView: View {
         withAnimation(Self.swapAnimation) {
             pickedRequest = nil
             streamsAreReady = false
+            streamTrigger = nil
         }
     }
 
@@ -436,5 +447,10 @@ struct DetailView: View {
             .accessibilityIdentifier("detail.related")
         }
     }
+}
+/// What asked for a title's streams on its page: Play, Shuffle or an episode's card. Only that control shows a spinner while they load,
+/// and the others take no taps until they are ready.
+enum StreamTrigger: Equatable {
+    case play, shuffle, episode
 }
 #endif
