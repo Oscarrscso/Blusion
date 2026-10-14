@@ -208,7 +208,11 @@ struct RatingButtonsRow: View {
     private func buttons(ratings: TitleRatings?) -> some View {
         // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed. They sit
         // at the far right, after the other sites.
-        let shown = ReviewSite.allCases.filter { $0 == .imdb || ReviewPageReader.supports($0) || ratings?.shortText(for: $0) != nil }
+        // Rotten Tomatoes and Metacritic are for films only: a show has no button for either.
+        let shown = ReviewSite.allCases.filter { site in
+            if ReviewPageReader.supports(site) { return item.type == "movie" }
+            return site == .imdb || ratings?.shortText(for: site) != nil
+        }
         let sites = shown.filter { !ReviewPageReader.supports($0) } + shown.filter { ReviewPageReader.supports($0) }
         let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in

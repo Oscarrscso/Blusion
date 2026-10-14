@@ -162,8 +162,8 @@ public final class PosterRatingsStore {
         if tmdb != nil, ["movie", "series"].contains(item.type), source == nil {
             enqueue(item, provider: .tmdb, includeReviews: includeReviews)
         }
-        // OMDb gives Rotten Tomatoes and Metacritic for a title, when the user has a key and today's allowance is not spent.
-        if let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit, LetterboxdRatings.isIMDbID(item.id),
+        // OMDb gives Rotten Tomatoes and Metacritic for a film, when the user has a key and today's allowance is not spent. Shows have none here.
+        if let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit, item.type == "movie", LetterboxdRatings.isIMDbID(item.id),
            source == nil || source == .rottenTomatoes || source == .metacritic {
             enqueue(item, provider: .omdb, includeReviews: includeReviews)
         }
