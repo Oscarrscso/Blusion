@@ -43,17 +43,6 @@ struct WidgetsManagerView: View {
         .accessibilityIdentifier("widgets.add")
     }
 
-    /// The wrench: the order of the widgets. The cards cannot be dragged into order, so the order is set on a list of its own.
-    private var orderLink: some View {
-        NavigationLink(value: WidgetOrderRoute.order) {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-        .disabled(model.widgets.count < 2)
-        .accessibilityLabel("Reorder Widgets")
-        .help("Reorder Widgets")
-        .accessibilityIdentifier("widgets.edit")
-    }
-
     /// Hides every widget's card at once, or shows them all again.
     private var hideToggle: some View {
         Button {
@@ -94,6 +83,15 @@ struct WidgetsManagerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Moves the widget dragged onto another card into that card's place. The order is saved at once, as the list's move was.
+    private func reorder(_ draggedID: String, onto targetID: String) {
+        guard let from = model.widgets.firstIndex(where: { $0.id == draggedID }),
+              let to = model.widgets.firstIndex(where: { $0.id == targetID }), from != to else { return }
+        // Moving down lands after the card it is dropped on; moving up lands before it.
+        let destination = from < to ? to + 1 : to
+        Task { await model.move(fromOffsets: IndexSet(integer: from), toOffset: destination) }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
@@ -102,8 +100,16 @@ struct WidgetsManagerView: View {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(model.widgets) { widget in
                             WidgetCard(widget: widget, services: services) { Task { await model.remove(id: widget.id) } }
+                                // Dragged onto another card, it takes that card's place and the others move aside. A tap still opens it.
+                                .draggable(widget.id)
+                                .dropDestination(for: String.self) { ids, _ in
+                                    guard let dragged = ids.first else { return false }
+                                    reorder(dragged, onto: widget.id)
+                                    return true
+                                }
                         }
                     }
+                    .animation(.snappy(duration: 0.3), value: model.widgets.map(\.id))
                     .accessibilityIdentifier("widgets.list")
                 }
                 VStack(alignment: .leading, spacing: 4) {
@@ -135,7 +141,6 @@ struct WidgetsManagerView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { hideToggle }
             ToolbarItem(placement: .topBarTrailing) { addMenu }
-            ToolbarItem(placement: .topBarTrailing) { orderLink }
         }
         .task { await model.load() }
         // A list that has just been imported or reset is shown too.
@@ -143,7 +148,6 @@ struct WidgetsManagerView: View {
             if !old.isEmpty, !Set(new).isSubset(of: old) { withAnimation { hidesWidgets = false } }
         }
         .navigationDestination(for: HomeWidget.self) { WidgetEditorView(widget: $0, model: model, services: services) }
-        .navigationDestination(for: WidgetOrderRoute.self) { _ in WidgetOrderList(model: model) }
         .navigationDestination(item: $creating) { _ in WidgetEditorView(model: model, services: services) }
         .sheet(isPresented: $showsGenreCollection) {
             NavigationStack {
@@ -281,54 +285,9 @@ private struct WidgetCard: View {
     }
 }
 
-/// The widgets in their order, for reordering and deleting. The cards open and delete a widget; the order is set here.
-private struct WidgetOrderList: View {
-    let model: WidgetsManagerViewModel
-
-    var body: some View {
-        List {
-            ForEach(model.widgets) { widget in
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(widget.title.isEmpty ? "Untitled" : widget.title)
-                        Text(model.summary(of: widget)).font(.caption).foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: widgetSymbol(for: widget))
-                }
-            }
-            .onDelete { offsets in Task { await model.remove(atOffsets: offsets) } }
-            .onMove { offsets, destination in Task { await model.move(fromOffsets: offsets, toOffset: destination) } }
-        }
-        .environment(\.editMode, .constant(.active))
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .readableColumn()
-        .screenBackground()
-        .navigationTitle("Order")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-private func widgetSymbol(for widget: HomeWidget) -> String {
-    switch widget.content {
-    case .hero: "sparkles.tv"
-    case .banner: "rectangle.topthird.inset.filled"
-    case .row: "rectangle.stack"
-    case .collection: "square.grid.2x2"
-    case .continueWatching: "play.circle"
-    case .unsupported: "questionmark.square.dashed"
-    }
-}
-
 /// A screen pushed to make a new widget.
 private enum NewWidgetRoute: Hashable, Identifiable {
     case widget
     var id: Self { self }
-}
-
-/// The screen pushed from the wrench, for the order of the widgets.
-private enum WidgetOrderRoute: Hashable {
-    case order
 }
 #endif
