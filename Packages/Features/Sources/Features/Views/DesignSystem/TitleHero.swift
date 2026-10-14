@@ -376,9 +376,8 @@ struct HeroPicture: View {
                              imageAlignment: alignment, acceptsAnyCachedSize: true)
                     .blur(radius: TitleHero.placeholderBlur, opaque: true)
                     .overlay {
-                        ProgressView()
+                        Spinner(color: .white)
                             .controlSize(.large)
-                            .tint(.white)
                             .accessibilityHidden(true)
                     }
                     .transition(hasPicture ? .asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.01).delay(0.3)))

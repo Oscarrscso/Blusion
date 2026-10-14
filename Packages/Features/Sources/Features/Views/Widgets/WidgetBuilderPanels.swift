@@ -203,7 +203,7 @@ struct WidgetFieldPanel: View {
     @ViewBuilder
     private var optionsStatus: some View {
         if model.isLoadingOptions {
-            ProgressView()
+            Spinner()
                 .frame(maxWidth: .infinity)
         } else if let message = model.optionsMessage {
             Text(message)

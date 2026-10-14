@@ -45,7 +45,7 @@ struct CatalogListView: View {
                           usesBetterPosters: request.presentation.usesBetterPosters)
                     .accessibilityIdentifier("catalogList.grid")
                 if model.state == .loadingMore {
-                    ProgressView()
+                    Spinner()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.l)
                 }

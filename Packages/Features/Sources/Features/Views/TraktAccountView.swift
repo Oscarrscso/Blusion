@@ -33,7 +33,7 @@ struct TraktAccountView: View {
         .task { await model.load() }
         .onDisappear { model.cancelSignIn() }
         .disabled(model.isWorking)
-        .overlay { if model.isWorking { ProgressView().padding().glassEffect() } }
+        .overlay { if model.isWorking { Spinner().padding().glassEffect() } }
         .accessibilityIdentifier("trakt.form")
     }
 

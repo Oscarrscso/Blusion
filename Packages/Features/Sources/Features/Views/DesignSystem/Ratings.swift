@@ -276,7 +276,7 @@ struct RatingButton: View {
                 }
                 // While the page loads, the rating shows a spinner in place of its chevron.
                 if isLoading {
-                    ProgressView().controlSize(.small).tint(.white)
+                    Spinner(color: .white).controlSize(.small)
                 } else if showsLinkIcon || ((site == .imdb || ReviewPageReader.supports(site)) && score == nil) {
                     // After the score, a little greyed, so it reads as a control rather than as part of the rating.
                     Image(systemName: isOpen ? "chevron.up" : "chevron.down")

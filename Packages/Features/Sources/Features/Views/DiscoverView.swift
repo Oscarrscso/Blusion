@@ -147,7 +147,7 @@ struct DiscoverView: View {
         case .loaded:
             if model.items.isEmpty { EmptyStateView("Nothing here yet", systemImage: "film", message: "Try another category or genre.") }
         case .loadingMore:
-            ProgressView().frame(maxWidth: .infinity)
+            Spinner().frame(maxWidth: .infinity)
         }
     }
 }

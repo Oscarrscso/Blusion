@@ -147,9 +147,8 @@ struct CircleActionButton: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .opacity(isLoading ? 0 : 1)
                 if isLoading {
-                    ProgressView()
+                    Spinner(color: .white.opacity(0.6))
                         .controlSize(.small)
-                        .tint(.white.opacity(0.6))
                         .transition(.opacity)
                 }
             }

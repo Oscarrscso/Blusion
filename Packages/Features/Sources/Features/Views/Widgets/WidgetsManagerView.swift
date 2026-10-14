@@ -398,7 +398,7 @@ struct WidgetsManagerView: View {
         } message: { pending in
             Text("This setup uses addons you don't have: \(pending.missingAddonHosts.joined(separator: ", ")).")
         }
-        .overlay { if model.isWorking { ProgressView().padding().background(.regularMaterial, in: .capsule) } }
+        .overlay { if model.isWorking { Spinner().padding().background(.regularMaterial, in: .capsule) } }
         .savedHUD(trigger: model.saveRevision)
         .disabled(model.isWorking)
     }

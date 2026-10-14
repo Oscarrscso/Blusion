@@ -58,7 +58,7 @@ struct RootView: View {
                 RootTabView(services: environment.services, route: environment.launchRoute,
                             addonLink: $addonLink, userStateRevision: userStateRevision)
             } else {
-                ProgressView()
+                Spinner()
                     .accessibilityIdentifier("root.loading")
             }
         }

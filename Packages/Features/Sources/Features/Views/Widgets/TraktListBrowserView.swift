@@ -220,7 +220,7 @@ struct TraktListBrowserView: View {
                         .accessibilityIdentifier("traktBrowser.list.\(list.slug)")
                 }
             }
-            if browser.isLoadingMore { ProgressView().padding(Theme.Spacing.l) }
+            if browser.isLoadingMore { Spinner().padding(Theme.Spacing.l) }
         }
         .padding(.horizontal, metrics.contentMargin)
     }

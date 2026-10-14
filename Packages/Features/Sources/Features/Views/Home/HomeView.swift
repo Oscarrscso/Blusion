@@ -107,7 +107,7 @@ struct HomeView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; ProgressView() }.padding(.top, Theme.Spacing.m) }
+            ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; Spinner() }.padding(.top, Theme.Spacing.m) }
                 .screenBackground()
                 .ignoresSafeArea(.container, edges: sideEdges)
         case .noAddons:
@@ -287,7 +287,7 @@ private struct HomeWidgetEditor: View {
                     // The saved copy of the row, in case the layout changed since Home loaded.
                     WidgetEditorView(widget: model.widgets.first(where: { $0.id == widget.id }) ?? widget, model: model, services: services)
                 } else {
-                    ProgressView()
+                    Spinner()
                 }
             }
             // The title shows while the editor loads, matching the editor's own title once it loads.

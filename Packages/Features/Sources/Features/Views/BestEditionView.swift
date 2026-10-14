@@ -88,7 +88,7 @@ struct BestEditionView: View {
         switch model.bestEdition {
         case .idle, .loading:
             HStack(spacing: Theme.Spacing.m) {
-                ProgressView()
+                Spinner()
                 Text("Checking Best Blurays for \(model.request.title)…")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

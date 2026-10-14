@@ -92,7 +92,7 @@ private struct TraktListLinkForm: View {
                 Button {
                     Task { await addList() }
                 } label: {
-                    if isReading { ProgressView() } else { Text("Add List") }
+                    if isReading { Spinner() } else { Text("Add List") }
                 }
                 .disabled(isReading || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("widgetSource.trakt.add")

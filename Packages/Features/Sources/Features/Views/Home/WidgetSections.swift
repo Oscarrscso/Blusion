@@ -213,9 +213,8 @@ struct ContinueWatchingRow: View {
                         .accessibilityAddTraits(.isHeader)
                         // The kind selector sits right beside the title, as the chevron does after a row title.
                         if !items.isEmpty { ContinueKindSwitch(selection: $kind) }
-                        ProgressView()
+                        Spinner(color: .gray)
                             .controlSize(.small)
-                            .tint(.gray)
                             .scaleEffect(0.75)
                             .opacity(state == .loading ? 1 : 0)
                             .accessibilityLabel("Refreshing Continue")

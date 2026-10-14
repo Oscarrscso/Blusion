@@ -177,7 +177,7 @@ struct PersonView: View {
             SectionHeader("Credits")
             filters
             if model.isLoading && model.credits.isEmpty {
-                ProgressView()
+                Spinner()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.l)
             } else if model.sections.isEmpty {
@@ -208,7 +208,7 @@ struct PersonView: View {
                     }
                 }
                 if model.hasMoreCredits {
-                    ProgressView()
+                    Spinner()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.m)
                         .onAppear { model.loadMore() }

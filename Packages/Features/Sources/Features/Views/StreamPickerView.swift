@@ -425,7 +425,7 @@ struct StreamPickerView: View {
     private var status: some View {
         if model.isLoading {
             HStack(spacing: Theme.Spacing.s) {
-                ProgressView()
+                Spinner()
                     .controlSize(.small)
                 Text(waitingText)
                     .font(.footnote)
@@ -483,7 +483,7 @@ struct StreamPickerView: View {
                         autoPick()
                     } label: {
                         HStack(spacing: Theme.Spacing.xs) {
-                            if model.isAutoPicking { ProgressView() } else { Image(systemName: "sparkles").foregroundStyle(.secondary) }
+                            if model.isAutoPicking { Spinner() } else { Image(systemName: "sparkles").foregroundStyle(.secondary) }
                             Text("Auto Pick")
                             // The kind of stream it would start, always there once the addons have answered.
                             if let kind = model.recommendedStreamLabel {

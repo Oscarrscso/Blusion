@@ -20,7 +20,7 @@ struct TMDbTitleView: View {
         Group {
             switch phase {
             case .loading:
-                ProgressView()
+                Spinner()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .screenBackground()
                     .accessibilityIdentifier("tmdbTitle.loading")

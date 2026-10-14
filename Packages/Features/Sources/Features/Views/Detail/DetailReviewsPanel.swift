@@ -94,7 +94,7 @@ struct DetailReviewsPanel: View {
                 .id(reviews.site)
                 .frame(height: pageHeightNow)
                 .overlay {
-                    if isLoading { ProgressView().controlSize(.large).tint(.white) }
+                    if isLoading { Spinner(color: .white).controlSize(.large) }
                 }
                 .accessibilityIdentifier("detail.reviewsWeb")
         }

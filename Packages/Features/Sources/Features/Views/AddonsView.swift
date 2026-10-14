@@ -84,7 +84,7 @@ struct AddonsView: View {
                 Button {
                     Task { await model.install() }
                 } label: {
-                    if model.isInstalling { ProgressView() } else { Text("Install") }
+                    if model.isInstalling { Spinner() } else { Text("Install") }
                 }
                 .buttonStyle(.primaryActionCompact)
                 .disabled(!model.canInstall)

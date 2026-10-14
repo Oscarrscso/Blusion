@@ -82,9 +82,8 @@ struct DetailActions: View {
                     .opacity(isLoadingStreams ? 0 : 1)
                     .overlay {
                         if isLoadingStreams {
-                            ProgressView()
+                            Spinner(color: .white.opacity(0.6))
                                 .controlSize(.small)
-                                .tint(.white.opacity(0.6))
                                 .transition(.opacity)
                         }
                     }
