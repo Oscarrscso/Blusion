@@ -45,7 +45,7 @@ import StremioKitTestSupport
         let ratings = store.ratings(for: bare)
         #expect(ratings.imdb == nil, "asking from a view body must not synchronously change an observed rating")
         try await waitUntil { ratings.imdb == 8.1 }
-        #expect(ratings.imdbVotes == 2_900_000 && ratings.imdbText == "8.1")
+        #expect(ratings.imdbVotes == 2_900_000 && ratings.imdbText == "81")
     }
 
     @Test func theDatasetIsIMDbsOwnNumberSoItWinsOverTheCatalogs() async throws {

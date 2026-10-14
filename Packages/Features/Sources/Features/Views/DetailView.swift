@@ -153,7 +153,8 @@ struct DetailView: View {
                             // streams are ready.
                             StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streamsAreReady,
                                              onClose: closeStreams, onReady: revealStreams,
-                                             scrollToRow: { proxy.scrollTo($0, anchor: .center) })
+                                             scrollToRow: { proxy.scrollTo($0, anchor: .center) },
+                                             episodeScore: model.episodeScoreText(for: request))
                                 .id(request.id)
                                 #if targetEnvironment(macCatalyst)
                                 // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.

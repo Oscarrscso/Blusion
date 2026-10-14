@@ -50,6 +50,14 @@ struct DetailEpisodes: View {
                 ForEach(model.episodes) { episode in
                     episodeRow(episode, width: width)
                         .id(episode.id).reportsShelfEdge(id: episode.id)
+                        // The card Shuffle picked is outlined; nothing plays.
+                        .overlay {
+                            if model.highlightedEpisodeID == episode.id {
+                                RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.6), lineWidth: 2)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                 }
             }
             .animation(.snappy, value: model.matchesEpisodeWidthToText)
@@ -94,7 +102,8 @@ struct DetailEpisodes: View {
     private var shuffleButton: some View {
         let isReady = model.canShuffle && !isLoadingStreams
         return Button {
-            if let request = model.shuffledRequest() { play(request) }
+            // Shows the picked episode, outlined; it does not start a stream.
+            model.shuffleEpisode()
         } label: {
             Image(systemName: "shuffle")
                 .font(.body.weight(.semibold))

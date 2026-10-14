@@ -325,7 +325,8 @@ public final class DetailViewModel {
     public struct EpisodeScore: Equatable, Sendable {
         public let value: Double
         public let isIMDb: Bool
-        public var text: String { value.formatted(.number.precision(.fractionLength(1))) }
+        /// A whole number out of 100, never a decimal: the score is out of 10, so "8.9" is 89.
+        public var text: String { String(Int((value * 10).rounded())) }
     }
 
     /// OMDb's scores by season, then episode number. A season is here once it has been asked for, even when OMDb had none.
@@ -450,6 +451,23 @@ public final class DetailViewModel {
     public func shuffledRequest(now: Date = Date()) -> StreamRequest? {
         guard isSeries else { return nil }
         return detail.episodesCountingAsWatched(by: now).randomElement().map { request(for: $0) }
+    }
+
+    /// The episode's score as its card shows it ("89"), for the stream selector's heading. Nil for a film or an episode without a score.
+    public func episodeScoreText(for request: StreamRequest) -> String? {
+        guard isSeries, let season = request.season, let episode = request.episode,
+              let video = detail.videos.first(where: { $0.season == season && $0.episode == episode }) else { return nil }
+        return score(for: video)?.text
+    }
+
+    /// The episode Shuffle has picked, highlighted in the episode list. It is shown, not played: Play still starts a stream.
+    public private(set) var highlightedEpisodeID: String?
+
+    /// Shuffle: picks a random episode that has aired, opens its season and highlights its card. Nothing starts playing.
+    public func shuffleEpisode(now: Date = Date()) {
+        guard isSeries, let video = detail.episodesCountingAsWatched(by: now).randomElement() else { return }
+        if let season = video.season { selectedSeason = season }
+        highlightedEpisodeID = video.id
     }
 
     /// Share of the movie that is saved and resumable (0...1). Nil when it has not started, is watched or cannot be resumed.

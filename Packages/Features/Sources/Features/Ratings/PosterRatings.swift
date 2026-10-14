@@ -37,8 +37,10 @@ public final class TitleRatings: Identifiable {
         }
     }
 
-    public var imdbText: String? { imdb.map { String(format: "%.1f", $0) } }
-    public var letterboxdText: String? { letterboxd.map { String(format: "%.1f", $0 * 2) } }
+    /// Whole numbers out of 100, never a decimal: IMDb and TMDb are out of 10 and Letterboxd out of 5, so each is scaled to 100 first
+    /// ("8.6" is 86, "4.2" is 84). Rotten Tomatoes and Metacritic already are.
+    public var imdbText: String? { imdb.map { String(Int(($0 * 10).rounded())) } }
+    public var letterboxdText: String? { letterboxd.map { String(Int(($0 * 20).rounded())) } }
     /// Prefer IMDb and Letterboxd, then fill either missing score from the other available sites.
     public var posterSites: [ReviewSite] {
         Array(ReviewSite.allCases.filter { shortText(for: $0) != nil }.prefix(2))
@@ -52,17 +54,17 @@ public final class TitleRatings: Identifiable {
         case .letterboxd: letterboxdText
         case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f", $0) }
         case .metacritic: metacritic.map { String(format: "%.0f", $0) }
-        case .tmdb: tmdb.map { String(format: "%.1f", $0) }
+        case .tmdb: tmdb.map { String(Int(($0 * 10).rounded())) }
         }
     }
 
     public func text(for site: ReviewSite) -> String? {
         switch site {
-        case .imdb: imdbText.map { "\($0)/10" }
-        case .letterboxd: letterboxdText.map { "\($0)/10" }
+        case .imdb: imdbText.map { "\($0)/100" }
+        case .letterboxd: letterboxdText.map { "\($0)/100" }
         case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f%%", $0) }
         case .metacritic: metacritic.map { String(format: "%.0f/100", $0) }
-        case .tmdb: tmdb.map { String(format: "%.1f/10", $0) }
+        case .tmdb: tmdb.map { "\(Int(($0 * 10).rounded()))/100" }
         }
     }
 }

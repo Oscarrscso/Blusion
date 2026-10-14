@@ -40,8 +40,8 @@ import StremioKitTestSupport
         try await waitUntil { entry.letterboxd == 4.5 }
         _ = store.ratings(for: movie)
         #expect(transport.callCount == 1)
-        #expect(entry.imdbText == "9.0" && entry.letterboxdText == "9.0")
-        #expect(entry.text(for: .letterboxd) == "9.0/10")
+        #expect(entry.imdbText == "90" && entry.letterboxdText == "90", "whole numbers out of 100, never a decimal")
+        #expect(entry.text(for: .letterboxd) == "90/100")
         #expect(!entry.isEmpty)
     }
 
@@ -212,7 +212,7 @@ import StremioKitTestSupport
         #expect(transport.callCount == 1)
         _ = store.ratings(for: movie, includeReviews: true)
         try await waitUntil { entry.tmdb == 9.1 }
-        #expect(entry.imdb == 9 && entry.text(for: .tmdb) == "9.1/10")
+        #expect(entry.imdb == 9 && entry.text(for: .tmdb) == "91/100")
         #expect(entry.tmdbURL?.absoluteString == "https://www.themoviedb.org/movie/155")
         for _ in 0..<10 { _ = store.ratings(for: movie, includeReviews: true) }
         #expect(transport.callCount == 1 && store.reviewServiceIssue == nil)
@@ -432,7 +432,7 @@ import StremioKitTestSupport
                                        tmdb: TMDbRatings(client: makeClient(transport), readAccessToken: "test-token"))
         let entry = store.ratings(for: movie, includeReviews: true)
         try await waitUntil { entry.tmdb == 8.4 }
-        #expect(transport.callCount == 0 && entry.text(for: .tmdb) == "8.4/10")
+        #expect(transport.callCount == 0 && entry.text(for: .tmdb) == "84/100")
         await store.forgetAll()
         #expect(entry.tmdb == nil && entry.tmdbURL == nil)
     }

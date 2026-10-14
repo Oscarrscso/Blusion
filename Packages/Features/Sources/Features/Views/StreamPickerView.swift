@@ -31,6 +31,8 @@ struct StreamPickerView: View {
     /// True when the title page shows these streams in place of its details: no scroll view, backdrop, title or header of its own, since
     /// the page above it has them.
     private let isEmbedded: Bool
+    /// The episode's score, shown after its season and episode in the heading ("S3E5 · 84"). Nil for a film.
+    private let episodeScore: String?
     /// False draws nothing yet: the picker is on the page and loading, and the page shows it once `onReady` has been called.
     private let isRevealed: Bool
     /// Embedded only: takes the streams away and shows the title's details again, as Escape does on Mac. Back leaves the title's page, so
@@ -57,7 +59,8 @@ struct StreamPickerView: View {
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
-         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil) {
+         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: String? = nil) {
+        self.episodeScore = episodeScore
         self.services = services
         self.isEmbedded = isEmbedded
         self.isRevealed = isRevealed
@@ -381,7 +384,8 @@ struct StreamPickerView: View {
         guard let season = model.request.season, let episode = model.request.episode else { return nil }
         // A request without the series' name has it at the front of its title, which is "Series · Episode".
         let series = model.request.seriesName ?? model.request.title.components(separatedBy: " · ").first ?? model.request.title
-        return "\(series) · S\(season)E\(episode)"
+        let heading = "\(series) · S\(season)E\(episode)"
+        return episodeScore.map { "\(heading) · \($0)" } ?? heading
     }
 
     /// Only while the addons are still answering: the stream count is not shown once they have.
