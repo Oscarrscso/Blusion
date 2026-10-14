@@ -331,17 +331,20 @@ struct HeroPicture: View {
     let preview: MetaPreview
     /// Whether the stand-in may only be a backdrop, never a poster, and no poster fallback is loaded for it (the Mac title page).
     let standInFromBackdrop: Bool
+    /// The title page keeps the system's spinner over its stand-in, as asked; Home's spotlight has the app's thin ring.
+    let usesSystemSpinner: Bool
     /// The stand-in's address, chosen once when the page opens (see `standInURL(for:)`).
     @State private var standIn: URL?
 
     init(slot: HeroSlot, isRevealed: Bool, contentMode: ContentMode, alignment: Alignment = TitleHero.imageAlignment, preview: MetaPreview,
-         standInFromBackdrop: Bool = false) {
+         standInFromBackdrop: Bool = false, usesSystemSpinner: Bool = false) {
         self.slot = slot
         self.isRevealed = isRevealed
         self.contentMode = contentMode
         self.alignment = alignment
         self.preview = preview
         self.standInFromBackdrop = standInFromBackdrop
+        self.usesSystemSpinner = usesSystemSpinner
         _standIn = State(initialValue: Self.standInURL(for: preview, backdropOnly: standInFromBackdrop))
     }
 
@@ -376,9 +379,16 @@ struct HeroPicture: View {
                              imageAlignment: alignment, acceptsAnyCachedSize: true)
                     .blur(radius: TitleHero.placeholderBlur, opaque: true)
                     .overlay {
-                        Spinner(color: .white)
-                            .controlSize(.large)
-                            .accessibilityHidden(true)
+                        if usesSystemSpinner {
+                            ProgressView()
+                                .controlSize(.large)
+                                .tint(.white)
+                                .accessibilityHidden(true)
+                        } else {
+                            Spinner(color: .white)
+                                .controlSize(.large)
+                                .accessibilityHidden(true)
+                        }
                     }
                     .transition(hasPicture ? .asymmetric(insertion: .identity, removal: .opacity.animation(.linear(duration: 0.01).delay(0.3)))
                                            : .opacity)

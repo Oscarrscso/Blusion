@@ -59,7 +59,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     private var landscapeTop: some View {
         let artworkWidth = landscapeWidths.artwork
         return HStack(alignment: .center, spacing: Theme.Spacing.xl) {
-            HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fit, preview: model.preview)
+            HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fit, preview: model.preview, usesSystemSpinner: true)
                 .frame(width: artworkWidth, height: artworkWidth / CardAspect.wide.ratio)
                 .overlay(alignment: .bottomTrailing) {
                     PosterRatingsOverlay(item: model.preview, isLandscape: true, startsLoading: model.hasSettledHero)
@@ -109,7 +109,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
         }
         .background(alignment: .top) {
             // The fade runs past the picture's bottom edge, so no row of picture pixels shows under its black end.
-            HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, preview: model.preview)
+            HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, preview: model.preview, usesSystemSpinner: true)
                 .frame(width: size.width, height: TitleHero.pictureHeight(height) + scrollPull)
                 .frame(height: visible + scrollPull, alignment: .top)
                 .clipped()

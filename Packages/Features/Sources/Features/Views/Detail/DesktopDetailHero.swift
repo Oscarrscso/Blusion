@@ -69,7 +69,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
             HeroPicture(slot: pictureSlot, isRevealed: isRevealed, contentMode: .fill, alignment: .center, preview: model.preview,
-                        standInFromBackdrop: true)
+                        standInFromBackdrop: true, usesSystemSpinner: true)
             // Darker on the left, where the text sits, so the title and the buttons read over the picture.
             LinearGradient(stops: [
                 .init(color: .black.opacity(0.85), location: 0),
