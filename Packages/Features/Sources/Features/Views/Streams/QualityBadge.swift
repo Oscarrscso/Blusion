@@ -9,11 +9,14 @@ struct QualityBadge: View {
     let title: String
     let symbol: String
     let tint: Color
+    /// What VoiceOver reads when the text on the badge is an abbreviation, such as "DV" for Dolby Vision. Nil reads the text itself.
+    let spokenAs: String?
 
-    init(_ title: String, symbol: String, tint: Color = .white) {
+    init(_ title: String, symbol: String, tint: Color = .white, spokenAs: String? = nil) {
         self.title = title
         self.symbol = symbol
         self.tint = tint
+        self.spokenAs = spokenAs
     }
 
     var body: some View {
@@ -24,6 +27,9 @@ struct QualityBadge: View {
                 .font(.system(size: 9, weight: .semibold))
         }
         .qualityBadgeChrome(tint: tint)
+        // The capsule is as wide as its text, so a short label is never cut short.
+        .fixedSize()
+        .accessibilityLabel(Text(verbatim: spokenAs ?? title))
     }
 }
 
@@ -62,9 +68,10 @@ extension QualityBadge {
         QualityBadge(label, symbol: is4K ? "4k.tv" : "tv", tint: is4K ? premium : .white)
     }
 
-    static func source(_ kind: StreamSourceKind) -> QualityBadge {
+    /// The source marker. A Blu-ray reads "BD", or "BD4K" for a 4K source.
+    static func source(_ kind: StreamSourceKind, is4K: Bool = false) -> QualityBadge {
         switch kind {
-        case .bluray: QualityBadge("Blu-ray", symbol: "opticaldisc")
+        case .bluray: QualityBadge(is4K ? "BD4K" : "BD", symbol: "opticaldisc", spokenAs: is4K ? "4K Blu-ray" : "Blu-ray")
         case .webDL: QualityBadge("WEB-DL", symbol: "globe")
         case .webRip: QualityBadge("WEBRip", symbol: "globe")
         case .hdtv: QualityBadge("HDTV", symbol: "tv")
@@ -73,10 +80,15 @@ extension QualityBadge {
         }
     }
 
-    static let remux = QualityBadge("REMUX", symbol: "square.stack.3d.down.right")
+    /// The remux marker: "REMUX" beside its symbol, or "RMX" where the row is narrow (iPhone in portrait).
+    static func remux(compact: Bool) -> QualityBadge {
+        QualityBadge(compact ? "RMX" : "REMUX", symbol: "aqi.medium", spokenAs: "REMUX")
+    }
 
-    static func hdr(dolbyVision: Bool) -> QualityBadge {
-        QualityBadge(dolbyVision ? "Dolby Vision" : "HDR", symbol: "sun.max", tint: dynamicRange)
+    /// The high dynamic range marker: "Dolby Vision" or "HDR", or "DV" for Dolby Vision where the row is narrow (iPhone in portrait).
+    static func hdr(dolbyVision: Bool, compact: Bool) -> QualityBadge {
+        let title = dolbyVision ? (compact ? "DV" : "Dolby Vision") : "HDR"
+        return QualityBadge(title, symbol: "sun.max", tint: dynamicRange, spokenAs: dolbyVision ? "Dolby Vision" : nil)
     }
 }
 #endif

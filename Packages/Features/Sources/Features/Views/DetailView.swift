@@ -146,7 +146,7 @@ struct DetailView: View {
                         }
                         #endif
                         if let request = pickedRequest {
-                            // The page scrolls to here once the streams are ready, so the picker's top sits two-fifths down the screen.
+                            // The page scrolls to here once the streams are ready, so the picker's top sits a seventh of the way down the screen, and more rows show.
                             Color.clear.frame(height: 0).id(Self.streamsScrollID)
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
                             // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
@@ -242,7 +242,7 @@ struct DetailView: View {
                     guard ready else { return }
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
-                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.streamsScrollID, anchor: UnitPoint(x: 0.5, y: 0.4)) }
+                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.streamsScrollID, anchor: UnitPoint(x: 0.5, y: 0.15)) }
                     }
                 }
             }

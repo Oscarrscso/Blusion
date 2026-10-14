@@ -13,6 +13,8 @@ struct StreamRow: View {
     var isBest = false
     /// True when the release name says REMUX, as the stream's parsed quality reads it.
     var isRemux = false
+    /// Compact width (iPhone in portrait) takes the short badge words: "RMX" and "DV".
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
@@ -30,10 +32,12 @@ struct StreamRow: View {
                         if let label = item.quality.resolutionLabel {
                             QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
                         }
-                        if item.quality.isHDR || item.quality.isDolbyVision { QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision) }
-                        if isRemux { QualityBadge.remux }
+                        if item.quality.isHDR || item.quality.isDolbyVision {
+                            QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision, compact: horizontalSizeClass == .compact)
+                        }
+                        if isRemux { QualityBadge.remux(compact: horizontalSizeClass == .compact) }
                         if let source = item.quality.source {
-                            QualityBadge.source(source)
+                            QualityBadge.source(source, is4K: (item.quality.resolution ?? 0) >= 2160)
                         }
                         if playsAtmosOverAirPods { SpatialAudioBadge() }
                     }

@@ -73,6 +73,16 @@ mv "$DEST.installing" "$DEST"
 done
 "$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
 
+# Stray Mac copies are deleted, not only unlisted: the build product this install copied from, and any Mac Blusion.app left in Xcode's
+# DerivedData or in this repo's build/ folder. Spotlight finds a copy on disk, so each one is a second "Blusion" until it is gone.
+# Only the Mac (Catalyst) products are named here; iPhone builds are left alone.
+for stray in "$APP" "$HOME"/Library/Developer/Xcode/DerivedData/Blusion-*/Build/Products/*maccatalyst/Blusion.app \
+             "$ROOT"/build/*/Build/Products/*maccatalyst/Blusion.app "$ROOT"/build/*/DerivedData/Build/Products/*maccatalyst/Blusion.app; do
+  [[ -e "$stray" && "$stray" != "$DEST" ]] || continue
+  "$LSREGISTER" -u "$stray" >/dev/null 2>&1 || true
+  rm -rf "$stray"
+done
+
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$DEST/Contents/Info.plist" 2>/dev/null)"
 echo "install-mac: $DEST ($VERSION, ${IDENTITY:-ad hoc})"
 [[ "$OPEN" == 0 ]] || open "$DEST"
