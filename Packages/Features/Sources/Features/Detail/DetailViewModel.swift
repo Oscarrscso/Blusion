@@ -14,6 +14,10 @@ public final class DetailViewModel {
     public private(set) var isFallback = false
     public var selectedSeason: Int?
     public private(set) var isInLibrary = false
+    /// Goes up each time the page reads in what it shows (the details, library membership, watched marks) rather than the user changing it
+    /// here. The Save and Watched buttons tick only for a change that comes without it, so a page that opens on a saved or watched title is
+    /// silent.
+    public private(set) var loadRevision = 0
     /// Episode cards are as wide as the text above them, as chosen with the toggle beside the season name. The choice is saved, and read
     /// again when the details load.
     public private(set) var matchesEpisodeWidthToText = false
@@ -102,6 +106,7 @@ public final class DetailViewModel {
         let settings = await playbackSettings
         matchesEpisodeWidthToText = settings.matchesEpisodeWidthToText
         detail = result.detail
+        loadRevision += 1
         isFallback = result.isFallback
         if !result.isFallback { services.heroMeta.record(detail.preview, for: preview) }
         isLoading = false
@@ -236,9 +241,11 @@ public final class DetailViewModel {
         await services.settings.save(settings)
     }
 
-    /// Library membership, watched marks and saved progress, from the local stores.
-    public func refreshUserState() async {
+    /// Library membership, watched marks and saved progress, from the local stores. `afterUserChange` is for a change the user just made
+    /// on this page, which the Save and Watched buttons tick for; any other read moves `loadRevision` along with the state, so they stay silent.
+    public func refreshUserState(afterUserChange: Bool = false) async {
         isInLibrary = await services.library.contains(libraryIdentity)
+        if !afterUserChange { loadRevision += 1 }
         var watched = Set<String>()
         var saved: [String: WatchProgress] = [:]
         var fractions: [String: Double] = [:]
@@ -255,6 +262,7 @@ public final class DetailViewModel {
         watchedIdentities = watched
         savedProgress = saved
         progressFractions = fractions
+        if !afterUserChange { loadRevision += 1 }
     }
 
     private var libraryIdentity: String {
@@ -283,7 +291,7 @@ public final class DetailViewModel {
         } else {
             await services.progress.remove(request.identity)
         }
-        await refreshUserState()
+        await refreshUserState(afterUserChange: true)
     }
 
     // MARK: watched marks for a whole show
@@ -327,7 +335,7 @@ public final class DetailViewModel {
         } else {
             await services.progress.remove(episodes.map { episodeIdentity($0) })
         }
-        await refreshUserState()
+        await refreshUserState(afterUserChange: true)
     }
 
     // MARK: episode scores

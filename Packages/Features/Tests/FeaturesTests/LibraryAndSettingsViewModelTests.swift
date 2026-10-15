@@ -122,6 +122,26 @@ import StremioKitTestSupport
         #expect(!model.isInLibrary && afterRemoval.isEmpty)
     }
 
+    /// The Save and Watched buttons tick only when `loadRevision` stays put: a saved, watched title read in as its page opens moves it, so
+    /// the page opens silently, and the user's own Save and Watched taps leave it where it is, so they tick.
+    @Test func detailReadsSavedStateQuietlyAndTicksForTheUsersChanges() async {
+        let film = MetaPreview(id: "tt1", type: "movie", name: "Film")
+        let services = services(progress: [progress("tt1", 0, watched: true)], library: [LibraryItem(preview: film, addedAt: when)])
+        let model = detailModel(services, preview: film)
+        let opened = model.loadRevision
+        await model.refreshUserState()
+        #expect(model.isInLibrary && model.isWatched(model.movieRequest))
+        #expect(model.loadRevision > opened, "reading the saved state in is not a change the user made")
+        let read = model.loadRevision
+        await model.toggleLibrary()
+        #expect(!model.isInLibrary)
+        await model.setWatched(false, for: model.movieRequest)
+        #expect(!model.isWatched(model.movieRequest))
+        #expect(model.loadRevision == read, "the user's own changes tick")
+        await model.refreshUserState()
+        #expect(model.loadRevision > read, "reading again, as the page shows again, stays silent")
+    }
+
     @Test func detailMarksMoviesWatched() async {
         let services = services()
         let model = detailModel(services, preview: MetaPreview(id: "tt1", type: "movie", name: "Film"))

@@ -115,6 +115,9 @@ struct CircleActionButton: View {
     let onSystemImage: String?
     let action: () -> Void
     let isLoading: Bool
+    /// Moves when `isOn` is read in rather than changed by the user (see `DetailViewModel.loadRevision`). A change of `isOn` that comes with a
+    /// move of this gives no tick.
+    let loadRevision: Int
     /// The height of the large glass capsule beside it, so the circles are level with Play and equally wide. Smaller on a Mac, where a
     /// pointer needs less room than a finger and 50 points stood twice as tall as the Mac's own Play button.
     #if targetEnvironment(macCatalyst)
@@ -124,14 +127,21 @@ struct CircleActionButton: View {
     #endif
 
     init(title: String, systemImage: String, isOn: Bool = false, onTitle: String? = nil, onSystemImage: String? = nil,
-         action: @escaping () -> Void, isLoading: Bool = false) {
+         loadRevision: Int = 0, action: @escaping () -> Void, isLoading: Bool = false) {
         self.title = title
         self.systemImage = systemImage
         self.isOn = isOn
         self.onTitle = onTitle
         self.onSystemImage = onSystemImage
+        self.loadRevision = loadRevision
         self.action = action
         self.isLoading = isLoading
+    }
+
+    /// What the tick watches: the state, and whether it was read in.
+    private struct TickState: Equatable {
+        let isOn: Bool
+        let loadRevision: Int
     }
 
     var body: some View {
@@ -162,7 +172,10 @@ struct CircleActionButton: View {
         .accessibilityLabel(isLoading ? "\(title), loading" : (isOn ? (onTitle ?? title) : title))
         .help(isOn ? (onTitle ?? title) : title)
         .accessibilityAddTraits(isOn ? .isSelected : [])
-        .sensoryFeedback(.selection, trigger: isOn)
+        // A tick when the state changes, but not when it is read in: a page that opens on a saved title is silent.
+        .sensoryFeedback(trigger: TickState(isOn: isOn, loadRevision: loadRevision)) { old, new in
+            old.isOn != new.isOn && old.loadRevision == new.loadRevision ? .selection : nil
+        }
     }
 }
 
