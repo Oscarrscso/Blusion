@@ -529,6 +529,17 @@
         }
       }
     },
+    "Cache in use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache in use"
+          }
+        }
+      }
+    },
     "Can't play this": {
       "extractionState": "manual",
       "localizations": {
@@ -606,6 +617,17 @@
         }
       }
     },
+    "Clear Image Cache": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Image Cache"
+          }
+        }
+      }
+    },
     "Clear data": {
       "extractionState": "manual",
       "localizations": {
@@ -624,6 +646,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear search"
+          }
+        }
+      }
+    },
+    "Clear the image cache?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear the image cache?"
           }
         }
       }
@@ -932,6 +965,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Discover"
+          }
+        }
+      }
+    },
+    "Disk cache size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disk cache size"
           }
         }
       }
@@ -2410,6 +2454,28 @@
         }
       }
     },
+    "Posters and backdrops download again as you browse.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posters and backdrops download again as you browse."
+          }
+        }
+      }
+    },
+    "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time it appears.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time it appears."
+          }
+        }
+      }
+    },
     "Preferred quality": {
       "extractionState": "manual",
       "localizations": {
@@ -2615,6 +2681,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove from Continue Watching"
+          }
+        }
+      }
+    },
+    "Removes every poster and backdrop kept on this device. They download again as you browse.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removes every poster and backdrop kept on this device. They download again as you browse."
           }
         }
       }

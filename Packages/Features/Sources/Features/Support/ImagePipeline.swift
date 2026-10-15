@@ -10,6 +10,12 @@ actor ImagePipeline {
     static let shared = ImagePipeline()
 
     private let session: URLSession
+    /// The downloaded files on disk, kept until the size limit (`ImageCachePolicy`) pushes the least recently used out. `URLCache` is
+    /// thread-safe, so its size and usage are read and set without hopping onto the actor.
+    private nonisolated(unsafe) let files: URLCache
+    /// Pictures being checked for a newer copy now, so one is checked once at a time, and at most `refreshLimit` at once.
+    private var refreshing: Set<String> = []
+    private static let refreshLimit = 3
     /// `NSCache` is thread-safe, which is what lets `cachedImage` answer without hopping onto the actor.
     private nonisolated(unsafe) let decoded = NSCache<NSString, UIImage>()
     /// What the cache cannot be asked: the sizes each address has been decoded at, and the addresses that answered "not found". Behind a
@@ -37,11 +43,32 @@ actor ImagePipeline {
 
     init() {
         let configuration = URLSessionConfiguration.default
-        configuration.urlCache = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
-        // Artwork rarely changes, so a cached copy is served without asking the server again.
+        let saved = UserDefaults.standard.object(forKey: ImageCachePolicy.diskMegabytesKey) as? Int
+        files = URLCache(memoryCapacity: 32 * 1024 * 1024, diskCapacity: ImageCachePolicy.diskBytes(forSavedMegabytes: saved))
+        configuration.urlCache = files
+        // A cached copy is served without asking the server first, however old it is: a poster is not downloaded again for its age. One
+        // that is due a check is checked afterwards, in the background (see `refreshIfDue`).
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         session = URLSession(configuration: configuration)
         decoded.totalCostLimit = 256 * 1024 * 1024
+    }
+
+    // MARK: The cache on disk
+
+    /// The bytes the pictures take on disk now.
+    nonisolated var diskUsage: Int { files.currentDiskUsage }
+
+    /// Sets the disk cache's size. A smaller size removes the least recently used pictures until they fit.
+    nonisolated func setDiskLimit(megabytes: Int) {
+        files.diskCapacity = ImageCachePolicy.diskBytes(forSavedMegabytes: megabytes)
+    }
+
+    /// Removes every picture, on disk and in memory, and forgets which addresses were missing. Views that show one keep it until they are
+    /// drawn again; Play colours, which are kept per title, stay.
+    func clear() {
+        files.removeAllCachedResponses()
+        decoded.removeAllObjects()
+        known.withLock { $0 = Known() }
     }
 
     /// A picture that is already decoded, without waiting. A card that scrolls back into view shows its artwork in the same
@@ -118,7 +145,9 @@ actor ImagePipeline {
                 try await acquireDownloadSlot(id: slot, priority: priority)
                 defer { releaseDownloadSlot() }
                 try Task.checkCancellation()
-                return try await Self.fetch(url, maxPixelSize: size, session: session)
+                let fetched = try await Self.fetch(url, maxPixelSize: size, session: session, files: files)
+                if fetched.isDue { await refreshIfDue(url) }
+                return fetched.image
             }
             inFlight[key] = Pending(task: task, consumers: [consumer], slot: slot)
         }
@@ -192,8 +221,10 @@ actor ImagePipeline {
         waiting.removeFirst().continuation.resume()
     }
 
-    /// Runs off the actor, so a slow download or decode never blocks requests for other images.
-    private nonisolated static func fetch(_ url: URL, maxPixelSize: CGFloat, session: URLSession) async throws -> UIImage {
+    /// Runs off the actor, so a slow download or decode never blocks requests for other images. `isDue` is true when the picture came
+    /// from the disk cache and has been there long enough to be checked for a newer copy.
+    private nonisolated static func fetch(_ url: URL, maxPixelSize: CGFloat, session: URLSession,
+                                          files: URLCache) async throws -> (image: UIImage, isDue: Bool) {
         let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw ImagePipelineError.httpStatus(http.statusCode)
@@ -201,7 +232,68 @@ actor ImagePipeline {
         guard let image = decode(data, maxPixelSize: maxPixelSize) else {
             throw ImagePipelineError.undecodable
         }
-        return image
+        // A copy from the network is dated about now, so only one that has been on disk a while is old enough to be due.
+        // One with no date is checked once, and dated then (see `revalidate`).
+        let fetched = ImageCachePolicy.date(fromHeader: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Date"))
+        return (image, ImageCachePolicy.isDueForRefresh(url: url, fetched: fetched))
+    }
+
+    /// Checks a picture that has been on disk a while for a newer copy, in the background, once at a time. Nothing on screen changes: a
+    /// newer copy is stored, and it replaces the decoded picture in memory, so the next time the picture is drawn it is the new one.
+    private func refreshIfDue(_ url: URL) {
+        let address = url.absoluteString
+        // A few at a time, so a Home full of old posters does not send a burst of requests; one skipped now is checked the next time it
+        // comes from the disk.
+        guard refreshing.count < Self.refreshLimit, refreshing.insert(address).inserted else { return }
+        let session = session
+        let files = files
+        let known = known
+        // Off the actor: the request and the decoding never hold up other pictures.
+        Task.detached(priority: .background) {
+            var replacements: [(size: Int, image: UIImage)] = []
+            if let newer = await Self.revalidate(url, session: session, files: files) {
+                // The sizes decoded by now, the one being loaded when the check started included.
+                for size in known.withLock({ $0.sizes[address] }) ?? [] {
+                    if let image = Self.decode(newer, maxPixelSize: CGFloat(size)) { replacements.append((size, image)) }
+                }
+            }
+            await self.finishRefresh(url, replacements: replacements)
+        }
+    }
+
+    private func finishRefresh(_ url: URL, replacements: [(size: Int, image: UIImage)]) {
+        let address = url.absoluteString
+        refreshing.remove(address)
+        for replacement in replacements {
+            decoded.setObject(replacement.image, forKey: "\(replacement.size)|\(address)" as NSString, cost: Self.cost(of: replacement.image))
+        }
+    }
+
+    /// Asks the server whether the stored copy is still current (If-None-Match, If-Modified-Since). Unchanged: the stored copy is kept and
+    /// dated now, so it is not asked about again for a while, and nil comes back. Changed: the new copy is stored and returned. A failure
+    /// leaves the stored copy as it is.
+    private nonisolated static func revalidate(_ url: URL, session: URLSession, files: URLCache) async -> Data? {
+        let plain = URLRequest(url: url)
+        guard let stored = files.cachedResponse(for: plain), let old = stored.response as? HTTPURLResponse else { return nil }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+        if let tag = old.value(forHTTPHeaderField: "ETag") { request.setValue(tag, forHTTPHeaderField: "If-None-Match") }
+        if let modified = old.value(forHTTPHeaderField: "Last-Modified") { request.setValue(modified, forHTTPHeaderField: "If-Modified-Since") }
+        guard let (data, response) = try? await session.data(for: request), let http = response as? HTTPURLResponse else { return nil }
+        if http.statusCode == 304 || ((200..<300).contains(http.statusCode) && data == stored.data) {
+            var headers: [String: String] = [:]
+            for (key, value) in old.allHeaderFields {
+                guard let key = key as? String, let value = value as? String, key.lowercased() != "date" else { continue }
+                headers[key] = value
+            }
+            headers["Date"] = ImageCachePolicy.header(for: Date())
+            if let renewed = HTTPURLResponse(url: url, statusCode: old.statusCode, httpVersion: "HTTP/1.1", headerFields: headers) {
+                files.storeCachedResponse(CachedURLResponse(response: renewed, data: stored.data), for: plain)
+            }
+            return nil
+        }
+        guard (200..<300).contains(http.statusCode), decode(data, maxPixelSize: 64) != nil else { return nil }
+        files.storeCachedResponse(CachedURLResponse(response: http, data: data), for: plain)
+        return data
     }
 
     /// ImageIO builds the thumbnail straight from the compressed data, so the full-size bitmap is never created.

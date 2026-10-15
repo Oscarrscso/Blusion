@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var model: SettingsViewModel
     @State private var datasetStatus: IMDbDatasetStatus?
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
+    @AppStorage(ImageCachePolicy.diskMegabytesKey) private var imageCacheMegabytes = ImageCachePolicy.defaultDiskMegabytes
     private let services: AppServices
     let fallbackEngineLinked: Bool
     @Environment(AppRouter.self) private var router
@@ -109,6 +110,10 @@ struct SettingsView: View {
                     }
                 }
                 Section("Data") {
+                    NavigationLink { ImageCacheSettingsPage() } label: {
+                        SettingsRow(title: "Image cache", summary: ImageCacheSettingsPage.summary(imageCacheMegabytes), systemImage: "photo.stack")
+                    }
+                    .accessibilityIdentifier("settings.section.imageCache")
                     NavigationLink { DataSettingsPage(model: model, services: services) } label: {
                         SettingsRow(title: "Clear data", summary: "History, library, settings", systemImage: "trash")
                     }
@@ -584,6 +589,70 @@ private struct DataSettingsPage: View {
             Button("Cancel", role: .cancel) {}
         } message: { scope in
             Text(scope.warning)
+        }
+    }
+}
+
+/// How much room posters and backdrops may take on this device, how much they take now, and a way to clear them. There is no expiry and no
+/// quality choice: pictures stay until the limit makes room (the least recently used go first), and one that has been kept a while is
+/// checked quietly for a newer copy (see `ImageCachePolicy`).
+private struct ImageCacheSettingsPage: View {
+    @AppStorage(ImageCachePolicy.diskMegabytesKey) private var megabytes = ImageCachePolicy.defaultDiskMegabytes
+    @State private var inUse: Int?
+    @State private var confirmsClear = false
+
+    /// The Settings row's summary: the chosen size.
+    static func summary(_ megabytes: Int) -> String {
+        "Up to \(sizeName(ImageCachePolicy.diskBytes(forSavedMegabytes: megabytes) / 1024 / 1024))"
+    }
+
+    static func sizeName(_ megabytes: Int) -> String {
+        megabytes >= 1024 ? "\(megabytes / 1024) GB" : "\(megabytes) MB"
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Disk cache size", selection: $megabytes) {
+                    ForEach(ImageCachePolicy.diskSizeOptions, id: \.self) { Text(Self.sizeName($0)).tag($0) }
+                }
+                .accessibilityIdentifier("settings.imageCache.size")
+                LabeledContent("Cache in use") {
+                    Text(inUse.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "—")
+                        .monospacedDigit()
+                        .accessibilityLabel(inUse.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "Measuring")
+                }
+                .accessibilityIdentifier("settings.imageCache.inUse")
+            } footer: {
+                Text("""
+                    Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing \
+                    is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time \
+                    it appears.
+                    """)
+            }
+            Section {
+                Button("Clear Image Cache", role: .destructive) { confirmsClear = true }
+                    .accessibilityIdentifier("settings.imageCache.clear")
+            } footer: {
+                Text("Removes every poster and backdrop kept on this device. They download again as you browse.")
+            }
+        }
+        .settingsPage("Image cache")
+        .task { inUse = ImagePipeline.shared.diskUsage }
+        .onChange(of: megabytes) { _, chosen in
+            ImagePipeline.shared.setDiskLimit(megabytes: chosen)
+            inUse = ImagePipeline.shared.diskUsage
+        }
+        .confirmationDialog("Clear the image cache?", isPresented: $confirmsClear, titleVisibility: .visible) {
+            Button("Clear Image Cache", role: .destructive) {
+                Task {
+                    await ImagePipeline.shared.clear()
+                    inUse = ImagePipeline.shared.diskUsage
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Posters and backdrops download again as you browse.")
         }
     }
 }
