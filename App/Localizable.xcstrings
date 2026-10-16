@@ -122,17 +122,6 @@
         }
       }
     },
-    "Add Date": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add Date"
-          }
-        }
-      }
-    },
     "Add List": {
       "extractionState": "manual",
       "localizations": {
@@ -162,6 +151,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Widget"
+          }
+        }
+      }
+    },
+    "Add Year": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Year"
           }
         }
       }
@@ -2971,13 +2971,13 @@
         }
       }
     },
-    "Setting a date replaces the period.": {
+    "Setting a year replaces the period.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Setting a date replaces the period."
+            "value": "Setting a year replaces the period."
           }
         }
       }

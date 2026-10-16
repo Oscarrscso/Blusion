@@ -67,7 +67,7 @@ struct WidgetFieldPanel: View {
         case .votes: "Vote Count"
         case .language: "Language"
         case .runtime: "Runtime"
-        case .release: "Release Date"
+        case .release: "Release Year"
         case .providers: "Watch Providers"
         case .region: "Region"
         case .cast: "Cast"
@@ -354,53 +354,42 @@ struct WidgetFieldPanel: View {
         })
     }
 
-    // MARK: Release dates
+    // MARK: Release years
 
+    /// Whole years: From is 1 January of its year and To is 31 December of its (see `ReleaseYears`).
     private var releaseContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            dateRow("From", text: query.releasedFrom) { value in model.updateQuery { $0.releasedFrom = value } }
-            dateRow("To", text: query.releasedTo) { value in model.updateQuery { $0.releasedTo = value } }
-            Text("Setting a date replaces the period.")
+            yearRow("From", text: query.releasedFrom, date: ReleaseYears.from) { value in model.updateQuery { $0.releasedFrom = value } }
+            yearRow("To", text: query.releasedTo, date: ReleaseYears.to) { value in model.updateQuery { $0.releasedTo = value } }
+            Text("Setting a year replaces the period.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
 
-    /// One end of the release dates: a date picker and a Clear button when it has a date, or an Add Date button when it has none.
-    private func dateRow(_ title: String, text: String?, update: @escaping (String?) -> Void) -> some View {
+    /// One end of the release years: a year picker and a Clear button when it has a year, or an Add Year button when it has none. A saved
+    /// date shows its year, and keeps its day until another year is picked. `date` gives the date saved for a year picked.
+    private func yearRow(_ title: String, text: String?, date: @escaping (Int) -> String,
+                         update: @escaping (String?) -> Void) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
             Spacer(minLength: 0)
-            if let date = Self.dateValue(text) {
-                DatePicker(title, selection: Binding(get: { date }, set: { update(Self.dateText($0)) }), displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .labelsHidden()
+            if let year = ReleaseYears.year(of: text) {
+                Picker(title, selection: Binding(get: { year }, set: { picked in
+                    if let value = ReleaseYears.edit(shown: year, picked: picked, date: date) { update(value) }
+                })) {
+                    ForEach(ReleaseYears.offered(including: year), id: \.self) { Text(verbatim: String($0)).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
                 Button("Clear") { update(nil) }
                     .buttonStyle(.glassCapsule)
             } else {
-                Button("Add Date") { update(Self.dateText(Date())) }
+                Button("Add Year") { update(date(ReleaseYears.current())) }
                     .buttonStyle(.glassCapsule)
             }
         }
-    }
-
-    /// The date a "yyyy-MM-dd" string names, read with the Gregorian calendar so the locale cannot change it. Nil for any other text.
-    private static func dateValue(_ text: String?) -> Date? {
-        guard let text else { return nil }
-        let parts = text.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        var components = DateComponents()
-        components.year = parts[0]
-        components.month = parts[1]
-        components.day = parts[2]
-        return Calendar(identifier: .gregorian).date(from: components)
-    }
-
-    /// The day as a "yyyy-MM-dd" string, read with the Gregorian calendar so the locale cannot change it.
-    private static func dateText(_ date: Date) -> String {
-        let parts = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04ld-%02ld-%02ld", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 
     // MARK: Catalogs and Trakt

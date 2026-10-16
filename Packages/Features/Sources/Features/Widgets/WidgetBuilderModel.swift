@@ -721,14 +721,9 @@ public final class WidgetBuilderModel {
         }
     }
 
-    /// The release dates: "2010-05-01 to 2020-12-31", "after 2010-05-01" or "before 2020-12-31". Nil when no date is set.
+    /// The release years: "2010 to 2020", "in 2015", "from 2010" or "up to 2020". Nil when no year is set.
     private static func releaseText(_ query: TMDbDiscoverQuery) -> String? {
-        switch (query.releasedFrom, query.releasedTo) {
-        case let (from?, to?): return "\(from) to \(to)"
-        case let (from?, nil): return "after \(from)"
-        case let (nil, to?): return "before \(to)"
-        case (nil, nil): return nil
-        }
+        ReleaseYears.text(from: query.releasedFrom, to: query.releasedTo)
     }
 
     /// A score or minute without a trailing ".0": 7 for 7.0, 7.5 for 7.5.
