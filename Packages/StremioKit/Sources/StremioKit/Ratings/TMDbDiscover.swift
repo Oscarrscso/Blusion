@@ -249,6 +249,44 @@ extension TMDbRatings {
         }
     }
 
+    /// Real title matches for an unstructured name such as "Dune". This is distinct from keyword discovery:
+    /// it prevents a single title query from returning a random page of popular films.
+    public func searchTitleItems(_ text: String, kind: TMDbDiscoverQuery.Kind? = nil, limit: Int = 12) async throws -> [MetaPreview] {
+        let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, limit > 0, credential != nil else { return [] }
+        let mediaTypes = kind.map { [$0 == .movie ? "movie" : "tv"] } ?? ["movie", "tv"]
+        var all: [[MetaPreview]] = []
+        for mediaType in mediaTypes {
+            try Task.checkCancellation()
+            let (url, headers) = try request(path: ["search", mediaType],
+                                             query: [URLQueryItem(name: "query", value: term),
+                                                     URLQueryItem(name: "page", value: "1"),
+                                                     URLQueryItem(name: "include_adult", value: "false")])
+            let response = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
+            let page = try TMDbDiscoverEntry.parsePage(response.data)
+            let entries = Array(page.entries.prefix(limit))
+            let ids = try await resolveIMDbIDs(for: entries, mediaType: mediaType)
+            all.append(zip(entries, ids).compactMap { entry, imdb -> MetaPreview? in
+                guard let imdb else { return nil }
+                return MetaPreview(id: imdb, type: mediaType == "movie" ? "movie" : "series",
+                                   name: entry.title, poster: TMDbImage.url(entry.posterPath, size: "w500"),
+                                   background: TMDbImage.url(entry.backdropPath, size: "w1280"),
+                                   description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date))
+            })
+        }
+        // Interleave the movie and TV results without allowing either to dominate an untyped query.
+        var merged: [MetaPreview] = []
+        var seen: Set<String> = []
+        for index in 0..<(all.map(\.count).max() ?? 0) {
+            for list in all where index < list.count {
+                let item = list[index]
+                if seen.insert(item.identity).inserted { merged.append(item) }
+                if merged.count == limit { return merged }
+            }
+        }
+        return merged
+    }
+
     /// The IMDb id of each entry, in order, asked for at most six at a time. Nil for an entry TMDb has no IMDb id for, or whose lookup
     /// failed. Throws `CancellationError` when the caller is cancelled.
     private func resolveIMDbIDs(for entries: [TMDbDiscoverEntry], mediaType: String) async throws -> [String?] {
