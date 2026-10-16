@@ -39,6 +39,7 @@ public enum IMDbDatasetRefresh: Sendable, Equatable {
     case notModified
     /// A new copy replaced the old one.
     case updated(titles: Int)
+    case episodeIndexUpdated
     /// Nothing changed: the old copy (if any) is still in use.
     case failed(String)
 }
@@ -49,9 +50,14 @@ public enum IMDbDatasetRefresh: Sendable, Equatable {
 /// the app's own storage, out of backups, and is never shared or redistributed.
 public protocol IMDbDataset: Sendable {
     func rating(for imdbID: String) async -> IMDbRating?
+    func episodeIDs(for seriesID: String, season: Int) async -> [Int: String]
     func status() async -> IMDbDatasetStatus?
     /// Downloads a newer copy when the last check is over a day old. Safe to call often; it returns at once when nothing is due.
     func refreshIfNeeded() async -> IMDbDatasetRefresh
+}
+
+public extension IMDbDataset {
+    func episodeIDs(for seriesID: String, season: Int) async -> [Int: String] { [:] }
 }
 
 /// The words IMDb asks for next to its data, and the terms the data comes with.

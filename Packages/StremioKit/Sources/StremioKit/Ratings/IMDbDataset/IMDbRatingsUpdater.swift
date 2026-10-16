@@ -54,7 +54,7 @@ public struct URLSessionIMDbTransport: IMDbDatasetTransport {
             try? FileManager.default.removeItem(at: temporary)
             return .notModified
         case 200:
-            let destination = directory.appendingPathComponent("title.ratings.tsv.gz")
+            let destination = directory.appendingPathComponent(request.url?.lastPathComponent ?? "dataset.tsv.gz")
             try? FileManager.default.removeItem(at: destination)
             try FileManager.default.moveItem(at: temporary, to: destination)
             return .file(destination, etag: http.value(forHTTPHeaderField: "ETag"), lastModified: http.value(forHTTPHeaderField: "Last-Modified"))
@@ -236,17 +236,22 @@ private extension JSONDecoder {
 public struct IMDbRatingsService: IMDbDataset {
     public let database: IMDbRatingsDatabase
     public let updater: IMDbRatingsUpdater
+    public let episodeIndex: IMDbEpisodeIndex?
     private let fileURL: URL
 
     public init(directory: URL, transport: any IMDbDatasetTransport = URLSessionIMDbTransport(),
                 source: URL = IMDbRatingsUpdater.datasetURL, now: @escaping @Sendable () -> Date = { Date() },
-                minimumRows: Int = IMDbRatingsUpdater.minimumTitles) {
+                minimumRows: Int = IMDbRatingsUpdater.minimumTitles,
+                episodeSource: URL? = IMDbEpisodeIndex.datasetURL, minimumEpisodeRows: Int = 500_000) {
         let fileURL = directory.appendingPathComponent("title.ratings.sqlite")
         let database = IMDbRatingsDatabase(fileURL: fileURL)
         self.fileURL = fileURL
         self.database = database
         self.updater = IMDbRatingsUpdater(directory: directory, database: database, transport: transport, source: source, now: now,
                                           minimumRows: minimumRows)
+        self.episodeIndex = episodeSource.map {
+            IMDbEpisodeIndex(directory: directory, transport: transport, source: $0, now: now, minimumRows: minimumEpisodeRows)
+        }
         Self.excludeFromBackup(directory)
     }
 
@@ -260,11 +265,16 @@ public struct IMDbRatingsService: IMDbDataset {
 
     public func rating(for imdbID: String) async -> IMDbRating? { await database.rating(for: imdbID) }
 
+    public func episodeIDs(for seriesID: String, season: Int) async -> [Int: String] {
+        await episodeIndex?.episodeIDs(for: seriesID, season: season) ?? [:]
+    }
+
     public func status() async -> IMDbDatasetStatus? {
         guard let count = await database.titleCount() else { return nil }
         let state = await updater.state()
         return IMDbDatasetStatus(titleCount: count, updatedAt: state.updatedAt, checkedAt: state.checkedAt,
-                                 fileSize: Self.size(ofDatabaseAt: fileURL))
+                                 fileSize: (Self.size(ofDatabaseAt: fileURL) ?? 0)
+                                    + (episodeIndex.flatMap { Self.size(ofDatabaseAt: $0.fileURL) } ?? 0))
     }
 
     /// The database file plus its write-ahead log and shared-memory siblings, when present. Nil if the database file can't be read.
@@ -275,7 +285,15 @@ public struct IMDbRatingsService: IMDbDataset {
         return main + (bytes(url.path + "-wal") ?? 0) + (bytes(url.path + "-shm") ?? 0)
     }
 
-    public func refreshIfNeeded() async -> IMDbDatasetRefresh { await updater.updateIfNeeded() }
+    public func refreshIfNeeded() async -> IMDbDatasetRefresh {
+        let ratings = await updater.updateIfNeeded()
+        let episodesChanged = await episodeIndex?.refreshIfNeeded() ?? false
+        if episodesChanged {
+            if case .updated = ratings { return ratings }
+            return .episodeIndexUpdated
+        }
+        return ratings
+    }
 
     /// The data is a download that can always be fetched again, and IMDb's terms do not let us pass it on.
     private static func excludeFromBackup(_ directory: URL) {

@@ -119,6 +119,7 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
     @ObservationIgnored private var episodeRetryAfter: [String: Date] = [:]
     @ObservationIgnored private var episodeDatasetScores: [String: EpisodeDatasetLookup] = [:]
+    @ObservationIgnored private var episodeIndexIDs: [String: EpisodeIndexLookup] = [:]
     /// Hero artwork answers by title, kept for the session and dropped with the other review data by `forgetAll`.
     @ObservationIgnored private var heroArtworkByID: [String: TMDbArtwork] = [:]
     /// Hero artwork lookups under way, by title, so a title asked for twice at once (a prewarm and the page, say) shares one request.
@@ -228,6 +229,10 @@ public final class PosterRatingsStore {
             logger.log(.info, "IMDb ratings updated: \(titles) titles")
             datasetGeneration += 1
             reviewServicesRevision += 1
+        case .episodeIndexUpdated:
+            logger.log(.info, "IMDb offline episode mapping updated")
+            datasetGeneration += 1
+            reviewServicesRevision += 1
         case .failed(let reason):
             logger.log(.warning, "IMDb ratings update failed: \(reason)")
         case .skipped, .notModified:
@@ -306,6 +311,7 @@ public final class PosterRatingsStore {
         episodeTasks.removeAll()
         episodeRetryAfter.removeAll()
         episodeDatasetScores.removeAll()
+        episodeIndexIDs.removeAll()
         nextLookupAt.removeAll()
     }
 
@@ -505,18 +511,31 @@ public final class PosterRatingsStore {
             let cached = await cache.value(for: key)
             guard !Task.isCancelled else { return [:] }
             let previousIDs = cached?.episodeIDs ?? [:]
-            let previous = await resolveEpisodeScores(cached?.episodes ?? [:], ids: previousIDs, key: key)
+            let indexedIDs = await localEpisodeIDs(for: seriesID, season: season, key: key)
+            let ids = previousIDs.merging(indexedIDs) { _, local in local }
+            var carried = cached?.episodes ?? [:]
+            for (number, id) in ids where previousIDs[number] != nil && previousIDs[number] != id {
+                carried[number] = nil // Never inherit a stale score from a mismatched identity.
+            }
+            let previous = await resolveEpisodeScores(carried, ids: ids, key: key)
             guard !Task.isCancelled else { return [:] }
-            if var enriched = cached, enriched.episodes != previous {
+            if var enriched = cached, enriched.episodes != previous || enriched.episodeIDs != ids {
                 enriched.episodes = previous
-                await cache.store(enriched, for: key) // Keep the original fetch time; local lookups do not refresh OMDb.
+                enriched.episodeIDs = ids
+                enriched.episodeNumbers.formUnion(ids.keys)
+                await cache.store(enriched, for: key)
             }
             guard !Task.isCancelled else { return [:] }
             if let retry = episodeRetryAfter[key], now() < retry { return previous }
-            let lifetime = Self.episodeCacheLifetime(scores: previous, knownEpisodes: cached?.episodeNumbers ?? [], expectedEpisodes: expectedEpisodes)
+            let knownEpisodes = (cached?.episodeNumbers ?? []).union(ids.keys)
+            let expected = expectedEpisodes.isEmpty ? knownEpisodes : expectedEpisodes
+            if !indexedIDs.isEmpty && !expected.isEmpty && expected.isSubset(of: Set(previous.keys)) {
+                return previous // Fully resolved offline: no OMDb season request required.
+            }
+            let lifetime = Self.episodeCacheLifetime(scores: previous, knownEpisodes: knownEpisodes, expectedEpisodes: expectedEpisodes)
             let expires = cached?.fetchedAt.addingTimeInterval(lifetime) ?? .distantPast
             // Upgrade old score-only caches once, instead of making this fix wait for their 24-hour expiry.
-            let needsIDs = dataset != nil && cached?.episodeIDs == nil
+            let needsIDs = dataset != nil && ids.isEmpty && cached?.episodeIDs == nil
             if !needsIDs, let until = nextLookupAt[key], now() < min(until, expires) { return previous }
             if !needsIDs, !ignoresCachedFreshness, now() < expires {
                 return previous
@@ -526,16 +545,16 @@ public final class PosterRatingsStore {
                 let answer = try await omdb.seasonRatings(imdbID: seriesID, season: season)
                 guard !Task.isCancelled else { return [:] }
                 var retained = previous
-                for (number, id) in answer.episodeIDs where previousIDs[number] != nil && previousIDs[number] != id {
-                    retained[number] = nil // An identity correction must not inherit another episode's score.
+                for (number, id) in answer.episodeIDs where indexedIDs[number] == nil && previousIDs[number] != nil && previousIDs[number] != id {
+                    retained[number] = nil
                 }
-                let ids = previousIDs.merging(answer.episodeIDs) { _, new in new }
-                let scores = await resolveEpisodeScores(retained.merging(answer.scores) { _, new in new }, ids: ids, key: key)
+                let mergedIDs = answer.episodeIDs.merging(ids) { _, local in local }
+                let scores = await resolveEpisodeScores(retained.merging(answer.scores) { _, new in new }, ids: mergedIDs, key: key)
                 guard !Task.isCancelled else { return [:] }
                 let numbers = (cached?.episodeNumbers ?? []).union(answer.episodeNumbers)
                 let fetchedAt = now()
                 await cache.store(CachedRating(rating: nil, fetchedAt: fetchedAt, episodes: scores,
-                                               episodeIDs: ids, episodeNumbers: numbers), for: key)
+                                               episodeIDs: mergedIDs, episodeNumbers: numbers.union(mergedIDs.keys)), for: key)
                 guard !Task.isCancelled else { return [:] }
                 episodeRetryAfter[key] = nil
                 nextLookupAt[key] = fetchedAt.addingTimeInterval(Self.episodeCacheLifetime(scores: scores, knownEpisodes: numbers,
@@ -556,6 +575,22 @@ public final class PosterRatingsStore {
         let scores = await task.value
         if episodeTasks[key] == task { episodeTasks[key] = nil }
         return scores
+    }
+
+    private struct EpisodeIndexLookup {
+        let generation: Int
+        let ids: [Int: String]
+    }
+
+    private func localEpisodeIDs(for seriesID: String, season: Int, key: String) async -> [Int: String] {
+        guard let dataset else { return [:] }
+        if let cached = episodeIndexIDs[key], cached.generation == datasetGeneration { return cached.ids }
+        let generation = datasetGeneration
+        let ids = await dataset.episodeIDs(for: seriesID, season: season)
+        if generation == datasetGeneration {
+            episodeIndexIDs[key] = EpisodeIndexLookup(generation: generation, ids: ids)
+        }
+        return ids
     }
 
     private struct EpisodeDatasetLookup {
