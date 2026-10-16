@@ -95,6 +95,34 @@ final class PlayColourStore {
         store(hex, source: source, for: identity)
     }
 
+    /// Reads the colour of a title whose page opened before it was decided, and returns it ("" for the plain button), or nil when it still
+    /// cannot be decided. It is the card's read, made for the page: `standIn` is fetched when no picture is in the image cache yet, at the size
+    /// the page's stand-in loads it, so it is the stand-in's own download; a dull poster's logo is fetched too. It does not wait for a card's
+    /// read of the same title.
+    func readForPage(identity: String, standIn: URL?, pictures: [URL], logos: [URL]) async -> String? {
+        if let known = entries[identity] { return known }
+        // The stand-in is read too: on the Mac it can be Metahub's backdrop, which a card never shows.
+        let pictures = pictures + [standIn].compactMap { $0 }.filter { !pictures.contains($0) }
+        var outcome = Self.decide(pictures: pictures, logos: logos)
+        if case .unknown = outcome, let standIn {
+            _ = try? await ImagePipeline.shared.image(for: standIn, maxPixelSize: TitleHero.placeholderPixelSize)
+            guard !Task.isCancelled else { return nil }
+            if let known = entries[identity] { return known }
+            outcome = Self.decide(pictures: pictures, logos: logos)
+        }
+        if case .needsLogo = outcome {
+            for logo in logos {
+                if (try? await ImagePipeline.shared.image(for: logo, maxPixelSize: Self.logoPixelSize)) != nil { break }
+            }
+            guard !Task.isCancelled else { return nil }
+            if let known = entries[identity] { return known }
+            outcome = Self.decide(pictures: pictures, logos: logos)
+        }
+        guard case .decided(let hex, let source) = outcome else { return entries[identity] }
+        if entries[identity] == nil { store(hex, source: "\(source), page", for: identity) }
+        return entries[identity]
+    }
+
     /// Logs the colour a title page opened with: "rrggbb", "-" for the plain button, or "none" when it was not decided yet.
     func logPageColour(identity: String) {
         let hex = entries[identity]

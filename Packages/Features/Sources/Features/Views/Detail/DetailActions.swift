@@ -94,9 +94,12 @@ struct DetailActions: View {
             .buttonStyle(PrimaryActionButtonStyle(minWidth: Self.playMinWidth))
             .allowsHitTesting(!blocksPlay)
             // The title's colour from its poster is the button's background, behind the glass. Not a tint: a tint also colours the label.
-            // A title opened without its card keeps the plain style; the colour is not animated in.
-            // The colour is the one known when the page opened, so it never changes while the page is open.
-            .background(PlayColourStore.colour(hex: model.playColourHex) ?? Color.clear, in: Capsule())
+            // It is the one known when the page opened; a title whose colour was not decided yet fades it in once, as the page reads it.
+            .background {
+                Capsule()
+                    .fill(PlayColourStore.colour(hex: model.playColourHex) ?? Color.clear)
+                    .animation(.smooth(duration: 0.3), value: model.playColourHex)
+            }
             .accessibilityLabel(isLoadingStreams ? "\(model.primaryActionTitle), loading" : model.primaryActionTitle)
             .accessibilityIdentifier("detail.playButton")
         } else if let airs = model.unairedAirLabel {

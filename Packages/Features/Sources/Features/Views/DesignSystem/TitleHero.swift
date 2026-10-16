@@ -352,7 +352,7 @@ struct HeroPicture: View {
     /// backdrop a wide card or a turned phone showed), that one. Whatever the card that opened this page was showing is then on screen in
     /// the first frame, and nothing is loaded again for it. With `backdropOnly`, a page that lays out full width (the Mac title page) only
     /// ever stands in with a backdrop, never a cropped poster.
-    private static func standInURL(for preview: MetaPreview, backdropOnly: Bool = false) -> URL? {
+    static func standInURL(for preview: MetaPreview, backdropOnly: Bool = false) -> URL? {
         if backdropOnly {
             let backdrops = [preview.background, MetahubArtwork.background(imdbID: preview.id)].compactMap { $0 }
             return backdrops.first { ImagePipeline.shared.cachedImageAtAnySize(for: $0) != nil } ?? backdrops.first

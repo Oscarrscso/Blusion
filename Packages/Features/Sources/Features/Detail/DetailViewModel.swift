@@ -54,9 +54,10 @@ public final class DetailViewModel {
     /// Goes up when the trailer is closed by a control that gave its own haptic (the full-screen trailer's X), so the Trailer button does not
     /// tick a second time.
     public private(set) var trailerQuietCloses = 0
-    /// The title's Play colour as "rrggbb" when the page opened ("" or nil for the plain button). Read once, so the button keeps its colour
-    /// while the page is open even if a card's read decides it later.
-    public let playColourHex: String?
+    /// The title's Play colour as "rrggbb" ("" for the plain button), or nil while it is not decided. Read when the page opens; a title whose
+    /// colour was not decided yet (a dull poster whose logo had not loaded, or no card that showed it) takes it once, as soon as the page's
+    /// own read decides it, rather than on the next opening. It never changes after that.
+    public private(set) var playColourHex: String?
 
     public init(preview: MetaPreview, services: AppServices, artwork: TMDbArtwork? = nil, artworkChecked: Bool = false,
                 trailerPreparer: (any TrailerPreparing)? = nil) {
@@ -79,6 +80,24 @@ public final class DetailViewModel {
         self.isLoadingArtwork = known == nil && !artworkChecked
         // The age rating the spotlight already showed for this title is there from the first frame, so the line does not change on opening.
         self.certification = services.posterRatings.cachedCertification(for: preview)
+        #if canImport(UIKit)
+        if playColourHex == nil {
+            // The page's own stand-in picture, so a picture fetched for the colour is the stand-in's own download: the Mac's stands in with a
+            // backdrop.
+            #if targetEnvironment(macCatalyst)
+            let standIn = HeroPicture.standInURL(for: preview, backdropOnly: true)
+            #else
+            let standIn = HeroPicture.standInURL(for: preview)
+            #endif
+            let identity = preview.identity
+            let pictures = PlayColourStore.pictures(for: preview), logos = PlayColourStore.logos(for: preview)
+            Task { [weak self] in
+                let hex = await PlayColourStore.shared.readForPage(identity: identity, standIn: standIn, pictures: pictures, logos: logos)
+                guard let self, let hex, self.playColourHex == nil else { return }
+                self.playColourHex = hex
+            }
+        }
+        #endif
     }
 
     /// Runs the hero's load, and gives up after five seconds, so a slow picture never holds the page.
