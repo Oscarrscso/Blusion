@@ -189,7 +189,7 @@ import StremioKit
 
     @Test func aCombinedPersonRequestChecksGenreLanguageAndScoreToo() async throws {
         let calls = Calls()
-        let data = Data(#"{"title":"Wrong Genre","imdb_id":"tt1","original_language":"en","genres":[{"name":"Horror"}],"vote_average":5,"vote_count":10}"#.utf8)
+        let data = Data(#"{"title":"Wrong Genre","imdb_id":"tt1234567","original_language":"en","genres":[{"name":"Horror"}],"vote_average":5,"vote_count":10}"#.utf8)
         let metadata = try #require(try TMDbSearchMetadata.parse(data, mediaType: "movie"))
         let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], minimumScore: 7),
                                 people: [.init(name: "Requested Actor", role: .cast)], language: "fr", requiresSemanticRanking: false)
