@@ -48,7 +48,9 @@ public struct DescribedSearch: Sendable, Equatable {
             if Self.storyTopics.contains(mood) { corrected.moods.insert(mood, at: 0) }
         }
         corrected.moods = Array(corrected.moods.prefix(Self.maxMoods))
-        if corrected.genres.isEmpty && !words.genres.isEmpty { corrected.genres = words.genres }
+        // Explicit genre wording must win over an inferred genre: "funny movies about brothers"
+        // is Comedy, not an unspecified Romance simply because both mention relationships.
+        if !words.genres.isEmpty { corrected.genres = words.genres }
         return corrected
     }
 
