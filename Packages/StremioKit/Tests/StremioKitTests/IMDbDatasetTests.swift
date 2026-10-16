@@ -209,6 +209,46 @@ enum IMDbFixtures {
     }
 }
 
+@Suite struct IMDbEpisodeIndexTests {
+    @Test func indexesASeasonWithNoNetworkRequests() async throws {
+        let folder = try IMDbFixtures.scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let rows = [
+            "tconst\tparentTconst\tseasonNumber\tepisodeNumber",
+            "tt1480055\ttt0944947\t1\t1",
+            "tt1668746\ttt0944947\t1\t2",
+            "tt0000001\ttt0944947\t\\N\t\\N",
+            "tt12345678\ttt0944947\t0\t1",
+            "tt1480055\ttt0944947\t1\t1"
+        ].joined(separator: "\n") + "\n"
+        let archive = try IMDbFixtures.write(IMDbFixtures.gzip(Data(rows.utf8)), to: folder, named: "title.episode.tsv.gz")
+        let file = folder.appendingPathComponent("title.episode.sqlite")
+        #expect(try IMDbEpisodeImporter.build(from: archive, to: file, minimumRows: 3) == 3)
+        let index = IMDbEpisodeIndex(directory: folder, minimumRows: 3)
+        #expect(await index.episodeIDs(for: "tt0944947", season: 1) == [1: "tt1480055", 2: "tt1668746"])
+        #expect(await index.episodeIDs(for: "tt0944947", season: 0) == [1: "tt12345678"])
+        #expect(await index.episodeIDs(for: "tt0944947", season: 8).isEmpty)
+    }
+
+    @Test func failedUpdateKeepsPreviousCompleteIndex() async throws {
+        let folder = try IMDbFixtures.scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let rows = "tconst\tparentTconst\tseasonNumber\tepisodeNumber\ntt1480055\ttt0944947\t1\t1\n"
+        let archive = try IMDbFixtures.gzip(Data(rows.utf8))
+        let transport = ScriptedTransport([
+            .file(archive, etag: "v1", lastModified: nil),
+            .file(Data([0x00, 0x01]), etag: "v2", lastModified: nil)
+        ])
+        let clock = Clock(Date(timeIntervalSince1970: 1_800_000_000))
+        let index = IMDbEpisodeIndex(directory: folder, transport: transport, now: { clock.now }, minimumRows: 1)
+        #expect(await index.refreshIfNeeded())
+        #expect(await index.episodeIDs(for: "tt0944947", season: 1)[1] == "tt1480055")
+        clock.advance(86_400)
+        #expect(!(await index.refreshIfNeeded()))
+        #expect(await index.episodeIDs(for: "tt0944947", season: 1)[1] == "tt1480055")
+    }
+}
+
 @Suite struct IMDbRatingsDatabaseTests {
     private func database(rows: Int, in directory: URL, as name: String = "ratings.sqlite") throws -> IMDbRatingsDatabase {
         let source = try IMDbFixtures.write(IMDbFixtures.gzip(IMDbFixtures.table(rows: rows)), to: directory, named: "src-\(rows).gz")
@@ -318,7 +358,7 @@ final class Clock: @unchecked Sendable {
 
     private func service(_ replies: [ScriptedTransport.Reply], clock: Clock, in directory: URL) -> (IMDbRatingsService, ScriptedTransport) {
         let transport = ScriptedTransport(replies)
-        return (IMDbRatingsService(directory: directory, transport: transport, now: { clock.now }, minimumRows: 100), transport)
+        return (IMDbRatingsService(directory: directory, transport: transport, now: { clock.now }, minimumRows: 100, episodeSource: nil), transport)
     }
 
     private func file(rows: Int, etag: String = "\"v1\"", modified: String = "Sat, 10 Oct 2026 12:46:23 GMT") throws -> ScriptedTransport.Reply {
