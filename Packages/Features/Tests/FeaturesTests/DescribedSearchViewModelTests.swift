@@ -50,6 +50,25 @@ import StremioKit
         #expect(query?.releasedTo == "2009-12-31" && query?.minimumScore == 7.5)
     }
 
+    private struct PlotRanker: CandidateRanking {
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            guard candidates.count == 2, candidates[1].contains("Synopsis:") else { return [] }
+            return [RankedCandidate(number: 2, reason: "Stronger thematic match"),
+                    RankedCandidate(number: 1, reason: "Related")]
+        }
+    }
+
+    @Test func descriptiveSearchUsesPlotToRerankTmdbResults() async {
+        let films = [
+            MetaPreview(id: "tt1", type: "movie", name: "First", description: "A space journey."),
+            MetaPreview(id: "tt2", type: "movie", name: "Second", description: "An isolated protagonist doubts reality.")
+        ]
+        let describer = DescribedSearchService(interpreter: StubInterpreter(answer: DescribedSearch(genres: ["Drama"])),
+                                               keywords: { _ in [] }, titles: { _ in films }, ranker: PlotRanker())
+        let ranked = await describer.titles(for: "films about isolation and paranoia")
+        #expect(ranked.map(\.name) == ["Second", "First"])
+    }
+
     @Test func aTitleSearchAsksNothingOfTheDescriber() async {
         let asked = Asked()
         let model = SearchViewModel(services: services(), debounce: .milliseconds(1),
