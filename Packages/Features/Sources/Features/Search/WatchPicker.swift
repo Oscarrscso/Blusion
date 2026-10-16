@@ -80,6 +80,8 @@ public struct WatchPicker: Sendable {
     static let maxSeeds = 2
     /// On-device inference is relatively expensive: recovery is bounded even when every synopsis is refused.
     static let recoveryAttempts = 16
+    /// Apple Foundation Models accepts smaller, more reliable synopsis groups than a huge 40-film prompt.
+    static let maxModelBatch = 12
 
     /// Only concrete relationships named in the query are hard requirements. Broad moods stay semantic,
     /// but a romantic comedy without evidence of brothers must not satisfy "comedy about brothers".
@@ -119,6 +121,42 @@ public struct WatchPicker: Sendable {
         guard !eligible.isEmpty, !Task.isCancelled else { return [] }
         let named = references.map(line)
         let watchedNames = Array(watched.prefix(12))
+        if eligible.count > maxModelBatch {
+            var groups: [[WatchPick]] = []
+            for index in stride(from: 0, to: eligible.count, by: maxModelBatch) {
+                guard !Task.isCancelled else { return [] }
+                let batch = Array(eligible[index..<min(index + maxModelBatch, eligible.count)])
+                do {
+                    let ranked = try await ranker.rank(request: request, references: named,
+                                                       candidates: batch.map(line), watched: watchedNames)
+                    groups.append(validated(ranked, candidates: batch))
+                } catch {
+                    guard hasSynopses else { continue }
+                    let recovery = await recoverRanking(batch, request: request, references: named,
+                                                        watched: watchedNames, ranker: ranker, remaining: 8)
+                    groups.append(recovery.picks)
+                }
+            }
+            guard !Task.isCancelled else { return [] }
+            // Round-robin preserves the strongest suggestions from every pool, not just TMDb's first page.
+            var finalists: [WatchPick] = []
+            for position in 0..<maxPicks {
+                for group in groups where position < group.count {
+                    let pick = group[position]
+                    if !finalists.contains(where: { $0.id == pick.id }) { finalists.append(pick) }
+                    if finalists.count == maxModelBatch { break }
+                }
+                if finalists.count == maxModelBatch { break }
+            }
+            guard !finalists.isEmpty else { return [] }
+            let shortlist = finalists.map(\.item)
+            if let ranked = try? await ranker.rank(request: request, references: named,
+                                                   candidates: shortlist.map(line), watched: watchedNames),
+               !Task.isCancelled {
+                return validated(ranked, candidates: shortlist)
+            }
+            return Array(finalists.prefix(maxPicks))
+        }
         do {
             let ranked = try await ranker.rank(request: request, references: named, candidates: eligible.map(line),
                                                watched: watchedNames)
