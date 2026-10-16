@@ -545,11 +545,18 @@ public final class PosterRatingsStore {
                 let answer = try await omdb.seasonRatings(imdbID: seriesID, season: season)
                 guard !Task.isCancelled else { return [:] }
                 var retained = previous
-                for (number, id) in answer.episodeIDs where indexedIDs[number] == nil && previousIDs[number] != nil && previousIDs[number] != id {
-                    retained[number] = nil
+                var remoteScores = answer.scores
+                for (number, remoteID) in answer.episodeIDs {
+                    if let localID = indexedIDs[number], localID != remoteID {
+                        // Never assign OMDb's score for a different episode to the authoritative offline IMDb ID.
+                        retained[number] = nil
+                        remoteScores[number] = nil
+                    } else if let previousID = previousIDs[number], previousID != remoteID {
+                        retained[number] = nil
+                    }
                 }
                 let mergedIDs = answer.episodeIDs.merging(ids) { _, local in local }
-                let scores = await resolveEpisodeScores(retained.merging(answer.scores) { _, new in new }, ids: mergedIDs, key: key)
+                let scores = await resolveEpisodeScores(retained.merging(remoteScores) { _, new in new }, ids: mergedIDs, key: key)
                 guard !Task.isCancelled else { return [:] }
                 let numbers = (cached?.episodeNumbers ?? []).union(answer.episodeNumbers)
                 let fetchedAt = now()
