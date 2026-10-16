@@ -128,7 +128,8 @@ struct DiscoverView: View {
     @ViewBuilder
     private var results: some View {
         if !model.visibleItems.isEmpty {
-            MediaGrid(items: model.visibleItems, onLastAppear: { Task { await model.loadMore() } })
+            // On Mac the posters span the filters' width, from the first filter's leading edge to the last one's trailing edge.
+            MediaGrid(items: model.visibleItems, onLastAppear: { Task { await model.loadMore() } }, fillsWidth: true)
         } else if !model.items.isEmpty {
             // Every title loaded so far is outside the year span: keep reading until one fits, or the catalogue ends.
             EmptyStateView("No titles match", systemImage: "line.3.horizontal.decrease.circle", message: "Try another year.")

@@ -136,12 +136,14 @@ struct MediaRow<Content: View>: View {
 /// viewer is within the buffer of the end, so a caller can load the next page. A paged grid also draws a blank card of the same size for
 /// titles outside the buffer. What is visible comes from the grid's own geometry against its scroll view, not from its cells.
 /// `usesBetterPosters` makes the posters of a poster grid take their pictures from the BetterPosters addon (see `MediaCard`).
+/// `fillsWidth` makes a Mac grid's columns span its whole width, edge to edge between the page margins (see `GridFill`).
 struct MediaGrid: View {
     let items: [MetaPreview]
     let aspect: CardAspect
     let showsRating: Bool
     let onLastAppear: (() -> Void)?
     let usesBetterPosters: Bool
+    let fillsWidth: Bool
     @State private var zoomScope = UUID().uuidString
     /// The titles whose rows are on screen; nil before the first reading.
     @State private var visible: ClosedRange<Int>?
@@ -153,12 +155,13 @@ struct MediaGrid: View {
     @Environment(\.displayScale) private var displayScale
 
     init(items: [MetaPreview], aspect: CardAspect = .poster, showsRating: Bool = true, onLastAppear: (() -> Void)? = nil,
-         usesBetterPosters: Bool = false) {
+         usesBetterPosters: Bool = false, fillsWidth: Bool = false) {
         self.items = items
         self.aspect = aspect
         self.showsRating = showsRating
         self.onLastAppear = onLastAppear
         self.usesBetterPosters = usesBetterPosters
+        self.fillsWidth = fillsWidth
     }
 
     /// Titles kept ready on each side of the visible ones.
@@ -174,8 +177,8 @@ struct MediaGrid: View {
         let kept = onLastAppear == nil ? nil : bufferRange
         // A poster in landscape is drawn as a wide card without a caption (see `MediaCard`), so its blank card has that shape.
         let landscapePoster = isLandscape && aspect == .poster
-        let columns = metrics.gridColumns(for: aspect, inLandscape: isLandscape)
         let spacing = metrics.cardSpacing
+        let columns = filled(metrics.gridColumns(for: aspect, inLandscape: isLandscape))
         let count = items.count
         LazyVGrid(columns: columns, alignment: .leading, spacing: spacing) {
             ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
@@ -210,12 +213,23 @@ struct MediaGrid: View {
         .onDisappear { prefetcher.cancelAll() }
     }
 
+    /// Mac, for a grid that fills its width: an adaptive column stops at its maximum width and so can leave a gutter on the right, so its
+    /// maximum is lifted and the columns share the whole width (see `GridFill`). The cards ask for their pictures at the size they did,
+    /// whatever the column's width. iPhone and iPad keep their columns.
+    private func filled(_ columns: [GridItem]) -> [GridItem] {
+        #if targetEnvironment(macCatalyst)
+        return fillsWidth ? GridFill.filling(columns) : columns
+        #else
+        return columns
+        #endif
+    }
+
     /// How many columns SwiftUI lays `columns` out in at `width`: one per fixed or flexible item, and for an adaptive item as many
     /// minimum-width columns (plus spacing) as fit, at least one.
     private static func columnCount(of columns: [GridItem], width: CGFloat, spacing: CGFloat) -> Int {
         columns.reduce(0) { total, column in
             switch column.size {
-            case .adaptive(let minimum, _): total + max(1, Int(((width + spacing) / (minimum + spacing)).rounded(.down)))
+            case .adaptive(let minimum, _): total + GridFill.columnCount(width: width, minimum: minimum, spacing: spacing)
             default: total + 1
             }
         }
