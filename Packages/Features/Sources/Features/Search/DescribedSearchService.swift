@@ -170,7 +170,7 @@ public struct DescribedSearchService: Sendable {
             }, stage: .similar)
         }
         // People requests are answered by verified filmographies, not a broad list with an actor's name in its prompt.
-        if plan.people.isEmpty, (plan.titleQueries.isEmpty || output.isEmpty),
+        if plan.people.isEmpty, plan.titleQueries.isEmpty || output.isEmpty,
            !plan.filters.isEmpty || plan.language != nil || !plan.companies.isEmpty {
             var studios: [TMDbDiscoverQuery.Named] = []
             for name in plan.companies.prefix(2) {
@@ -321,7 +321,10 @@ struct GeneratedSearch {
     var earliestYear: Int?
     @Guide(description: "The latest release year it allows, for words such as before or until. Before 2010 is 2009")
     var latestYear: Int?
-    @Guide(description: "Up to three search phrases for requested subjects, setting, relationships, tone, visual style or pacing; keep phrases such as time travel together")
+    @Guide(description: """
+        Up to three search phrases for requested subjects, setting, relationships, tone, visual style or pacing; keep phrases such as \
+        time travel together
+        """)
     var moods: [String]
     @Guide(description: "The lowest audience score out of 10 it asks for: 7.5 for great reviews, 7 for good reviews, nothing otherwise")
     var minimumScore: Double?
@@ -350,7 +353,10 @@ struct GeneratedSearch {
     var excludedTopics: [String]
     @Guide(description: "True only when the user asks to exclude films or series already watched")
     var unwatchedOnly: Bool
-    @Guide(description: "True for subjective tone, mood, style, story, character or similarity requirements. False when only title or database filters like genre, cast, decade, language, score or runtime are requested.")
+    @Guide(description: """
+        True for subjective tone, mood, style, story, character or similarity requirements. False when only title or database filters \
+        like genre, cast, decade, language, score or runtime are requested.
+        """)
     var requiresSemanticRanking: Bool
 
     var described: DescribedSearch {

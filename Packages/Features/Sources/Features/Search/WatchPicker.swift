@@ -429,7 +429,10 @@ struct ModelCandidateRanker: CandidateRanking {
 struct GeneratedWish {
     @Guide(description: "Titles the request names as a reference, such as Prisoners in 'something like Prisoners'")
     var likeTitles: [String]
-    @Guide(description: "Genres it names or implies, from Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Mystery, Romance, Science Fiction, Thriller, War, Western")
+    @Guide(description: """
+        Genres it names or implies, from Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, \
+        Horror, Mystery, Romance, Science Fiction, Thriller, War, Western
+        """)
     var genres: [String]
     @Guide(description: "Up to three short themes to use as TMDb keywords, such as paranoia, memory loss, time travel or isolation")
     var moods: [String]

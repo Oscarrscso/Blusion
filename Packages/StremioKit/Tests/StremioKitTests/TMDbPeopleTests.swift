@@ -169,7 +169,8 @@ import StremioKitTestSupport
             let path = request.url?.path ?? ""
             let body = path.hasPrefix("/3/find") ? #"{"movie_results":[{"id":155,"vote_average":8.4,"vote_count":9}],"tv_results":[]}"# :
                 #"""
-                {"results":[{"id":272,"title":"Batman Begins","overview":"A determined hero returns to fight crime.","release_date":"2005-06-15","poster_path":"/b.jpg","backdrop_path":null},
+                {"results":[{"id":272,"title":"Batman Begins","overview":"A determined hero returns to fight crime.",
+                             "release_date":"2005-06-15","poster_path":"/b.jpg","backdrop_path":null},
                             {"id":9,"title":"","poster_path":null},
                             {"id":11,"name":"A Show","first_air_date":"2001-01-01","media_type":"tv"}]}
                 """#

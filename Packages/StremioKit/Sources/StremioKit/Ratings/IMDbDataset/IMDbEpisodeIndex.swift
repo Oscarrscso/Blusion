@@ -139,8 +139,11 @@ public actor IMDbEpisodeIndex {
                 return true
             }
         } catch {
-            if error is CancellationError || (error as? URLError)?.code == .cancelled { state.attemptedAt = nil }
-            else { state.failure = String(describing: error) }
+            if error is CancellationError || (error as? URLError)?.code == .cancelled {
+                state.attemptedAt = nil
+            } else {
+                state.failure = String(describing: error)
+            }
             saveState(state)
             return false
         }
@@ -182,7 +185,8 @@ enum IMDbEpisodeImporter {
         do {
             try IMDbRatingsImporter.exec(db, "PRAGMA journal_mode = OFF")
             try IMDbRatingsImporter.exec(db, "PRAGMA synchronous = OFF")
-            try IMDbRatingsImporter.exec(db, "CREATE TABLE episodes (parent_id INTEGER NOT NULL, season INTEGER NOT NULL, episode INTEGER NOT NULL, episode_id INTEGER NOT NULL, PRIMARY KEY(parent_id, season, episode)) WITHOUT ROWID")
+            try IMDbRatingsImporter.exec(db, "CREATE TABLE episodes (parent_id INTEGER NOT NULL, season INTEGER NOT NULL, "
+                                         + "episode INTEGER NOT NULL, episode_id INTEGER NOT NULL, PRIMARY KEY(parent_id, season, episode)) WITHOUT ROWID")
             try IMDbRatingsImporter.exec(db, "BEGIN")
             var rawInsert: OpaquePointer?
             guard sqlite3_prepare_v2(db, "INSERT OR IGNORE INTO episodes VALUES (?1, ?2, ?3, ?4)", -1, &rawInsert, nil) == SQLITE_OK,
