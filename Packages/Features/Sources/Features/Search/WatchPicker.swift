@@ -81,6 +81,23 @@ public struct WatchPicker: Sendable {
     /// On-device inference is relatively expensive: recovery is bounded even when every synopsis is refused.
     static let recoveryAttempts = 16
 
+    /// Only concrete relationships named in the query are hard requirements. Broad moods stay semantic,
+    /// but a romantic comedy without evidence of brothers must not satisfy "comedy about brothers".
+    static func matchesStorySubject(_ item: MetaPreview, request: String) -> Bool {
+        let words = Set(request.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init))
+        let subjects: [(Set<String>, [String])] = [
+            (["brother", "brothers"], ["brother", "sibling", "brotherhood"]),
+            (["sister", "sisters"], ["sister", "sibling", "sisterhood"]),
+            (["siblings", "sibling"], ["brother", "sister", "sibling"]),
+            (["father", "fathers"], ["father", "dad", "paternal"]),
+            (["mother", "mothers"], ["mother", "mom", "mum", "maternal"]),
+        ]
+        let required = subjects.filter { !$0.0.isDisjoint(with: words) }
+        guard !required.isEmpty else { return true }
+        guard let overview = synopsis(item.description)?.lowercased() else { return false }
+        return required.allSatisfy { _, terms in terms.contains(where: overview.contains) }
+    }
+
     /// Plot descriptions are already present in TMDb's discover/recommendation responses.
     /// Keep the model context small and avoid including blank or excessively long input.
     static func synopsis(_ text: String?) -> String? {
@@ -95,7 +112,8 @@ public struct WatchPicker: Sendable {
     static func rankedPicks(request: String, references: [MetaPreview], candidates: [MetaPreview], watched: [String],
                             ranker: any CandidateRanking) async throws -> [WatchPick] {
         let hasSynopses = candidates.contains { synopsis($0.description) != nil }
-        let eligible = hasSynopses ? candidates.filter { synopsis($0.description) != nil } : candidates
+        let relevant = candidates.filter { matchesStorySubject($0, request: request) }
+        let eligible = hasSynopses ? relevant.filter { synopsis($0.description) != nil } : relevant
         guard !eligible.isEmpty, !Task.isCancelled else { return [] }
         let named = references.map(line)
         let watchedNames = Array(watched.prefix(12))
@@ -199,7 +217,8 @@ public struct WatchPicker: Sendable {
         let excluded = Set(seeds.map(\.identity) + seen.map(\.identity))
         var candidates: [MetaPreview] = []
         for item in pool where !excluded.contains(item.identity) && !candidates.contains(where: { $0.identity == item.identity })
-            && Self.fitsRuntime(item, search) && Self.fitsKindAndYears(item, search) {
+            && Self.fitsRuntime(item, search) && Self.fitsKindAndYears(item, search)
+            && Self.matchesStorySubject(item, request: text) {
             candidates.append(item)
             if candidates.count == Self.maxCandidates { break }
         }
@@ -354,8 +373,9 @@ struct ModelCandidateRanker: CandidateRanking {
     private static let instructions = """
         You recommend what to watch. You may only choose from the numbered candidates you are given, by their numbers. Rank first the \
         candidates closest to the request in story, themes, tone, and characters, using the supplied synopses rather than just genres. \
-        Follow the changes relative to named titles. Pick at most eight, best first. Give each a short, spoiler-free reason based on \
-        supplied information; do not invent plot details.
+        Follow the changes relative to named titles. Only select a film when its synopsis actually supports EVERY explicit story \
+        requirement, not merely its genre. For example, a comedy romance is NOT a movie about brothers. Exclude uncertain matches \
+        rather than forcing eight answers. Pick up to eight with short, spoiler-free, evidence-based reasons; never invent plots.
         """
 
     func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
