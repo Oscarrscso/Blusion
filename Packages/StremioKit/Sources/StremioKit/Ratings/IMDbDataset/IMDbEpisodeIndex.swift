@@ -178,7 +178,7 @@ enum IMDbEpisodeImporter {
             throw IMDbImportError.database("cannot create episode index")
         }
         var closed = false
-        func close() { if !closed { closed = true; sqlite3_close(db) } }
+        func close() { if !closed { closed = true; sqlite3_close_v2(db) } }
         do {
             try IMDbRatingsImporter.exec(db, "PRAGMA journal_mode = OFF")
             try IMDbRatingsImporter.exec(db, "PRAGMA synchronous = OFF")
@@ -187,7 +187,8 @@ enum IMDbEpisodeImporter {
             var rawInsert: OpaquePointer?
             guard sqlite3_prepare_v2(db, "INSERT OR IGNORE INTO episodes VALUES (?1, ?2, ?3, ?4)", -1, &rawInsert, nil) == SQLITE_OK,
                   let insert = rawInsert else { throw IMDbImportError.database("cannot prepare episode import") }
-            defer { sqlite3_finalize(insert) }
+            var insertFinalized = false
+            defer { if !insertFinalized { sqlite3_finalize(insert) } }
             var count = 0
             var hasHeader = false
             var failure: Error?
@@ -224,6 +225,9 @@ enum IMDbEpisodeImporter {
             if let failure { throw failure }
             guard hasHeader else { throw IMDbImportError.badHeader }
             guard count >= minimumRows else { throw IMDbImportError.tooFewRows(count) }
+            let finalization = sqlite3_finalize(insert)
+            insertFinalized = true
+            guard finalization == SQLITE_OK else { throw IMDbImportError.database("episode insert finalization failed") }
             try IMDbRatingsImporter.exec(db, "COMMIT")
             // The full, checksummed gzip has been read and the index has a valid SQLite structure.
             var check: OpaquePointer?
