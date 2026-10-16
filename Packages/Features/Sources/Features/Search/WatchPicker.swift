@@ -55,6 +55,8 @@ public struct WatchPicker: Sendable {
     /// TMDb's recommendations for a title, as titles with IMDb ids.
     let related: @Sendable (MetaPreview) async -> [MetaPreview]
     let discover: @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview]
+    /// TMDb keyword suggestions for plot themes; nil in simple/offline tests.
+    let keywords: @Sendable (String) async -> [TMDbDiscoverQuery.Named]
     /// Titles watched or started on this device (and through Trakt), as identities and names.
     let watched: @Sendable () async -> [(identity: String, name: String)]
 
@@ -62,24 +64,85 @@ public struct WatchPicker: Sendable {
                 findTitle: @escaping @Sendable (String) async -> MetaPreview?,
                 related: @escaping @Sendable (MetaPreview) async -> [MetaPreview],
                 discover: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview],
-                watched: @escaping @Sendable () async -> [(identity: String, name: String)]) {
+                watched: @escaping @Sendable () async -> [(identity: String, name: String)],
+                keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named] = { _ in [] }) {
         self.interpreter = interpreter
         self.ranker = ranker
         self.findTitle = findTitle
         self.related = related
         self.discover = discover
+        self.keywords = keywords
         self.watched = watched
     }
 
     static let maxPicks = 8
     static let maxCandidates = 30
     static let maxSeeds = 2
+    /// On-device inference is relatively expensive: recovery is bounded even when every synopsis is refused.
+    static let recoveryAttempts = 16
+
+    /// Plot descriptions are already present in TMDb's discover/recommendation responses.
+    /// Keep the model context small and avoid including blank or excessively long input.
+    static func synopsis(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let compact = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard !compact.isEmpty else { return nil }
+        return String(compact.prefix(240))
+    }
+
+    /// Rank real titles with their synopses. A failure retries smaller groups: a synopsis that still fails
+    /// when alone is omitted rather than making every other result disappear.
+    static func rankedPicks(request: String, references: [MetaPreview], candidates: [MetaPreview], watched: [String],
+                            ranker: any CandidateRanking) async throws -> [WatchPick] {
+        let hasSynopses = candidates.contains { synopsis($0.description) != nil }
+        let eligible = hasSynopses ? candidates.filter { synopsis($0.description) != nil } : candidates
+        guard !eligible.isEmpty, !Task.isCancelled else { return [] }
+        let named = references.map(line)
+        let watchedNames = Array(watched.prefix(12))
+        do {
+            let ranked = try await ranker.rank(request: request, references: named, candidates: eligible.map(line),
+                                               watched: watchedNames)
+            return validated(ranked, candidates: eligible)
+        } catch {
+            guard hasSynopses, !Task.isCancelled else { throw error }
+            // Recover from a refused multi-title prompt. Only an individually refused synopsis is excluded.
+            guard eligible.count > 1 else { return [] }
+            let midpoint = eligible.count / 2
+            let left = await recoverRanking(Array(eligible[..<midpoint]), request: request, references: named,
+                                            watched: watchedNames, ranker: ranker, remaining: recoveryAttempts)
+            let right = await recoverRanking(Array(eligible[midpoint...]), request: request, references: named,
+                                             watched: watchedNames, ranker: ranker, remaining: left.remaining)
+            return Array((left.picks + right.picks).prefix(maxPicks))
+        }
+    }
+
+    private static func recoverRanking(_ items: [MetaPreview], request: String, references: [String], watched: [String],
+                                       ranker: any CandidateRanking, remaining: Int) async -> (picks: [WatchPick], remaining: Int) {
+        guard remaining > 0, !Task.isCancelled else { return ([], 0) }
+        do {
+            let ranked = try await ranker.rank(request: request, references: references,
+                                               candidates: items.map(line), watched: watched)
+            return (validated(ranked, candidates: items), remaining - 1)
+        } catch {
+            guard items.count > 1 else { return ([], remaining - 1) }
+            let midpoint = items.count / 2
+            let left = await recoverRanking(Array(items[..<midpoint]), request: request, references: references,
+                                            watched: watched, ranker: ranker, remaining: remaining - 1)
+            let right = await recoverRanking(Array(items[midpoint...]), request: request, references: references,
+                                             watched: watched, ranker: ranker, remaining: left.remaining)
+            return (Array((left.picks + right.picks).prefix(maxPicks)), right.remaining)
+        }
+    }
 
     /// Whether a search asks what to watch: "something like …", "similar to …", "what should I watch", "recommend …".
     public static func readsLikeRequest(_ text: String) -> Bool {
         let text = " " + text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ") + " "
-        return [" something like ", " anything like ", " movies like ", " films like ", " shows like ", " series like ",
-                " similar to ", " what should i watch ", " what to watch ", " recommend "].contains { text.contains($0) }
+        if [" something like ", " anything like ", " movies like ", " films like ", " shows like ", " series like ",
+            " similar to ", " what should i watch ", " what to watch ", " recommend "].contains(where: text.contains) {
+            return true
+        }
+        // "movies with shocking twists like Shutter Island" still names a reference film.
+        return text.contains(" like ") && [" movies ", " films ", " shows ", " series "].contains(where: text.contains)
     }
 
     /// The picks for a request, best first. Empty when nothing fits or the model is not there.
@@ -105,7 +168,15 @@ public struct WatchPicker: Sendable {
                 if recommendedFor[item.identity] == nil { recommendedFor[item.identity] = seed.name }
             }
         }
-        if !search.isEmpty || seeds.isEmpty { pool += (try? await discover(search.query(keywords: []))) ?? [] }
+        if !search.isEmpty || seeds.isEmpty {
+            var matched: [TMDbDiscoverQuery.Named] = []
+            for mood in search.moods.prefix(DescribedSearch.maxMoods) {
+                let hits = await keywords(mood)
+                if let hit = hits.first(where: { $0.name.caseInsensitiveCompare(mood) == .orderedSame }) ?? hits.first,
+                   !matched.contains(hit) { matched.append(hit) }
+            }
+            pool += (try? await discover(search.query(keywords: matched))) ?? []
+        }
         guard !Task.isCancelled else { return [] }
         let seen = await watched()
         let excluded = Set(seeds.map(\.identity) + seen.map(\.identity))
@@ -117,9 +188,8 @@ public struct WatchPicker: Sendable {
         }
         guard !candidates.isEmpty else { return [] }
         do {
-            let ranked = try await ranker.rank(request: text, references: seeds.map(Self.line), candidates: candidates.map(Self.line),
-                                               watched: seen.prefix(12).map(\.name))
-            return Self.validated(ranked, candidates: candidates)
+            return try await Self.rankedPicks(request: text, references: seeds, candidates: candidates,
+                                              watched: seen.map(\.name), ranker: ranker)
         } catch {
             // The model refused or failed: the candidates in TMDb's order, each with where it came from, rather than nothing.
             guard !Task.isCancelled else { return [] }
@@ -178,7 +248,7 @@ public struct WatchPicker: Sendable {
         parts[0] += item.type == "series" ? ", series" : ", film"
         if !item.genres.isEmpty { parts.append(item.genres.prefix(3).joined(separator: ", ")) }
         if let runtime = item.runtime, !runtime.isEmpty { parts.append(runtime) }
-        // No plot: the on-device model's safety check refuses some crime films' synopses, and it then answers nothing at all.
+        if let overview = synopsis(item.description) { parts.append("Synopsis: \(overview)") }
         return parts.joined(separator: ". ")
     }
 
@@ -209,7 +279,8 @@ public struct WatchPicker: Sendable {
                     group.addTask {
                         guard let imdb = try? await tmdb.imdbID(tmdbID: title.tmdbID, mediaType: title.mediaType) else { return (index, nil) }
                         return (index, MetaPreview(id: imdb, type: title.mediaType == "tv" ? "series" : "movie", name: title.title,
-                                                   poster: title.poster, releaseInfo: title.releaseDate.map { String($0.prefix(4)) }))
+                                                   poster: title.poster, description: title.overview,
+                                                   releaseInfo: title.releaseDate.map { String($0.prefix(4)) }))
                     }
                 }
                 var found: [(Int, MetaPreview)] = []
@@ -223,6 +294,9 @@ public struct WatchPicker: Sendable {
                 let id = entry.seriesID ?? entry.contentID
                 return (identity: "\(entry.type)/\(id)", name: entry.title)
             }
+        }, keywords: { mood in
+            guard let token = await settings.load().tmdbReadToken else { return [] }
+            return (try? await TMDbRatings(client: client, readAccessToken: token).searchKeywords(mood)) ?? []
         })
         #else
         return nil
@@ -247,9 +321,10 @@ struct ModelWishInterpreter: WishInterpreting {
             case .series: .series
             case .either: nil
             }
-            let search = DescribedSearch(kind: kind, excludedGenres: answer.excludedGenres, earliestYear: answer.earliestYear,
-                                         latestYear: answer.latestYear, minimumScore: answer.minimumScore,
-                                         maximumRuntime: answer.maximumRuntime)
+            let search = DescribedSearch(kind: kind, genres: answer.genres, excludedGenres: answer.excludedGenres,
+                                         earliestYear: answer.earliestYear, latestYear: answer.latestYear,
+                                         moods: Array(answer.moods.prefix(DescribedSearch.maxMoods)),
+                                         minimumScore: answer.minimumScore, maximumRuntime: answer.maximumRuntime)
             return WatchWish(likeTitles: answer.likeTitles, search: search.correcting(with: .reading(text)))
         } catch {
             return nil
@@ -261,8 +336,9 @@ struct ModelWishInterpreter: WishInterpreting {
 struct ModelCandidateRanker: CandidateRanking {
     private static let instructions = """
         You recommend what to watch. You may only choose from the numbered candidates you are given, by their numbers. Rank first the \
-        candidates closest to the titles the request names in genre and tone, then follow the changes the request asks for. Pick at \
-        most eight, best first. Give each a short reason of one sentence about its genre, tone or length; never describe a plot.
+        candidates closest to the request in story, themes, tone, and characters, using the supplied synopses rather than just genres. \
+        Follow the changes relative to named titles. Pick at most eight, best first. Give each a short, spoiler-free reason based on \
+        supplied information; do not invent plot details.
         """
 
     func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
@@ -281,6 +357,10 @@ struct ModelCandidateRanker: CandidateRanking {
 struct GeneratedWish {
     @Guide(description: "Titles the request names as a reference, such as Prisoners in 'something like Prisoners'")
     var likeTitles: [String]
+    @Guide(description: "Genres it names or implies, from Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Mystery, Romance, Science Fiction, Thriller, War, Western")
+    var genres: [String]
+    @Guide(description: "Up to three short themes to use as TMDb keywords, such as paranoia, memory loss, time travel or isolation")
+    var moods: [String]
     @Guide(description: "Whether it asks for films, TV series, or does not say")
     var kind: GeneratedKind
     @Guide(description: """
@@ -310,7 +390,7 @@ struct GeneratedPicks {
 struct GeneratedPick {
     @Guide(description: "The candidate's number in the list")
     var number: Int
-    @Guide(description: "One short sentence on why it fits the request")
+    @Guide(description: "One short, spoiler-free sentence on why its story, themes or mood fit the request")
     var reason: String
 }
 #endif
