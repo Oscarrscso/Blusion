@@ -519,10 +519,14 @@ public final class PosterRatingsStore {
             }
             let previous = await resolveEpisodeScores(carried, ids: ids, key: key)
             guard !Task.isCancelled else { return [:] }
-            if var enriched = cached, enriched.episodes != previous || enriched.episodeIDs != ids {
+            // Stored only for a real change. An old score-only entry keeps its missing IDs when none were found, since that is how
+            // `needsIDs` below knows to ask OMDb for them once: writing empty IDs over it marked it upgraded without any.
+            if var enriched = cached, enriched.episodes != previous || (!ids.isEmpty && enriched.episodeIDs != ids) {
                 enriched.episodes = previous
-                enriched.episodeIDs = ids
-                enriched.episodeNumbers = (enriched.episodeNumbers ?? []).union(ids.keys)
+                if !ids.isEmpty {
+                    enriched.episodeIDs = ids
+                    enriched.episodeNumbers = (enriched.episodeNumbers ?? []).union(ids.keys)
+                }
                 await cache.store(enriched, for: key)
             }
             guard !Task.isCancelled else { return [:] }
