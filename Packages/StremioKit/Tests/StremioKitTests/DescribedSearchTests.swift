@@ -55,6 +55,19 @@ import Testing
         #expect(model.correcting(with: .reading("dark sci-fi films about space")) == model, "no years in the words: the model's stand")
     }
 
+    @Test func explicitComedyAndBrothersSurviveAnIncorrectModelInterpretation() {
+        let request = "funny movies about brothers"
+        let words = DescribedSearch.reading(request)
+        #expect(words.genres == ["Comedy"])
+        #expect(words.moods.first == "brothers")
+        let model = DescribedSearch(kind: .movie, genres: ["Romance"], moods: [])
+        let corrected = model.correcting(with: words)
+        #expect(corrected.genres == ["Comedy"])
+        #expect(corrected.moods.contains("brothers"))
+        #expect(DescribedSearch.readsLikeDescription(request))
+        #expect(DescribedSearch.readsLikeDescription("dark gritty crime"))
+    }
+
     @Test func onlyADescriptionReadsLikeOne() {
         #expect(DescribedSearch.readsLikeDescription("a dark, atmospheric sci-fi film from before 2010 with great reviews"))
         #expect(DescribedSearch.readsLikeDescription("funny shows about a family"))
