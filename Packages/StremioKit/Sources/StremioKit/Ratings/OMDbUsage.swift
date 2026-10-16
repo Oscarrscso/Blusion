@@ -13,7 +13,7 @@ public final class OMDbUsage: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let now: @Sendable () -> Date
-    /// `UserDefaults` is thread-safe, but reading the count and writing it back is not one step.
+    /// `UserDefaults` is thread-safe, but reading the count and writing it back is not one step. Only `record()` takes it.
     private let lock = NSLock()
 
     public init(defaults: UserDefaults = .standard, now: @escaping @Sendable () -> Date = Date.init) {
@@ -32,9 +32,11 @@ public final class OMDbUsage: @unchecked Sendable {
     }
 
     /// Requests sent on the current UTC day. 0 when the stored count is from another day.
+    ///
+    /// Read without the lock, so it never waits for `record()`. That writes the count while it holds the lock, and each write posts
+    /// `UserDefaults.didChangeNotification` on its own thread, where SwiftUI's observer waits for the main thread's view update. A view
+    /// that read the count, and so waited for the lock, then waited forever: the app froze until the system ended it.
     public func today() -> Int {
-        lock.lock()
-        defer { lock.unlock() }
         guard defaults.string(forKey: Self.dayKey) == Self.utcDay(now()) else { return 0 }
         return max(0, defaults.integer(forKey: Self.countKey))
     }

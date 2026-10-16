@@ -103,4 +103,36 @@ import StremioKitTestSupport
             #expect(usage.today() == 0)
         }
     }
+
+    /// What a reader sees from inside a write. Written on the recording thread, read after the semaphore it signals.
+    private final class Reading: @unchecked Sendable {
+        var count: Int?
+    }
+
+    /// `record()` writes the count while it holds its lock, and the write posts `UserDefaults.didChangeNotification` on that thread. A
+    /// reader called from there (SwiftUI's observer of the notification waits for the main thread, whose view update may be reading the
+    /// count) must not wait for that lock. It did, and on 14 Oct the app froze until the system ended it.
+    @Test func theCountCanBeReadWhileARequestIsBeingCounted() throws {
+        let name = "OMDbUsageTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let noon = self.noon
+        let usage = OMDbUsage(defaults: defaults, now: { noon })
+        let reading = Reading()
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: defaults,
+                                                              queue: nil) { _ in reading.count = usage.today() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let counted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            usage.record()
+            counted.signal()
+        }
+        // Before the fix the recording thread never came back: it waited for its own lock, and held it, so nothing else may ask then.
+        guard counted.wait(timeout: .now() + 5) == .success else {
+            Issue.record("record() deadlocked on a read of the count made while it was writing")
+            return
+        }
+        #expect(reading.count != nil)
+        #expect(usage.today() == 1)
+    }
 }
