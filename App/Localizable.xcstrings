@@ -56,6 +56,17 @@
         }
       }
     },
+    "AI Search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Search"
+          }
+        }
+      }
+    },
     "About": {
       "extractionState": "manual",
       "localizations": {
@@ -1981,6 +1992,17 @@
         }
       }
     },
+    "No confident AI matches for this search.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No confident AI matches for this search."
+          }
+        }
+      }
+    },
     "No paused movies or episodes on Trakt.": {
       "extractionState": "manual",
       "localizations": {
@@ -2186,6 +2208,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offline IMDb ratings"
+          }
+        }
+      }
+    },
+    "On-device AI": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI"
+          }
+        }
+      }
+    },
+    "On-device AI isn't available. Enable Apple Intelligence to search by meaning.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI isn't available. Enable Apple Intelligence to search by meaning."
           }
         }
       }
