@@ -121,15 +121,32 @@ public final class BrowseService: Sendable {
         manifest.searchableCatalogs.filter { isVisible($0.type, in: visible) }
     }
 
-    /// Full metadata for Detail. Asks every addon that supports `meta` for this id and takes the first good answer;
-    /// when none answers, Detail is built from the catalog preview (`isFallback`).
+    /// Full metadata for Detail. Asks every addon that supports `meta` for this id at once, and takes the answer of the first addon in the
+    /// user's order that has one, as Stremio does: an addon further down that answers sooner waits until those above it have answered or
+    /// failed, so an addon that answers for any id cannot replace Cinemeta's details with its own. When none answers, Detail is built from
+    /// the catalog preview (`isFallback`).
     public func detail(for preview: MetaPreview) async -> (detail: MetaDetail, isFallback: Bool) {
         let type = preview.type.isEmpty ? "movie" : preview.type
         let addons = await registry.addons(for: .meta, type: type, id: preview.id)
         let client = self.client
+        var answers: [Int: MetaDetail] = [:]
+        var settled = Set<Int>()
         for await response in FanOut.run(over: addons, operation: { try await client.meta(base: $0.baseURL, type: type, id: preview.id) }) {
-            if let detail = response.value { return (detail.filling(from: preview), false) }
+            guard let index = addons.firstIndex(where: { $0.summary == response.addon }) else { continue }
+            settled.insert(index)
+            if let detail = response.value { answers[index] = detail }
+            if let detail = Self.firstAnswerInOrder(answers, settled: settled, count: addons.count) { return (detail.filling(from: preview), false) }
         }
         return (.fallback(from: preview), true)
+    }
+
+    /// The answer of the first addon, in order, that has one, once every addon before it has answered or failed. Nil while an addon before
+    /// the first answer has not settled yet, and when none has an answer.
+    static func firstAnswerInOrder<Answer>(_ answers: [Int: Answer], settled: Set<Int>, count: Int) -> Answer? {
+        for index in 0..<count {
+            guard settled.contains(index) else { return nil }
+            if let answer = answers[index] { return answer }
+        }
+        return nil
     }
 }

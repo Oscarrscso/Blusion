@@ -166,6 +166,45 @@ import StremioKitTestSupport
         #expect(foreign.isFallback)
     }
 
+    /// Two addons that both give details for an IMDb id: Cinemeta first in the list, then one that answers for any id, sooner, with another
+    /// title (a search result used to open as an episode of something else this way).
+    private func metaRace(firstDelay: Duration, firstStatus: Int = 200) async throws -> BrowseService {
+        let first = Manifest(id: "first", name: "First", version: "1", resources: [ResourceDescriptor(name: "meta", idPrefixes: ["tt"])],
+                             types: ["movie"], catalogs: [])
+        let catchAll = Manifest(id: "any", name: "Any", version: "1", resources: [ResourceDescriptor(name: "meta")], types: ["movie", "series"],
+                                catalogs: [])
+        let transport = StubTransport { request, _ in
+            if request.url?.host == "stub0.example.com" {
+                try await Task.sleep(for: firstDelay)
+                return StubTransport.response(Data(#"{"meta":{"id":"tt4920274","type":"movie","name":"Regular Show: The Movie"}}"#.utf8),
+                                              status: firstStatus, for: request)
+            }
+            return StubTransport.response(Data(#"{"meta":{"id":"tt4920274","type":"series","name":"A Time Loop Episode"}}"#.utf8), for: request)
+        }
+        return try await stubbedService(manifests: [first, catchAll], transport: transport, visibleTypes: ["movie", "series"])
+    }
+
+    @Test func detailTakesTheFirstAddonInOrderNotTheFastest() async throws {
+        let browse = try await metaRace(firstDelay: .milliseconds(300))
+        let result = await browse.detail(for: MetaPreview(id: "tt4920274", type: "movie", name: "Regular Show: The Movie"))
+        #expect(!result.isFallback)
+        #expect(result.detail.name == "Regular Show: The Movie", "the addon higher in the list wins, though the other answered first")
+    }
+
+    @Test func detailFallsToTheNextAddonWhenTheFirstFails() async throws {
+        let browse = try await metaRace(firstDelay: .milliseconds(50), firstStatus: 500)
+        let result = await browse.detail(for: MetaPreview(id: "tt4920274", type: "movie", name: "Regular Show: The Movie"))
+        #expect(!result.isFallback)
+        #expect(result.detail.name == "A Time Loop Episode", "with nothing from the first, the next one's details are used")
+    }
+
+    @Test func theFirstAnswerInOrderWaitsOnlyForTheAddonsAboveIt() {
+        #expect(BrowseService.firstAnswerInOrder([1: "b"], settled: [1], count: 3) == nil, "the first addon has not answered yet")
+        #expect(BrowseService.firstAnswerInOrder([1: "b"], settled: [0, 1], count: 3) == "b", "the first failed, the second has one")
+        #expect(BrowseService.firstAnswerInOrder([0: "a"], settled: [0], count: 3) == "a", "the first answers: no waiting for the rest")
+        #expect(BrowseService.firstAnswerInOrder([Int: String](), settled: [0, 1, 2], count: 3) == nil, "nobody has one")
+    }
+
     @Test func detailSurvivesABrokenAddonWhenAnotherAnswers() async throws {
         let rig = try makeRig()
         _ = try await rig.registry.install(from: rig.server.catalogManifestURL(flags: ["err500"], token: "x").absoluteString)
