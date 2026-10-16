@@ -137,7 +137,8 @@ struct DiscoverView: View {
         }
         switch model.state {
         case .idle, .loadingFirstPage:
-            if model.items.isEmpty { SkeletonRow() }
+            // The grid's own placeholders, so the titles land where they stand, at the same size.
+            if model.items.isEmpty { MediaGridPlaceholder(aspect: .poster, fillsWidth: true) }
         case .failed(let error):
             if model.isOffline {
                 OfflineBanner()

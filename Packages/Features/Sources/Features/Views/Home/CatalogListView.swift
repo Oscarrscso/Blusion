@@ -58,11 +58,8 @@ struct CatalogListView: View {
     private var emptyContent: some View {
         switch model.state {
         case .loading, .loadingMore:
-            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                ForEach(0..<3, id: \.self) { _ in
-                    SkeletonRow(aspect: request.presentation.aspectRatio.cardAspect, size: request.presentation.cardStyle.cardSize)
-                }
-            }
+            // The grid's own placeholders, so the titles land where they stand, at the same size.
+            MediaGridPlaceholder(aspect: request.presentation.aspectRatio.cardAspect)
         case .loaded:
             EmptyStateView("Nothing here yet", systemImage: "square.stack", message: "This list is empty right now.")
                 .frame(maxWidth: .infinity, minHeight: 360)

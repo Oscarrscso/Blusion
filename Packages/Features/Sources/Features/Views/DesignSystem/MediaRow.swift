@@ -255,6 +255,36 @@ struct MediaGrid: View {
     }
 }
 
+/// What a `MediaGrid` shows before its first titles arrive: blank cards in the grid's own columns, card shape, spacing and margins, so each
+/// poster takes a placeholder's place exactly and nothing changes size as they load.
+struct MediaGridPlaceholder: View {
+    let aspect: CardAspect
+    /// As the grid's own `fillsWidth`.
+    var fillsWidth = false
+    /// Enough blank cards to fill a screen.
+    var count = 18
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
+
+    var body: some View {
+        // The grid's columns, and its drawing of a poster in landscape as a wide card (see `MediaGrid`).
+        let landscapePoster = isLandscape && aspect == .poster
+        var columns = metrics.gridColumns(for: aspect, inLandscape: isLandscape)
+        #if targetEnvironment(macCatalyst)
+        if fillsWidth { columns = GridFill.filling(columns) }
+        #endif
+        return LazyVGrid(columns: columns, alignment: .leading, spacing: metrics.cardSpacing) {
+            ForEach(0..<count, id: \.self) { _ in
+                UnloadedCard(artwork: landscapePoster ? .wide : aspect, showsCaption: aspect.showsCaptionByDefault)
+            }
+        }
+        .padding(.horizontal, metrics.pageMargin)
+        .shimmering()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+
 /// The stand-in for a title whose artwork has been released: a blank box of its card's shape, with the two caption lines when the card
 /// has them, so the grid keeps the same row heights and its scroll position.
 private struct UnloadedCard: View {
