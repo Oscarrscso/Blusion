@@ -41,6 +41,8 @@ import Testing
         #expect(DescribedSearch.reading("a 90s comedy under two hours").earliestYear == 1990)
         #expect(DescribedSearch.reading("a 90s comedy under two hours").maximumRuntime == 120)
         #expect(DescribedSearch.reading("Inception").isEmpty)
+        let eighties = DescribedSearch.reading("80s dark gritty")
+        #expect(eighties.earliestYear == 1980 && eighties.latestYear == 1989 && eighties.moods == ["dark", "gritty"])
     }
 
     @Test func theWordsCorrectAModelThatPutsAYearAtTheWrongEnd() {
@@ -58,7 +60,11 @@ import Testing
         #expect(DescribedSearch.readsLikeDescription("funny shows about a family"))
         #expect(!DescribedSearch.readsLikeDescription("Inception"))
         #expect(!DescribedSearch.readsLikeDescription("The Lord of the Rings"))
-        #expect(!DescribedSearch.readsLikeDescription("sci-fi film"), "under four words is a title search")
+        #expect(!DescribedSearch.readsLikeDescription("sci-fi film"), "two words are a title search")
+        #expect(DescribedSearch.readsLikeDescription("80s dark gritty"), "three description words in three")
+        #expect(DescribedSearch.readsLikeDescription("80s dark grity"), "a decade and a mood in three words, a typo besides")
+        #expect(!DescribedSearch.readsLikeDescription("Scary Movie 2"))
+        #expect(!DescribedSearch.readsLikeDescription("The Dark Knight"))
         #expect(!DescribedSearch.readsLikeDescription("The Dark Knight Rises"))
         #expect(!DescribedSearch.readsLikeDescription("War of the Worlds"))
         #expect(!DescribedSearch.readsLikeDescription("The Girl with the Dragon Tattoo"))

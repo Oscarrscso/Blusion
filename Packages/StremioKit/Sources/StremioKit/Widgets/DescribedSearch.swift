@@ -88,16 +88,17 @@ public struct DescribedSearch: Sendable, Equatable {
 // MARK: - Reading a description without the model
 
 extension DescribedSearch {
-    /// Whether the text reads like a description rather than a title: four words or more, with at least two words a description uses
-    /// ("film", "from", "before", "with", a genre, a mood, a decade). One alone is not enough, so titles such as "The Dark Knight Rises"
-    /// or "War of the Worlds" stay title searches.
+    /// Whether the text reads like a description rather than a title: words a description uses ("film", "from", "before", "with", a
+    /// genre, a mood, a decade), two of them in four words or more. A three-word search needs three, or two with a decade, so "80s dark
+    /// gritty" reads as a description while "The Dark Knight Rises", "War of the Worlds" or "Scary Movie 2" stay title searches.
     public static func readsLikeDescription(_ text: String) -> Bool {
         let words = words(text)
-        guard words.count >= 4 else { return false }
+        guard words.count >= 3 else { return false }
         let joined = " " + words.joined(separator: " ") + " "
         let cues = words.filter { descriptionWords.contains($0) || moodWords.contains($0) || decade($0) != nil }.count
             + TMDbDiscoverQuery.genreNames(in: joined).count
-        return cues >= 2
+        if words.count >= 4 { return cues >= 2 }
+        return cues >= 3 || (cues >= 2 && words.contains { decade($0) != nil })
     }
 
     /// The filters a description names, read word by word: films or series, genres, a decade or "before/after/since" a year, "great
