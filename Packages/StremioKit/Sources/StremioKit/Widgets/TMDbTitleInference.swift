@@ -108,7 +108,7 @@ extension TMDbDiscoverQuery {
     }
 
     /// The genre a title's words name, as TMDb's movie and TV ids. A genre TV does not have is nil for TV.
-    private struct GenreClue: Sendable {
+    struct GenreClue: Sendable {
         let phrases: [String]
         let movie: Named?
         let series: Named?
@@ -116,7 +116,7 @@ extension TMDbDiscoverQuery {
 
     /// Whole words or phrases (lowercased, punctuation dropped) and the genre each means. TMDb's TV genres group some films' genres, so
     /// "Sci-Fi" is Science Fiction for films and Sci-Fi & Fantasy for TV.
-    private static let genreClues: [GenreClue] = [
+    static let genreClues: [GenreClue] = [
         GenreClue(phrases: ["action"], movie: Named(id: 28, name: "Action"), series: Named(id: 10759, name: "Action & Adventure")),
         GenreClue(phrases: ["adventure"], movie: Named(id: 12, name: "Adventure"), series: Named(id: 10759, name: "Action & Adventure")),
         GenreClue(phrases: ["animation", "animated"], movie: Named(id: 16, name: "Animation"), series: Named(id: 16, name: "Animation")),

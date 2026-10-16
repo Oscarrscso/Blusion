@@ -164,6 +164,13 @@ struct SearchView: View {
 
     @ViewBuilder
     private var results: some View {
+        // A search typed as a description gets the titles it describes first, found by TMDb from the filters it names.
+        if !model.describedItems.isEmpty {
+            MediaRow("Matching Your Description") {
+                ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
+            }
+            .accessibilityIdentifier("search.described")
+        }
         if model.groups.count > 1 {
             ChipRow(fittingColumns: min(4, model.groups.count + 1)) {
                 GlassChip("All", isSelected: selectedGroup == nil, fillsWidth: true) { selectedGroup = nil }

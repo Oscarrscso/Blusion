@@ -64,17 +64,23 @@ public final class SearchViewModel {
     private let debounce: Duration
     private let history: any SearchHistoryStore
     private var task: Task<Void, Never>?
+    /// Titles TMDb has for a search typed as a description, in their own row. Empty for a search that reads like a title.
+    public private(set) var describedItems: [MetaPreview] = []
+    private let describer: DescribedSearchService
+    private var describeTask: Task<Void, Never>?
 
     /// `history` keeps the recent searches. Without one they live only as long as this model.
-    public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil) {
+    public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil,
+                describer: DescribedSearchService? = nil) {
         let store = history ?? InMemorySearchHistoryStore()
         self.services = services
+        self.describer = describer ?? .live(services)
         self.debounce = debounce
         self.history = store
         self.recentQueries = Self.normalised(store.load())
     }
 
-    public var hasResults: Bool { sections.contains { !$0.items.isEmpty } }
+    public var hasResults: Bool { sections.contains { !$0.items.isEmpty } || !describedItems.isEmpty }
     /// Nothing came back and every addon failed because the device is offline.
     public var isOffline: Bool { !hasResults && Connectivity.isOffline(failures.map(\.error)) }
     /// "No results" needs an addon that could have answered; with none installed the screen says so instead.
@@ -123,6 +129,7 @@ public final class SearchViewModel {
     /// Call whenever `query` changes. Cancels the previous search and starts a new debounced one.
     public func queryDidChange() {
         task?.cancel()
+        describeTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else {
             reset()
@@ -141,6 +148,7 @@ public final class SearchViewModel {
     public func submit() async {
         guard !Task.isCancelled else { return }
         task?.cancel()
+        describeTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return reset() }
         phase = .searching
@@ -159,18 +167,36 @@ public final class SearchViewModel {
     /// Waits for the in-flight debounced search (used by tests and by accessibility announcements).
     public func waitUntilDone() async {
         await task?.value
+        await describeTask?.value
     }
 
     private func reset() {
+        describeTask?.cancel()
         sections = []
         failures = []
+        describedItems = []
         phase = .idle
+    }
+
+    /// A search that reads like a description also asks TMDb for the titles it describes, shown in their own row beside the addons'
+    /// results, which it neither waits for nor changes.
+    private func describe(_ term: String) {
+        describeTask?.cancel()
+        guard DescribedSearch.readsLikeDescription(term) else { return }
+        let describer = describer
+        describeTask = Task { [weak self] in
+            let items = await describer.titles(for: term)
+            guard !Task.isCancelled, let self, self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+            self.describedItems = items
+        }
     }
 
     private func run(_ term: String) async {
         guard !Task.isCancelled else { return }
         sections = []
         failures = []
+        describedItems = []
+        describe(term)
         await refreshAvailability()
         guard !Task.isCancelled else { return }
         guard hasSearchableAddons else {
