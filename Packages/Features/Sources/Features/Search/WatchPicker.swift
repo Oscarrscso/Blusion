@@ -112,7 +112,24 @@ public struct WatchPicker: Sendable {
                                             watched: watchedNames, ranker: ranker, remaining: recoveryAttempts)
             let right = await recoverRanking(Array(eligible[midpoint...]), request: request, references: named,
                                              watched: watchedNames, ranker: ranker, remaining: left.remaining)
-            return Array((left.picks + right.picks).prefix(maxPicks))
+            // A successful half may have chosen only its own top eight. Re-rank the survivors together
+            // when possible, so the first half does not unfairly dominate the combined result.
+            let survivors = left.picks + right.picks
+            guard !survivors.isEmpty else { return [] }
+            let items = survivors.map(\.item)
+            if right.remaining > 0, !Task.isCancelled {
+                if let ranked = try? await ranker.rank(request: request, references: named,
+                                                       candidates: items.map(line), watched: watchedNames) {
+                    return validated(ranked, candidates: items)
+                }
+            }
+            // If even the safe combined list is too large, interleave halves for a fair fallback.
+            var combined: [WatchPick] = []
+            for index in 0..<max(left.picks.count, right.picks.count) {
+                if index < left.picks.count { combined.append(left.picks[index]) }
+                if index < right.picks.count { combined.append(right.picks[index]) }
+            }
+            return Array(combined.prefix(maxPicks))
         }
     }
 
