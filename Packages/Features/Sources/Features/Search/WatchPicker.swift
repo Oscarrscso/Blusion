@@ -94,8 +94,10 @@ public struct WatchPicker: Sendable {
         ]
         let required = subjects.filter { !$0.0.isDisjoint(with: words) }
         guard !required.isEmpty else { return true }
-        guard let overview = synopsis(item.description)?.lowercased() else { return false }
-        return required.allSatisfy { _, terms in terms.contains(where: overview.contains) }
+        // Titles such as "Step Brothers" may state the relationship more clearly than the short overview.
+        // Do not require an overview to repeat something already established by the title.
+        let evidence = (item.name + " " + (item.description ?? "")).lowercased()
+        return required.allSatisfy { _, terms in terms.contains(where: evidence.contains) }
     }
 
     /// Plot descriptions are already present in TMDb's discover/recommendation responses.
@@ -373,9 +375,9 @@ struct ModelCandidateRanker: CandidateRanking {
     private static let instructions = """
         You recommend what to watch. You may only choose from the numbered candidates you are given, by their numbers. Rank first the \
         candidates closest to the request in story, themes, tone, and characters, using the supplied synopses rather than just genres. \
-        Follow the changes relative to named titles. Only select a film when its synopsis actually supports EVERY explicit story \
-        requirement, not merely its genre. For example, a comedy romance is NOT a movie about brothers. Exclude uncertain matches \
-        rather than forcing eight answers. Pick up to eight with short, spoiler-free, evidence-based reasons; never invent plots.
+        Match EVERY explicit request requirement; for instance, a generic romance is not a comedy about brothers. \
+        If a candidate's supplied title or synopsis does not establish a relevant plot/theme, do not select it, even if its genre fits. \
+        Exclude uncertain matches rather than filling eight slots. Give brief spoiler-free reasons without inventing plots.
         """
 
     func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
