@@ -11,7 +11,8 @@ const { parseHTML } = require(process.env.BLUSION_TEST_DOM_PATH || 'linkedom')
 const source = fs.readFileSync(path.join(__dirname, '../Packages/Features/Sources/Features/Views/Detail/ReviewPageReader.swift'), 'utf8')
 const template = source.match(/private static let template = #"""\n([\s\S]*?)\n    """#/)[1]
 
-// `reads: true` draws the reader's own list of reviews (Metacritic in the app). Rotten Tomatoes in the app shows its own page (`reads: false`).
+// `reads: true` draws the reader's own list of reviews, which these tests cover. The app shows Rotten Tomatoes' and Metacritic's own pages
+// (`reads: false`): the reader only takes a search on to the title's audience or user reviews.
 const rtOptions = { site: 'rottenTomatoes', title: 'It', year: 2017, kind: 'movie', reads: true }
 const mcOptions = { site: 'metacritic', title: 'It', year: 2017, kind: 'movie', reads: true }
 const rtRow = (author, body, score = '4.5/5') => `<article class="audience-review-row">

@@ -6,9 +6,9 @@ import StremioKit
 enum ReviewPageReader {
     static func supports(_ site: ReviewSite) -> Bool { site == .rottenTomatoes || site == .metacritic }
 
-    /// Whether the reader shows its own list of the reviews over the page. Rotten Tomatoes' own page is shown instead: the reader only takes
-    /// a search to the title's audience reviews.
-    static func reads(_ site: ReviewSite) -> Bool { site == .metacritic }
+    /// Whether the reader shows its own list of the reviews over the page. Neither site's does: Rotten Tomatoes' and Metacritic's own pages
+    /// are shown, and the reader only takes a search to the title's audience or user reviews.
+    static func reads(_ site: ReviewSite) -> Bool { false }
 
     static func script(for site: ReviewSite, item: MetaPreview) -> String {
         guard supports(site) else { return "" }
@@ -107,6 +107,10 @@ enum ReviewPageReader {
         // Rotten Tomatoes' own page is shown for a film: the search goes straight to its audience reviews, one page fewer.
         if (rt && !options.reads && options.kind === 'movie') {
           return go(new URL(ranked[0].url.pathname.replace(/\/$/, '') + '/reviews/all-audience', location.origin))
+        }
+        // Metacritic's own page is shown: the search goes straight to the title's user reviews, a film's or a show's alike.
+        if (!rt && !options.reads) {
+          return go(new URL(ranked[0].url.pathname.replace(/\/$/, '') + '/user-reviews/', location.origin))
         }
         return go(ranked[0].url)
       }

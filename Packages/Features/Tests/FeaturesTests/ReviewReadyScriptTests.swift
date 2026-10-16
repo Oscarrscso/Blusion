@@ -44,6 +44,15 @@ import Testing
         if (selector.indexOf('review-card-audience') >= 0 && page.cards > 0) {
           return element('Jack F @MovieFan111 4 days ago I am giving it 50/50 because I do not know what to think about it at all.', true);
         }
+        if (selector === '#review-card-list [data-object-id]' && page.cards > 0 && !page.imdbCardOnly) {
+          return element('A review by Sampson · Written on May 12, 2019 · A landmark of the genre that still holds up decades later.', true);
+        }
+        if (selector === '.review-footer--user' && page.cards > 0 && !page.imdbCardOnly) {
+          var userCard = element('Neo99 · 10 · Oct 3, 2025 · Still the best science fiction film ever made, nothing comes close to it.', true);
+          var footer = element('Report', true);
+          footer.closest = function () { return userCard; };
+          return footer;
+        }
         if (selector !== '.review-date' || page.cards === 0) return null;
         var card = element('Shinra788 · Jun 6, 2005 · The Batman film I have been waiting for, and it was worth every minute of it.', true);
         var date = element('Jun 6, 2005', true);
@@ -98,9 +107,9 @@ import Testing
     }
 
     @Test func anotherSiteIsNotReadyOnACardThatLooksLikeIMDbs() throws {
-        let context = try page(cards: 1, host: "www.metacritic.com", path: "/movie/barbie/user-reviews/")
-        context.evaluateScript("run(1000)")
-        #expect(posted(context) == nil, "it waits for its own heading")
+        let context = try page(cards: 0, host: "www.metacritic.com", path: "/movie/barbie/user-reviews/")
+        context.evaluateScript("page.imdbCardOnly = true; page.cards = 1; run(1000)")
+        #expect(posted(context) == nil, "it waits for its own card or heading")
     }
 
     /// Rotten Tomatoes' own page is shown now: it is ready on its first review card, as IMDb is.
@@ -124,6 +133,29 @@ import Testing
         let context = try page(cards: 1, readyState: "complete", host: "www.rottentomatoes.com", path: "/tv/the_simpsons")
         context.evaluateScript("run(3000)")
         #expect(posted(context) == nil)
+    }
+
+    /// TMDB's reviews page has no "User reviews" heading: it is ready on its first review card.
+    @Test func tmdbIsReadyOnItsFirstReviewCard() throws {
+        let context = try page(cards: 1, host: "www.themoviedb.org", path: "/movie/603/reviews")
+        context.evaluateScript("run(200)")
+        #expect(posted(context)?.reason == "card")
+    }
+
+    /// Metacritic's own user reviews page is shown now: it is ready on its first user review, as Rotten Tomatoes is.
+    @Test func metacriticIsReadyOnItsFirstUserReview() throws {
+        let context = try page(cards: 1, host: "www.metacritic.com", path: "/movie/barbie/user-reviews/")
+        context.evaluateScript("run(200)")
+        #expect(posted(context)?.reason == "card")
+    }
+
+    /// Its search page leads on to the user reviews, so it does not open the panel itself, even once it has loaded.
+    @Test func metacriticSearchWaitsForTheReviewsPage() throws {
+        let context = try page(cards: 1, readyState: "complete", host: "www.metacritic.com", path: "/search/barbie/")
+        context.evaluateScript("run(7000)")
+        #expect(posted(context) == nil)
+        context.evaluateScript("run(1200)")
+        #expect(posted(context)?.reason == "no-heading", "after 8 s it opens on whatever is there")
     }
 
     /// IMDb's check starts with the page, before its style sheets have arrived: a card laid out without them is its bare text.

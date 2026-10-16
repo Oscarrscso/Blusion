@@ -218,17 +218,27 @@ extension ReviewPageRules {
 
       var isIMDb = /(^|\.)imdb\.com$/.test(location.hostname);
       var isRottenTomatoes = /(^|\.)rottentomatoes\.com$/.test(location.hostname);
-      // Rotten Tomatoes' search and title pages lead on to its reviews: they wait for that page rather than open early themselves.
-      var leadsOn = isRottenTomatoes && !/\/reviews(\/|$)/.test(location.pathname);
+      var isMetacritic = /(^|\.)metacritic\.com$/.test(location.hostname);
+      var isTMDb = /(^|\.)themoviedb\.org$/.test(location.hostname);
+      // Rotten Tomatoes' and Metacritic's search and title pages lead on to their reviews: they wait for that page rather than open early
+      // themselves.
+      var leadsOn = (isRottenTomatoes && !/\/reviews(\/|$)/.test(location.pathname))
+        || (isMetacritic && !/\/(user|critic)-reviews(\/|$)/.test(location.pathname));
 
       // The first review card, once it is laid out with its text: on IMDb the card that holds the first review date, on Rotten Tomatoes
-      // its first review card. Those sites' pages only.
+      // its first review card, on Metacritic the card around its first user review's footer, on TMDB its first review card. Those sites'
+      // pages only.
       function firstCard() {
-        if (!(isIMDb || isRottenTomatoes) || !document.body || !stylesLoaded()) return null;
+        if (!(isIMDb || isRottenTomatoes || isMetacritic || isTMDb) || !document.body || !stylesLoaded()) return null;
         var card = null;
         if (isIMDb) {
           var date = document.querySelector('.review-date');
           card = date && date.closest('.ipc-list-card, article');
+        } else if (isTMDb) {
+          card = document.querySelector('#review-card-list [data-object-id]');
+        } else if (isMetacritic && !leadsOn) {
+          var footer = document.querySelector('.review-footer--user');
+          card = footer && footer.closest('.c-reviews-container > *');
         } else if (!leadsOn) {
           card = document.querySelector('review-card-audience, review-card-critic');
         }
@@ -355,6 +365,9 @@ struct ReviewWebView: UIViewRepresentable {
         if let dark = ReviewPageRules.darkModeScript(for: site) {
             configuration.userContentController.addUserScript(WKUserScript(source: dark, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
+        if let layout = ReviewPageRules.layoutScript(for: site) {
+            configuration.userContentController.addUserScript(WKUserScript(source: layout, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         // Metacritic's direct address for a title can be wrong; a "Page Not Found" falls back to its search.
         if site == .metacritic, let search = site.url(for: item),
            let fallback = ReviewPageRules.notFoundScript(fallback: search) {
@@ -365,13 +378,14 @@ struct ReviewWebView: UIViewRepresentable {
         // with the page: its reviews arrive with the page's first bytes, well before the page has finished loading its scripts.
         let waitsForHeading = site.waitsForReviewsHeading(at: url)
         configuration.userContentController.addUserScript(WKUserScript(source: waitsForHeading ? ReviewPageRules.paintedScript : ReviewPageRules.loadedScript,
-                                                                       injectionTime: waitsForHeading && (site == .imdb || site == .rottenTomatoes)
+                                                                       injectionTime: waitsForHeading && ReviewPageRules.isShownDark(site)
                                                                            ? .atDocumentStart : .atDocumentEnd,
                                                                        forMainFrameOnly: true))
         configuration.userContentController.add(handler, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
-        // IMDb's and Rotten Tomatoes' reviews are shown in the dark, whatever the device's setting; the other sites keep the device's look.
+        // IMDb's, Rotten Tomatoes', TMDB's and Metacritic's reviews are shown in the dark, whatever the device's setting; Letterboxd keeps the
+        // device's look.
         view.overrideUserInterfaceStyle = ReviewPageRules.isShownDark(site) ? .dark : .unspecified
         return view
     }

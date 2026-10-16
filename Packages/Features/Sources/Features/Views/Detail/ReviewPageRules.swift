@@ -28,13 +28,24 @@ enum ReviewPageRules {
     private static let rottenTomatoesHeaderSlots = "#main > header, rt-header, mobile-android-banner, notification-alert, back-to-top, "
         + "#onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter"
 
+    /// TMDB's own bars: its header (logo, menus, search), the bar of title links under it, and the block with the title and "Back to main",
+    /// and its cookie banner. Only TMDB's pages hide them, so the reviews panel starts at the first review.
+    private static let tmdbHeaderSlots = "header.main-header, .shortcut_bar_outer, #new_shortcut_bar, div.header.small.first, "
+        + "#onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter"
+
+    /// Metacritic's own navigation bar (logo, menu, search, sign-in) and its cookie banner. Only Metacritic's pages hide them, so the reviews
+    /// panel starts at the title's "User Reviews".
+    private static let metacriticHeaderSlots = "header.c-site-header, #onetrust-consent-sdk, #onetrust-banner-sdk, .onetrust-pc-dark-filter"
+
     /// WebKit content-blocking rules, as JSON. Requests to ad-serving and tracking hosts are blocked, and the ad slots are hidden where they
-    /// remain. IMDb's header is hidden on IMDb's pages only, and Rotten Tomatoes' bars on its pages only.
+    /// remain. Each site's own bars are hidden on that site's pages only: IMDb's, Rotten Tomatoes', TMDB's and Metacritic's.
     static var contentRules: String {
         let blocks = adHosts.map { #"{"trigger": {"url-filter": "\#($0)"}, "action": {"type": "block"}}"# }
         let hides = [#"{"trigger": {"url-filter": ".*"}, "action": {"type": "css-display-none", "selector": "\#(adSlots)"}}"#,
                      #"{"trigger": {"url-filter": "imdb[.]com"}, "action": {"type": "css-display-none", "selector": "\#(imdbHeaderSlots)"}}"#,
-                     #"{"trigger": {"url-filter": "rottentomatoes[.]com"}, "action": {"type": "css-display-none", "selector": "\#(rottenTomatoesHeaderSlots)"}}"#]
+                     #"{"trigger": {"url-filter": "rottentomatoes[.]com"}, "action": {"type": "css-display-none", "selector": "\#(rottenTomatoesHeaderSlots)"}}"#,
+                     #"{"trigger": {"url-filter": "themoviedb[.]org"}, "action": {"type": "css-display-none", "selector": "\#(tmdbHeaderSlots)"}}"#,
+                     #"{"trigger": {"url-filter": "metacritic[.]com"}, "action": {"type": "css-display-none", "selector": "\#(metacriticHeaderSlots)"}}"#]
         return "[\n" + (blocks + hides).joined(separator: ",\n") + "\n]"
     }
 
@@ -49,15 +60,31 @@ enum ReviewPageRules {
         }
     }
 
-    /// The dark treatment, for IMDb's and Rotten Tomatoes' pages: the page is inverted, then its pictures are inverted back, so text reads
-    /// light on a dark ground. Nil for every other site, which keep their own look. Runs before the page is drawn, so no white flashes.
+    /// The dark treatment, for IMDb's, Rotten Tomatoes', TMDB's and Metacritic's pages: the page is inverted, then its pictures are inverted
+    /// back, so text reads light on a dark ground. Nil for Letterboxd, which keeps its own look. Runs before the page is drawn, so no white
+    /// flashes.
     static func darkModeScript(for site: ReviewSite) -> String? {
         isShownDark(site) ? invertedDarkScript : nil
     }
 
+    /// A site's own layout fixes once its bars are hidden, run before the page is drawn. TMDB keeps room above its pages for its fixed
+    /// header, so with the header hidden that band goes too. Nil for the other sites, whose bars take their room with them.
+    static func layoutScript(for site: ReviewSite) -> String? {
+        site == .tmdb ? tmdbLayoutScript : nil
+    }
+
+    private static let tmdbLayoutScript = """
+    (function () {
+      if (!/(^|\\.)themoviedb\\.org$/.test(location.hostname)) return;
+      var style = document.createElement('style');
+      style.textContent = 'main{margin-top:0 !important}';
+      (document.head || document.documentElement).appendChild(style);
+    })();
+    """
+
     /// Whether a site's page is shown in the dark treatment, and its web view in dark mode.
     static func isShownDark(_ site: ReviewSite) -> Bool {
-        site == .imdb || site == .rottenTomatoes
+        [.imdb, .rottenTomatoes, .tmdb, .metacritic].contains(site)
     }
 
     private static let invertedDarkScript = """

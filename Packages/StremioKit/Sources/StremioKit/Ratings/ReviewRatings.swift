@@ -48,6 +48,8 @@ public enum ReviewSite: String, CaseIterable, Sendable, Identifiable {
     /// `url(for:)`: the title's page, or a search.
     public func reviewsURL(for item: MetaPreview, tmdbURL: URL? = nil) -> URL? {
         if self == .imdb, LetterboxdRatings.isIMDbID(item.id) { return URL(string: "https://www.imdb.com/title/\(item.id)/reviews/") }
+        // TMDB's user reviews are a page below the title's own.
+        if self == .tmdb, let tmdbURL { return tmdbURL.appendingPathComponent("reviews") }
         // Metacritic's user reviews sit at the title's own address. The address is a guess from the title; a page that is not there falls
         // back to the search (see the review web view).
         if self == .metacritic, let slug = Self.metacriticSlug(item.name) {

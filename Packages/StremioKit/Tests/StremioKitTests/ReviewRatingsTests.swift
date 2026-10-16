@@ -116,6 +116,16 @@ import StremioKitTestSupport
         #expect(ReviewSite.metacritic.reviewsURL(for: show)?.absoluteString == "https://www.metacritic.com/tv/the-simpsons/user-reviews/")
     }
 
+    @Test func tmdbUserReviewsAreThePageBelowTheTitlesOwnAndASearchStaysASearch() {
+        let film = MetaPreview(id: "tt0133093", type: "movie", name: "The Matrix")
+        let title = URL(string: "https://www.themoviedb.org/movie/603")
+        #expect(ReviewSite.tmdb.reviewsURL(for: film, tmdbURL: title)?.absoluteString == "https://www.themoviedb.org/movie/603/reviews")
+        #expect(ReviewSite.tmdb.reviewsURL(for: film, tmdbURL: URL(string: "https://www.themoviedb.org/tv/1399/"))?.absoluteString
+                == "https://www.themoviedb.org/tv/1399/reviews", "a trailing slash makes no double slash")
+        #expect(ReviewSite.tmdb.url(for: film, tmdbURL: title) == title, "the title's own page is unchanged")
+        #expect(ReviewSite.tmdb.reviewsURL(for: film) == ReviewSite.tmdb.url(for: film), "without TMDB's address, its search")
+    }
+
     @Test func onlyIMDbsReviewsPageWaitsForAHeadingNotItsSearch() {
         let reviews = URL(string: "https://www.imdb.com/title/tt0468569/reviews/")!
         let search = URL(string: "https://www.imdb.com/find/?q=Film")!
