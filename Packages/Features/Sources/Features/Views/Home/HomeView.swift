@@ -184,14 +184,19 @@ struct HomeView: View {
     }
 
     /// One round glass button that opens the widgets page, where widgets are added and edited: the navigation bar's button, in the
-    /// page so that it scrolls away with it.
+    /// page so that it scrolls away with it. It shows the app's icon, filling the circle.
     private var customizeButton: some View {
         Button {
             router.showWidgets()
         } label: {
-            Image(systemName: "slider.horizontal.3")
-                .fontWeight(.semibold)
+            Image("BlusionIcon")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFill()
                 .frame(width: Theme.barButtonDiameter, height: Theme.barButtonDiameter)
+                // A little larger than the circle, so the icon's own bevelled rim falls outside it; every point of the star stays inside.
+                .scaleEffect(1.1)
+                .clipShape(.circle)
                 .glassEffect(.regular.interactive(), in: .circle)
                 .contentShape(.circle)
                 .pointerFeedback()
