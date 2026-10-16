@@ -36,6 +36,9 @@ public struct AppServices: Sendable {
     public let decodesAV1InHardware: Bool
     /// Streams handed to another player app, waiting for its callback to record where the viewer stopped.
     public let handoffs: any HandoffStore
+    /// The addon speed test's results, by addon (see `AddonSpeedTester`), and the tester that makes them.
+    public let addonSpeed: any AddonSpeedStore
+    public let speedTester: AddonSpeedTester
     public let searchHistory: any SearchHistoryStore
     public let traktAccount: TraktAccount
     /// The one Trakt client: public reads with the client ID, signed-in reads through `traktAccount`, browse pages cached.
@@ -50,7 +53,8 @@ public struct AppServices: Sendable {
                 widgets: (any WidgetStore)? = nil, widgetContent: WidgetContentService? = nil, posterRatings: PosterRatingsStore? = nil,
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
                 trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil,
-                traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false, heroMeta: HeroMetaStore? = nil) {
+                traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false, heroMeta: HeroMetaStore? = nil,
+                addonSpeed: (any AddonSpeedStore)? = nil, speedTester: AddonSpeedTester? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -75,6 +79,8 @@ public struct AppServices: Sendable {
         self.heroMeta = heroMeta ?? HeroMetaStore(browse: self.browse)
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
+        self.addonSpeed = addonSpeed ?? InMemoryAddonSpeedStore()
+        self.speedTester = speedTester ?? AddonSpeedTester(registry: registry)
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
         self.traktAccount = traktAccount
         self.trakt = trakt

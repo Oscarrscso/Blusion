@@ -12,6 +12,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         public static let showsColouredRatingLogos = "settings.showsColouredRatingLogos"
         public static let matchesEpisodeWidthToText = "settings.matchesEpisodeWidthToText"
         public static let autoPlayBestStream = "settings.autoPlayBestStream"
+        public static let autoPickWait = "settings.autoPickWait"
         public static let continueWatchingRefreshSeconds = "settings.continueWatchingRefreshSeconds"
         public static let serverSecret = "settings.streamingServerURL"
         public static let traktClientSecret = "settings.traktClientID"
@@ -60,7 +61,8 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
                                 omdbAPIKey: omdbAPIKey, tmdbReadToken: tmdbReadToken,
                                 continueWatchingRefreshSeconds: defaults.object(forKey: Keys.continueWatchingRefreshSeconds) as? Int ?? 300,
                                 showsColouredRatingLogos: defaults.bool(forKey: Keys.showsColouredRatingLogos),
-                                matchesEpisodeWidthToText: defaults.bool(forKey: Keys.matchesEpisodeWidthToText))
+                                matchesEpisodeWidthToText: defaults.bool(forKey: Keys.matchesEpisodeWidthToText),
+                                autoPickWait: AutoPickWait(storedValue: defaults.string(forKey: Keys.autoPickWait)))
     }
 
     public func save(_ settings: PlaybackSettings) async {
@@ -80,6 +82,7 @@ public final class DefaultsSettingsStore: SettingsStore, @unchecked Sendable {
         defaults.set(settings.showsColouredRatingLogos, forKey: Keys.showsColouredRatingLogos)
         defaults.set(settings.matchesEpisodeWidthToText, forKey: Keys.matchesEpisodeWidthToText)
         defaults.set(settings.autoPlayBestStream, forKey: Keys.autoPlayBestStream)
+        defaults.set(settings.autoPickWait.storedValue, forKey: Keys.autoPickWait)
         defaults.set(settings.continueWatchingRefreshSeconds ?? 300, forKey: Keys.continueWatchingRefreshSeconds)
         if let server = settings.streamingServerURL?.trimmingCharacters(in: .whitespacesAndNewlines), !server.isEmpty {
             await store(server, for: Keys.serverSecret)

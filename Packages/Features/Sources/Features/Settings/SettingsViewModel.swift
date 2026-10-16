@@ -36,6 +36,8 @@ public final class SettingsViewModel {
     public var tmdbReadTokenText = ""
     /// Every installed addon, disabled ones included.
     public private(set) var installedAddonCount = 0
+    /// Each installed addon's name, for the Addon Speed row's summary.
+    public private(set) var addonNames: [UUID: String] = [:]
     public private(set) var lastMessage: String?
     /// OMDb requests this device has sent today (UTC). `refreshOMDbUsage()` updates it.
     public private(set) var omdbRequestsToday = 0
@@ -60,7 +62,9 @@ public final class SettingsViewModel {
         tmdbReadTokenText = settings.tmdbReadToken ?? ""
         services.posterRatings.isEnabled = settings.showsPosterRatings
         services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
-        installedAddonCount = await services.registry.addons.count
+        let addons = await services.registry.addons
+        installedAddonCount = addons.count
+        addonNames = Dictionary(addons.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         refreshOMDbUsage()
     }
 

@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import Network
 import SwiftUI
 import StremioKit
 import UIKit
@@ -58,6 +59,12 @@ struct SettingsView: View {
                         SettingsRow(title: "Addons", summary: "\(model.installedAddonCount) installed", systemImage: "puzzlepiece.extension")
                     }
                     .accessibilityIdentifier("settings.addons")
+                    NavigationLink { AddonSpeedSettingsPage(services: services, onChange: { Task { await model.load() } }) } label: {
+                        SettingsRow(title: "Addon Speed",
+                                    summary: AddonSpeedViewModel.summary(for: model.settings.autoPickWait, names: model.addonNames),
+                                    systemImage: "speedometer")
+                    }
+                    .accessibilityIdentifier("settings.section.addonSpeed")
                     NavigationLink(value: SettingsDestination.widgets) {
                         SettingsRow(title: "Widgets", summary: "Home rows and layout", systemImage: "rectangle.3.group")
                     }
@@ -655,6 +662,100 @@ private struct ImageCacheSettingsPage: View {
         } message: {
             Text("Posters and backdrops download again as you browse.")
         }
+    }
+}
+
+/// How fast each addon answers, and what Auto Pick waits for. The test runs only when asked: every request is a real lookup. The addons
+/// stay in the user's own order, which also orders Home's rows.
+private struct AddonSpeedSettingsPage: View {
+    @State private var model: AddonSpeedViewModel
+    /// Tells Settings the choice changed, so its row's summary follows.
+    let onChange: () -> Void
+    @State private var isOnline = true
+
+    init(services: AppServices, onChange: @escaping () -> Void) {
+        _model = State(initialValue: AddonSpeedViewModel(services: services))
+        self.onChange = onChange
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Button {
+                    Task { await model.test() }
+                } label: {
+                    HStack {
+                        Text(model.isTesting ? "Testing…" : "Test Now")
+                        Spacer(minLength: 0)
+                        if model.isTesting { Spinner().controlSize(.small) }
+                    }
+                }
+                .disabled(model.isTesting || !isOnline)
+                .accessibilityIdentifier("settings.addonSpeed.test")
+                ForEach(model.rows) { row in
+                    HStack(spacing: Theme.Spacing.s) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.addon.name)
+                            Text(AddonSpeedViewModel.detail(for: row.result))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Spacer(minLength: 0)
+                        if row.id == model.fastest {
+                            Text("Fastest")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, Theme.Spacing.s)
+                                .padding(.vertical, 3)
+                                .background(.tint.opacity(0.25), in: Capsule())
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("settings.addonSpeed.row.\(row.id.uuidString)")
+                }
+            } footer: {
+                if isOnline {
+                    Text("""
+                        Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. \
+                        Every request is a real lookup, so the test only runs when you start it.
+                        """)
+                } else {
+                    Text("You're offline. Connect to test your addons.")
+                }
+            }
+            Section {
+                waitChoice("All addons", .allAddons)
+                waitChoice("Auto (fastest)", .fastest)
+                ForEach(model.rows) { row in waitChoice(row.addon.name, .addon(row.id)) }
+            } header: {
+                Text("Auto Pick waits for")
+            } footer: {
+                Text("""
+                    With an addon chosen, Auto Pick starts as soon as that addon has a stream it can play, from everything that has \
+                    arrived by then. If that addon fails, has nothing to play, or doesn't cover the title, Auto Pick waits for every addon, as \
+                    before. Auto waits for the fastest addon that answers reliably and finds the sharpest streams; with nothing tested yet, it \
+                    waits for every addon.
+                    """)
+            }
+        }
+        .settingsPage("Addon Speed")
+        .task { await model.load() }
+        .task { for await path in NWPathMonitor() { isOnline = path.status == .satisfied } }
+    }
+
+    private func waitChoice(_ title: String, _ wait: AutoPickWait) -> some View {
+        Button {
+            Haptics.selection()
+            Task { await model.choose(wait, saved: onChange) }
+        } label: {
+            HStack {
+                Text(title).foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                if model.shownWait == wait { Image(systemName: "checkmark").foregroundStyle(.tint) }
+            }
+        }
+        .accessibilityAddTraits(model.shownWait == wait ? .isSelected : [])
+        .accessibilityIdentifier("settings.addonSpeed.wait.\(wait.storedValue)")
     }
 }
 

@@ -27,12 +27,16 @@ public struct PlaybackSettings: Sendable, Equatable, Codable {
     public var continueWatchingRefreshSeconds: Int?
     /// Episode cards on a title page are as wide as the text above them, instead of the fixed card width. Off by default.
     public var matchesEpisodeWidthToText: Bool
+    /// What Auto Pick waits for before it chooses: every addon by default (see `AutoPickWait`).
+    public var autoPickWait: AutoPickWait
 
     public init(preferredResolution: Int? = nil, subtitleLanguage: String? = nil, streamingServerURL: String? = nil, fallbackEngineEnabled: Bool = true,
                 traktClientID: String? = nil, playerPreference: PlayerPreference = .infuseWhenNeeded, showsPosterRatings: Bool = true,
                 autoPlayBestStream: Bool = false, omdbAPIKey: String? = nil, tmdbReadToken: String? = nil,
-                continueWatchingRefreshSeconds: Int? = 300, showsColouredRatingLogos: Bool = false, matchesEpisodeWidthToText: Bool = false) {
+                continueWatchingRefreshSeconds: Int? = 300, showsColouredRatingLogos: Bool = false, matchesEpisodeWidthToText: Bool = false,
+                autoPickWait: AutoPickWait = .allAddons) {
         self.matchesEpisodeWidthToText = matchesEpisodeWidthToText
+        self.autoPickWait = autoPickWait
         self.preferredResolution = preferredResolution
         self.subtitleLanguage = subtitleLanguage
         self.streamingServerURL = streamingServerURL

@@ -130,6 +130,7 @@ final class AppEnvironment {
         let widgets: any WidgetStore = uiTesting ? InMemoryWidgetStore() : DefaultsWidgetStore(defaults: settingsDefaults)
         // Streams handed to Infuse and not yet called back, so a stop recorded after a relaunch still counts.
         let handoffs: any HandoffStore = uiTesting ? InMemoryHandoffStore() : DefaultsHandoffStore(defaults: settingsDefaults)
+        let addonSpeed: any AddonSpeedStore = uiTesting ? InMemoryAddonSpeedStore() : DefaultsAddonSpeedStore(defaults: settingsDefaults)
         // The last items of each Home row, kept on disk so Home shows them at once on the next launch (UI tests start empty).
         var snapshots: (any WidgetSnapshotStore)?
         if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
@@ -167,7 +168,8 @@ final class AppEnvironment {
                                    makeEngine: makeEngine, fallbackEngineLinked: fallbackLinked, decodesAV1InHardware: AVHardware.decodesAV1InHardware,
                                    widgets: widgets, widgetContent: widgetContent,
                                    posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount, trakt: trakt,
-                                   secretsInKeychain: secretsInKeychain, traktSyncState: traktSyncState, syncSchedulesItself: !uiTesting)
+                                   secretsInKeychain: secretsInKeychain, traktSyncState: traktSyncState, syncSchedulesItself: !uiTesting,
+                                   addonSpeed: addonSpeed)
         if !uiTesting {
             // The first report from the network monitor is also the launch sync.
             Task { await services.traktSync.startMonitoringNetwork() }

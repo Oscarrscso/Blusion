@@ -60,6 +60,7 @@ public struct DataResetService: Sendable {
         case .addons:
             for addon in await services.registry.addons { try? await services.registry.remove(id: addon.id) }
             await services.widgetContent.forgetEverything()
+            await services.addonSpeed.clear()
         case .everything:
             for each in [Scope.history, .library, .settings, .widgets, .addons] { await clear(each) }
             services.searchHistory.save([])

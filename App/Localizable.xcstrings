@@ -353,6 +353,17 @@
         }
       }
     },
+    "Auto Pick waits for": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Pick waits for"
+          }
+        }
+      }
+    },
     "Back": {
       "extractionState": "manual",
       "localizations": {
@@ -1112,6 +1123,17 @@
         }
       }
     },
+    "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it."
+          }
+        }
+      }
+    },
     "Everything Blusion knows stays on this device. Addon links are kept in the Keychain and are removed with their addon.": {
       "extractionState": "manual",
       "localizations": {
@@ -1130,6 +1152,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fallback player"
+          }
+        }
+      }
+    },
+    "Fastest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fastest"
           }
         }
       }
@@ -3873,6 +3906,17 @@
         }
       }
     },
+    "With an addon chosen, Auto Pick starts as soon as that addon has a stream it can play, from everything that has arrived by then. If that addon fails, has nothing to play, or doesn't cover the title, Auto Pick waits for every addon, as before. Auto waits for the fastest addon that answers reliably and finds the sharpest streams; with nothing tested yet, it waits for every addon.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "With an addon chosen, Auto Pick starts as soon as that addon has a stream it can play, from everything that has arrived by then. If that addon fails, has nothing to play, or doesn't cover the title, Auto Pick waits for every addon, as before. Auto waits for the fastest addon that answers reliably and finds the sharpest streams; with nothing tested yet, it waits for every addon."
+          }
+        }
+      }
+    },
     "Works with widget exports from Fusion and with links to a JSON file.": {
       "extractionState": "manual",
       "localizations": {
@@ -3891,6 +3935,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Year"
+          }
+        }
+      }
+    },
+    "You're offline. Connect to test your addons.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're offline. Connect to test your addons."
           }
         }
       }

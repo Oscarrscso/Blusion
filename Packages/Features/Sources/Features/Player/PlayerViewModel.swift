@@ -301,7 +301,8 @@ public final class PlayerViewModel {
         guard let next = plan.request.nextRequest else { return nil }
         let picker = StreamPickerViewModel(request: next, services: services)
         defer { picker.cancelLoading() }
-        await picker.loadForAutomaticSelection()
+        // Every addon's answers within the window, as before: the stream continuing this one may come from a slower addon.
+        await picker.loadForAutomaticSelection(stopsForWaitTarget: false)
         let context = plan.candidates.indices.contains(coordinator?.candidateIndex ?? 0) ? plan.candidates[coordinator?.candidateIndex ?? 0].bingeContext : nil
         if case .play(let nextPlan)? = await picker.bingeChoice(continuing: context) { return nextPlan }
         return nil
