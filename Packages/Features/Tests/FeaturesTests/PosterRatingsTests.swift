@@ -407,6 +407,27 @@ import StremioKitTestSupport
         #expect(entry.posterSites.isEmpty && entry.isEmpty)
     }
 
+    @Test func theAverageTakesEveryScoreOutOf100First() {
+        let entry = TitleRatings(id: "test", imdb: 7.8, letterboxd: 4)
+        entry.rottenTomatoes = 90
+        entry.metacritic = 70
+        entry.tmdb = 7.5
+        #expect(entry.scoreOutOf100(for: .imdb) == 78 && entry.scoreOutOf100(for: .letterboxd) == 80)
+        #expect(entry.scoreOutOf100(for: .tmdb) == 75 && entry.scoreOutOf100(for: .rottenTomatoes) == 90)
+        // (78 + 80 + 90 + 70 + 75) / 5 = 78.6
+        #expect(entry.averageScore == 79)
+    }
+
+    @Test func theAverageNeedsTwoScores() {
+        let entry = TitleRatings(id: "test")
+        #expect(entry.averageScore == nil)
+        entry.metacritic = 64
+        #expect(entry.averageScore == nil, "one score is not an average")
+        entry.imdb = 7.1
+        #expect(entry.averageScore == 68, "(64 + 71) / 2 = 67.5 rounds up")
+        #expect(TitleRatings.average(of: [nil, 50, nil]) == nil)
+    }
+
     @Test func expiredScoresSurviveOfflineFailuresAndManualRetryWorks() async throws {
         let cache = InMemoryRatingsCache()
         let cached = CachedRating(rating: 4, fetchedAt: when.addingTimeInterval(-8 * 86_400))

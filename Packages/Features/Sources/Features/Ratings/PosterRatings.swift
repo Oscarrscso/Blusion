@@ -58,6 +58,30 @@ public final class TitleRatings: Identifiable {
         }
     }
 
+    /// The site's score out of 100, unrounded: IMDb and TMDb are out of 10 and Letterboxd out of 5, as `shortText` scales them.
+    public func scoreOutOf100(for site: ReviewSite) -> Double? {
+        switch site {
+        case .imdb: imdb.map { $0 * 10 }
+        case .letterboxd: letterboxd.map { $0 * 20 }
+        case .rottenTomatoes: rottenTomatoes
+        case .metacritic: metacritic
+        case .tmdb: tmdb.map { $0 * 10 }
+        }
+    }
+
+    /// The average of the scores the title page's ratings row shows (each site's own score, TMDb's included, never the ratings on single
+    /// reviews), each out of 100 first, as a whole number out of 100. Nil until at least two sites have a score.
+    public var averageScore: Int? {
+        Self.average(of: ReviewSite.allCases.map { scoreOutOf100(for: $0) })
+    }
+
+    /// The rounded mean of the known scores, all out of 100; nil for fewer than two.
+    nonisolated static func average(of scores: [Double?]) -> Int? {
+        let known = scores.compactMap { $0 }
+        guard known.count >= 2 else { return nil }
+        return Int((known.reduce(0, +) / Double(known.count)).rounded())
+    }
+
     public func text(for site: ReviewSite) -> String? {
         switch site {
         case .imdb: imdbText.map { "\($0)/100" }
