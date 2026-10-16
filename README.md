@@ -65,10 +65,11 @@ opens it. That is the only copy to open. A build product launched from `build/` 
   and title pages. **Settings → IMDb ratings** shows the title count and the date of the last update, and carries IMDb's credit line.
   IMDb allows this data for personal, non-commercial use only (https://developer.imdb.com/non-commercial-datasets/): Blusion never
   uploads, shares or redistributes it. Check those terms before putting a build of Blusion in anyone else's hands.
-- **Episode ratings:** addons rarely send them (Cinemeta sends `0` for most shows), so with an OMDb key a season's IMDb scores are
-  fetched in one request when its first episode card scrolls onto the screen (nothing is asked when the page opens or for seasons you never
-  reach) and shown with the IMDb mark after each episode's description. OMDb is used for nothing else: posters and title pages read the offline file.
-  A TMDb credential also fills episodes that have no addon rating, labeled TMDb to identify their source.
+- **Episode ratings:** Blusion downloads IMDb's `title.episode.tsv.gz` on unmetered connections and builds a separate compact
+  SQLite index of series/season/episode numbers to IMDb episode IDs. Its existing IMDb ratings table then supplies episode
+  scores entirely offline; OMDb is not needed for seasons whose ratings are already locally available. The episode index is
+  refreshed conditionally each day, with previous data retained when a download or import fails. Incomplete seasons can still
+  fall back to optional OMDb season requests, then TMDb/addon scores.
 - **Best Blu-ray edition:** pressing **Play** on a film automatically looks it up on
   [Best Blurays](https://www.bestblurays.com) while addons search for streams. The streams page shows the recommended release,
   video notes, 4K tier and anything upcoming, with a link to the full comparison. The lookup keeps its answer while the stream picker
