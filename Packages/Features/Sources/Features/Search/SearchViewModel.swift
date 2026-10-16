@@ -68,19 +68,24 @@ public final class SearchViewModel {
     public private(set) var describedItems: [MetaPreview] = []
     private let describer: DescribedSearchService
     private var describeTask: Task<Void, Never>?
+    /// Titles the on-device model picked for a "what should I watch?" search, from real candidates, each with its reason.
+    public private(set) var picks: [WatchPick] = []
+    /// Nil where the on-device model is not available: such a search is then read as a description.
+    private let picker: WatchPicker?
 
     /// `history` keeps the recent searches. Without one they live only as long as this model.
     public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil,
-                describer: DescribedSearchService? = nil) {
+                describer: DescribedSearchService? = nil, picker: WatchPicker? = nil, usesLivePicker: Bool = true) {
         let store = history ?? InMemorySearchHistoryStore()
         self.services = services
         self.describer = describer ?? .live(services)
+        self.picker = picker ?? (usesLivePicker ? WatchPicker.live(services) : nil)
         self.debounce = debounce
         self.history = store
         self.recentQueries = Self.normalised(store.load())
     }
 
-    public var hasResults: Bool { sections.contains { !$0.items.isEmpty } || !describedItems.isEmpty }
+    public var hasResults: Bool { sections.contains { !$0.items.isEmpty } || !describedItems.isEmpty || !picks.isEmpty }
     /// Nothing came back and every addon failed because the device is offline.
     public var isOffline: Bool { !hasResults && Connectivity.isOffline(failures.map(\.error)) }
     /// "No results" needs an addon that could have answered; with none installed the screen says so instead.
@@ -130,6 +135,7 @@ public final class SearchViewModel {
     public func queryDidChange() {
         task?.cancel()
         describeTask?.cancel()
+        pickTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else {
             reset()
@@ -149,6 +155,7 @@ public final class SearchViewModel {
         guard !Task.isCancelled else { return }
         task?.cancel()
         describeTask?.cancel()
+        pickTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return reset() }
         phase = .searching
@@ -168,14 +175,30 @@ public final class SearchViewModel {
     public func waitUntilDone() async {
         await task?.value
         await describeTask?.value
+        await pickTask?.value
     }
 
     private func reset() {
         describeTask?.cancel()
+        pickTask?.cancel()
         sections = []
         failures = []
         describedItems = []
+        picks = []
         phase = .idle
+    }
+
+    private var pickTask: Task<Void, Never>?
+
+    /// A "what should I watch?" search also gets the on-device model's picks from real candidates, in their own row beside the addons'
+    /// results, which it neither waits for nor changes.
+    private func pick(_ term: String, with picker: WatchPicker) {
+        pickTask?.cancel()
+        pickTask = Task { [weak self] in
+            let picks = await picker.picks(for: term)
+            guard !Task.isCancelled, let self, self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+            self.picks = picks
+        }
     }
 
     /// A search that reads like a description also asks TMDb for the titles it describes, shown in their own row beside the addons'
@@ -196,7 +219,8 @@ public final class SearchViewModel {
         sections = []
         failures = []
         describedItems = []
-        describe(term)
+        picks = []
+        if let picker, WatchPicker.readsLikeRequest(term) { pick(term, with: picker) } else { describe(term) }
         await refreshAvailability()
         guard !Task.isCancelled else { return }
         guard hasSearchableAddons else {

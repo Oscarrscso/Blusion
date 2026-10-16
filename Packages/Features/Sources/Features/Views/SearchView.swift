@@ -164,6 +164,22 @@ struct SearchView: View {
 
     @ViewBuilder
     private var results: some View {
+        // A "what should I watch?" search gets the on-device model's picks first, each with why it fits.
+        if !model.picks.isEmpty {
+            MediaRow("Picks for You") {
+                ForEach(model.picks) { pick in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        MediaCardLink(item: pick.item, width: metrics.posterWidth)
+                        Text(pick.reason)
+                            .font(Theme.Typography.cardSubtitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3, reservesSpace: true)
+                            .frame(width: metrics.posterWidth, alignment: .leading)
+                    }
+                }
+            }
+            .accessibilityIdentifier("search.picks")
+        }
         // A search typed as a description gets the titles it describes first, found by TMDb from the filters it names.
         if !model.describedItems.isEmpty {
             MediaRow("Matching Your Description") {
