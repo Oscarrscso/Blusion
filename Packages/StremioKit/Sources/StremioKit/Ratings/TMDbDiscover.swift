@@ -245,7 +245,8 @@ extension TMDbRatings {
             return MetaPreview(id: imdbID, type: query.kind == .movie ? "movie" : "series", name: entry.title,
                                poster: TMDbImage.url(entry.posterPath, size: "w500"),
                                    background: TMDbImage.url(entry.backdropPath, size: "w1280"),
-                               description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date))
+                               description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date),
+                               genres: Self.genreNames(entry.genreIDs, mediaType: mediaType))
         }
     }
 
@@ -271,7 +272,8 @@ extension TMDbRatings {
                 return MetaPreview(id: imdb, type: mediaType == "movie" ? "movie" : "series",
                                    name: entry.title, poster: TMDbImage.url(entry.posterPath, size: "w500"),
                                    background: TMDbImage.url(entry.backdropPath, size: "w1280"),
-                                   description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date))
+                                   description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date),
+                               genres: Self.genreNames(entry.genreIDs, mediaType: mediaType))
             })
         }
         // Interleave the movie and TV results without allowing either to dominate an untyped query.
@@ -312,6 +314,11 @@ extension TMDbRatings {
         try await imdbIDs.imdbID(for: "\(mediaType)/\(tmdbID)") {
             try await self.imdbID(tmdbID: tmdbID, mediaType: mediaType)
         }
+    }
+
+    private static func genreNames(_ ids: [Int], mediaType: String) -> [String] {
+        let names = TMDbDiscoverQuery.genreClues.compactMap { mediaType == "movie" ? $0.movie : $0.series }
+        return ids.compactMap { id in names.first(where: { $0.id == id })?.name }
     }
 
     /// The first four characters of a date when they are a year, such as "2024" from "2024-03-01"; nil otherwise.

@@ -73,7 +73,7 @@ import Testing
         #expect(DescribedSearch.readsLikeDescription("funny shows about a family"))
         #expect(!DescribedSearch.readsLikeDescription("Inception"))
         #expect(!DescribedSearch.readsLikeDescription("The Lord of the Rings"))
-        #expect(!DescribedSearch.readsLikeDescription("sci-fi film"), "two words are a title search")
+        #expect(DescribedSearch.readsLikeDescription("sci-fi film"), "explicit filters don't become title searches because they are short")
         #expect(DescribedSearch.readsLikeDescription("80s dark gritty"), "three description words in three")
         #expect(DescribedSearch.readsLikeDescription("80s dark grity"), "a decade and a mood in three words, a typo besides")
         #expect(!DescribedSearch.readsLikeDescription("Scary Movie 2"))
@@ -81,5 +81,22 @@ import Testing
         #expect(!DescribedSearch.readsLikeDescription("The Dark Knight Rises"))
         #expect(!DescribedSearch.readsLikeDescription("War of the Worlds"))
         #expect(!DescribedSearch.readsLikeDescription("The Girl with the Dragon Tattoo"))
+    }
+
+    @Test(arguments: ["90s comedy", "80s horror", "2000s sci-fi", "drama before 2010", "comedy under two hours"])
+    func shortExplicitFiltersAreRecognisedAcrossGenresAndYears(_ text: String) {
+        #expect(DescribedSearch.isFilterOnly(text))
+        #expect(DescribedSearch.readsLikeDescription(text))
+    }
+
+    @Test func storyRequirementsAreNeverReducedToOnlyTheirGenre() {
+        #expect(!DescribedSearch.isFilterOnly("90s comedy about brothers"))
+        #expect(!DescribedSearch.isFilterOnly("dark gritty crime"))
+        #expect(!DescribedSearch.isFilterOnly("The Dark Knight"))
+        let words = DescribedSearch.reading("comedy without romance")
+        #expect(words.genres == ["Comedy"])
+        #expect(words.excludedGenres == ["Romance"])
+        let corrected = DescribedSearch(genres: ["Comedy", "Romance"]).correcting(with: words)
+        #expect(corrected.genres == ["Comedy"] && corrected.excludedGenres == ["Romance"])
     }
 }

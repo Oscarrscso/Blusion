@@ -51,6 +51,8 @@ public struct DescribedSearch: Sendable, Equatable {
         // Explicit genre wording must win over an inferred genre: "funny movies about brothers"
         // is Comedy, not an unspecified Romance simply because both mention relationships.
         if !words.genres.isEmpty { corrected.genres = words.genres }
+        for genre in words.excludedGenres where !corrected.excludedGenres.contains(genre) { corrected.excludedGenres.append(genre) }
+        corrected.genres.removeAll { corrected.excludedGenres.contains($0) }
         return corrected
     }
 
@@ -101,6 +103,7 @@ extension DescribedSearch {
     /// genre, a mood, a decade), two of them in four words or more. A three-word search needs three, or two with a decade, so "80s dark
     /// gritty" reads as a description while "The Dark Knight Rises", "War of the Worlds" or "Scary Movie 2" stay title searches.
     public static func readsLikeDescription(_ text: String) -> Bool {
+        if isFilterOnly(text) { return true }
         let words = words(text)
         guard words.count >= 3 else { return false }
         let joined = " " + words.joined(separator: " ") + " "
@@ -108,6 +111,22 @@ extension DescribedSearch {
             + TMDbDiscoverQuery.genreNames(in: joined).count
         if words.count >= 4 { return cues >= 2 }
         return cues >= 3 || (cues >= 2 && words.contains { decade($0) != nil })
+    }
+
+    /// Only fully explicit filter requests can be shown before semantic ranking finishes.
+    /// Unrecognised words keep a request semantic: "90s comedy about brothers" must still prove the story subject.
+    public static func isFilterOnly(_ text: String) -> Bool {
+        let search = reading(text)
+        guard !search.isEmpty, search.moods.isEmpty else { return false }
+        let allowed: Set<String> = [
+            "a", "an", "the", "and", "film", "films", "movie", "movies", "tv", "series", "show", "shows",
+            "from", "in", "before", "after", "since", "with", "under", "minutes", "minute", "min", "mins",
+            "hours", "hour", "two", "great", "good", "reviews", "highly", "rated", "best", "acclaimed", "short",
+            "action", "adventure", "animation", "animated", "comedy", "comedies", "funny", "hilarious", "comedic",
+            "crime", "documentary", "documentaries", "drama", "family", "fantasy", "history", "historical", "horror",
+            "mystery", "romance", "romantic", "science", "fiction", "sci", "fi", "scifi", "thriller", "war", "western"
+        ]
+        return words(text).allSatisfy { allowed.contains($0) || decade($0) != nil || Int($0) != nil }
     }
 
     /// The filters a description names, read word by word: films or series, genres, a decade or "before/after/since" a year, "great
@@ -120,6 +139,15 @@ extension DescribedSearch {
         let namesFilms = words.contains(where: { ["movie", "movies", "film", "films"].contains($0) })
         search.kind = namesTV == namesFilms ? (namesTV ? nil : .movie) : (namesTV ? .series : .movie)
         search.genres = TMDbDiscoverQuery.genreNames(in: joined)
+        for clue in TMDbDiscoverQuery.genreClues {
+            guard let genre = clue.movie else { continue }
+            if clue.phrases.contains(where: { phrase in
+                ["no", "not", "without", "excluding", "except"].contains { joined.contains(" \($0) \(phrase) ") }
+            }) {
+                search.excludedGenres.append(genre.name)
+                search.genres.removeAll { $0 == genre.name }
+            }
+        }
         if words.contains(where: { ["funny", "hilarious", "comedic"].contains($0) }),
            !search.genres.contains("Comedy") {
             search.genres.append("Comedy")

@@ -36,6 +36,8 @@ public final class SearchViewModel {
 
     /// Independent of the normal addon search; the AI row keeps showing a spinner until its own work ends.
     public private(set) var aiPhase: Phase = .idle
+    public private(set) var aiStage: AISearchUpdate.Stage = .interpreting
+    private var aiRequestID = UUID()
 
     /// A genre of one catalog, offered on the idle Search page. `source` opens that catalog filtered to the genre.
     public struct GenreShortcut: Identifiable, Hashable, Sendable {
@@ -141,6 +143,7 @@ public final class SearchViewModel {
     public func queryDidChange() {
         task?.cancel()
         aiTask?.cancel()
+        aiRequestID = UUID()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { reset(); return }
         sections = []
@@ -162,6 +165,7 @@ public final class SearchViewModel {
         guard !Task.isCancelled else { return }
         task?.cancel()
         aiTask?.cancel()
+        aiRequestID = UUID()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { reset(); return }
         sections = []
@@ -190,6 +194,7 @@ public final class SearchViewModel {
 
     private func reset() {
         aiTask?.cancel()
+        aiRequestID = UUID()
         sections = []
         failures = []
         describedItems = []
@@ -199,28 +204,30 @@ public final class SearchViewModel {
     }
 
     /// Every nonempty search runs on-device AI, even a single name like "Dune".
-    /// Specialised similarity requests get the reference-title picker first, then plot discovery if it finds no candidates.
+    /// One plan covers title, metadata, people, similarity and semantic searches with cumulative updates.
     private func searchAI(_ term: String) {
         aiTask?.cancel()
         let describer = describer
-        let picker = picker
+        let requestID = UUID()
+        aiRequestID = requestID
+        aiStage = .interpreting
         aiTask = Task { [weak self] in
-            if let picker, WatchPicker.readsLikeRequest(term) {
-                let result = await picker.picks(for: term)
-                guard !Task.isCancelled, let self,
-                      self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
-                if !result.isEmpty {
-                    self.picks = result
-                    self.aiPhase = .done
-                    return
-                }
+            let items = await describer.titles(for: term) { [weak self] update in
+                guard !Task.isCancelled else { return }
+                await self?.applyAIUpdate(update, term: term, requestID: requestID)
             }
-            let items = await describer.titles(for: term)
-            guard !Task.isCancelled, let self,
+            guard !Task.isCancelled, let self, self.aiRequestID == requestID,
                   self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
             self.describedItems = items
+            self.aiStage = .complete
             self.aiPhase = .done
         }
+    }
+
+    private func applyAIUpdate(_ update: AISearchUpdate, term: String, requestID: UUID) {
+        guard aiRequestID == requestID, query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+        describedItems = update.items
+        aiStage = update.stage
     }
 
     private func run(_ term: String) async {

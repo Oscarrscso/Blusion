@@ -213,40 +213,29 @@ struct SearchView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, metrics.pageMargin)
                     .accessibilityIdentifier("search.ai.unavailable")
-            } else if model.aiPhase == .searching {
-                HStack(spacing: Theme.Spacing.s) {
-                    ProgressView()
-                    Text("Analysing plots on your iPhone…")
+            } else {
+                if model.aiPhase == .searching {
+                    HStack(spacing: Theme.Spacing.s) {
+                        ProgressView()
+                        Text(model.aiStage.text)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, metrics.pageMargin)
+                    .accessibilityIdentifier("search.ai.loading")
+                }
+                if !model.describedItems.isEmpty {
+                    MediaRow("Matches for You") {
+                        ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
+                    }
+                    .accessibilityIdentifier("search.ai.matches")
+                } else if model.aiPhase == .done {
+                    Text("No confident AI matches for this search.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, metrics.pageMargin)
+                        .accessibilityIdentifier("search.ai.empty")
                 }
-                .padding(.horizontal, metrics.pageMargin)
-                .accessibilityIdentifier("search.ai.loading")
-            } else if !model.picks.isEmpty {
-                MediaRow("Matches for You") {
-                    ForEach(model.picks) { pick in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            MediaCardLink(item: pick.item, width: metrics.posterWidth)
-                            Text(pick.reason)
-                                .font(Theme.Typography.cardSubtitle)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3, reservesSpace: true)
-                                .frame(width: metrics.posterWidth, alignment: .leading)
-                        }
-                    }
-                }
-                .accessibilityIdentifier("search.ai.picks")
-            } else if !model.describedItems.isEmpty {
-                MediaRow("Matches for You") {
-                    ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
-                }
-                .accessibilityIdentifier("search.ai.matches")
-            } else {
-                Text("No confident AI matches for this search.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, metrics.pageMargin)
-                    .accessibilityIdentifier("search.ai.empty")
             }
         }
         .accessibilityIdentifier("search.ai")
