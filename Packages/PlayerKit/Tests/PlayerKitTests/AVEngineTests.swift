@@ -14,6 +14,13 @@ import Testing
         try MockServer.shared().stream.appendingPathComponent("media/\(path)")
     }
 
+    /// An engine with its sound off, so a test that plays a clip never sounds through the Mac's speakers.
+    private func silentEngine() -> AVEngine {
+        let engine = AVEngine()
+        engine.setMuted(true)
+        return engine
+    }
+
     /// Waits until `condition(state)` holds for a state from the engine, or fails the test after `timeout`.
     private func wait(_ engine: AVEngine, timeout: TimeInterval = 30, _ condition: @escaping @Sendable (PlaybackState) -> Bool) async -> PlaybackState? {
         let stream = engine.makeStateStream()
@@ -34,7 +41,7 @@ import Testing
 
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func playsTheMockMP4AndTheClockAdvances() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4"))
         engine.play()
         let playing = await wait(engine) { $0.status == .playing }
@@ -47,7 +54,7 @@ import Testing
 
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func seekLandsWithinOneSecond() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4"))
         engine.play()
         _ = await wait(engine) { $0.status == .playing }
@@ -59,7 +66,7 @@ import Testing
 
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func startPositionIsApplied() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4", startPosition: 4))
         engine.play()
         let state = await wait(engine) { $0.status == .playing && $0.position >= 4 }
@@ -69,7 +76,7 @@ import Testing
 
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func playsHLS() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("hls/index.m3u8"), title: "hls"))
         engine.play()
         #expect(await wait(engine) { $0.status == .playing && $0.position >= 1.0 } != nil)
@@ -78,7 +85,7 @@ import Testing
 
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func reachesTheEnd() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("sample.mp4"), title: "mp4", startPosition: 8.5))
         engine.play()
         #expect(await wait(engine) { $0.status == .ended } != nil)
@@ -86,7 +93,7 @@ import Testing
     }
 
     @Test func aMissingFileFails() async throws {
-        let engine = AVEngine()
+        let engine = silentEngine()
         engine.load(PlaybackItem(url: try media("does-not-exist.mp4"), title: "missing"))
         engine.play()
         let failed = await wait(engine) { $0.failure != nil }
@@ -98,13 +105,13 @@ import Testing
     @Test(.enabled(if: MockServer.hasMediaFixtures, "needs generated media: run Tools/MockAddon/make-fixtures.sh (ffmpeg)"))
     func aProtectedStreamPlaysOnlyWithItsHeader() async throws {
         let url = try media("protected.mp4")
-        let withHeader = AVEngine()
+        let withHeader = silentEngine()
         withHeader.load(PlaybackItem(url: url, headers: ["X-Mock-Token": "abc"], title: "protected"))
         withHeader.play()
         #expect(await wait(withHeader) { $0.status == .playing && $0.position >= 0.5 } != nil, "ADR-005 route B delivers the header")
         withHeader.stop()
 
-        let without = AVEngine()
+        let without = silentEngine()
         without.load(PlaybackItem(url: url, title: "protected"))
         without.play()
         #expect(await wait(without, timeout: 20) { $0.failure != nil } != nil, "without the header the mock answers 403")

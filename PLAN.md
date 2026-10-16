@@ -160,7 +160,7 @@ Each milestone is composite: DECOMPOSE it with RUN. The bullets are candidate ch
 
 `Tools/MockAddon/server.js`: Node 18+, zero dependencies. Serves a catalog addon and a stream addon on separate ports, ids prefixed `mock:`. Flags simulate a 3 s delay, HTTP 500, invalid JSON, a 6 MB body, a 302 redirect, null arrays and numbers as strings.
 
-Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so tests don't need the internet: 10 s clips from `testsrc` and `sine` as MP4 (H.264/AAC), HLS (2 s segments), MKV (H.264/AC3) and MKV (H.264/DTS via `-c:a dca -strict -2`, if available), plus SRT and VTT subtitle files with known cue times. Don't commit generated media.
+Media is generated offline with ffmpeg by `Tools/MockAddon/make-fixtures.sh` so tests don't need the internet: 10 s clips from `testsrc` and silent `anullsrc` audio (so the player tests never sound through the Mac's speakers) as MP4 (H.264/AAC), HLS (2 s segments), MKV (H.264/AC3) and MKV (H.264/DTS via `-c:a dca -strict -2`, if available), plus SRT and VTT subtitle files with known cue times. Don't commit generated media.
 
 ## 8. Risks and planned responses
 

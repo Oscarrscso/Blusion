@@ -26,7 +26,9 @@ rm -f "$OUT"/hls/*
 
 FF=(ffmpeg -hide_banner -loglevel error -y)
 VIDEO=(-f lavfi -i "testsrc=duration=$DUR:size=640x360:rate=25")
-AUDIO=(-f lavfi -i "sine=frequency=440:duration=$DUR")
+# Silent audio: the same mono 44.1 kHz track a tone would give, so the clips test the same things without sounding through the Mac's
+# speakers when the player tests play them.
+AUDIO=(-f lavfi -t "$DUR" -i "anullsrc=channel_layout=mono:sample_rate=44100")
 V264=(-c:v libx264 -preset veryfast -pix_fmt yuv420p -profile:v main -g 50 -keyint_min 50 -sc_threshold 0)
 
 echo "make-fixtures: mp4 (H.264/AAC)"
