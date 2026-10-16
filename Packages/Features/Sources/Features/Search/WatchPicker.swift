@@ -235,13 +235,8 @@ public struct WatchPicker: Sendable {
             search.genres = Array(genres.prefix(2))
         }
         var pool: [MetaPreview] = []
-        /// Which named title TMDb recommended each candidate for, for the reasons given when the model cannot rank.
-        var recommendedFor: [String: String] = [:]
         for seed in seeds {
-            for item in await related(seed) {
-                pool.append(item)
-                if recommendedFor[item.identity] == nil { recommendedFor[item.identity] = seed.name }
-            }
+            pool += await related(seed)
         }
         if !search.isEmpty || seeds.isEmpty {
             var matched: [TMDbDiscoverQuery.Named] = []
@@ -267,12 +262,8 @@ public struct WatchPicker: Sendable {
             return try await Self.rankedPicks(request: text, references: seeds, candidates: candidates,
                                               watched: seen.map(\.name), ranker: ranker)
         } catch {
-            // The model refused or failed: the candidates in TMDb's order, each with where it came from, rather than nothing.
-            guard !Task.isCancelled else { return [] }
-            return candidates.prefix(Self.maxPicks).map { item in
-                WatchPick(item: item, reason: recommendedFor[item.identity].map { "TMDb recommends it alongside \($0)." }
-                          ?? "On TMDb's list for what you asked.")
-            }
+            // The AI section must never claim a generic TMDb shortlist was selected by the on-device model.
+            return []
         }
     }
 
