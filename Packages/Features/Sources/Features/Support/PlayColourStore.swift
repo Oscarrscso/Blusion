@@ -95,6 +95,12 @@ final class PlayColourStore {
         store(hex, source: source, for: identity)
     }
 
+    /// Logs the colour a title page opened with: "rrggbb", "-" for the plain button, or "none" when it was not decided yet.
+    func logPageColour(identity: String) {
+        let hex = entries[identity]
+        colourLog.notice("\(identity, privacy: .public) page opens \(hex.map { $0.isEmpty ? "-" : $0 } ?? "none", privacy: .public)")
+    }
+
     private func store(_ hex: String, source: String, for identity: String) {
         entries[identity] = hex
         colourLog.notice("\(identity, privacy: .public) \(source, privacy: .public) \(hex.isEmpty ? "-" : hex, privacy: .public)")

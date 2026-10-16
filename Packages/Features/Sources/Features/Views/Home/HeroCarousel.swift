@@ -374,6 +374,14 @@ private struct HeroPage: View {
             guard distance <= 1 else { return }
             await heroMeta?.load(for: item)
         }
+        // The title's Play colour is read while its page is on show, as a poster card reads it, so its title page has the colour on the
+        // first frame: a dull poster takes the logo's colour, and the title page only reads a logo that is already loaded. Asked again
+        // once the page reveals, when its stand-in poster has surely loaded.
+        .task(id: "play-colour|\(distance == 0)|\(isRevealed)") {
+            guard distance == 0 else { return }
+            await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item),
+                                              logos: PlayColourStore.logos(for: item))
+        }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(isInWindow)|\(distance <= 1)") {
             // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
             guard isInWindow else { hero.release(keeping: []); return }

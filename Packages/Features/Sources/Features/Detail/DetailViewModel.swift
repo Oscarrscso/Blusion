@@ -68,6 +68,7 @@ public final class DetailViewModel {
         PlayColourStore.shared.readNow(identity: preview.identity, pictures: PlayColourStore.pictures(for: preview),
                                        logos: PlayColourStore.logos(for: preview))
         playColourHex = PlayColourStore.shared.hex(for: preview.identity)
+        PlayColourStore.shared.logPageColour(identity: preview.identity)
         #else
         playColourHex = nil
         #endif
