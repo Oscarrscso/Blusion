@@ -172,13 +172,19 @@ public struct BestBluraysClient: Sendable {
         // "Best English-friendly & video release · updated 4 months ago"
         let headingParts = tokens[headingIndex].components(separatedBy: " · ")
         let heading = headingParts[0].trimmingCharacters(in: .whitespaces)
-        let updated = headingParts.dropFirst().first { $0.hasPrefix("updated") }
+        var updated = headingParts.dropFirst().first { $0.hasPrefix("updated") }
 
         // The release is the heading just above that line.
         let before = tokens[..<headingIndex]
         let markerIndex = before.lastIndex(of: BestBluraysText.headingMarker)
         let releaseTokens = markerIndex.map { Array(before[before.index(after: $0)...]) } ?? []
-        let release = BestBluraysText.sentence(releaseTokens)
+        var release = BestBluraysText.sentence(releaseTokens)
+        // Since October 2026 the site names the release under the heading, not above it, and dates it on a line of its own.
+        var rest = headingIndex + 1
+        if release.isEmpty, rest < tokens.count, !BestBluraysText.startsSection(tokens[rest]) {
+            release = tokens[rest]
+            rest += 1
+        }
         let rating = markerIndex.flatMap { index -> Double? in
             before[..<index].suffix(6).reversed().compactMap { token -> Double? in
                 token.wholeMatch(of: /[0-9]\.[0-9]/).flatMap { Double(String($0.output)) }
@@ -192,9 +198,11 @@ public struct BestBluraysClient: Sendable {
         var notes: [String] = []
         var tier: [String] = []
         var upcoming: [String] = []
-        for token in tokens[(headingIndex + 1)...] {
+        for token in tokens[rest...] {
             if token == "Compare the discs" || token == "Overview" { break }
-            if token.hasPrefix("Video notes") {
+            if token.hasPrefix("Updated ") {
+                if updated == nil { updated = "u" + token.dropFirst() }
+            } else if token.hasPrefix("Video notes") {
                 section = .notes
                 let rest = token.dropFirst("Video notes".count).trimmingCharacters(in: CharacterSet(charactersIn: ": "))
                 if !rest.isEmpty { notes.append(rest) }
@@ -228,6 +236,12 @@ public struct BestBluraysClient: Sendable {
 enum BestBluraysText {
     /// Stands in the token list where an `<h2>` begins, so the heading's text can be told from the text before it.
     static let headingMarker = "\u{1}h2"
+
+    /// Whether a run of text after the best-release heading starts one of its sections rather than naming the release.
+    static func startsSection(_ token: String) -> Bool {
+        token == headingMarker || token == "UHD tiers" || token == "Compare the discs" || token == "Overview"
+            || ["Video notes", "Updated ", "Upcoming", "Best ", "Audio notes", "Additional"].contains { token.hasPrefix($0) }
+    }
 
     private static let inlineTags: Set<String> = ["a", "span", "em", "strong", "b", "i", "u", "small", "sup", "sub", "mark", "abbr", "code", "wbr", "time", "cite"]
 

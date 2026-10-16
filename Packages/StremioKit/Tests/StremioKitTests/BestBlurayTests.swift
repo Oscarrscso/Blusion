@@ -47,6 +47,20 @@ import StremioKitTestSupport
         #expect(edition.upcoming?.hasPrefix("Criterion Box Set coming October 20th") == true)
     }
 
+    /// The site's page since October 2026: the release is under the heading and its date on a line of its own (Best Blu-rays showed no
+    /// edition for any film until this was read).
+    @Test func thePageWithTheReleaseUnderItsHeadingNamesItToo() throws {
+        let page = try parse("dark-knight-2008-october-2026")
+        #expect(page.imdbID == "tt0468569")
+        let edition = try #require(page.edition)
+        #expect(edition.release == "WB 4K Blu-ray")
+        #expect(edition.heading == "Best English-friendly & video release")
+        #expect(edition.updated == "updated 4 months ago")
+        #expect(edition.uhdTier == "Solid")
+        #expect(edition.videoNotes?.hasPrefix("Caveat: mild DNR throughout the transfer") == true)
+        #expect(edition.videoNotes?.contains("Updated") == false, "the date is not a note")
+    }
+
     @Test func aLongNoteStopsAtTheUHDTier() throws {
         let edition = try #require(try parse("high-noon-1952").edition)
         #expect(edition.release == "MoC 4K Blu-ray")
