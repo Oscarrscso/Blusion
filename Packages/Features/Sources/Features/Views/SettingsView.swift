@@ -626,15 +626,15 @@ private struct ImageCacheSettingsPage: View {
             } footer: {
                 Text("""
                     Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing \
-                    is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time \
-                    it appears.
+                    is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which is used the next \
+                    time it is loaded.
                     """)
             }
             Section {
                 Button("Clear Image Cache", role: .destructive) { confirmsClear = true }
                     .accessibilityIdentifier("settings.imageCache.clear")
             } footer: {
-                Text("Removes every poster and backdrop kept on this device. They download again as you browse.")
+                Text("Removes the posters and backdrops kept on this device. Those already on screen stay; others download again as you browse.")
             }
         }
         .settingsPage("Image cache")
@@ -645,8 +645,9 @@ private struct ImageCacheSettingsPage: View {
         }
         .confirmationDialog("Clear the image cache?", isPresented: $confirmsClear, titleVisibility: .visible) {
             Button("Clear Image Cache", role: .destructive) {
+                // Off the main thread: emptying a full cache takes a moment, and the page should not stall while it does.
                 Task {
-                    await ImagePipeline.shared.clear()
+                    await Task.detached(priority: .userInitiated) { ImagePipeline.shared.clearDisk() }.value
                     inUse = ImagePipeline.shared.diskUsage
                 }
             }

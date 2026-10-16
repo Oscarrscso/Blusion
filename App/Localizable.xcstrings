@@ -2465,13 +2465,13 @@
         }
       }
     },
-    "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time it appears.": {
+    "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which is used the next time it is loaded.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which shows the next time it appears."
+            "value": "Posters and backdrops stay on this device until the cache is full; then the ones not seen for longest make room. Nothing is downloaded again just because it is old: one kept a while is checked quietly for a newer copy, which is used the next time it is loaded."
           }
         }
       }
@@ -2685,13 +2685,13 @@
         }
       }
     },
-    "Removes every poster and backdrop kept on this device. They download again as you browse.": {
+    "Removes the posters and backdrops kept on this device. Those already on screen stay; others download again as you browse.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Removes every poster and backdrop kept on this device. They download again as you browse."
+            "value": "Removes the posters and backdrops kept on this device. Those already on screen stay; others download again as you browse."
           }
         }
       }

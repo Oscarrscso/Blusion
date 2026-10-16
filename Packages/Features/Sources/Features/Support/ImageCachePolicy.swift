@@ -32,19 +32,20 @@ enum ImageCachePolicy {
     /// The Date header of an HTTP response ("Wed, 14 Oct 2026 21:00:00 GMT"), or nil.
     static func date(fromHeader value: String?) -> Date? {
         guard let value else { return nil }
-        return headerDateFormatter().date(from: value)
+        return headerDateFormatter.date(from: value)
     }
 
     static func header(for date: Date) -> String {
-        headerDateFormatter().string(from: date)
+        headerDateFormatter.string(from: date)
     }
 
-    /// A new formatter each time: it is used once per picture checked, and a shared one would have to be guarded across threads.
-    private static func headerDateFormatter() -> DateFormatter {
+    /// One formatter for every picture loaded, so reading a date costs no more than a lookup. `DateFormatter` is Sendable: safe to use
+    /// from several threads at once.
+    private static let headerDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "GMT")
         formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
         return formatter
-    }
+    }()
 }
