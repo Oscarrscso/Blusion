@@ -76,7 +76,8 @@ public struct DescribedSearchService: Sendable {
         let subjectiveTones: Set<String> = ["dark", "gritty", "funny", "atmospheric", "bleak", "tense",
                                            "slow", "epic", "scary", "creepy", "violent", "uplifting",
                                            "psychological", "cerebral", "twisty", "surreal"]
-        for mood in search.moods.prefix(DescribedSearch.maxMoods) where !subjectiveTones.contains(mood.lowercased()) {
+        for mood in search.moods.prefix(DescribedSearch.maxMoods)
+            where ranker == nil || !subjectiveTones.contains(mood.lowercased()) {
             guard !Task.isCancelled else { return [] }
             let keyword = switch mood.lowercased() {
             case "brothers": "brother"
