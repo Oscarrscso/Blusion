@@ -28,6 +28,14 @@ struct DetailEpisodes: View {
 
     /// The height of the season picker and of the episode-width toggle, so the two sit level on one line.
     private static let secondaryControlHeight: CGFloat = 36
+
+    /// The Shuffle symbol, unseen, behind the season picker's and the width toggle's labels. The glass around a label is the label's height
+    /// plus the same padding, and Shuffle's symbol stands half a point taller than the season name and the width symbol, so with it behind
+    /// them all three glass shapes are the same height. The season name is wider than it, and the width toggle keeps its fixed square.
+    private static var glassHeightReference: some View {
+        Image(systemName: "shuffle").font(.body.weight(.semibold)).hidden().accessibilityHidden(true)
+    }
+
     /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
     private static let previewPadding: CGFloat = Theme.Spacing.m
     /// The corner radius of the panel the system draws an episode's menu preview in: 32 pt, measured on an iPhone on iOS 27. The system
@@ -84,9 +92,12 @@ struct DetailEpisodes: View {
                 .accessibilityIdentifier("detail.seasonWatched")
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+            ZStack {
+                Self.glassHeightReference
+                HStack(spacing: 4) {
+                    Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+                }
             }
         }
         .buttonStyle(.glass)
@@ -137,10 +148,13 @@ struct DetailEpisodes: View {
         return Button {
             Task { await model.setMatchesEpisodeWidthToText(!isWide) }
         } label: {
-            Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.6))
-                .contentTransition(.symbolEffect(.replace))
+            ZStack {
+                Self.glassHeightReference
+                Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .contentTransition(.symbolEffect(.replace))
+            }
         }
         .glassCircleButton(.regular)
         .frame(width: Self.secondaryControlHeight, height: Self.secondaryControlHeight)
