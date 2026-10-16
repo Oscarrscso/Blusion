@@ -175,10 +175,17 @@ struct SearchView: View {
             MediaRow(title) {
                 ForEach(items, id: \.identity) { MediaCardLink(item: $0) }
             }
+        } else if model.phase == .searching {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                SectionHeader(title)
+                    .padding(.horizontal, metrics.pageMargin)
+                SkeletonRow()
+            }
+            .accessibilityIdentifier("search.\(type).loading")
         } else {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 SectionHeader(title)
-                Text(model.phase == .searching ? "Searching…" : "No \(title.lowercased()) found")
+                Text("No \(title.lowercased()) found")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
