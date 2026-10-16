@@ -188,7 +188,7 @@ struct DetailEpisodes: View {
             // still's corners follow the panel's, and the panel gets the hairline the app's glass cards have. The preview is on screen
             // only while the menu is open.
             episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater,
-                        stillRadius: Self.previewStillRadius)
+                        stillRadius: Self.previewStillRadius, showsWholeOverview: true)
                 .padding(Self.previewPadding)
                 .glassHairline(RoundedRectangle(cornerRadius: Self.previewPanelRadius, style: .continuous))
                 // Without the store the IMDb mark forgot the coloured-logos setting and changed colour while the card was held.
@@ -204,12 +204,14 @@ struct DetailEpisodes: View {
         }
     }
 
-    /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width.
+    /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width. The preview passes
+    /// `showsWholeOverview`, so a held episode's synopsis is never cut; the list follows the full-width setting.
     private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool, isLoadingStreams: Bool = false,
-                             stillRadius: CGFloat = Theme.Radius.small) -> EpisodeRow {
+                             stillRadius: CGFloat = Theme.Radius.small, showsWholeOverview: Bool? = nil) -> EpisodeRow {
         EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
                    artwork: model.backdropURL, score: model.score(for: video), width: width,
-                   showsWholeOverview: model.matchesEpisodeWidthToText, airsLater: airsLater, isLoadingStreams: isLoadingStreams,
+                   showsWholeOverview: showsWholeOverview ?? model.matchesEpisodeWidthToText, airsLater: airsLater,
+                   isLoadingStreams: isLoadingStreams,
                    stillRadius: stillRadius)
     }
 }
