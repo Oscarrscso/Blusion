@@ -13,16 +13,11 @@ struct DetailView: View {
     @State private var isConfirmingUnmarkShow = false
     /// True while an episode's context menu is open. The page blurs behind it.
     @State private var isHoldingEpisode = false
-    /// The streams the page shows in place of its details after Play; nil shows the details.
-    @State private var pickedRequest: StreamRequest?
-    /// What asked for the picked streams: only that control shows a spinner while they load.
-    @State private var streamTrigger: StreamTrigger?
+    /// The streams the page shows in place of its details after Play, what asked for them, and whether Auto Pick started one of them.
+    @State private var streams = TitleStreams()
     /// The item a Continue Watching card opens the page with. It is picked once the hero has settled (see the lookup task below), so the
     /// picker never loads ahead of the hero's images.
     @State private var pendingStreams: StreamRequest?
-    /// False while the picked streams are still on their way: the details stay and Play shows a spinner. True once the addons have
-    /// all answered, and the streams take the details' place.
-    @State private var streamsAreReady = false
     /// How far the page has been pulled down past its top. The portrait hero stretches by this much, like a refresh.
     @State private var scrollPull: CGFloat = 0
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
@@ -150,17 +145,20 @@ struct DetailView: View {
                                            isTruncated: $isDescriptionTruncated)
                         }
                         #endif
-                        if let request = pickedRequest {
+                        if let request = streams.request {
                             // The page scrolls to here once the streams are ready, so the picker's top sits a seventh of the way down the screen, and more rows show.
                             Color.clear.frame(height: 0).id(Self.streamsScrollID)
                             // The streams take the place of everything below the metadata line. The picture, the logo and the line stay.
                             // The picker is on the page from the tap, so it loads, but it draws nothing and takes no room until its
                             // streams are ready.
-                            StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streamsAreReady,
+                            // With Auto Pick on, the stream it chooses starts without the list ever showing: Play's spinner stops, and
+                            // the details stay.
+                            StreamPickerView(request: request, services: services, isEmbedded: true, isRevealed: streams.isReady,
                                              onClose: closeStreams, onReady: revealStreams,
                                              scrollToRow: { proxy.scrollTo($0, anchor: .center) },
-                                             episodeScore: model.episodeScore(for: request))
-                                .id(request.id)
+                                             episodeScore: model.episodeScore(for: request),
+                                             onAutomaticStart: { started in if started { streams.startedAutomatically() } })
+                                .id(streams.pickerID)
                                 #if targetEnvironment(macCatalyst)
                                 // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.
                                 .padding(.horizontal, max(0, contentMargin - Theme.Spacing.l))
@@ -188,7 +186,7 @@ struct DetailView: View {
                                 if model.isSeries {
                                     DetailEpisodes(model: model, pageWidth: geometry.size.width, contentMargin: contentMargin,
                                                    isHoldingEpisode: $isHoldingEpisode, play: { showStreams($0, from: $1) },
-                                                   loadingRequest: streamsAreReady ? nil : pickedRequest, loadingTrigger: loadingTrigger)
+                                                   loadingRequest: streams.loadingRequest, loadingTrigger: loadingTrigger)
                                         .padding(.top, metrics.titleRatingsGap)
                                 }
                                 VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
@@ -243,7 +241,7 @@ struct DetailView: View {
                 }
                 // Once the streams are ready they take the details' place, so the page moves down to bring the stream list into view.
                 // The short wait lets them lay out first.
-                .onChange(of: streamsAreReady) { _, ready in
+                .onChange(of: streams.isReady) { _, ready in
                     guard ready else { return }
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
@@ -289,19 +287,18 @@ struct DetailView: View {
             guard model.hasSettledHero else { return }
             if let request = pendingStreams {
                 pendingStreams = nil
-                pickedRequest = request
                 // As if Play had been tapped: Play shows the spinner.
-                streamTrigger = .play
+                streams.open(request)
                 return
             }
-            guard pickedRequest == nil else { return }
+            guard streams.request == nil else { return }
             model.prefetchStreams(for: model.primaryRequest)
         }
         // IMDb's reviews load in the background once the hero has settled, so a tap on the IMDb rating shows them at once.
         .task(id: model.hasSettledHero) { preloadReviews() }
         // The picker's episode gets its season's scores asked for, since its card may never have come on screen, so the heading shows its score.
-        .task(id: pickedRequest?.id) {
-            guard let request = pickedRequest else { return }
+        .task(id: streams.request?.id) {
+            guard let request = streams.request else { return }
             await model.prepareEpisodeScore(for: request)
         }
         .onAppear {
@@ -377,38 +374,33 @@ struct DetailView: View {
     private static let streamsScrollID = "detail.streams"
 
     /// True once the streams have taken the details' place.
-    private var showsStreams: Bool { pickedRequest != nil && streamsAreReady }
+    private var showsStreams: Bool { streams.showsStreams }
 
     /// What asked for the streams that are still loading, or nil when none are.
-    private var loadingTrigger: StreamTrigger? { pickedRequest != nil && !streamsAreReady ? streamTrigger : nil }
+    private var loadingTrigger: StreamTrigger? { streams.loadingTrigger }
 
     /// Play starts loading this title's streams, and the trailer stops, since it would play behind them. The details stay, with a
-    /// spinner in Play, until the streams are ready (`revealStreams`); a second tap while it spins calls the streams off. The page does
-    /// not scroll, and back still leaves the page, by the button or the swipe: the streams are part of the title's page, not a screen
-    /// of their own.
+    /// spinner in Play, until the streams are ready (`revealStreams`); a second tap while it spins calls the streams off. With Auto Pick
+    /// on, the stream it chooses starts instead and the list never shows; the next tap picks again. The page does not scroll, and back
+    /// still leaves the page, by the button or the swipe: the streams are part of the title's page, not a screen of their own.
     private func showStreams(_ request: StreamRequest, from trigger: StreamTrigger) {
         model.trailer.cancel()
         // Play is the user's own choice, so it replaces a Continue Watching item still waiting for the hero to settle.
         pendingStreams = nil
-        streamsAreReady = false
-        pickedRequest = pickedRequest == nil ? request : nil
-        streamTrigger = pickedRequest == nil ? nil : trigger
+        streams.show(request, from: trigger)
     }
 
     /// The streams are ready: they take the place of the details.
     private func revealStreams() {
-        guard pickedRequest != nil, !streamsAreReady else { return }
-        withAnimation(Self.swapAnimation) { streamsAreReady = true }
+        var revealed = streams
+        guard revealed.reveal() else { return }
+        withAnimation(Self.swapAnimation) { streams = revealed }
     }
 
     /// Takes the streams away and shows the details again. On Mac, Escape in the picker does this; on iPhone and iPad the streams are left by leaving
     /// the page.
     private func closeStreams() {
-        withAnimation(Self.swapAnimation) {
-            pickedRequest = nil
-            streamsAreReady = false
-            streamTrigger = nil
-        }
+        withAnimation(Self.swapAnimation) { streams.close() }
     }
 
     // MARK: - Header
@@ -469,10 +461,5 @@ struct DetailView: View {
             .accessibilityIdentifier("detail.related")
         }
     }
-}
-/// What asked for a title's streams on its page: Play, Shuffle or an episode's card. Only that control shows a spinner while they load,
-/// and the others take no taps until they are ready.
-enum StreamTrigger: Equatable {
-    case play, shuffle, episode
 }
 #endif

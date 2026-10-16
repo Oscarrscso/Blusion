@@ -90,7 +90,7 @@ struct HomeView: View {
     @ViewBuilder
     private var continueStarter: some View {
         if let launch = launcher.launch {
-            StreamPickerView(request: launch.request, services: services, isEmbedded: true, isRevealed: false,
+            StreamPickerView(request: launch.request, services: services, isEmbedded: true, isRevealed: false, isHeadless: true,
                              onAutomaticStart: { started in
                                  guard launcher.finish(launch.id, started: started) else { return }
                                  router.open(.home)

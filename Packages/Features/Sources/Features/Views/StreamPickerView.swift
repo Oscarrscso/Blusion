@@ -43,9 +43,13 @@ struct StreamPickerView: View {
     private let onReady: (() -> Void)?
     /// Embedded on Mac: scrolls the title page to a row the keyboard is on. The page's scroll view holds the rows, not the picker.
     private let scrollToRow: ((AnyHashable) -> Void)?
-    /// Set for a picker that is never shown: Home's Continue Watching starts a card's stream through one. Told once the automatic start
-    /// on opening has started something (true), or has nothing to start (false).
+    /// True for a picker that is never shown: Home's Continue Watching starts a card's stream through one.
+    private let isHeadless: Bool
+    /// Told once the automatic start on opening (Auto Pick's switch on) has started a stream (true), or has nothing to start (false).
     private let onAutomaticStart: ((Bool) -> Void)?
+    /// True from the moment the streams open with Auto Pick's switch on until it has had nothing to start. Meanwhile `onReady` waits, so
+    /// a title's page keeps its details and its spinner instead of showing the list; once a stream has started it is never called.
+    @State private var awaitsAutomaticStart = false
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -64,8 +68,9 @@ struct StreamPickerView: View {
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
          onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: DetailViewModel.EpisodeScore? = nil,
-         onAutomaticStart: ((Bool) -> Void)? = nil) {
+         isHeadless: Bool = false, onAutomaticStart: ((Bool) -> Void)? = nil) {
         self.episodeScore = episodeScore
+        self.isHeadless = isHeadless
         self.onAutomaticStart = onAutomaticStart
         self.services = services
         self.isEmbedded = isEmbedded
@@ -114,7 +119,7 @@ struct StreamPickerView: View {
     @ViewBuilder
     private func list(scrollTo: ((AnyHashable) -> Void)?) -> some View {
         #if targetEnvironment(macCatalyst)
-        if onAutomaticStart == nil {
+        if !isHeadless {
             keyboardNavigated(content, scrollTo: scrollTo)
         } else {
             content
@@ -243,14 +248,15 @@ struct StreamPickerView: View {
     private func behaviour(_ view: some View) -> some View {
         view
             // A picker that is never shown has no edition to show.
-            .task { if onAutomaticStart == nil { await model.findBestEdition() } }
+            .task { if !isHeadless { await model.findBestEdition() } }
             .task {
                 // Asked once, here: routing hands streams to these players only, and the menus offer only these.
                 model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
                 await model.loadAutoPlayPreference()
                 // A picker that is never shown is done once it has started a stream: shown again after the player closes, it does not load.
-                if !model.hasLoaded, onAutomaticStart == nil || !hasSelectedManually {
+                if !model.hasLoaded, !isHeadless || !hasSelectedManually {
                     let settings = await services.settings.load()
+                    if settings.autoPlayBestStream, !hasSelectedManually { awaitsAutomaticStart = true }
                     if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
                     // The picker was left while it loaded: nothing starts, and no Auto Pick is left waiting on a load that was called off.
                     guard !Task.isCancelled else { return }
@@ -262,14 +268,18 @@ struct StreamPickerView: View {
                         } else if let best = model.bestToPlay {
                             select(best, automatically: true)
                         } else {
-                            onAutomaticStart?(false)
+                            finishAutomaticStart(started: false)
                         }
                     } else {
-                        onAutomaticStart?(false)
+                        finishAutomaticStart(started: false)
                     }
+                } else if awaitsAutomaticStart, !isHeadless {
+                    // Left while Auto Pick was still choosing, after every addon had answered: its choice was called off, so the
+                    // list shows on return rather than Play spinning on.
+                    finishAutomaticStart(started: false)
                 }
             }
-            .onChange(of: isReady, initial: true) { _, ready in
+            .onChange(of: isReady && !awaitsAutomaticStart, initial: true) { _, ready in
                 if ready { onReady?() }
             }
             .onDisappear { autoPickTask?.cancel(); model.cancelLoading() }
@@ -779,18 +789,25 @@ struct StreamPickerView: View {
 
     // MARK: choosing
 
-    /// Starts `item`. `automatically` is set for the start made when the streams open, which is reported to `onAutomaticStart`.
+    /// Starts `item`. `automatically` is set for the start made when the streams open (see `finishAutomaticStart`).
     private func select(_ item: RankedStream, automatically: Bool = false) {
         hasSelectedManually = true
         autoPickTask?.cancel()
         Task {
             guard let choice = await model.choose(item) else {
-                if automatically { onAutomaticStart?(false) }
+                if automatically { finishAutomaticStart(started: false) }
                 return
             }
-            present(choice, for: item)
-            if automatically { onAutomaticStart?(true) }
+            let started = present(choice, for: item)
+            if automatically { finishAutomaticStart(started: started) }
         }
+    }
+
+    /// The automatic start made when the streams open is over. Started, the list is never shown; with nothing started, it shows once
+    /// every addon has answered, as it does with Auto Pick off.
+    private func finishAutomaticStart(started: Bool) {
+        if !started { awaitsAutomaticStart = false }
+        onAutomaticStart?(started)
     }
 
     /// Runs Auto Pick and starts its choice. The run made when the streams open (`fallingBackToBest`) starts the best stream by rank when
@@ -800,17 +817,16 @@ struct StreamPickerView: View {
         autoPickTask?.cancel()
         autoPickTask = Task {
             if let choice = await model.autoPickBest(), !Task.isCancelled, let item = model.autoPickedStream {
-                present(choice, for: item)
-                if fallingBackToBest { onAutomaticStart?(true) }
+                let started = present(choice, for: item)
+                if fallingBackToBest { finishAutomaticStart(started: started) }
                 return
             }
             guard fallingBackToBest, !Task.isCancelled else { return }
             guard let best = model.bestToPlay, let choice = await model.choose(best) else {
-                onAutomaticStart?(false)
+                finishAutomaticStart(started: false)
                 return
             }
-            present(choice, for: best)
-            onAutomaticStart?(true)
+            finishAutomaticStart(started: present(choice, for: best))
         }
     }
 
@@ -830,7 +846,9 @@ struct StreamPickerView: View {
         present(choice, for: item)
     }
 
-    private func present(_ choice: StreamPickerViewModel.Choice, for item: RankedStream) {
+    /// Starts `choice`. True when a stream started here or went to another app; false when an alert asks the viewer to pick again.
+    @discardableResult
+    private func present(_ choice: StreamPickerViewModel.Choice, for item: RankedStream) -> Bool {
         // In ghost mode nothing is handed to another player except Infuse, which the viewer allows: Infuse keeps its own history and its own
         // Trakt. Anything else that would leave Blusion plays here when Blusion can play it, and otherwise does not start.
         if GhostMode.isOn {
@@ -838,8 +856,12 @@ struct StreamPickerView: View {
             case .openInPlayer(.infuse, _):
                 break
             case .openInPlayer, .openExternal:
-                if case .play(let next)? = model.inAppChoice(for: item) { plan = next } else { ghostBlocked = true }
-                return
+                if case .play(let next)? = model.inAppChoice(for: item) {
+                    plan = next
+                    return true
+                }
+                ghostBlocked = true
+                return false
             case .play, .unsupported:
                 break
             }
@@ -850,7 +872,7 @@ struct StreamPickerView: View {
         case .openExternal(let url):
             openURL(url)
         case .openInPlayer(let player, let link):
-            guard !isOpeningPlayer else { return }
+            guard !isOpeningPlayer else { return true }
             isOpeningPlayer = true
             openURL(link) { accepted in
                 if !accepted {
@@ -860,7 +882,9 @@ struct StreamPickerView: View {
             }
         case .unsupported:
             unsupported = item   // the alert offers the next playable stream, or another player
+            return false
         }
+        return true
     }
 
     // MARK: players and alerts
