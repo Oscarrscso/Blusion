@@ -78,7 +78,8 @@ import StremioKitTestSupport
         let cache = InMemoryRatingsCache()
         await cache.store(CachedRating(rating: nil, fetchedAt: when, episodes: [1: 9.1],
                                        episodeIDs: [1: "tt1480055", 2: "tt1668746"], episodeNumbers: [1, 2]), for: key)
-        let data = Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"N/A","imdbID":"tt1480055"},{"Episode":"2","imdbRating":"8.8","imdbID":"tt1668746"}]}"#.utf8)
+        let data = Data((#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"N/A","imdbID":"tt1480055"},"#
+                         + #"{"Episode":"2","imdbRating":"8.8","imdbID":"tt1668746"}]}"#).utf8)
         let transport = StubTransport(data: data)
         let store = PosterRatingsStore(cache: cache, now: { clock.date }, omdb: omdb(transport))
         clock.advance(3_599)
