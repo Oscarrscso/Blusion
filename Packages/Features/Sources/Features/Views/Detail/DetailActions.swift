@@ -181,7 +181,7 @@ struct DetailActions: View {
 
     private var saveAction: some View {
         CircleActionButton(title: "Save", systemImage: "bookmark", isOn: model.isInLibrary, onTitle: "Saved", onSystemImage: "bookmark.fill",
-                           loadRevision: model.loadRevision) {
+                           quietRevision: model.loadRevision) {
             Task {
                 await model.toggleLibrary()
                 await titleActions.refresh()
@@ -197,7 +197,7 @@ struct DetailActions: View {
     private var watchedAction: some View {
         if model.isSeries {
             let watched = model.isSeriesWatched
-            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched, loadRevision: model.loadRevision) {
+            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched, quietRevision: model.loadRevision) {
                 if watched {
                     isConfirmingUnmarkShow = true
                 } else {
@@ -224,7 +224,7 @@ struct DetailActions: View {
         } else {
             let request = model.movieRequest
             let watched = model.isWatched(request)
-            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched, loadRevision: model.loadRevision) {
+            CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched, quietRevision: model.loadRevision) {
                 Task {
                     await model.setWatched(!watched, for: request)
                     await titleActions.refresh()
@@ -240,7 +240,8 @@ struct DetailActions: View {
     /// change when the page loads; when no trailer can be had it is dimmed and does nothing.
     private var trailerAction: some View {
         CircleActionButton(title: "Trailer", systemImage: "play.rectangle", isOn: model.trailer.isPlaying, onTitle: "Close Trailer",
-                           action: { model.toggleTrailer() }, isLoading: model.trailer.phase == .loading)
+                           quietRevision: model.trailerQuietCloses, action: { model.toggleTrailer() },
+                           isLoading: model.trailer.phase == .loading)
         .disabled(!model.canPlayTrailer)
         .opacity(model.canPlayTrailer ? 1 : 0.4)
         .accessibilityIdentifier("detail.trailerButton")

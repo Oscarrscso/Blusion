@@ -256,7 +256,10 @@ private struct SentenceCard: View {
             }
             .buttonStyle(.plain)
             if token.isRemovable {
-                Button { model.remove(token) } label: {
+                Button {
+                    Haptics.tap()
+                    model.remove(token)
+                } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)

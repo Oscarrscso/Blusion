@@ -110,7 +110,10 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     HStack {
                         SectionHeader("Recent Searches")
-                        Button("Clear", systemImage: "xmark") { model.clearRecents() }
+                        Button("Clear", systemImage: "xmark") {
+                            Haptics.tap()
+                            model.clearRecents()
+                        }
                             .labelStyle(.iconOnly)
                             .glassCircleButton(.small)
                             .help("Clear")

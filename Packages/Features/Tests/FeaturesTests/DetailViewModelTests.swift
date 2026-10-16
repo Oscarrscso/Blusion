@@ -335,6 +335,17 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(movie.openedReviews == nil, "starting the trailer closes the reviews")
     }
 
+    /// The Trailer button ticks when its own tap starts or closes the trailer, but not after the full-screen trailer's X, which gave its own
+    /// haptic: only that close moves `trailerQuietCloses`.
+    @Test func onlyTheFullScreenTrailersCloseIsQuiet() {
+        let movie = DetailViewModel(preview: MetaPreview(id: "tt1", type: "movie", name: "P"), services: offlineServices())
+        movie.toggleTrailer()
+        #expect(movie.trailer.phase == .loading)
+        #expect(movie.trailerQuietCloses == 0, "the button's own tap ticks")
+        movie.closeTrailerQuietly()
+        #expect(movie.trailerQuietCloses == 1 && !movie.trailer.isPlaying)
+    }
+
     @Test func anOMDbScoreBeatsTheAddonsOneAndTheAddonsFillsTheRest() async throws {
         let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"8.9"}]}"#.utf8))
         let client = AddonClient(configuration: AddonClientConfiguration(timeout: 1, maxRetries: 0), transport: transport)

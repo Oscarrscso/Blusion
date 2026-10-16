@@ -76,7 +76,10 @@ struct DetailReviewsPanel: View {
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 Spacer(minLength: 0)
-                Button(action: onClose) {
+                Button {
+                    Haptics.tap()
+                    onClose()
+                } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white.opacity(0.8))

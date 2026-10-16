@@ -454,7 +454,10 @@ struct StreamPickerView: View {
     private var closeButton: some View {
         if isEmbedded, let onClose {
             let side = autoPickButtonHeight > 0 ? autoPickButtonHeight : 34
-            Button(action: onClose) {
+            Button {
+                Haptics.tap()
+                onClose()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.footnote.weight(.bold))
                     .foregroundStyle(.white.opacity(0.6))

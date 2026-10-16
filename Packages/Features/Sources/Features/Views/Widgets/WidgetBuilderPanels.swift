@@ -34,7 +34,10 @@ struct WidgetFieldPanel: View {
                 Text(title)
                     .font(.headline)
                 Spacer(minLength: 0)
-                Button { model.selectedField = nil } label: {
+                Button {
+                    Haptics.tap()
+                    model.selectedField = nil
+                } label: {
                     Image(systemName: "xmark")
                 }
                 .glassCircleButton(.small)
@@ -693,7 +696,10 @@ private struct SearchField: View {
                 .submitLabel(.done)
                 .onSubmit { isFocused = false }
             if !text.isEmpty {
-                Button { text = "" } label: {
+                Button {
+                    Haptics.tap()
+                    text = ""
+                } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }

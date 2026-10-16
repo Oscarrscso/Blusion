@@ -51,6 +51,9 @@ public final class DetailViewModel {
     public private(set) var hasSettledHero = false
     /// The title's trailer: its loading, the player in the page's panel, and a failure. The trailer button and the panel share it.
     public let trailer: TrailerLoader
+    /// Goes up when the trailer is closed by a control that gave its own haptic (the full-screen trailer's X), so the Trailer button does not
+    /// tick a second time.
+    public private(set) var trailerQuietCloses = 0
     /// The title's Play colour as "rrggbb" when the page opened ("" or nil for the plain button). Read once, so the button keeps its colour
     /// while the page is open even if a card's read decides it later.
     public let playColourHex: String?
@@ -592,6 +595,12 @@ public final class DetailViewModel {
             guard !Task.isCancelled else { return }
             self?.reviewsDidLoad()
         }
+    }
+
+    /// Closes the trailer after the full-screen trailer's X, which gave its own haptic, so the Trailer button stays silent.
+    public func closeTrailerQuietly() {
+        trailerQuietCloses += 1
+        trailer.close()
     }
 
     /// The trailer button's tap: loads the title's trailer into the page, or closes it while it plays. A YouTube video is checked

@@ -35,7 +35,10 @@ struct PlayerControls: View {
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            Button(action: onClose) {
+            Button {
+                Haptics.tap()
+                onClose()
+            } label: {
                 Image(systemName: "xmark").font(.title3.weight(.semibold)).frame(width: 44, height: 44)
                     .glassEffect(.regular.interactive(), in: .circle)
                     .pointerInteraction(cornerRadius: 22)

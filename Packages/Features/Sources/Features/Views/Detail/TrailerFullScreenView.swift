@@ -18,7 +18,10 @@ struct TrailerFullScreenView: View {
                 YouTubeTrailerView(playback: playback)
                     .ignoresSafeArea()
             }
-            Button(action: close) {
+            Button {
+                Haptics.tap()
+                close()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.title3.weight(.semibold))
                     .frame(width: 44, height: 44)
