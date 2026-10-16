@@ -522,7 +522,7 @@ public final class PosterRatingsStore {
             if var enriched = cached, enriched.episodes != previous || enriched.episodeIDs != ids {
                 enriched.episodes = previous
                 enriched.episodeIDs = ids
-                enriched.episodeNumbers.formUnion(ids.keys)
+                enriched.episodeNumbers = (enriched.episodeNumbers ?? []).union(ids.keys)
                 await cache.store(enriched, for: key)
             }
             guard !Task.isCancelled else { return [:] }

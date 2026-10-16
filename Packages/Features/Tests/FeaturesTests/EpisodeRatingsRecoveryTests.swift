@@ -58,6 +58,25 @@ import StremioKitTestSupport
         #expect(await cache.value(for: key)?.episodeIDs?[1] == "tt1480055")
     }
 
+    @Test(arguments: [nil, Set([3])] as [Set<Int>?])
+    func enrichingCachedEpisodesRetainsKnownNumbers(_ knownNumbers: Set<Int>?) async throws {
+        let cache = InMemoryRatingsCache()
+        let fetchedAt = when.addingTimeInterval(-600)
+        await cache.store(CachedRating(rating: nil, fetchedAt: fetchedAt, episodes: [3: 7.5],
+                                       episodeNumbers: knownNumbers), for: key)
+        let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
+            "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100)
+        ])
+        await dataset.setEpisodeMappings([1: "tt1480055"])
+        let store = PosterRatingsStore(cache: cache, now: { when }, dataset: dataset)
+
+        #expect(await store.episodeRatings(for: seriesID, season: 1) == [1: 9.1, 3: 7.5])
+        let stored = try #require(await cache.value(for: key))
+        #expect(stored.episodeNumbers == (knownNumbers ?? []).union([1]))
+        #expect(stored.episodeIDs == [1: "tt1480055"])
+        #expect(stored.fetchedAt == fetchedAt)
+    }
+
     @Test func incompleteOfflineIndexCanStillUseOMDbFallback() async {
         let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
             "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100)
