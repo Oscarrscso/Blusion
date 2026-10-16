@@ -23,6 +23,53 @@ import StremioKitTestSupport
         return OMDbRatings(client: makeClient(transport, retries: 0), apiKey: "test-key", usage: OMDbUsage(defaults: defaults))
     }
 
+    @Test func completelyOfflineEpisodeScoresNeedNoOMDbKey() async {
+        let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
+            "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100),
+            "tt1668746": IMDbRating(imdbID: "tt1668746", rating: 8.8, votes: 100)
+        ])
+        await dataset.setEpisodeMappings([1: "tt1480055", 2: "tt1668746"])
+        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, dataset: dataset)
+        #expect(await store.episodeRatings(for: seriesID, season: 1, expectedEpisodes: [1, 2]) == [1: 9.1, 2: 8.8])
+        #expect(await dataset.lookupCount == 2)
+    }
+
+    @Test func aCompleteOfflineSeasonNeverRequestsOMDb() async {
+        let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
+            "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100)
+        ])
+        await dataset.setEpisodeMappings([1: "tt1480055"])
+        let transport = StubTransport(data: season)
+        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, omdb: omdb(transport), dataset: dataset)
+        #expect(await store.episodeRatings(for: seriesID, season: 1, expectedEpisodes: [1]) == [1: 9.1])
+        #expect(transport.callCount == 0)
+    }
+
+    @Test func aNewOfflineIdentityRepairsStaleCachedScore() async {
+        let cache = InMemoryRatingsCache()
+        await cache.store(CachedRating(rating: nil, fetchedAt: when, episodes: [1: 2.0],
+                                       episodeIDs: [1: "tt0000001"], episodeNumbers: [1]), for: key)
+        let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
+            "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100)
+        ])
+        await dataset.setEpisodeMappings([1: "tt1480055"])
+        let store = PosterRatingsStore(cache: cache, now: { when }, dataset: dataset)
+        #expect(await store.episodeRatings(for: seriesID, season: 1, expectedEpisodes: [1]) == [1: 9.1])
+        #expect(await cache.value(for: key)?.episodeIDs?[1] == "tt1480055")
+    }
+
+    @Test func incompleteOfflineIndexCanStillUseOMDbFallback() async {
+        let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
+            "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100)
+        ])
+        await dataset.setEpisodeMappings([1: "tt1480055"])
+        let transport = StubTransport(data: season)
+        let store = PosterRatingsStore(cache: InMemoryRatingsCache(), now: { when }, omdb: omdb(transport), dataset: dataset)
+        let scores = await store.episodeRatings(for: seriesID, season: 1, expectedEpisodes: [1, 2, 3])
+        #expect(scores[1] == 9.1 && scores[2] == 8.0 && scores[3] == 7.5)
+        #expect(transport.callCount == 1)
+    }
+
     @Test func datasetFillsNAsAndOverridesStaleOMDbScoresWithOneSeasonRequest() async throws {
         let dataset = IMDbDatasetRatingsTests.FakeDataset(ratings: [
             "tt1480055": IMDbRating(imdbID: "tt1480055", rating: 9.1, votes: 100),
