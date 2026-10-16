@@ -25,8 +25,11 @@ import StremioKitTestSupport
     private func model(manifests: [Manifest], transport: StubTransport, debounce: Duration = .milliseconds(40),
                        history: (any SearchHistoryStore)? = nil) async throws -> SearchViewModel {
         let (registry, client) = try await makeStubbedRegistry(manifests: manifests, transport: transport)
+        // The AI side reads with the keyword reader and finds nothing, so these tests never depend on whether this Mac has Apple
+        // Intelligence (with it, the live model was still reading when a test looked).
+        let quietAI = DescribedSearchService(interpreter: KeywordDescriptionInterpreter(), keywords: { _ in [] }, titles: { _ in [] })
         return SearchViewModel(services: AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: client)),
-                               debounce: debounce, history: history)
+                               debounce: debounce, history: history, describer: quietAI, usesLivePicker: false)
     }
 
     @Test func typingIsDebouncedIntoOneSearch() async throws {
@@ -89,11 +92,14 @@ import StremioKitTestSupport
         let model = try await model(manifests: [manifest("a")], transport: empty)
         model.query = "zzz"
         await model.submit()
+        // "No results" waits for the AI search as well, which runs beside the addons' search and is not part of `submit`.
+        await model.waitUntilDone()
         #expect(model.showsNoResults)
         let failing = StubTransport(data: Data(), status: 500)
         let other = try await self.model(manifests: [manifest("a")], transport: failing)
         other.query = "zzz"
         await other.submit()
+        await other.waitUntilDone()
         #expect(!other.showsNoResults, "an error chip explains the empty screen")
         #expect(other.failures.count == 1)
     }
