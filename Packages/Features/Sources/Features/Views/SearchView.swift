@@ -191,7 +191,7 @@ struct SearchView: View {
     private var aiResults: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack(alignment: .center, spacing: Theme.Spacing.s) {
-                Label("AI Search", systemImage: "apple.intelligence")
+                Label("AI Search", systemImage: "sparkles")
                     .font(.headline)
                 Spacer(minLength: 0)
                 Text("On-device AI")
