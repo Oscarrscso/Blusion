@@ -253,6 +253,8 @@ public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
     public let tmdbID: Int
     public let title: String
     public let releaseDate: String?
+    /// TMDb supplies this synopsis in the recommendation response, so no extra request is needed.
+    public let overview: String?
     /// A 342 pt wide poster. Nil when TMDb has none.
     public let poster: URL?
     /// A 780 pt wide backdrop. Nil when TMDb has none.
@@ -260,11 +262,13 @@ public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
 
     public var id: String { "\(mediaType)/\(tmdbID)" }
 
-    public init(mediaType: String, tmdbID: Int, title: String, releaseDate: String?, poster: URL?, backdrop: URL?) {
+    public init(mediaType: String, tmdbID: Int, title: String, releaseDate: String?, poster: URL?, backdrop: URL?,
+                overview: String? = nil) {
         self.mediaType = mediaType
         self.tmdbID = tmdbID
         self.title = title
         self.releaseDate = releaseDate
+        self.overview = overview
         self.poster = poster
         self.backdrop = backdrop
     }
@@ -278,7 +282,7 @@ public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
             let date = [entry.releaseDate, entry.firstAirDate].compactMap { $0 }.first { !$0.isEmpty }
             return TMDbRelatedTitle(mediaType: entry.mediaType ?? "movie", tmdbID: entry.id, title: title, releaseDate: date,
                                     poster: TMDbImage.url(entry.posterPath, size: "w342"),
-                                    backdrop: TMDbImage.url(entry.backdropPath, size: "w780"))
+                                    backdrop: TMDbImage.url(entry.backdropPath, size: "w780"), overview: entry.overview)
         }
     }
 }
@@ -436,6 +440,7 @@ private struct RawRecommendations: Decodable {
 
     struct RawRecommendation: Decodable {
         let id: Int
+        let overview: String?
         let mediaType: String?
         let title: String?
         let name: String?
@@ -445,7 +450,7 @@ private struct RawRecommendations: Decodable {
         let backdropPath: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, title, name
+            case id, title, name, overview
             case mediaType = "media_type"
             case releaseDate = "release_date"
             case firstAirDate = "first_air_date"
