@@ -169,7 +169,7 @@ import StremioKitTestSupport
             let path = request.url?.path ?? ""
             let body = path.hasPrefix("/3/find") ? #"{"movie_results":[{"id":155,"vote_average":8.4,"vote_count":9}],"tv_results":[]}"# :
                 #"""
-                {"results":[{"id":272,"title":"Batman Begins","release_date":"2005-06-15","poster_path":"/b.jpg","backdrop_path":null},
+                {"results":[{"id":272,"title":"Batman Begins","overview":"A determined hero returns to fight crime.","release_date":"2005-06-15","poster_path":"/b.jpg","backdrop_path":null},
                             {"id":9,"title":"","poster_path":null},
                             {"id":11,"name":"A Show","first_air_date":"2001-01-01","media_type":"tv"}]}
                 """#
@@ -180,6 +180,7 @@ import StremioKitTestSupport
         #expect(related.map(\.title) == ["Batman Begins", "A Show"])
         #expect(related[0].mediaType == "movie" && related[0].releaseDate == "2005-06-15" && related[0].backdrop == nil)
         #expect(related[1].mediaType == "tv" && related[1].releaseDate == "2001-01-01")
+        #expect(related[0].overview == "A determined hero returns to fight crime." && related[1].overview == nil)
         #expect(transport.requests.last?.url?.path == "/3/movie/155/recommendations")
     }
 
