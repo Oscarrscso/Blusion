@@ -42,6 +42,13 @@ public struct DescribedSearch: Sendable, Equatable {
         if words.maximumRuntime != nil { corrected.maximumRuntime = words.maximumRuntime }
         if words.minimumRuntime != nil { corrected.minimumRuntime = words.minimumRuntime }
         if corrected.minimumScore == nil { corrected.minimumScore = words.minimumScore }
+        // A model sometimes misses explicit relationship/story topics, such as "about brothers".
+        // Preserve those concrete subjects even when it inferred only a broad Comedy genre.
+        for mood in words.moods where !corrected.moods.contains(where: { $0.caseInsensitiveCompare(mood) == .orderedSame }) {
+            if Self.storyTopics.contains(mood) { corrected.moods.insert(mood, at: 0) }
+        }
+        corrected.moods = Array(corrected.moods.prefix(Self.maxMoods))
+        if corrected.genres.isEmpty && !words.genres.isEmpty { corrected.genres = words.genres }
         return corrected
     }
 
@@ -111,6 +118,10 @@ extension DescribedSearch {
         let namesFilms = words.contains(where: { ["movie", "movies", "film", "films"].contains($0) })
         search.kind = namesTV == namesFilms ? (namesTV ? nil : .movie) : (namesTV ? .series : .movie)
         search.genres = TMDbDiscoverQuery.genreNames(in: joined)
+        if words.contains(where: { ["funny", "hilarious", "comedic"].contains($0) }),
+           !search.genres.contains("Comedy") {
+            search.genres.append("Comedy")
+        }
         for (index, word) in words.enumerated() {
             if let start = decade(word) {
                 search.earliestYear = start
@@ -134,7 +145,13 @@ extension DescribedSearch {
                   ["minutes", "mins", "min"].contains(words[index + 2]) {
             search.maximumRuntime = minutes
         }
-        search.moods = Array(words.filter { moodWords.contains($0) }.prefix(maxMoods))
+        // Prioritise the requested story subject over broad tones. TMDb keyword searches
+        // for a relationship are much more useful than generic "funny" or "dark" keywords.
+        let subjects = words.filter { storyTopics.contains($0) }
+        let tones = words.filter { moodWords.contains($0) }
+        search.moods = Array((subjects + tones).reduce(into: [String]()) { output, term in
+            if !output.contains(term) { output.append(term) }
+        }.prefix(maxMoods))
         return search
     }
 
@@ -158,6 +175,12 @@ extension DescribedSearch {
     ]
 
     /// Mood words the keyword reader passes on as TMDb keywords.
+    private static let storyTopics: Set<String> = [
+        "brother", "brothers", "sibling", "siblings", "sister", "sisters", "father", "fathers", "mother", "mothers",
+        "family", "families", "friendship", "friends", "revenge", "betrayal", "isolation", "paranoia", "kidnapping",
+        "heist", "robbery", "time", "travel", "memory", "amnesia",
+    ]
+
     private static let moodWords: Set<String> = [
         "dark", "atmospheric", "gritty", "bleak", "uplifting", "heartwarming", "funny", "scary", "creepy", "tense", "violent", "slow",
         "cerebral", "twisty", "surreal", "nostalgic", "melancholic", "melancholy", "cozy", "quirky", "epic", "dystopian", "psychological",
