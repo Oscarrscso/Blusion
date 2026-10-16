@@ -13,6 +13,7 @@ import StremioKitTestSupport
     actor FakeDataset: IMDbDataset {
         var ratings: [String: IMDbRating]
         var outcomes: [IMDbDatasetRefresh]
+        var episodeMappings: [Int: String] = [:]
         private(set) var lookups: [String] = []
         private(set) var refreshes = 0
 
@@ -20,6 +21,9 @@ import StremioKitTestSupport
             self.ratings = ratings
             self.outcomes = outcomes
         }
+
+        func episodeIDs(for seriesID: String, season: Int) -> [Int: String] { episodeMappings }
+        func setEpisodeMappings(_ value: [Int: String]) { episodeMappings = value }
 
         func rating(for imdbID: String) -> IMDbRating? {
             lookups.append(imdbID)
