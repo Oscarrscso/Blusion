@@ -69,14 +69,45 @@ import StremioKit
         #expect(ranked.map(\.name) == ["Second", "First"])
     }
 
-    @Test func aTitleSearchAsksNothingOfTheDescriber() async {
+    @Test func evenATitleSearchUsesTheAISearchPathButNotAPopularityPage() async {
         let asked = Asked()
+        let title = MetaPreview(id: "tt1375666", type: "movie", name: "Inception",
+                                description: "A thief enters dreams to steal secrets.")
+        let service = DescribedSearchService(interpreter: StubInterpreter(answer: DescribedSearch(genres: ["Drama"])),
+                                             keywords: { _ in [] }, titles: { query in
+            asked.record(query)
+            return []
+        }, titleMatches: { text in
+            text == "Inception" ? [title] : []
+        })
         let model = SearchViewModel(services: services(), debounce: .milliseconds(1),
-                                    describer: describer(asked, answer: DescribedSearch(genres: ["Drama"])))
+                                    describer: service, usesLivePicker: false)
         model.query = "Inception"
         model.queryDidChange()
+        #expect(model.aiPhase == .searching)
         await model.waitUntilDone()
-        #expect(model.describedItems.isEmpty && asked.queries.isEmpty)
+        #expect(model.describedItems == [title])
+        #expect(asked.queries.isEmpty, "an exact title uses TMDb's title search, never arbitrary popular dramas")
+        #expect(model.aiPhase == .done)
+    }
+
+    @Test func aiKeepsSpinningAfterTheNormalSearchFinishes() async {
+        let item = MetaPreview(id: "tt1", type: "movie", name: "Crime Story",
+                               description: "A bleak investigation.")
+        let service = DescribedSearchService(interpreter: StubInterpreter(answer: DescribedSearch(genres: ["Crime"])),
+                                             keywords: { _ in [] }, titles: { _ in
+            try await Task.sleep(for: .milliseconds(150))
+            return [item]
+        })
+        let model = SearchViewModel(services: services(), debounce: .milliseconds(1),
+                                    describer: service, usesLivePicker: false)
+        model.query = "dark gritty crime"
+        model.queryDidChange()
+        #expect(model.aiPhase == .searching)
+        await model.waitUntilDone()
+        #expect(model.describedItems == [item])
+        #expect(model.aiPhase == .done)
+        #expect(model.phase == .done, "AI and regular search have independent completion states")
     }
 
     @Test func aDescriptionWithNothingUnderstoodFindsNothing() async {
