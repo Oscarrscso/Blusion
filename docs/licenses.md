@@ -19,6 +19,7 @@ No third-party code is linked into the **default** build: the dependency list is
 | Data | Terms | Notes |
 |---|---|---|
 | IMDb `title.ratings.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Downloaded to the device once a day, kept out of backups, never uploaded or redistributed. Credit line in Settings → IMDb ratings and Acknowledgements. ☐ A public or commercial release needs IMDb's permission or a licence: do not ship this to others on the current terms. |
+| IMDb `title.episode.tsv.gz` (datasets.imdbws.com) | IMDb non-commercial datasets: personal and non-commercial use only (https://developer.imdb.com/non-commercial-datasets/) | Episode-to-series/season/number mapping downloaded only on unmetered connections, indexed on device and kept out of backups. The data is not redistributed. |
 
 ## Brand marks in the app
 
