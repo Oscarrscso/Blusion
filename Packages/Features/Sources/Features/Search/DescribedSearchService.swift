@@ -22,12 +22,16 @@ public struct DescribedSearchService: Sendable {
     let keywords: @Sendable (String) async -> [TMDbDiscoverQuery.Named]
     /// TMDb's titles for a discover query.
     let titles: @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview]
+    /// Optional synopsis-aware ranking. Falls back to TMDb order without Apple Intelligence.
+    let ranker: (any CandidateRanking)?
 
     public init(interpreter: any DescriptionInterpreting, keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named],
-                titles: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview]) {
+                titles: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview],
+                ranker: (any CandidateRanking)? = nil) {
         self.interpreter = interpreter
         self.keywords = keywords
         self.titles = titles
+        self.ranker = ranker
     }
 
     /// How many titles the description's row holds.
@@ -36,7 +40,7 @@ public struct DescribedSearchService: Sendable {
     /// The titles for a description, or none when nothing in it was understood or TMDb has none.
     public func titles(for text: String) async -> [MetaPreview] {
         let search = await interpreter.interpret(text)
-        guard !search.isEmpty, !Task.isCancelled else { return [] }
+        guard !Task.isCancelled, !search.isEmpty || ranker != nil else { return [] }
         var found: [TMDbDiscoverQuery.Named] = []
         for mood in search.moods.prefix(DescribedSearch.maxMoods) {
             let matches = await keywords(mood)
@@ -46,7 +50,19 @@ public struct DescribedSearchService: Sendable {
             }
         }
         guard !Task.isCancelled else { return [] }
-        return (try? await titles(search.query(keywords: found))) ?? []
+        var items = (try? await titles(search.query(keywords: found))) ?? []
+        // TMDb can be too strict when matching themes as keywords; retry with the other filters.
+        if items.isEmpty && !found.isEmpty, !Task.isCancelled {
+            items = (try? await titles(search.query(keywords: []))) ?? []
+        }
+        guard let ranker, !items.isEmpty, !Task.isCancelled else { return items }
+        do {
+            let picks = try await WatchPicker.rankedPicks(request: text, references: [], candidates: items,
+                                                          watched: [], ranker: ranker)
+            return picks.map(\.item)
+        } catch {
+            return items
+        }
     }
 
     /// The live service: TMDb with the saved token, through the widgets' content service (which caches its answers).
@@ -59,7 +75,7 @@ public struct DescribedSearchService: Sendable {
             return (try? await TMDbRatings(client: client, readAccessToken: token).searchKeywords(mood)) ?? []
         }, titles: { query in
             try await content.items(for: .tmdbDiscover(query), limit: limit)
-        })
+        }, ranker: OnDeviceDescriptionInterpreter.availableRanker())
     }
 }
 
@@ -73,6 +89,15 @@ enum OnDeviceDescriptionInterpreter {
         }
         #endif
         return KeywordDescriptionInterpreter()
+    }
+
+    static func availableRanker() -> (any CandidateRanking)? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *), case .available = SystemLanguageModel.default.availability {
+            return ModelCandidateRanker()
+        }
+        #endif
+        return nil
     }
 }
 
