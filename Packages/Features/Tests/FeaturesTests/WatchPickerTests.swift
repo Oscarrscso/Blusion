@@ -109,6 +109,42 @@ import StremioKit
         #expect(WatchPicker.synopsis(String(repeating: "x", count: 500))?.count == 240)
     }
 
+    private final class BatchRanker: CandidateRanking, @unchecked Sendable {
+        private let lock = NSLock()
+        private var sizes: [Int] = []
+        var requestSizes: [Int] { lock.withLock { sizes } }
+
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            lock.withLock { sizes.append(candidates.count) }
+            return candidates.prefix(2).enumerated().map {
+                RankedCandidate(number: $0.offset + 1, reason: "A grounded plot match")
+            }
+        }
+    }
+
+    @Test func largeSearchesAreRankedInBoundedSynopsisGroups() async throws {
+        let candidates = (1...34).map {
+            MetaPreview(id: "tt\($0)", type: "movie", name: "Film \($0)", description: "A story about a quest number \($0).")
+        }
+        let ranker = BatchRanker()
+        let picks = try await WatchPicker.rankedPicks(request: "films about quests", references: [],
+                                                      candidates: candidates, watched: [], ranker: ranker)
+        #expect(!picks.isEmpty)
+        #expect(ranker.requestSizes.count >= 4)
+        #expect(ranker.requestSizes.allSatisfy { $0 <= WatchPicker.maxModelBatch })
+        #expect(picks.count <= WatchPicker.maxPicks)
+    }
+
+    @Test func explicitBrothersRequestRejectsUnrelatedRomanceButKeepsStepBrothers() {
+        let step = MetaPreview(id: "tt1", type: "movie", name: "Step Brothers",
+                               description: "Two grown men are forced to live together after their parents marry.")
+        let romance = MetaPreview(id: "tt2", type: "movie", name: "Through My Window",
+                                  description: "A girl becomes infatuated with her mysterious neighbour.")
+        #expect(WatchPicker.matchesStorySubject(step, request: "funny movies about brothers"))
+        #expect(!WatchPicker.matchesStorySubject(romance, request: "funny movies about brothers"))
+        #expect(WatchPicker.matchesStorySubject(romance, request: "funny romances"))
+    }
+
     @Test func noWishMeansNoPicks() async {
         let ranker = StubRanker([RankedCandidate(number: 1, reason: "Fits")])
         #expect(await picker(ranker, wish: nil).picks(for: "something like Prisoners").isEmpty)
