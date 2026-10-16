@@ -34,6 +34,9 @@ public final class SearchViewModel {
         case done
     }
 
+    /// Independent of the normal addon search; the AI row keeps showing a spinner until its own work ends.
+    public private(set) var aiPhase: Phase = .idle
+
     /// A genre of one catalog, offered on the idle Search page. `source` opens that catalog filtered to the genre.
     public struct GenreShortcut: Identifiable, Hashable, Sendable {
         public let name: String
@@ -67,11 +70,14 @@ public final class SearchViewModel {
     /// Titles TMDb has for a search typed as a description, in their own row. Empty for a search that reads like a title.
     public private(set) var describedItems: [MetaPreview] = []
     private let describer: DescribedSearchService
-    private var describeTask: Task<Void, Never>?
+    private var aiTask: Task<Void, Never>?
     /// Titles the on-device model picked for a "what should I watch?" search, from real candidates, each with its reason.
     public private(set) var picks: [WatchPick] = []
     /// Nil where the on-device model is not available: such a search is then read as a description.
     private let picker: WatchPicker?
+
+    /// Never label a TMDb-only fallback as on-device model output.
+    public var aiAvailable: Bool { picker != nil || describer.ranker != nil }
 
     /// `history` keeps the recent searches. Without one they live only as long as this model.
     public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil,
@@ -89,7 +95,7 @@ public final class SearchViewModel {
     /// Nothing came back and every addon failed because the device is offline.
     public var isOffline: Bool { !hasResults && Connectivity.isOffline(failures.map(\.error)) }
     /// "No results" needs an addon that could have answered; with none installed the screen says so instead.
-    public var showsNoResults: Bool { hasSearchableAddons && phase == .done && !hasResults && failures.isEmpty }
+    public var showsNoResults: Bool { phase == .done && aiPhase == .done && !hasResults && failures.isEmpty }
     public var showsNoSearchableAddons: Bool { !hasSearchableAddons }
 
     /// Results across all addons, grouped by content type: movie first, then series, then other types in order of first appearance.
@@ -131,17 +137,18 @@ public final class SearchViewModel {
         history.save([])
     }
 
-    /// Call whenever `query` changes. Cancels the previous search and starts a new debounced one.
+    /// Call whenever the query changes. Cancel old work immediately and debounce both search paths.
     public func queryDidChange() {
         task?.cancel()
-        describeTask?.cancel()
-        pickTask?.cancel()
+        aiTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else {
-            reset()
-            return
-        }
+        guard !term.isEmpty else { reset(); return }
+        sections = []
+        failures = []
+        describedItems = []
+        picks = []
         phase = .searching
+        aiPhase = .searching
         task = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: debounce)
@@ -150,15 +157,19 @@ public final class SearchViewModel {
         }
     }
 
-    /// Runs a search immediately (the keyboard's Search button) and waits for it.
+    /// The keyboard's Search button skips the debounce but still starts both paths.
     public func submit() async {
         guard !Task.isCancelled else { return }
         task?.cancel()
-        describeTask?.cancel()
-        pickTask?.cancel()
+        aiTask?.cancel()
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else { return reset() }
+        guard !term.isEmpty else { reset(); return }
+        sections = []
+        failures = []
+        describedItems = []
+        picks = []
         phase = .searching
+        aiPhase = .searching
         let search = Task { [weak self] in
             guard let self else { return }
             await self.run(term)
@@ -171,56 +182,54 @@ public final class SearchViewModel {
         }
     }
 
-    /// Waits for the in-flight debounced search (used by tests and by accessibility announcements).
+    /// Test and accessibility helper: the addon search can finish before the on-device model.
     public func waitUntilDone() async {
         await task?.value
-        await describeTask?.value
-        await pickTask?.value
+        await aiTask?.value
     }
 
     private func reset() {
-        describeTask?.cancel()
-        pickTask?.cancel()
+        aiTask?.cancel()
         sections = []
         failures = []
         describedItems = []
         picks = []
         phase = .idle
+        aiPhase = .idle
     }
 
-    private var pickTask: Task<Void, Never>?
-
-    /// A "what should I watch?" search also gets the on-device model's picks from real candidates, in their own row beside the addons'
-    /// results, which it neither waits for nor changes.
-    private func pick(_ term: String, with picker: WatchPicker) {
-        pickTask?.cancel()
-        pickTask = Task { [weak self] in
-            let picks = await picker.picks(for: term)
-            guard !Task.isCancelled, let self, self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
-            self.picks = picks
-        }
-    }
-
-    /// A search that reads like a description also asks TMDb for the titles it describes, shown in their own row beside the addons'
-    /// results, which it neither waits for nor changes.
-    private func describe(_ term: String) {
-        describeTask?.cancel()
-        guard DescribedSearch.readsLikeDescription(term) else { return }
+    /// Every nonempty search runs on-device AI, even a single name like "Dune".
+    /// Specialised similarity requests get the reference-title picker first, then plot discovery if it finds no candidates.
+    private func searchAI(_ term: String) {
+        aiTask?.cancel()
         let describer = describer
-        describeTask = Task { [weak self] in
+        let picker = picker
+        aiTask = Task { [weak self] in
+            if let picker, WatchPicker.readsLikeRequest(term) {
+                let result = await picker.picks(for: term)
+                guard !Task.isCancelled, let self,
+                      self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+                if !result.isEmpty {
+                    self.picks = result
+                    self.aiPhase = .done
+                    return
+                }
+            }
             let items = await describer.titles(for: term)
-            guard !Task.isCancelled, let self, self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+            guard !Task.isCancelled, let self,
+                  self.query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
             self.describedItems = items
+            self.aiPhase = .done
         }
     }
 
     private func run(_ term: String) async {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
         sections = []
         failures = []
         describedItems = []
         picks = []
-        if let picker, WatchPicker.readsLikeRequest(term) { pick(term, with: picker) } else { describe(term) }
+        searchAI(term)
         await refreshAvailability()
         guard !Task.isCancelled else { return }
         guard hasSearchableAddons else {
