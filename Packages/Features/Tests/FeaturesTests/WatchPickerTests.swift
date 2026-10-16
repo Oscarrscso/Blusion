@@ -87,6 +87,28 @@ import StremioKit
         #expect(WatchPicker.fitsKindAndYears(show, DescribedSearch()))
     }
 
+    private struct SynopsisRefusal: CandidateRanking {
+        struct Blocked: Error {}
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            if candidates.contains(where: { $0.contains("REFUSED_PLOT") }) { throw Blocked() }
+            return candidates.indices.map { RankedCandidate(number: $0 + 1, reason: "Story matches") }
+        }
+    }
+
+    @Test func aSingleRefusedSynopsisDoesNotDiscardOtherMovies() async throws {
+        let safe = MetaPreview(id: "tt1", type: "movie", name: "Safe", description: "A mystery involving a missing friend.")
+        let blocked = MetaPreview(id: "tt2", type: "movie", name: "Blocked", description: "REFUSED_PLOT")
+        let other = MetaPreview(id: "tt3", type: "movie", name: "Other", description: "A paranoid investigation.")
+        let missing = MetaPreview(id: "tt4", type: "movie", name: "Missing Synopsis")
+        let picks = try await WatchPicker.rankedPicks(request: "mysteries about paranoia", references: [],
+                                                      candidates: [safe, blocked, other, missing], watched: [],
+                                                      ranker: SynopsisRefusal())
+        #expect(picks.map(\.item.name) == ["Safe", "Other"])
+        #expect(WatchPicker.line(safe).contains("Synopsis: A mystery involving a missing friend."))
+        #expect(WatchPicker.synopsis(" \n ") == nil)
+        #expect(WatchPicker.synopsis(String(repeating: "x", count: 500))?.count == 240)
+    }
+
     @Test func noWishMeansNoPicks() async {
         let ranker = StubRanker([RankedCandidate(number: 1, reason: "Fits")])
         #expect(await picker(ranker, wish: nil).picks(for: "something like Prisoners").isEmpty)
@@ -103,6 +125,7 @@ import StremioKit
         #expect(WatchPicker.readsLikeRequest("Something like Prisoners, but less depressing, under two hours"))
         #expect(WatchPicker.readsLikeRequest("what should I watch tonight"))
         #expect(WatchPicker.readsLikeRequest("movies like Heat"))
+        #expect(WatchPicker.readsLikeRequest("movies with shocking twists like Shutter Island"))
         #expect(!WatchPicker.readsLikeRequest("Prisoners"))
         #expect(!WatchPicker.readsLikeRequest("a dark atmospheric sci-fi film from before 2010"))
     }
