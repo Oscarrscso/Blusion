@@ -43,6 +43,9 @@ struct StreamPickerView: View {
     private let onReady: (() -> Void)?
     /// Embedded on Mac: scrolls the title page to a row the keyboard is on. The page's scroll view holds the rows, not the picker.
     private let scrollToRow: ((AnyHashable) -> Void)?
+    /// Set for a picker that is never shown: Home's Continue Watching starts a card's stream through one. Told once the automatic start
+    /// on opening has started something (true), or has nothing to start (false).
+    private let onAutomaticStart: ((Bool) -> Void)?
     @Environment(\.openURL) private var openURL
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
@@ -60,8 +63,10 @@ struct StreamPickerView: View {
     private var streamMargin: CGFloat { Theme.Spacing.l }
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
-         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: DetailViewModel.EpisodeScore? = nil) {
+         onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: DetailViewModel.EpisodeScore? = nil,
+         onAutomaticStart: ((Bool) -> Void)? = nil) {
         self.episodeScore = episodeScore
+        self.onAutomaticStart = onAutomaticStart
         self.services = services
         self.isEmbedded = isEmbedded
         self.isRevealed = isRevealed
@@ -104,12 +109,18 @@ struct StreamPickerView: View {
         .accessibilityIdentifier("streams.list")
     }
 
-    /// The list the page shows. On Mac it also takes the keyboard (see `keyboardNavigated`); on iPhone it is the rows alone.
+    /// The list the page shows. On Mac it also takes the keyboard (see `keyboardNavigated`), unless it is a picker that is never shown;
+    /// on iPhone it is the rows alone.
+    @ViewBuilder
     private func list(scrollTo: ((AnyHashable) -> Void)?) -> some View {
         #if targetEnvironment(macCatalyst)
-        return keyboardNavigated(content, scrollTo: scrollTo)
+        if onAutomaticStart == nil {
+            keyboardNavigated(content, scrollTo: scrollTo)
+        } else {
+            content
+        }
         #else
-        return content
+        content
         #endif
     }
 
@@ -231,22 +242,30 @@ struct StreamPickerView: View {
     /// it is pushed or embedded.
     private func behaviour(_ view: some View) -> some View {
         view
-            .task { await model.findBestEdition() }
+            // A picker that is never shown has no edition to show.
+            .task { if onAutomaticStart == nil { await model.findBestEdition() } }
             .task {
                 // Asked once, here: routing hands streams to these players only, and the menus offer only these.
                 model.setInstalledPlayers(Set(ExternalPlayer.allCases.filter(isInstalled)))
                 await model.loadAutoPlayPreference()
-                if !model.hasLoaded {
+                // A picker that is never shown is done once it has started a stream: shown again after the player closes, it does not load.
+                if !model.hasLoaded, onAutomaticStart == nil || !hasSelectedManually {
                     let settings = await services.settings.load()
                     if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
+                    // The picker was left while it loaded: nothing starts, and no Auto Pick is left waiting on a load that was called off.
+                    guard !Task.isCancelled else { return }
                     if settings.autoPlayBestStream, !hasSelectedManually {
                         // With the switch on, opening the streams does what the Auto Pick button beside it does, for a viewer whose streams
                         // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
                         if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {
                             autoPick(fallingBackToBest: true)
                         } else if let best = model.bestToPlay {
-                            select(best)
+                            select(best, automatically: true)
+                        } else {
+                            onAutomaticStart?(false)
                         }
+                    } else {
+                        onAutomaticStart?(false)
                     }
                 }
             }
@@ -760,12 +779,17 @@ struct StreamPickerView: View {
 
     // MARK: choosing
 
-    private func select(_ item: RankedStream) {
+    /// Starts `item`. `automatically` is set for the start made when the streams open, which is reported to `onAutomaticStart`.
+    private func select(_ item: RankedStream, automatically: Bool = false) {
         hasSelectedManually = true
         autoPickTask?.cancel()
         Task {
-            guard let choice = await model.choose(item) else { return }
+            guard let choice = await model.choose(item) else {
+                if automatically { onAutomaticStart?(false) }
+                return
+            }
             present(choice, for: item)
+            if automatically { onAutomaticStart?(true) }
         }
     }
 
@@ -777,10 +801,16 @@ struct StreamPickerView: View {
         autoPickTask = Task {
             if let choice = await model.autoPickBest(), !Task.isCancelled, let item = model.autoPickedStream {
                 present(choice, for: item)
+                if fallingBackToBest { onAutomaticStart?(true) }
                 return
             }
-            guard fallingBackToBest, !Task.isCancelled, let best = model.bestToPlay, let choice = await model.choose(best) else { return }
+            guard fallingBackToBest, !Task.isCancelled else { return }
+            guard let best = model.bestToPlay, let choice = await model.choose(best) else {
+                onAutomaticStart?(false)
+                return
+            }
             present(choice, for: best)
+            onAutomaticStart?(true)
         }
     }
 

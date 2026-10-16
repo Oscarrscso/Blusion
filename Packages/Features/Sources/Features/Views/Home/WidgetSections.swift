@@ -188,6 +188,8 @@ struct ContinueWatchingRow: View {
     let onRemove: (ContinueWatchingEntry) -> Void
     var title = "Continue"
     var hideTitle = false
+    /// Starts a card's stream from Home when Auto Pick is on. Nil opens the title's page, as with Auto Pick off.
+    var launcher: ContinueWatchingLauncher?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @State private var kind = ContinueKind.all
@@ -247,7 +249,7 @@ struct ContinueWatchingRow: View {
                             .continueWatchingHold(preview: MetaPreview(id: artworkID, type: item.request.type,
                                                                       name: item.request.seriesName ?? item.request.title,
                                                                       poster: item.request.poster, releaseInfo: item.request.year),
-                                                  request: item.request, onRemove: { onRemove(item) })
+                                                  request: item.request, itemID: item.id, launcher: launcher, onRemove: { onRemove(item) })
                             .id(item.id)
                             .accessibilityIdentifier("board.continue.\(item.id)")
                         }

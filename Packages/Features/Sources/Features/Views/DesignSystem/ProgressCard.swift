@@ -36,33 +36,66 @@ struct ProgressCard: View {
 }
 
 extension View {
-    /// A Continue Watching card: a tap opens its title's page with the stream picker open on the item it resumes, and its context menu
-    /// opens the title from that artwork.
-    func continueWatchingHold(preview: MetaPreview, request: StreamRequest, onRemove: @escaping () -> Void) -> some View {
-        modifier(ContinueWatchingHoldModifier(preview: preview, request: request, onRemove: onRemove))
+    /// A Continue Watching card: a tap opens its title's page with the stream picker open on the item it resumes, or, with Auto Pick on,
+    /// starts that item's stream from Home (see `ContinueWatchingLauncher`). Its context menu opens the title from that artwork.
+    func continueWatchingHold(preview: MetaPreview, request: StreamRequest, itemID: String, launcher: ContinueWatchingLauncher?,
+                              onRemove: @escaping () -> Void) -> some View {
+        modifier(ContinueWatchingHoldModifier(preview: preview, request: request, itemID: itemID, launcher: launcher, onRemove: onRemove))
     }
 }
 
 private struct ContinueWatchingHoldModifier: ViewModifier {
     let preview: MetaPreview
     let request: StreamRequest
+    let itemID: String
+    let launcher: ContinueWatchingLauncher?
     let onRemove: () -> Void
     @Environment(AppRouter.self) private var router
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(\.zoomScope) private var zoomScope
 
+    /// True while a card's streams load on Home: every card ignores taps meanwhile, and looks as it did.
+    private var isBusy: Bool { launcher?.isResolving ?? false }
+
     func body(content: Content) -> some View {
         let sourceID = "continue/\(zoomScope)/\(preview.identity)"
+        let isLoading = launcher?.isLoading(itemID) ?? false
         Button {
+            guard !isBusy else { return }
+            guard let launcher else {
+                Haptics.tap()
+                return openTitle(sourceID: sourceID)
+            }
+            // A swipe that ends on the card starts nothing, as on an episode's card.
+            guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
             Haptics.tap()
-            router.open(.home)
-            router.homePath.append(TitleDestination(preview: preview, sourceID: sourceID, streams: request))
+            Task {
+                if await launcher.open(itemID: itemID, request: request, preview: preview, sourceID: sourceID) == .openTitle {
+                    openTitle(sourceID: sourceID)
+                }
+            }
         } label: {
             content
+                // While this card's streams load, the ring an episode's card shows, over this card only.
+                .overlay {
+                    if isLoading {
+                        ZStack {
+                            Color.black.opacity(0.35)
+                            Spinner()
+                                .controlSize(.large)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: CardAspect.wide.cornerRadius, style: .continuous))
+                        .transition(.opacity)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Loading streams")
+                    }
+                }
+                .animation(.smooth(duration: 0.25), value: isLoading)
                 .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: CardAspect.wide.cornerRadius)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle())
+        .allowsHitTesting(!isBusy)
         // The hold is the system context menu: a custom long-press gesture here blocked the row's horizontal scroll.
         // No custom preview: the system snapshots the card itself (its artwork, bounds and clipping), and this shape gives the
         // menu the card's corner radius.
@@ -80,6 +113,12 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
         }
         // The menu's "Open title" opens this title's page, so its artwork is looked up while the card is on screen.
         .prewarmsHeroArtwork(preview)
+    }
+
+    /// The title's page, with the streams of the item this card resumes.
+    private func openTitle(sourceID: String) {
+        router.open(.home)
+        router.homePath.append(TitleDestination(preview: preview, sourceID: sourceID, streams: request))
     }
 }
 

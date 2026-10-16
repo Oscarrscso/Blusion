@@ -103,7 +103,7 @@ struct ContinueWatchingAccessory: View {
         .padding(.horizontal, Theme.Spacing.l)
         .continueWatchingHold(preview: MetaPreview(id: ContentID(item.contentID).baseID, type: item.type,
                                                   name: item.title, poster: item.poster), request: LibraryViewModel.request(for: item),
-                                  onRemove: onRemove)
+                                  itemID: item.id, launcher: nil, onRemove: onRemove)
         .accessibilityLabel("Continue watching \(item.title), \(Int((item.fraction * 100).rounded())) percent watched")
         .accessibilityIdentifier("tabbar.continue")
     }

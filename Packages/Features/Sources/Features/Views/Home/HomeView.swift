@@ -23,10 +23,13 @@ struct HomeView: View {
     @Environment(TitleActions.self) private var actions: TitleActions?
     /// The widget editor opened from a row's menu.
     @State private var editing: HomeWidget?
+    /// What a Continue Watching card's tap does, and the card whose streams are loading on Home.
+    @State private var launcher: ContinueWatchingLauncher
     private let services: AppServices
     init(services: AppServices) {
         self.services = services
         _model = State(initialValue: HomeViewModel(services: services))
+        _launcher = State(initialValue: ContinueWatchingLauncher(autoPickIsOn: { await services.settings.load().autoPlayBestStream }))
     }
 
     var body: some View {
@@ -45,6 +48,8 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .pageTopBar(hidden: heroIsFirst || isPhoneLandscape)
             .task { await model.observeAddons() }
+            // Auto Pick's switch is changed away from Home, so a Continue Watching card reads it again whenever Home shows.
+            .task(id: scenePhase) { await launcher.refreshAutoPick() }
             .task(id: scenePhase == .active && router.tab == .home) {
                 guard scenePhase == .active, router.tab == .home else { return }
                 while !Task.isCancelled {
@@ -74,6 +79,28 @@ struct HomeView: View {
             .sheet(item: $editing, onDismiss: { Task { await model.load() } }) { widget in
                 HomeWidgetEditor(widget: widget, services: services)
             }
+            .background { continueStarter }
+            // Leaving Home calls off a Continue Watching card's streams still loading, so nothing starts behind another page.
+            .onDisappear { launcher.cancel() }
+    }
+
+    /// With Auto Pick on, a Continue Watching card's streams load here, in a stream picker that draws nothing and starts the stream Play
+    /// would, in Infuse or here. It stays once a stream has started, since the player it opened belongs to it. When it has nothing to
+    /// start, the title's page opens with the streams, where Play leaves them in that case.
+    @ViewBuilder
+    private var continueStarter: some View {
+        if let launch = launcher.launch {
+            StreamPickerView(request: launch.request, services: services, isEmbedded: true, isRevealed: false,
+                             onAutomaticStart: { started in
+                                 guard launcher.finish(launch.id, started: started) else { return }
+                                 router.open(.home)
+                                 router.homePath.append(TitleDestination(preview: launch.preview, sourceID: launch.sourceID,
+                                                                         streams: launch.request))
+                             })
+                .id(launch.id)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
     }
 
     /// Home's page margin is the title page's content margin, so its headings, the Continue selector and the shelves line up with it.
@@ -234,7 +261,8 @@ struct HomeView: View {
             // Continue Watching is always shown at the top of Home when the layout leaves it out, so removing it would only move it: it is
             // edited here, not removed. A card's own menu (removing it from Continue Watching) opens where it is.
             withWidgetMenu(ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback,
-                                               onRemove: removeContinue, title: section.widget.title, hideTitle: section.widget.hideTitle),
+                                               onRemove: removeContinue, title: section.widget.title, hideTitle: section.widget.hideTitle,
+                                               launcher: launcher),
                            section, removable: false)
         case .unsupported:
             withWidgetMenu(UnsupportedWidgetRow(widget: section.widget), section)
@@ -242,7 +270,8 @@ struct HomeView: View {
     }
 
     private var continueRow: some View {
-        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue)
+        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue,
+                            launcher: launcher)
     }
 
     /// The Better Posters menu of a row, offered only once the layout is saved: the automatic layout is not saved by a change.
