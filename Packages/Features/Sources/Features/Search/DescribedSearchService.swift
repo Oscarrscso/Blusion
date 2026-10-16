@@ -71,12 +71,24 @@ public struct DescribedSearchService: Sendable {
         guard !search.isEmpty, !Task.isCancelled else { return [] }
 
         var selectedKeywords: [TMDbDiscoverQuery.Named] = []
-        for mood in search.moods.prefix(DescribedSearch.maxMoods) {
+        // A tone word (e.g. "dark") is not an exact story subject: TMDb may offer
+        // "dark comedy" as its keyword, excluding most genuinely dark crime films.
+        let subjectiveTones: Set<String> = ["dark", "gritty", "funny", "atmospheric", "bleak", "tense",
+                                           "slow", "epic", "scary", "creepy", "violent", "uplifting",
+                                           "psychological", "cerebral", "twisty", "surreal"]
+        for mood in search.moods.prefix(DescribedSearch.maxMoods) where !subjectiveTones.contains(mood.lowercased()) {
             guard !Task.isCancelled else { return [] }
-            let suggestions = await keywords(mood)
-            if let match = suggestions.first(where: { $0.name.caseInsensitiveCompare(mood) == .orderedSame })
-                ?? suggestions.first(where: { $0.name.lowercased().contains(mood.lowercased()) }) {
-                if !selectedKeywords.contains(match) { selectedKeywords.append(match) }
+            let keyword = switch mood.lowercased() {
+            case "brothers": "brother"
+            case "sisters": "sister"
+            case "siblings": "sibling"
+            default: mood
+            }
+            let suggestions = await keywords(keyword)
+            let exact = suggestions.first { $0.name.caseInsensitiveCompare(keyword) == .orderedSame }
+            let related = suggestions.first { $0.name.localizedCaseInsensitiveContains(keyword) }
+            if let match = exact ?? related, !selectedKeywords.contains(match) {
+                selectedKeywords.append(match)
             }
         }
         guard !Task.isCancelled else { return [] }
