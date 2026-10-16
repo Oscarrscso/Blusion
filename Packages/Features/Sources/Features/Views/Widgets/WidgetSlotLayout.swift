@@ -20,6 +20,11 @@ struct WidgetSlotLayout: Equatable {
                       height: rows == 0 ? 0 : CGFloat(rows) * cardHeight + CGFloat(rows - 1) * Self.gutter)
     }
 
+    /// A scroll offset moved by `step`, kept between `lowest` and `highest` (which is never below `lowest`).
+    static func scrolledOffset(_ offset: CGFloat, by step: CGFloat, lowest: CGFloat, highest: CGFloat) -> CGFloat {
+        min(max(offset + step, lowest), max(lowest, highest))
+    }
+
     /// The layout of `columns` cards that fill `width` between them, with a gutter between each.
     static func fitting(width: CGFloat, columns: Int, count: Int) -> WidgetSlotLayout {
         guard columns > 0 else { return WidgetSlotLayout(columns: 1, cardWidth: 0, count: count) }

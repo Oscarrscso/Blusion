@@ -254,7 +254,7 @@ struct HomeView: View {
             withWidgetMenu(HeroBannerSection(section: section, row: row, onRetry: { retry(section) }), section)
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
-                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget })
+                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section))
         case .collection(let items):
             withWidgetMenu(CollectionRow(widget: section.widget, items: items), section)
         case .continueWatching:
@@ -286,11 +286,21 @@ struct HomeView: View {
 
     private func removeWidget(_ section: HomeViewModel.Section) { Task { await model.removeWidget(sectionID: section.id) } }
 
+    /// Duplicates a widget from its menu, with a light tap, or nil for Continue Watching and the showcase, which are one of a kind.
+    private func duplicateAction(for section: HomeViewModel.Section) -> (() -> Void)? {
+        guard WidgetsManagerViewModel.isDuplicable(section.widget) else { return nil }
+        return {
+            Haptics.tap()
+            Task { await model.duplicateWidget(sectionID: section.id) }
+        }
+    }
+
     /// The long-press menu every widget shares, on a widget whose own menus are on its cards or none. A card's menu opens where it is.
     private func withWidgetMenu<Content: View>(_ content: Content, _ section: HomeViewModel.Section, removable: Bool = true) -> some View {
         let onRemove: (() -> Void)? = removable ? { removeWidget(section) } : nil
         return content.contextMenu {
-            widgetActions(for: section.widget, onEdit: { editing = section.widget }, onRemove: onRemove)
+            widgetActions(for: section.widget, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
+                          onRemove: onRemove)
         }
     }
 

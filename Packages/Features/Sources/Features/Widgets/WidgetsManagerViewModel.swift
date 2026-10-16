@@ -93,6 +93,23 @@ public final class WidgetsManagerViewModel {
         HomeLayout.isShowcase(widget)
     }
 
+    /// Continue Watching and the showcase are one of a kind, so they are not duplicated.
+    nonisolated public static func isDuplicable(_ widget: HomeWidget) -> Bool {
+        !HomeLayout.isContinueWatching(widget) && !HomeLayout.isShowcase(widget)
+    }
+
+    /// `list` with a copy of the widget `id` straight after it: the same kind, title, source, filters and look, under `newID`. Nil when
+    /// the list has no such widget, or it is one that is not duplicated.
+    nonisolated public static func duplicating(_ id: String, in list: [HomeWidget],
+                                               newID: String = UUID().uuidString) -> [HomeWidget]? {
+        guard let index = list.firstIndex(where: { $0.id == id }), isDuplicable(list[index]) else { return nil }
+        var copy = list[index]
+        copy.id = newID
+        var result = list
+        result.insert(copy, at: index + 1)
+        return result
+    }
+
     /// Continue Watching is not removed: Home shows it whether the layout lists it or not, so removing it would only move it above the
     /// showcase. It is moved like any other widget.
     nonisolated public static func isRemovable(_ widget: HomeWidget) -> Bool {
@@ -149,6 +166,18 @@ public final class WidgetsManagerViewModel {
             return
         }
         list[index] = widget
+        await commit(list)
+        saveRevision += 1
+    }
+
+    /// Puts a copy of the widget straight after it, and saves. Home lists its widgets in the same saved order.
+    public func duplicate(id: String) async {
+        guard let current = await savedList() else { return }
+        guard current.contains(where: { $0.id == id }) else {
+            report("This widget was removed elsewhere, so it was not duplicated.", isError: true)
+            return
+        }
+        guard let list = WidgetsManagerViewModel.duplicating(id, in: current) else { return }
         await commit(list)
         saveRevision += 1
     }

@@ -34,6 +34,8 @@ struct WidgetRow: View {
     let onRemove: () -> Void
     /// Opens this row in the widget editor, from its menu.
     let onEdit: () -> Void
+    /// Puts a copy of this row straight after it, from its menu.
+    var onDuplicate: (() -> Void)?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
@@ -63,7 +65,7 @@ struct WidgetRow: View {
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
                     Divider()
                 }
-                widgetActions(for: widget, onEdit: onEdit, onRemove: onRemove)
+                widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, onRemove: onRemove)
             }
         } else {
             Group {
@@ -93,7 +95,7 @@ struct WidgetRow: View {
             // opens across the whole row, not only over the text it shows.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
-            .contextMenu { widgetActions(for: widget, onEdit: onEdit, onRemove: onRemove) }
+            .contextMenu { widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, onRemove: onRemove) }
         }
     }
 
@@ -111,9 +113,14 @@ struct WidgetRow: View {
 /// The long-press menu every Home widget shares, after its own items: its editor, then its removal, set apart from it. Removal has no
 /// confirmation, as the widgets page's does. Nil `onRemove` leaves removal out, for a widget Home always shows.
 @ViewBuilder
-func widgetActions(for widget: HomeWidget, onEdit: @escaping () -> Void, onRemove: (() -> Void)?) -> some View {
+func widgetActions(for widget: HomeWidget, onEdit: @escaping () -> Void, onDuplicate: (() -> Void)? = nil,
+                   onRemove: (() -> Void)?) -> some View {
     Button("Edit Widget", action: onEdit)
         .accessibilityIdentifier("board.editWidget.\(widget.id)")
+    if let onDuplicate {
+        Button("Duplicate Widget", systemImage: "plus.square.on.square", action: onDuplicate)
+            .accessibilityIdentifier("board.duplicateWidget.\(widget.id)")
+    }
     if let onRemove {
         Divider()
         Button("Remove Widget", role: .destructive, action: onRemove)

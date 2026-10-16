@@ -154,6 +154,44 @@ public final class HomeViewModel {
         sections.removeAll { $0.id == sectionID }
     }
 
+    /// Puts a copy of a widget straight after it, as the widgets page does, starting from the list as it is saved now. The copy shows what
+    /// the original shows at once, so nothing is fetched again. Nothing saved while this layout was customised means it was reset
+    /// elsewhere: the change is refused, and Home shows the automatic layout again.
+    public func duplicateWidget(sectionID: String) async {
+        guard sections.contains(where: { $0.id == sectionID }) else { return }
+        let saved = await services.widgets.load()
+        guard saved != nil || !isCustomised else {
+            await load()
+            return
+        }
+        let current = saved ?? sections.map(\.widget)
+        guard let list = WidgetsManagerViewModel.duplicating(sectionID, in: current),
+              let index = list.firstIndex(where: { $0.id == sectionID }) else { return }
+        isCustomised = true
+        await services.widgets.save(list)
+        // Home adds the copy in place only when it shows the list that was saved from; otherwise it loads the saved layout again.
+        guard current == sections.map(\.widget), let shown = sections.firstIndex(where: { $0.id == sectionID }) else {
+            await load()
+            return
+        }
+        let original = sections[shown]
+        let copy = list[index + 1]
+        sections.insert(Section(widget: copy, state: original.state, issue: original.issue, isRefreshing: original.isRefreshing),
+                        at: shown + 1)
+        // A row still loading, or showing items from before, fetches for the copy too: its own load would not reach a row added since.
+        switch original.state {
+        case .idle, .loading:
+            await retry(sectionID: copy.id)
+        default:
+            // Items from before stay on the copy until its fresh ones arrive, as on the original.
+            guard original.isRefreshing, let row = loadingConfiguration(copy.content) else { return }
+            let current = generation
+            let result = await HomeViewModel.fetch(id: copy.id, row: row, from: services.widgetContent)
+            guard current == generation, !Task.isCancelled else { return }
+            apply(result)
+        }
+    }
+
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
     public func continueWatchingRefreshInterval() async -> Int {
         let settings = await services.settings.load()

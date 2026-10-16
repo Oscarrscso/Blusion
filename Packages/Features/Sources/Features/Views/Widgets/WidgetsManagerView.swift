@@ -3,6 +3,9 @@ import os
 import StremioKit
 import SwiftUI
 import UIKit
+// The second-finger scroll sets its own recognizer state, which only this part of UIKit allows.
+// swiftlint:disable:next duplicate_imports
+import UIKit.UIGestureRecognizerSubclass
 
 /// Each lift, swap and drop of a widget card, so a try on the phone can be read back from its log.
 private let dragLog = Logger(subsystem: "app.blusion.player", category: "widgets.drag")
@@ -226,13 +229,16 @@ struct WidgetsManagerView: View {
         }
     }
 
-    /// While a card is held near the top or bottom of what is visible, the page scrolls, and the card's place follows the pointer as the
-    /// content moves under it.
+    /// While a card is held near the top or bottom of what is visible, or a second finger drags the page, the page scrolls, and the card's
+    /// place follows the pointer as the content moves under it.
     private func startAutoScroll() {
         autoScroll?.cancel()
+        // A new card starts with no scroll counted from before it was held.
+        _ = scroller.takeFingerScroll()
         autoScroll = Task { @MainActor in
             while !Task.isCancelled, let current = drag, !landing {
-                let moved = scroller.autoScrollStep(at: current.pointer)
+                // The page moves near its edges, and under a second finger: the card's place follows the content either way.
+                let moved = scroller.autoScrollStep(at: current.pointer) + scroller.takeFingerScroll()
                 if moved != 0 {
                     drag?.pointer.y += moved
                     retarget()
@@ -265,6 +271,17 @@ struct WidgetsManagerView: View {
         }
     }
 
+    /// The duplicate action of a card, or nil for Continue Watching and the showcase, which are one of a kind. The copy goes straight after
+    /// the card, with a light tap.
+    private func duplicateAction(for widget: HomeWidget) -> (() -> Void)? {
+        guard WidgetsManagerViewModel.isDuplicable(widget) else { return nil }
+        return {
+            guard takesTaps else { return }
+            Haptics.tap()
+            Task { await model.duplicate(id: widget.id) }
+        }
+    }
+
     // MARK: Grid
 
     private var grid: some View {
@@ -274,7 +291,8 @@ struct WidgetsManagerView: View {
                 let index = order.firstIndex(of: id) ?? 0
                 let isShowcase = showcaseIDs.contains(id)
                 if let widget = widgetsByID[id] {
-                    WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget))
+                    WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget),
+                               onDuplicate: duplicateAction(for: widget))
                         .frame(width: layout.cardWidth, height: layout.cardHeight)
                         .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                         .opacity(drag?.id == id ? 0 : 1)
@@ -290,7 +308,8 @@ struct WidgetsManagerView: View {
                 }
             }
             if let current = drag, let widget = widgetsByID[current.id] {
-                WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget))
+                WidgetCard(widget: widget, services: services, onDelete: deleteAction(for: widget),
+                           onDuplicate: duplicateAction(for: widget))
                     .frame(width: layout.cardWidth, height: layout.cardHeight)
                     .scaleEffect(landing ? 1 : 1.05)
                     .shadow(color: .black.opacity(landing ? 0 : 0.35), radius: 16, y: 10)
@@ -305,8 +324,8 @@ struct WidgetsManagerView: View {
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: order)
         .contentShape(Rectangle())
         .background(
-            GridScrollAnchor(scroller: scroller, canLift: { canLift(at: $0) }, began: { beginDrag(at: $0) },
-                             changed: { updateDrag(to: $0) }, ended: { endDrag(cancelled: $0) })
+            GridScrollAnchor(scroller: scroller, canLift: { canLift(at: $0) }, isHolding: { drag != nil && !landing },
+                             began: { beginDrag(at: $0) }, changed: { updateDrag(to: $0) }, ended: { endDrag(cancelled: $0) })
         )
         #if targetEnvironment(macCatalyst)
         .simultaneousGesture(
@@ -423,6 +442,8 @@ private struct GridDrag: Equatable {
 private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
     /// Whether a touch at this point, in the grid's coordinates, may lift a card.
     var canLift: (CGPoint) -> Bool = { _ in false }
+    /// Whether a card is held now.
+    var isHolding: () -> Bool = { false }
     var began: (CGPoint) -> Void = { _ in }
     var changed: (CGPoint) -> Void = { _ in }
     /// Called with true when the press was cancelled, and false when it ended.
@@ -430,7 +451,16 @@ private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
 
     private weak var anchor: UIView?
     private weak var scrollView: UIScrollView?
+    /// How far a second finger has moved the page since the drag last asked (see `takeFingerScroll`).
+    private var fingerScroll: CGFloat = 0
     #if !targetEnvironment(macCatalyst)
+    /// While a card is held, a second finger scrolls the page (see `SecondFingerScroll`). Intentionally iOS-only: the Mac has no touches.
+    private lazy var secondFinger: SecondFingerScroll = {
+        let recognizer = SecondFingerScroll(target: nil, action: nil)
+        recognizer.isHolding = { [weak self] in self?.isHolding() ?? false }
+        recognizer.scroll = { [weak self] delta in self?.scrollByFinger(delta) }
+        return recognizer
+    }()
     private lazy var press: UILongPressGestureRecognizer = {
         let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
         recognizer.minimumPressDuration = 0.2
@@ -452,6 +482,7 @@ private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
         dragLog.notice("grid \(found == nil ? "found no scroll view" : "attached to its scroll view", privacy: .public)")
         #if !targetEnvironment(macCatalyst)
         found?.addGestureRecognizer(press)
+        found?.addGestureRecognizer(secondFinger)
         #endif
     }
 
@@ -467,6 +498,7 @@ private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
         guard anchor === self.anchor else { return }
         detach()
         canLift = { _ in false }
+        isHolding = { false }
         began = { _ in }
         changed = { _ in }
         ended = { _ in }
@@ -475,8 +507,21 @@ private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
     private func detach() {
         #if !targetEnvironment(macCatalyst)
         press.view?.removeGestureRecognizer(press)
+        secondFinger.view?.removeGestureRecognizer(secondFinger)
         #endif
         scrollView = nil
+        fingerScroll = 0
+    }
+
+    /// How far a second finger has moved the page since the last call, and starts counting again.
+    func takeFingerScroll() -> CGFloat {
+        defer { fingerScroll = 0 }
+        return fingerScroll
+    }
+
+    /// Moves the page by `delta` points under a second finger, within its content, and counts how far it went.
+    private func scrollByFinger(_ delta: CGFloat) {
+        fingerScroll += move(by: delta)
     }
 
     #if !targetEnvironment(macCatalyst)
@@ -522,20 +567,82 @@ private final class GridScroller: NSObject, UIGestureRecognizerDelegate {
             step = 2 + 18 * min(1, (y - (bottom - zone)) / zone)
         }
         guard step != 0 else { return 0 }
-        let lowest = -insets.top
-        let highest = max(lowest, scrollView.contentSize.height + insets.bottom - scrollView.bounds.height)
-        let next = min(max(scrollView.contentOffset.y + step, lowest), highest)
+        return move(by: step)
+    }
+
+    /// Moves the page by `step` points, kept within its content. Returns how far it moved.
+    private func move(by step: CGFloat) -> CGFloat {
+        guard let scrollView else { return 0 }
+        let insets = scrollView.adjustedContentInset
+        let next = WidgetSlotLayout.scrolledOffset(scrollView.contentOffset.y, by: step, lowest: -insets.top,
+                                                   highest: scrollView.contentSize.height + insets.bottom - scrollView.bounds.height)
         let moved = next - scrollView.contentOffset.y
         if moved != 0 { scrollView.contentOffset.y = next }
         return moved
     }
 }
 
+#if !targetEnvironment(macCatalyst)
+/// While a card is held, a second finger anywhere on the page scrolls it, as the page's own scrolling would, while the card stays under the
+/// first finger. The page's own scrolling is off during a drag (it would follow the held card's finger), so this moves the page itself. It
+/// never takes part otherwise: it never recognizes, never stops another gesture or a tap, and ignores the finger that holds the card.
+private final class SecondFingerScroll: UIGestureRecognizer {
+    var isHolding: () -> Bool = { false }
+    var scroll: (CGFloat) -> Void = { _ in }
+    private weak var finger: UITouch?
+    private var lastY: CGFloat = 0
+
+    override init(target: Any?, action: Selector?) {
+        super.init(target: target, action: action)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
+    }
+
+    override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+    override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        // Only a finger that comes down while a card is already held by another one.
+        guard finger == nil, isHolding(), let touch = touches.first, (event.allTouches?.count ?? 0) > 1 else { return }
+        finger = touch
+        lastY = touch.location(in: nil).y
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let finger, touches.contains(finger) else { return }
+        // The card was put down: the finger stops scrolling, so nothing builds up for the next card.
+        guard isHolding() else {
+            self.finger = nil
+            return
+        }
+        // Read in the window's coordinates, which the page's scrolling does not move. A finger moving up moves the page down.
+        let y = finger.location(in: nil).y
+        scroll(lastY - y)
+        lastY = y
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) { finished(touches, event) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) { finished(touches, event) }
+
+    /// The second finger lifting stops the scroll. Once every finger is up, the recognizer is done until the next touch.
+    private func finished(_ touches: Set<UITouch>, _ event: UIEvent) {
+        if let finger, touches.contains(finger) { self.finger = nil }
+        if event.allTouches?.allSatisfy({ $0.phase == .ended || $0.phase == .cancelled }) ?? true { state = .failed }
+    }
+
+    override func reset() {
+        finger = nil
+    }
+}
+#endif
+
 /// A plain view behind the grid, the same size, that hands `GridScroller` the page's scroll view and the grid's coordinates. It takes no
 /// touches itself.
 private struct GridScrollAnchor: UIViewRepresentable {
     let scroller: GridScroller
     let canLift: (CGPoint) -> Bool
+    let isHolding: () -> Bool
     let began: (CGPoint) -> Void
     let changed: (CGPoint) -> Void
     let ended: (Bool) -> Void
@@ -560,6 +667,7 @@ private struct GridScrollAnchor: UIViewRepresentable {
     func updateUIView(_ view: AnchorView, context: Context) {
         view.scroller = scroller
         scroller.canLift = canLift
+        scroller.isHolding = isHolding
         scroller.began = began
         scroller.changed = changed
         scroller.ended = ended
@@ -577,6 +685,8 @@ private struct WidgetCard: View {
     let services: AppServices
     /// Nil for Continue Watching, which has no delete button: Home always shows it.
     let onDelete: (() -> Void)?
+    /// Puts a copy straight after this card. Nil for Continue Watching and the showcase, which are one of a kind.
+    let onDuplicate: (() -> Void)?
     /// The posters the card shows, read when the card first appears.
     @State private var items: [MetaPreview] = []
 
@@ -598,23 +708,40 @@ private struct WidgetCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(alignment: .bottomTrailing) {
-            if let onDelete {
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
-                        .frame(width: Self.trashSize, height: Self.trashSize)
+            // Duplicate sits before Delete, the same size, so the card's two buttons read as one pair.
+            HStack(spacing: 8) {
+                if let onDuplicate {
+                    Button(action: onDuplicate) {
+                        Image(systemName: "plus.square.on.square")
+                            .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
+                            .frame(width: Self.trashSize, height: Self.trashSize)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Duplicate \(widget.title)")
+                    .accessibilityIdentifier("widgets.menu.duplicate.\(widget.id)")
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .padding(12)
-                .accessibilityLabel("Delete \(widget.title)")
-                .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
+                if let onDelete {
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: Self.trashSize * 0.39, weight: .semibold))
+                            .frame(width: Self.trashSize, height: Self.trashSize)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("Delete \(widget.title)")
+                    .accessibilityIdentifier("widgets.menu.delete.\(widget.id)")
+                }
             }
+            .padding(12)
         }
         #if targetEnvironment(macCatalyst)
         // A right click on the Mac. iPhone has no menu here: its long press lifts the card, and a menu under the finger with Delete in it
         // was one slide away from removing the card.
         .contextMenu {
+            if let onDuplicate {
+                Button(action: onDuplicate) { Label("Duplicate", systemImage: "plus.square.on.square") }
+            }
             if let onDelete {
                 Button(role: .destructive, action: onDelete) { Label("Delete", systemImage: "trash") }
             }
