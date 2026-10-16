@@ -4,7 +4,6 @@ import StremioKit
 
 struct SearchView: View {
     @State private var model: SearchViewModel
-    @State private var selectedGroup: String?
     @State private var isSearchPresented = false
     @FocusState private var isSearchFocused: Bool
     @Environment(AppRouter.self) private var router
@@ -30,21 +29,18 @@ struct SearchView: View {
                             .padding(.horizontal, metrics.pageMargin)
                             .accessibilityIdentifier("search.failures")
                     }
-                    if model.showsNoSearchableAddons {
-                        EmptyStateView("No addon can search", systemImage: "magnifyingglass",
-                                       message: "Add a catalog addon, such as Cinemeta, in Settings.",
-                                       actionTitle: "Open Addons", action: { router.showAddons() })
-                            .accessibilityIdentifier("search.noSearchableAddons")
-                    } else if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        browse
-                    } else {
-                        results
-                        if model.phase == .searching {
-                            Text("Searching…").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, metrics.pageMargin)
-                            SkeletonRow()
-                        } else if model.showsNoResults {
-                            ContentUnavailableView.search(text: model.query)
+                    if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if model.showsNoSearchableAddons {
+                            EmptyStateView("No addon can search", systemImage: "magnifyingglass",
+                                           message: "Add a catalog addon, such as Cinemeta, in Settings.",
+                                           actionTitle: "Open Addons", action: { router.showAddons() })
+                                .accessibilityIdentifier("search.noSearchableAddons")
+                        } else {
+                            browse
                         }
+                    } else {
+                        // The three search areas have fixed positions even while they load independently.
+                        results
                     }
                 }
                 .padding(.vertical, Theme.Spacing.l)
@@ -64,10 +60,7 @@ struct SearchView: View {
             // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up. The field
             // stays where it is, under the title.
             .onChange(of: router.searchFocusRevision, initial: true) { focusField() }
-            .onChange(of: model.query) {
-                selectedGroup = nil
-                model.queryDidChange()
-            }
+            .onChange(of: model.query) { model.queryDidChange() }
             .onSubmit(of: .search) { Task { await model.submit() } }
             .task { await model.refreshAvailability() }
             .onChange(of: router.tab) { old, _ in
@@ -164,46 +157,92 @@ struct SearchView: View {
 
     @ViewBuilder
     private var results: some View {
-        // A "what should I watch?" search gets the on-device model's picks first, each with why it fits.
-        if !model.picks.isEmpty {
-            MediaRow("Picks for You") {
-                ForEach(model.picks) { pick in
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        MediaCardLink(item: pick.item, width: metrics.posterWidth)
-                        Text(pick.reason)
-                            .font(Theme.Typography.cardSubtitle)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3, reservesSpace: true)
-                            .frame(width: metrics.posterWidth, alignment: .leading)
+        // These sections never switch between a grid and type chips when addons finish loading.
+        resultRow("Movies", type: "movie")
+        resultRow("Series", type: "series")
+        ForEach(model.groups.filter { $0.type != "movie" && $0.type != "series" }) { group in
+            MediaRow(group.title) {
+                ForEach(group.items, id: \.identity) { MediaCardLink(item: $0) }
+            }
+        }
+        aiResults
+    }
+
+    @ViewBuilder
+    private func resultRow(_ title: String, type: String) -> some View {
+        let items = model.groups.first(where: { $0.type == type })?.items ?? []
+        if !items.isEmpty {
+            MediaRow(title) {
+                ForEach(items, id: \.identity) { MediaCardLink(item: $0) }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                SectionHeader(title)
+                Text(model.phase == .searching ? "Searching…" : "No \(title.lowercased()) found")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, metrics.pageMargin)
+            .accessibilityIdentifier("search.\(type).empty")
+        }
+    }
+
+    @ViewBuilder
+    private var aiResults: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack(alignment: .center, spacing: Theme.Spacing.s) {
+                Label("AI Search", systemImage: "apple.intelligence")
+                    .font(.headline)
+                Spacer(minLength: 0)
+                Text("On-device AI")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, metrics.pageMargin)
+
+            if model.aiPhase == .searching {
+                HStack(spacing: Theme.Spacing.s) {
+                    ProgressView()
+                    Text(model.aiAvailable ? "Analysing plots on your iPhone…" : "Checking AI availability…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, metrics.pageMargin)
+                .accessibilityIdentifier("search.ai.loading")
+            } else if !model.aiAvailable {
+                Text("On-device AI isn't available. Enable Apple Intelligence to search by meaning.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, metrics.pageMargin)
+                    .accessibilityIdentifier("search.ai.unavailable")
+            } else if !model.picks.isEmpty {
+                MediaRow("Matches for You") {
+                    ForEach(model.picks) { pick in
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            MediaCardLink(item: pick.item, width: metrics.posterWidth)
+                            Text(pick.reason)
+                                .font(Theme.Typography.cardSubtitle)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3, reservesSpace: true)
+                                .frame(width: metrics.posterWidth, alignment: .leading)
+                        }
                     }
                 }
-            }
-            .accessibilityIdentifier("search.picks")
-        }
-        // A search typed as a description gets the titles it describes first, found by TMDb from the filters it names.
-        if !model.describedItems.isEmpty {
-            MediaRow("Matching Your Description") {
-                ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
-            }
-            .accessibilityIdentifier("search.described")
-        }
-        if model.groups.count > 1 {
-            ChipRow(fittingColumns: min(4, model.groups.count + 1)) {
-                GlassChip("All", isSelected: selectedGroup == nil, fillsWidth: true) { selectedGroup = nil }
-                ForEach(model.groups) { group in
-                    GlassChip(group.title, isSelected: selectedGroup == group.id, fillsWidth: true) { selectedGroup = group.id }
+                .accessibilityIdentifier("search.ai.picks")
+            } else if !model.describedItems.isEmpty {
+                MediaRow("Matches for You") {
+                    ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
                 }
+                .accessibilityIdentifier("search.ai.matches")
+            } else {
+                Text("No confident AI matches for this search.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, metrics.pageMargin)
+                    .accessibilityIdentifier("search.ai.empty")
             }
         }
-        ForEach(model.groups) { group in
-            if model.groups.count == 1 || selectedGroup == group.id {
-                MediaGrid(items: group.items)
-            } else if selectedGroup == nil {
-                MediaRow(group.title, onSeeAll: { selectedGroup = group.id }) {
-                    ForEach(group.items, id: \.identity) { MediaCardLink(item: $0) }
-                }
-            }
-        }
+        .accessibilityIdentifier("search.ai")
     }
 }
 
