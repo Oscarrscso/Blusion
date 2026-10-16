@@ -31,6 +31,20 @@ public struct DescribedSearch: Sendable, Equatable {
         self.maximumRuntime = maximumRuntime
     }
 
+    /// This reading, with the years, runtimes and lowest score that `words` states outright taking the place of this one's. The keyword
+    /// reader reads "before 2010" or "under two hours" exactly, where the on-device model sometimes puts a year at the wrong end.
+    public func correcting(with words: DescribedSearch) -> DescribedSearch {
+        var corrected = self
+        if words.earliestYear != nil || words.latestYear != nil {
+            corrected.earliestYear = words.earliestYear
+            corrected.latestYear = words.latestYear
+        }
+        if words.maximumRuntime != nil { corrected.maximumRuntime = words.maximumRuntime }
+        if words.minimumRuntime != nil { corrected.minimumRuntime = words.minimumRuntime }
+        if corrected.minimumScore == nil { corrected.minimumScore = words.minimumScore }
+        return corrected
+    }
+
     /// The most moods looked up as keywords: each is one TMDb request.
     public static let maxMoods = 3
 

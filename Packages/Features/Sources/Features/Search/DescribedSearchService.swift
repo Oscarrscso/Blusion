@@ -88,7 +88,7 @@ struct ModelDescriptionInterpreter: DescriptionInterpreting {
         do {
             let session = LanguageModelSession(instructions: Self.instructions)
             let answer = try await session.respond(to: text, generating: GeneratedSearch.self).content
-            return answer.described
+            return answer.described.correcting(with: .reading(text))
         } catch {
             return .reading(text)
         }
@@ -107,9 +107,9 @@ struct GeneratedSearch {
     var genres: [String]
     @Guide(description: "Genres the description rules out, from the same list")
     var excludedGenres: [String]
-    @Guide(description: "The earliest release year it allows, if it gives one")
+    @Guide(description: "The earliest release year it allows, for words such as after, since or from. After 2000 is 2001")
     var earliestYear: Int?
-    @Guide(description: "The latest release year it allows, if it gives one. Before 2010 is 2009")
+    @Guide(description: "The latest release year it allows, for words such as before or until. Before 2010 is 2009")
     var latestYear: Int?
     @Guide(description: "Up to three short mood or theme keywords it names, such as dark, atmospheric or time travel")
     var moods: [String]

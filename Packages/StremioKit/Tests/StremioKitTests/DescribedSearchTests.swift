@@ -43,6 +43,16 @@ import Testing
         #expect(DescribedSearch.reading("Inception").isEmpty)
     }
 
+    @Test func theWordsCorrectAModelThatPutsAYearAtTheWrongEnd() {
+        // The on-device model read "before 2010" as an earliest year of 2009 on the Mac (16 Oct).
+        let model = DescribedSearch(kind: .movie, genres: ["Science Fiction"], earliestYear: 2009, moods: ["dark"])
+        let text = "a dark, atmospheric sci-fi film from before 2010 with great reviews"
+        let corrected = model.correcting(with: .reading(text))
+        #expect(corrected.earliestYear == nil && corrected.latestYear == 2009)
+        #expect(corrected.minimumScore == 7.5 && corrected.genres == ["Science Fiction"] && corrected.moods == ["dark"])
+        #expect(model.correcting(with: .reading("dark sci-fi films about space")) == model, "no years in the words: the model's stand")
+    }
+
     @Test func onlyADescriptionReadsLikeOne() {
         #expect(DescribedSearch.readsLikeDescription("a dark, atmospheric sci-fi film from before 2010 with great reviews"))
         #expect(DescribedSearch.readsLikeDescription("funny shows about a family"))
