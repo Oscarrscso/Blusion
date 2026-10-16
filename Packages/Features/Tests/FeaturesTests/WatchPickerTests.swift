@@ -77,6 +77,16 @@ import StremioKit
         #expect(picks.map(\.reason) == ["TMDb recommends it alongside Prisoners.", "On TMDb's list for what you asked."])
     }
 
+    @Test func aRecommendationOfTheWrongKindOrYearsIsNotACandidate() {
+        let show = MetaPreview(id: "tt1", type: "series", name: "Show", releaseInfo: "2015")
+        let old = MetaPreview(id: "tt2", type: "movie", name: "Old", releaseInfo: "1975")
+        let undated = MetaPreview(id: "tt3", type: "movie", name: "Undated")
+        let films = DescribedSearch(kind: .movie, earliestYear: 1990)
+        #expect(!WatchPicker.fitsKindAndYears(show, films) && !WatchPicker.fitsKindAndYears(old, films))
+        #expect(WatchPicker.fitsKindAndYears(undated, films), "a title with no known year is kept")
+        #expect(WatchPicker.fitsKindAndYears(show, DescribedSearch()))
+    }
+
     @Test func noWishMeansNoPicks() async {
         let ranker = StubRanker([RankedCandidate(number: 1, reason: "Fits")])
         #expect(await picker(ranker, wish: nil).picks(for: "something like Prisoners").isEmpty)

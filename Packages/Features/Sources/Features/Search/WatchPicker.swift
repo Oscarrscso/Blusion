@@ -111,7 +111,7 @@ public struct WatchPicker: Sendable {
         let excluded = Set(seeds.map(\.identity) + seen.map(\.identity))
         var candidates: [MetaPreview] = []
         for item in pool where !excluded.contains(item.identity) && !candidates.contains(where: { $0.identity == item.identity })
-            && Self.fitsRuntime(item, search) {
+            && Self.fitsRuntime(item, search) && Self.fitsKindAndYears(item, search) {
             candidates.append(item)
             if candidates.count == Self.maxCandidates { break }
         }
@@ -136,6 +136,16 @@ public struct WatchPicker: Sendable {
         guard let minutes = minutes(item.runtime) else { return true }
         if let longest = search.maximumRuntime, minutes > longest { return false }
         if let shortest = search.minimumRuntime, minutes < shortest { return false }
+        return true
+    }
+
+    /// False for a title of the other kind, or released outside the request's years when its year is known. TMDb's recommendations are
+    /// not filtered by TMDb, so they are checked here.
+    static func fitsKindAndYears(_ item: MetaPreview, _ search: DescribedSearch) -> Bool {
+        if let kind = search.kind, item.type != (kind == .movie ? "movie" : "series") { return false }
+        guard let year = item.releaseInfo.flatMap({ Int($0.prefix(4)) }) else { return true }
+        if let earliest = search.earliestYear, year < earliest { return false }
+        if let latest = search.latestYear, year > latest { return false }
         return true
     }
 
@@ -273,7 +283,10 @@ struct GeneratedWish {
     var likeTitles: [String]
     @Guide(description: "Whether it asks for films, TV series, or does not say")
     var kind: GeneratedKind
-    @Guide(description: "Genres it rules out, from: Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, Horror")
+    @Guide(description: """
+        Genres it rules out, from: Action, Adventure, Animation, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, \
+        Mystery, Romance, Science Fiction, Thriller, War, Western
+        """)
     var excludedGenres: [String]
     @Guide(description: "The earliest release year it allows, for words such as after, since or from. After 2000 is 2001")
     var earliestYear: Int?
