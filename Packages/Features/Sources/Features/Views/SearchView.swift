@@ -200,21 +200,21 @@ struct SearchView: View {
             }
             .padding(.horizontal, metrics.pageMargin)
 
-            if model.aiPhase == .searching {
-                HStack(spacing: Theme.Spacing.s) {
-                    ProgressView()
-                    Text(model.aiAvailable ? "Analysing plots on your iPhone…" : "Checking AI availability…")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, metrics.pageMargin)
-                .accessibilityIdentifier("search.ai.loading")
-            } else if !model.aiAvailable {
+            if !model.aiAvailable {
                 Text("On-device AI isn't available. Enable Apple Intelligence to search by meaning.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, metrics.pageMargin)
                     .accessibilityIdentifier("search.ai.unavailable")
+            } else if model.aiPhase == .searching {
+                HStack(spacing: Theme.Spacing.s) {
+                    ProgressView()
+                    Text("Analysing plots on your iPhone…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, metrics.pageMargin)
+                .accessibilityIdentifier("search.ai.loading")
             } else if !model.picks.isEmpty {
                 MediaRow("Matches for You") {
                     ForEach(model.picks) { pick in
