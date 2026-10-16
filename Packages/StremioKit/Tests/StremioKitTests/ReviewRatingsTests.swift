@@ -165,6 +165,21 @@ import StremioKitTestSupport
         #expect(try OMDbRatings.parseSeason(season) == [1: 9.1, 2: 8.8])
     }
 
+    @Test func unratedEpisodesKeepTheirIMDbIDsForLocalDatasetLookups() throws {
+        let answer = try OMDbRatings.parseSeasonRatings(season)
+        #expect(answer.scores == [1: 9.1, 2: 8.8])
+        #expect(answer.episodeIDs == [1: "tt1480055", 2: "tt1668746", 3: "tt1668747", 5: "tt1668749"])
+        #expect(answer.episodeNumbers == [1, 2, 3, 5])
+        let invalid = Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"N/A","imdbID":"N/A"}]}"#.utf8)
+        #expect(try OMDbRatings.parseSeasonRatings(invalid).episodeIDs.isEmpty)
+    }
+
+    @Test func theSeriesIDCannotBecomeAnEpisodeLookupID() async throws {
+        let transport = StubTransport(data: Data(#"{"Response":"True","Episodes":[{"Episode":"1","imdbRating":"N/A","imdbID":"tt0944947"}]}"#.utf8))
+        let answer = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").seasonRatings(imdbID: "tt0944947", season: 1)
+        #expect(answer.episodeIDs.isEmpty && answer.episodeNumbers == [1])
+    }
+
     @Test func omdbSeasonRequestsCarryTheSeasonNumber() async throws {
         let transport = StubTransport(data: season)
         let scores = try await OMDbRatings(client: makeClient(transport), apiKey: "test-key").episodeRatings(imdbID: "tt0944947", season: 1)
@@ -190,7 +205,8 @@ import StremioKitTestSupport
     }
 
     @Test func episodeScoresSurviveTheCacheFile() throws {
-        let current = CachedRating(rating: nil, fetchedAt: Date(timeIntervalSince1970: 100), episodes: [1: 9.1, 12: 7.4])
+        let current = CachedRating(rating: nil, fetchedAt: Date(timeIntervalSince1970: 100), episodes: [1: 9.1, 12: 7.4],
+                                   episodeIDs: [1: "tt1480055", 2: "tt1668746"], episodeNumbers: [1, 2, 12])
         #expect(try JSONDecoder().decode(CachedRating.self, from: JSONEncoder().encode(current)) == current)
     }
 
@@ -198,6 +214,7 @@ import StremioKitTestSupport
         let legacy = Data(#"{"rating":4.5,"fetchedAt":100}"#.utf8)
         let decoded = try JSONDecoder().decode(CachedRating.self, from: legacy)
         #expect(decoded.rating == 4.5 && decoded.reviews == nil)
+        #expect(decoded.episodeIDs == nil && decoded.episodeNumbers == nil)
         // Existing cached scores from either provider survive the merged build.
         let combined = Data(#"{"rating":null,"fetchedAt":100,"reviews":{"imdb":8.7,"rottenTomatoes":91,"tmdb":8.4}}"#.utf8)
         #expect(try JSONDecoder().decode(CachedRating.self, from: combined).reviews == ReviewRatings(imdb: 8.7, rottenTomatoes: 91, tmdb: 8.4))

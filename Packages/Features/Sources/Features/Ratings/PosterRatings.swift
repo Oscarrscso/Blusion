@@ -117,6 +117,8 @@ public final class PosterRatingsStore {
     /// An explicit refresh bypasses disk freshness once per lookup; nextLookupAt then prevents repeated requests.
     @ObservationIgnored private var ignoresCachedFreshness = false
     @ObservationIgnored private var episodeTasks: [String: Task<[Int: Double], Never>] = [:]
+    @ObservationIgnored private var episodeRetryAfter: [String: Date] = [:]
+    @ObservationIgnored private var episodeDatasetScores: [String: EpisodeDatasetLookup] = [:]
     /// Hero artwork answers by title, kept for the session and dropped with the other review data by `forgetAll`.
     @ObservationIgnored private var heroArtworkByID: [String: TMDbArtwork] = [:]
     /// Hero artwork lookups under way, by title, so a title asked for twice at once (a prewarm and the page, say) shares one request.
@@ -302,6 +304,8 @@ public final class PosterRatingsStore {
         cacheTasks.removeAll()
         cachePriorities.removeAll()
         episodeTasks.removeAll()
+        episodeRetryAfter.removeAll()
+        episodeDatasetScores.removeAll()
         nextLookupAt.removeAll()
     }
 
@@ -491,35 +495,58 @@ public final class PosterRatingsStore {
         }
     }
 
-    /// IMDb scores of one season's episodes, by episode number. New requests need an OMDb key; cached scores work offline.
-    /// Seasons refresh daily (hourly when empty). A season asked for twice at once is fetched once.
-    public func episodeRatings(for seriesID: String, season: Int) async -> [Int: Double] {
+    /// IMDb scores from the local dataset using OMDb's episode IDs, with OMDb's scores filling gaps.
+    /// One network request per season; complete seasons refresh daily, partial/empty ones hourly. Cached identities work offline.
+    public func episodeRatings(for seriesID: String, season: Int, expectedEpisodes: Set<Int> = []) async -> [Int: Double] {
         guard !isClearing, LetterboxdRatings.isIMDbID(seriesID), season >= 0 else { return [:] }
         let key = "omdb:\(seriesID):s\(season)"
         if let running = episodeTasks[key] { return await running.value }
         let task = Task<[Int: Double], Never> { [self] in
             let cached = await cache.value(for: key)
             guard !Task.isCancelled else { return [:] }
-            let previous = cached?.episodes ?? [:]
-            if let until = nextLookupAt[key], now() < until { return previous }
-            if let cached, !ignoresCachedFreshness,
-               now().timeIntervalSince(cached.fetchedAt) < (previous.isEmpty ? 3_600 : 86_400) {
+            let previousIDs = cached?.episodeIDs ?? [:]
+            let previous = await resolveEpisodeScores(cached?.episodes ?? [:], ids: previousIDs, key: key)
+            guard !Task.isCancelled else { return [:] }
+            if var enriched = cached, enriched.episodes != previous {
+                enriched.episodes = previous
+                await cache.store(enriched, for: key) // Keep the original fetch time; local lookups do not refresh OMDb.
+            }
+            guard !Task.isCancelled else { return [:] }
+            if let retry = episodeRetryAfter[key], now() < retry { return previous }
+            let lifetime = Self.episodeCacheLifetime(scores: previous, knownEpisodes: cached?.episodeNumbers ?? [], expectedEpisodes: expectedEpisodes)
+            let expires = cached?.fetchedAt.addingTimeInterval(lifetime) ?? .distantPast
+            // Upgrade old score-only caches once, instead of making this fix wait for their 24-hour expiry.
+            let needsIDs = dataset != nil && cached?.episodeIDs == nil
+            if !needsIDs, let until = nextLookupAt[key], now() < min(until, expires) { return previous }
+            if !needsIDs, !ignoresCachedFreshness, now() < expires {
                 return previous
             }
-            guard let omdb, !isOMDbPaused else { return previous }
+            guard let omdb, omdbAllowsEpisodeRequests else { return previous }
             do {
-                let scores = try await omdb.episodeRatings(imdbID: seriesID, season: season)
+                let answer = try await omdb.seasonRatings(imdbID: seriesID, season: season)
                 guard !Task.isCancelled else { return [:] }
-                await cache.store(CachedRating(rating: nil, fetchedAt: now(), episodes: scores), for: key)
+                var retained = previous
+                for (number, id) in answer.episodeIDs where previousIDs[number] != nil && previousIDs[number] != id {
+                    retained[number] = nil // An identity correction must not inherit another episode's score.
+                }
+                let ids = previousIDs.merging(answer.episodeIDs) { _, new in new }
+                let scores = await resolveEpisodeScores(retained.merging(answer.scores) { _, new in new }, ids: ids, key: key)
                 guard !Task.isCancelled else { return [:] }
-                nextLookupAt[key] = now().addingTimeInterval(scores.isEmpty ? 3_600 : 86_400)
+                let numbers = (cached?.episodeNumbers ?? []).union(answer.episodeNumbers)
+                let fetchedAt = now()
+                await cache.store(CachedRating(rating: nil, fetchedAt: fetchedAt, episodes: scores,
+                                               episodeIDs: ids, episodeNumbers: numbers), for: key)
+                guard !Task.isCancelled else { return [:] }
+                episodeRetryAfter[key] = nil
+                nextLookupAt[key] = fetchedAt.addingTimeInterval(Self.episodeCacheLifetime(scores: scores, knownEpisodes: numbers,
+                                                                                          expectedEpisodes: expectedEpisodes))
                 if !isOMDbPaused { omdbError = nil }
                 // The request that used up the allowance: cards ask again, and TMDb fills in from now on.
                 if omdb.usage.today() >= OMDbUsage.dailyLimit { reviewServicesRevision += 1 }
                 return scores
             } catch {
                 if !Task.isCancelled {
-                    nextLookupAt[key] = now().addingTimeInterval(60)
+                    episodeRetryAfter[key] = now().addingTimeInterval(60)
                     pauseOMDbIfRefused(error)
                 }
                 return previous
@@ -531,8 +558,38 @@ public final class PosterRatingsStore {
         return scores
     }
 
+    private struct EpisodeDatasetLookup {
+        let generation: Int
+        let ids: [Int: String]
+        let scores: [Int: Double]
+    }
+
+    /// Indexed local reads, once per season and dataset generation. No per-episode network requests.
+    private func resolveEpisodeScores(_ scores: [Int: Double], ids: [Int: String], key: String) async -> [Int: Double] {
+        guard let dataset, !ids.isEmpty else { return scores }
+        if let found = episodeDatasetScores[key], found.generation == datasetGeneration, found.ids == ids {
+            return scores.merging(found.scores) { _, local in local }
+        }
+        let generation = datasetGeneration
+        var local: [Int: Double] = [:]
+        for (number, id) in ids {
+            guard !Task.isCancelled else { return scores }
+            if let rating = await dataset.rating(for: id), rating.rating.isFinite, rating.rating > 0, rating.rating <= 10 {
+                local[number] = rating.rating
+            }
+        }
+        guard !Task.isCancelled else { return scores }
+        if generation == datasetGeneration { episodeDatasetScores[key] = EpisodeDatasetLookup(generation: generation, ids: ids, scores: local) }
+        return scores.merging(local) { _, local in local }
+    }
+
+    private static func episodeCacheLifetime(scores: [Int: Double], knownEpisodes: Set<Int>, expectedEpisodes: Set<Int>) -> TimeInterval {
+        let expected = expectedEpisodes.isEmpty ? knownEpisodes : expectedEpisodes
+        return scores.isEmpty || !expected.isSubset(of: Set(scores.keys)) ? 3_600 : 86_400
+    }
+
     /// Whether OMDb can still be asked for episode scores: there is a key, OMDb has not refused it (401 or the 429 quota pause) and today's
-    /// requests from this device are under the daily limit. TMDb's episode scores are used only while this is false.
+    /// requests from this device are under the daily limit. TMDb fills gaps after IMDb has been checked.
     public var omdbAllowsEpisodeRequests: Bool {
         guard let omdb else { return false }
         return !isOMDbPaused && omdb.usage.today() < OMDbUsage.dailyLimit

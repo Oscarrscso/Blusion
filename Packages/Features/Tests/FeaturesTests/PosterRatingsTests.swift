@@ -295,7 +295,7 @@ import StremioKitTestSupport
         let again = await store.episodeRatings(for: "tt0944947", season: 2)
         #expect(again == a && transport.callCount == 1)
         let stored = await cache.value(for: "omdb:tt0944947:s2")
-        #expect(stored == CachedRating(rating: nil, fetchedAt: when, episodes: [1: 8.9]))
+        #expect(stored == CachedRating(rating: nil, fetchedAt: when, episodes: [1: 8.9], episodeIDs: [:], episodeNumbers: [1, 2]))
         _ = await store.episodeRatings(for: "tt0944947", season: 3)
         #expect(transport.callCount == 2)
     }
@@ -349,6 +349,8 @@ import StremioKitTestSupport
         #expect(store.omdbAllowsEpisodeRequests)
         for _ in 0..<OMDbUsage.dailyLimit { usage.record() }
         #expect(!store.omdbAllowsEpisodeRequests, "the day's allowance is spent")
+        #expect(await store.episodeRatings(for: "tt0944947", season: 1).isEmpty)
+        #expect(transport.callCount == 0, "the fetch itself must enforce the allowance")
     }
 
     @Test func aRateLimitedOMDbIsNotAvailableForEpisodesAndAsksTheCardsAgain() async throws {

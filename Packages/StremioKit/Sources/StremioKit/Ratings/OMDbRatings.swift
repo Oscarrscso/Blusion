@@ -26,35 +26,58 @@ public struct OMDbRatings: Sendable {
         return try Self.parse(result.data)
     }
 
-    /// IMDb scores of one season's episodes, by episode number. Empty when OMDb does not know the season or has no scores in it.
-    /// Cinemeta sends `"0"` for the episodes of most shows, so this is where per-episode IMDb scores come from.
+    /// A season's IMDb scores and identities. Keep IDs even for `N/A` scores: the local IMDb dataset may have their ratings.
+    public struct SeasonRatings: Sendable, Equatable {
+        public var scores: [Int: Double] = [:]
+        public var episodeIDs: [Int: String] = [:]
+        public var episodeNumbers: Set<Int> = []
+
+        public init() {}
+    }
+
+    /// IMDb scores of one season's episodes, by episode number.
     public func episodeRatings(imdbID: String, season: Int) async throws -> [Int: Double] {
-        guard LetterboxdRatings.isIMDbID(imdbID), season >= 0, !apiKey.isEmpty else { return [:] }
+        try await seasonRatings(imdbID: imdbID, season: season).scores
+    }
+
+    /// One request for the whole season, including identities for episodes OMDb has no rating for.
+    public func seasonRatings(imdbID: String, season: Int) async throws -> SeasonRatings {
+        guard LetterboxdRatings.isIMDbID(imdbID), season >= 0, !apiKey.isEmpty else { return SeasonRatings() }
         var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         parts?.queryItems = [URLQueryItem(name: "apikey", value: apiKey), URLQueryItem(name: "i", value: imdbID),
                              URLQueryItem(name: "Season", value: String(season))]
         guard let url = parts?.url else { throw AddonError.invalidURL }
         usage.record()
         let result = try await client.get(url, limits: FetchLimits(maxBytes: 256 * 1024), timeout: 8)
-        return try Self.parseSeason(result.data)
+        var answer = try Self.parseSeasonRatings(result.data)
+        // A series ID is not an episode ID; never use the show's rating for an episode.
+        answer.episodeIDs = answer.episodeIDs.filter { $0.value != imdbID }
+        return answer
     }
 
     /// `Episodes` of a season answer, as episode number to score. Episodes without a score (`"N/A"`) are left out.
     public static func parseSeason(_ data: Data) throws -> [Int: Double] {
+        try parseSeasonRatings(data).scores
+    }
+
+    public static func parseSeasonRatings(_ data: Data) throws -> SeasonRatings {
         let response: SeasonResponse
         do { response = try JSONDecoder().decode(SeasonResponse.self, from: data) } catch { throw AddonError.invalidJSON }
         if response.Response == "False" {
-            if isMissingTitle(response.Error) { return [:] }
+            if isMissingTitle(response.Error) { return SeasonRatings() }
             throw failure(for: response.Error)
         }
         guard response.Response == "True" else { throw AddonError.invalidJSON }
-        var scores: [Int: Double] = [:]
+        var answer = SeasonRatings()
         for episode in response.Episodes ?? [] {
-            guard let number = episode.Episode.flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }), number >= 0,
-                  let value = score(episode.imdbRating, scale: 10), value > 0 else { continue }
-            scores[number] = value
+            guard let number = episode.Episode.flatMap({ Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }), number >= 0 else { continue }
+            answer.episodeNumbers.insert(number)
+            if let id = episode.imdbID?.trimmingCharacters(in: .whitespacesAndNewlines), LetterboxdRatings.isIMDbID(id) {
+                answer.episodeIDs[number] = id
+            }
+            if let value = score(episode.imdbRating, scale: 10), value > 0 { answer.scores[number] = value }
         }
-        return scores
+        return answer
     }
 
     public static func parse(_ data: Data) throws -> ReviewRatings {
@@ -112,5 +135,6 @@ public struct OMDbRatings: Sendable {
     private struct SeasonEpisode: Decodable {
         let Episode: String?
         let imdbRating: String?
+        let imdbID: String?
     }
 }

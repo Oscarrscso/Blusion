@@ -8,12 +8,19 @@ public struct CachedRating: Sendable, Codable, Equatable {
     public var reviews: ReviewRatings?
     /// One season's episode scores by episode number, for the OMDb season lookups. Absent in files written before they existed.
     public var episodes: [Int: Double]?
+    /// Episode number to IMDb title ID, including episodes OMDb returned with `N/A` scores.
+    public var episodeIDs: [Int: String]?
+    /// All episode numbers in the season response, so a partially filled season expires sooner.
+    public var episodeNumbers: Set<Int>?
 
-    public init(rating: Double?, fetchedAt: Date, reviews: ReviewRatings? = nil, episodes: [Int: Double]? = nil) {
+    public init(rating: Double?, fetchedAt: Date, reviews: ReviewRatings? = nil, episodes: [Int: Double]? = nil,
+                episodeIDs: [Int: String]? = nil, episodeNumbers: Set<Int>? = nil) {
         self.rating = rating
         self.fetchedAt = fetchedAt
         self.reviews = reviews
         self.episodes = episodes
+        self.episodeIDs = episodeIDs
+        self.episodeNumbers = episodeNumbers
     }
 }
 
