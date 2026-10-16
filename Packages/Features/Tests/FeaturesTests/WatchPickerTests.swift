@@ -68,13 +68,12 @@ import StremioKit
         }
     }
 
-    @Test func aRefusedRankingStillShowsTheCandidatesWithWhereTheyCameFrom() async {
+    @Test func aRefusedRankingDoesNotPretendTMDbMatchesWereChosenByAI() async {
         let prisoners = prisoners, zodiac = zodiac, knives = knives
         let picker = WatchPicker(interpreter: StubWish(wish: WatchWish(likeTitles: ["Prisoners"])), ranker: RefusingRanker(),
                                  findTitle: { _ in prisoners }, related: { _ in [zodiac] }, discover: { _ in [knives] }, watched: { [] })
         let picks = await picker.picks(for: "something like Prisoners")
-        #expect(picks.map(\.item.name) == ["Zodiac", "Knives Out"])
-        #expect(picks.map(\.reason) == ["TMDb recommends it alongside Prisoners.", "On TMDb's list for what you asked."])
+        #expect(picks.isEmpty, "only actual model selections belong in the AI row")
     }
 
     @Test func aRecommendationOfTheWrongKindOrYearsIsNotACandidate() {
