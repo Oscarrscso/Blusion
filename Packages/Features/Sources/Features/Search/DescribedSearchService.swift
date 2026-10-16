@@ -22,46 +22,85 @@ public struct DescribedSearchService: Sendable {
     let keywords: @Sendable (String) async -> [TMDbDiscoverQuery.Named]
     /// TMDb's titles for a discover query.
     let titles: @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview]
+    /// Actual TMDb title matches, not genre-discovery results, for searches like "Dune".
+    let titleMatches: @Sendable (String) async throws -> [MetaPreview]
     /// Optional synopsis-aware ranking. Falls back to TMDb order without Apple Intelligence.
     let ranker: (any CandidateRanking)?
 
     public init(interpreter: any DescriptionInterpreting, keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named],
                 titles: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview],
-                ranker: (any CandidateRanking)? = nil) {
+                ranker: (any CandidateRanking)? = nil,
+                titleMatches: @escaping @Sendable (String) async throws -> [MetaPreview] = { _ in [] }) {
         self.interpreter = interpreter
         self.keywords = keywords
         self.titles = titles
+        self.titleMatches = titleMatches
         self.ranker = ranker
     }
 
     /// How many titles the description's row holds.
     static let limit = 20
 
-    /// The titles for a description, or none when nothing in it was understood or TMDb has none.
+    /// Run on-device interpretation for every nonempty search. Search real TMDb titles for
+    /// title-like queries, while descriptive requests draw from focused AND broad discover pools.
+    /// Broad candidates are shown only when Apple's model considers their synopses relevant.
     public func titles(for text: String) async -> [MetaPreview] {
-        let search = await interpreter.interpret(text)
-        guard !Task.isCancelled, !search.isEmpty || ranker != nil else { return [] }
-        var found: [TMDbDiscoverQuery.Named] = []
+        let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, !Task.isCancelled else { return [] }
+        let search = await interpreter.interpret(term)
+        guard !Task.isCancelled else { return [] }
+        let looksLikeDescription = DescribedSearch.readsLikeDescription(term)
+        var candidates: [MetaPreview] = []
+        var seen: Set<String> = []
+        func collect(_ items: [MetaPreview]) {
+            for item in items where seen.insert(item.identity).inserted {
+                candidates.append(item)
+            }
+        }
+
+        if !looksLikeDescription {
+            // A short title shouldn't be interpreted as a request for twenty popular movies.
+            let exact = (try? await titleMatches(term)) ?? []
+            collect(exact)
+            if !exact.isEmpty {
+                return await rank(term, candidates: candidates)
+            }
+        }
+
+        // Without interpretable criteria, blindly searching TMDb's popularity chart isn't AI search.
+        guard !search.isEmpty, !Task.isCancelled else { return [] }
+
+        var selectedKeywords: [TMDbDiscoverQuery.Named] = []
         for mood in search.moods.prefix(DescribedSearch.maxMoods) {
-            let matches = await keywords(mood)
-            if let match = matches.first(where: { $0.name.caseInsensitiveCompare(mood) == .orderedSame }) ?? matches.first,
-               !found.contains(match) {
-                found.append(match)
+            guard !Task.isCancelled else { return [] }
+            let suggestions = await keywords(mood)
+            if let match = suggestions.first(where: { $0.name.caseInsensitiveCompare(mood) == .orderedSame })
+                ?? suggestions.first(where: { $0.name.lowercased().contains(mood.lowercased()) }) {
+                if !selectedKeywords.contains(match) { selectedKeywords.append(match) }
             }
         }
         guard !Task.isCancelled else { return [] }
-        var items = (try? await titles(search.query(keywords: found))) ?? []
-        // TMDb can be too strict when matching themes as keywords; retry with the other filters.
-        if items.isEmpty && !found.isEmpty, !Task.isCancelled {
-            items = (try? await titles(search.query(keywords: []))) ?? []
+        if !selectedKeywords.isEmpty {
+            collect((try? await titles(search.query(keywords: selectedKeywords))) ?? [])
         }
-        guard let ranker, !items.isEmpty, !Task.isCancelled else { return items }
+        // Collect a second, less rigid group so a weak TMDb keyword cannot hide a good plot match.
+        // The model, not this broad TMDb list, decides what is relevant.
+        if selectedKeywords.isEmpty || ranker != nil || candidates.isEmpty {
+            collect((try? await titles(search.query(keywords: []))) ?? [])
+        }
+        return await rank(term, candidates: candidates)
+    }
+
+    private func rank(_ term: String, candidates: [MetaPreview]) async -> [MetaPreview] {
+        guard !Task.isCancelled, !candidates.isEmpty else { return [] }
+        guard let ranker else { return Array(candidates.prefix(Self.limit)) }
         do {
-            let picks = try await WatchPicker.rankedPicks(request: text, references: [], candidates: items,
-                                                          watched: [], ranker: ranker)
-            return picks.map(\.item)
+            let results = try await WatchPicker.rankedPicks(request: term, references: [],
+                                                            candidates: candidates, watched: [], ranker: ranker)
+            return results.map(\.item)
         } catch {
-            return items
+            // Never label generic TMDb titles as an AI result following a model failure.
+            return []
         }
     }
 
@@ -75,7 +114,10 @@ public struct DescribedSearchService: Sendable {
             return (try? await TMDbRatings(client: client, readAccessToken: token).searchKeywords(mood)) ?? []
         }, titles: { query in
             try await content.items(for: .tmdbDiscover(query), limit: limit)
-        }, ranker: OnDeviceDescriptionInterpreter.availableRanker())
+        }, ranker: OnDeviceDescriptionInterpreter.availableRanker(), titleMatches: { name in
+            guard let token = await settings.load().tmdbReadToken else { return [] }
+            return try await TMDbRatings(client: client, readAccessToken: token).searchTitleItems(name, limit: 12)
+        })
     }
 }
 
