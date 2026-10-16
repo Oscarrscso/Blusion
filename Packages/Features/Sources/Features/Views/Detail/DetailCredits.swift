@@ -8,6 +8,8 @@ import UIKit
 struct DetailCredits: View {
     let model: DetailViewModel
     let contentMargin: CGFloat
+    /// The page's width, so four whole cast cards fit across it.
+    let pageWidth: CGFloat
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
@@ -17,8 +19,12 @@ struct DetailCredits: View {
                     // TMDb's cast and key crew, with photos. Each photo loads as its card scrolls on, behind the rest of the page.
                     SectionHeader("Cast & Crew")
                         .padding(.horizontal, contentMargin)
-                    ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
-                        ForEach(people) { PersonCardLink(person: $0).reportsShelfEdge(id: $0.id) }
+                    // Four whole cards across the page, the fifth peeking in; never wider than a shelf's usual card.
+                    let cardWidth = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin, spacing: metrics.cardSpacing,
+                                                             maximum: metrics.posterWidth)
+                    // Keyed on the width, so the row measures its height again when the cards change size (the phone turned).
+                    ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing, resetKey: "\(Int(cardWidth))") {
+                        ForEach(people) { PersonCardLink(person: $0, width: cardWidth).reportsShelfEdge(id: $0.id) }
                     }
                     .accessibilityIdentifier("detail.castCarousel")
                 }

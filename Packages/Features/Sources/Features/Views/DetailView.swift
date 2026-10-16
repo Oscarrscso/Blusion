@@ -195,7 +195,7 @@ struct DetailView: View {
                                     if !model.reviews.isEmpty {
                                         DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
                                     }
-                                    DetailCredits(model: model, contentMargin: contentMargin)
+                                    DetailCredits(model: model, contentMargin: contentMargin, pageWidth: geometry.size.width)
                                 }
                                 .padding(.top, model.isSeries ? metrics.titleSectionSpacing : metrics.titleRatingsGap)
                                 if !model.relatedTitles.isEmpty {

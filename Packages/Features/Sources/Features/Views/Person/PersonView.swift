@@ -335,10 +335,13 @@ private struct CreditRow: View {
 /// A cast or crew member as a card: a portrait with rounded corners, then the name and the role. Tapping opens their page.
 struct PersonCardLink: View {
     let person: TMDbTitlePerson
+    /// The card's width; zero for a shelf's usual card. A card narrower than that sets its two lines one size smaller.
+    var width: CGFloat = 0
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        let width = metrics.posterWidth
+        let width = width > 0 ? min(width, metrics.posterWidth) : metrics.posterWidth
+        let isNarrow = width < metrics.posterWidth
         NavigationLink(value: PersonDestination(id: person.id, name: person.name, profile: person.profile)) {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 ArtworkImage(url: person.profile, title: person.name, maxPixelSize: 360, contentMode: .fill)
@@ -346,11 +349,11 @@ struct PersonCardLink: View {
                     .mediaArtwork(cornerRadius: Theme.Radius.poster)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(person.name)
-                        .font(Theme.Typography.cardTitle)
+                        .font(isNarrow ? .caption.weight(.semibold) : Theme.Typography.cardTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(person.roleText ?? (person.isCast ? "Actor" : "Crew"))
-                        .font(Theme.Typography.cardSubtitle)
+                        .font(isNarrow ? .caption2 : Theme.Typography.cardSubtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
