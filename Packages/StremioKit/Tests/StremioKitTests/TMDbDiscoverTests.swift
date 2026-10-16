@@ -98,6 +98,34 @@ private func externalIDRequests(_ transport: StubTransport, tmdbID: Int? = nil) 
         return (request.path, request.query.map { "\($0.name)=\($0.value ?? "")" })
     }
 
+    @Test func exactTitleSearchQueriesTmdbMoviesAndSeriesAndKeepsOverviews() async throws {
+        let transport = StubTransport { request, _ in
+            let path = request.url?.path ?? ""
+            if path == "/3/search/movie" {
+                return StubTransport.response(Data(
+                    #"{"results":[{"id":155,"title":"Dune","overview":"A hero crosses a dangerous desert.","release_date":"2021-10-22"}]}"#.utf8),
+                    for: request)
+            }
+            if path == "/3/search/tv" {
+                return StubTransport.response(Data(
+                    #"{"results":[{"id":211,"name":"Dune","overview":"A desert-world miniseries.","first_air_date":"2000-12-03"}]}"#.utf8),
+                    for: request)
+            }
+            let parts = path.split(separator: "/")
+            if parts.count == 4, parts[3] == "external_ids", let id = Int(parts[2]) {
+                return StubTransport.response(Data(#"{"imdb_id":"tt\#(1_000_000 + id)"}"#.utf8), for: request)
+            }
+            return StubTransport.response(Data(), status: 404, for: request)
+        }
+        let items = try await ratings(transport).searchTitleItems("Dune", limit: 12)
+        #expect(items.map(\.type) == ["movie", "series"])
+        #expect(items.map(\.name) == ["Dune", "Dune"])
+        #expect(items.map(\.description) == ["A hero crosses a dangerous desert.", "A desert-world miniseries."])
+        let titleCalls = transport.requests.filter { ($0.url?.path ?? "").hasPrefix("/3/search/") }
+        #expect(titleCalls.count == 2)
+        #expect(titleCalls.allSatisfy { queryValue($0.url, "query") == "Dune" })
+    }
+
     // MARK: Requests
 
     @Test func aTrendingQueryAsksTheTrendingListAndIgnoresItsFilters() {
