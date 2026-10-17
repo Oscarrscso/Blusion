@@ -256,6 +256,43 @@ import StremioKit
         }
     }
 
+    /// TMDb's main keyword is the singular one: "zombies" tags a handful of titles, so both forms are asked for, singular first.
+    @Test func aTopicAsksForBothFormsOfItsKeyword() {
+        let found = [TMDbDiscoverQuery.Named(id: 2, name: "zombies"), .init(id: 1, name: "zombie"), .init(id: 3, name: "zombie apocalypse")]
+        #expect(DescribedSearchService.sameTopic(found, "zombies").map(\.id) == [1, 2])
+        #expect(DescribedSearchService.sameTopic(found, "vampires").isEmpty)
+    }
+
+    /// A title the model gave back is shown even when its words read as a genre that it is not ("Scary Movie" is a comedy), with
+    /// its sequels, and never a film whose name merely contains the words.
+    @Test func aTitleTheWordsNameIsShownWithItsSequelsDespiteTheirFilters() async {
+        let calls = Calls()
+        let films = [MetaPreview(id: "tt1", type: "movie", name: "Scary Movie", releaseInfo: "2000", genres: ["Comedy"]),
+                     MetaPreview(id: "tt2", type: "movie", name: "Scary Movie 3", releaseInfo: "2003", genres: ["Comedy"]),
+                     MetaPreview(id: "tt3", type: "movie", name: "A Very Scary Movie Night", releaseInfo: "2019", genres: ["Horror"])]
+        var plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Horror"]), titleQueries: ["Scary Movie"],
+                                requiresSemanticRanking: false)
+        plan.titlesFromWords = true
+        plan.titleSequelsOnly = true
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+            titles: { _ in [] }, titleMatches: { _ in films })
+        let items = await service.titles(for: "Scary Movie")
+        #expect(items.prefix(2).map(\.name) == ["Scary Movie", "Scary Movie 3"])
+        #expect(!items.contains { $0.name == "A Very Scary Movie Night" })
+    }
+
+    @Test func aLeadingArticleDoesNotChangeATitlesName() {
+        #expect(DescribedSearchService.isNamedOrSequel(MetaPreview(id: "tt1", name: "The Lego Movie"), "lego movie"))
+        #expect(DescribedSearchService.isNamed(MetaPreview(id: "tt2", name: "The War of the Worlds"), "War of the Worlds"))
+        #expect(!DescribedSearchService.isNamed(MetaPreview(id: "tt3", name: "The"), "A"))
+    }
+
+    @Test func eachTopicsMainKeywordComesBeforeAnySecondForm() {
+        let zombie = TMDbDiscoverQuery.Named(id: 1, name: "zombie"), zombies = TMDbDiscoverQuery.Named(id: 2, name: "zombies")
+        let heist = TMDbDiscoverQuery.Named(id: 3, name: "heist"), heists = TMDbDiscoverQuery.Named(id: 4, name: "heists")
+        #expect(DescribedSearchService.firstsFirst([[zombie, zombies], [heist, heists]]).map(\.id) == [1, 3, 2, 4])
+    }
+
     /// Words searched as a title whose matches are only near ("Time Travel Tales" for "time travel") still get the theme search.
     @Test func aTitleSearchWithoutAnExactMatchStillSearchesTheThemes() async {
         let calls = Calls()
@@ -338,7 +375,8 @@ import StremioKit
     /// movies" on 17 Oct). The topic pool still comes first and no generic popularity page is asked for.
     @Test func themeMatchesGetTheFirstSlotsAndFinishBeforeGenericPopularityPages() async {
         let calls = Calls()
-        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], moods: ["bank robbery"]))
+        var plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], moods: ["bank robbery"]))
+        plan.trustsTopicMatches = true // as the reading of these words sets it: nothing in them is a feel
         let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in
             [.init(id: 100, name: "bank robbery")]
         }, titles: { query in

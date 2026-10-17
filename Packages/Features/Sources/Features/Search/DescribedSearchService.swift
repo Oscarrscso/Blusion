@@ -64,8 +64,28 @@ public struct DescribedSearchService: Sendable {
     static let limit = 40
     static let batchSize = 12
     static let candidateLimit = 72
-    /// Stop after a useful row, rather than running inference until forty cards have accumulated.
-    static let semanticTarget = 18
+    /// Stop after a useful row, rather than running inference until forty cards have accumulated. Eighteen read as too few.
+    static let semanticTarget = 30
+    /// The lowest TMDb score of the popular titles a search with nothing else to go on gets.
+    static let crowdPleaserScore = 7.0
+
+    /// Whether a title is named exactly as the words, accents, case, punctuation and a leading article aside ("lego movie" is The
+    /// Lego Movie).
+    static func isNamed(_ item: MetaPreview, _ name: String) -> Bool {
+        bareName(item.name) == bareName(name)
+    }
+
+    /// Whether a title is named as the words or is a sequel under that name ("Scary Movie 3", "Alien: Romulus").
+    static func isNamedOrSequel(_ item: MetaPreview, _ name: String) -> Bool {
+        let title = bareName(item.name), wanted = bareName(name)
+        return title == wanted || title.hasPrefix(wanted + " ")
+    }
+
+    private static func bareName(_ name: String) -> String {
+        let words = AISearchGrounding.normalized(name).split(separator: " ")
+        let kept = words.count > 1 && ["the", "a", "an"].contains(words[0]) ? words.dropFirst() : words[...]
+        return kept.joined(separator: " ")
+    }
     /// Includes retries: a rejected batch cannot cause a fresh retry tree for every database page.
     static let rankingAttemptLimit = 8
     /// Candidate batches the model checks at once.
@@ -139,13 +159,37 @@ public struct DescribedSearchService: Sendable {
             }
         }
 
-        // A search that reads like a title shows TMDb's matches for it at once; the model's reading follows.
+        // Words that could be a title are searched as one at once. They are a story topic too when TMDb has a keyword for each of
+        // their topic words ("zombies", "Star Wars"), or a genre when they imply one ("anime", "space"): then only titles of exactly
+        // that name stand for the title, and the topic's titles follow, instead of "Zombies of the Third Reich" alone.
+        let lexical = AISearchGrounding.plan(ModelReading(), for: term)
+        let phrases = AISearchGrounding.topicPhrases(in: term)
+        var topics: [TMDbDiscoverQuery.Named] = []
+        var wordsAreTopic = false
+        var exactTitlesOnly = false
         if !filterOnly, AISearchGrounding.mightBeTitle(term) {
-            do {
-                let found = try await titleMatches(term)
-                considered.formUnion(found.map(\.identity))
-                await publish(found, stage: .titles)
-            } catch { recordFailure(error) }
+            func searchTitles() async -> Result<[MetaPreview], any Error> {
+                do { return .success(try await titleMatches(term)) } catch { return .failure(error) }
+            }
+            async let matches = searchTitles()
+            let found = AISearchGrounding.isAllTopic(term) && !phrases.isEmpty ? await exactKeywords(for: phrases) : []
+            let result = await matches
+            let titles = (try? result.get()) ?? []
+            // A topic, unless a title of that very name shows it is a title ("Inception"); a plural word is a topic even then
+            // ("zombies", though there is a film called Zombies).
+            let words = AISearchGrounding.normalized(term).split(separator: " ").map(String.init)
+            let plural = words.count == 1 && !AISearchGrounding.isSingular(words[0])
+            wordsAreTopic = !found.isEmpty && AISearchGrounding.uncoveredTopics(in: term, by: found.map(\.name)).isEmpty
+                && (plural || !titles.contains { Self.isNamed($0, term) })
+            if wordsAreTopic { topics = found }
+            exactTitlesOnly = wordsAreTopic
+            if case .failure(let error) = result { recordFailure(error) }
+            let shown = exactTitlesOnly ? titles.filter { Self.isNamed($0, term) } : titles
+            considered.formUnion(shown.map(\.identity))
+            await publish(shown, stage: .titles)
+        } else if !filterOnly, !phrases.isEmpty, !AISearchGrounding.capitalisesATopic(term) {
+            let found = await exactKeywords(for: phrases)
+            if !found.isEmpty, AISearchGrounding.uncoveredTopics(in: term, by: found.map(\.name)).isEmpty { topics = found }
         }
         // Topics the words name outright are searched at once too, when TMDb's keywords answer every one of them and the words ask
         // for nothing a synopsis would have to show: titles tagged with each topic, in the requested genres, years and language,
@@ -153,31 +197,24 @@ public struct DescribedSearchService: Sendable {
         // topic written with a capital ("Tom Hanks films") is likely a name, and a search that rules something out ("heist movies
         // without violence") or wants only unwatched titles needs what only the reading and history give, so those wait.
         var earlyQueries = Set<TMDbDiscoverQuery>()
-        if !filterOnly, !AISearchGrounding.mightBeTitle(term), !AISearchGrounding.capitalisesATopic(term),
+        if !topics.isEmpty, lexical.trustsTopicMatches, !lexical.unwatchedOnly, lexical.referenceTitles.isEmpty,
            !AISearchGrounding.hasNegation(term) {
-            let lexical = AISearchGrounding.plan(ModelReading(), for: term)
-            let phrases = AISearchGrounding.topicPhrases(in: term)
-            if lexical.trustsTopicMatches, !lexical.unwatchedOnly, lexical.referenceTitles.isEmpty, !phrases.isEmpty {
-                let found = await exactKeywords(for: phrases)
-                if !found.isEmpty, AISearchGrounding.uncoveredTopics(in: term, by: found.map(\.name)).isEmpty {
-                    let queries = lexical.queries(keywords: Array(found.prefix(DescribedSearch.maxMoods)))
-                    earlyQueries = Set(queries)
-                    await withTaskGroup(of: Result<[MetaPreview], any Error>.self) { group in
-                        for query in queries {
-                            group.addTask {
-                                do { return .success(try await fetch(query, page: 0)) } catch { return .failure(error) }
-                            }
-                        }
-                        for await result in group {
-                            guard !Task.isCancelled else { group.cancelAll(); break }
-                            switch result {
-                            case .success(let items):
-                                let fitting = items.filter { Self.fits($0, filters: lexical.filters) && considered.insert($0.identity).inserted }
-                                await publish(fitting, stage: .themes)
-                            case .failure(let error):
-                                recordFailure(error)
-                            }
-                        }
+            let queries = lexical.queries(keywords: Array(topics.prefix(DescribedSearch.maxMoods)))
+            earlyQueries = Set(queries)
+            await withTaskGroup(of: Result<[MetaPreview], any Error>.self) { group in
+                for query in queries {
+                    group.addTask {
+                        do { return .success(try await fetch(query, page: 0)) } catch { return .failure(error) }
+                    }
+                }
+                for await result in group {
+                    guard !Task.isCancelled else { group.cancelAll(); break }
+                    switch result {
+                    case .success(let items):
+                        let fitting = items.filter { Self.fits($0, filters: lexical.filters) && considered.insert($0.identity).inserted }
+                        await publish(fitting, stage: .themes)
+                    case .failure(let error):
+                        recordFailure(error)
                     }
                 }
             }
@@ -214,9 +251,20 @@ public struct DescribedSearchService: Sendable {
                 if output.count == Self.limit || Task.isCancelled { break }
             }
         }
-        let plan = await interpreted
+        var reading = await interpreted
         guard !Task.isCancelled else { return [] }
-        if plan.interpretationFailed { issue = issue ?? .ranking }
+        if reading.interpretationFailed { issue = issue ?? .ranking }
+        // Words that are a topic are searched as one, whatever the model made of them.
+        for topic in topics where wordsAreTopic && !reading.filters.moods.contains(where: { AISearchGrounding.isSameTopic($0, topic.name) }) {
+            reading.filters.moods.append(topic.name)
+        }
+        reading.filters.moods = Array(reading.filters.moods.prefix(DescribedSearch.maxMoods))
+        // A search with nothing the reading could use ("something to watch tonight") gets well-liked popular titles, not nothing.
+        if reading.filters.isEmpty, reading.titleQueries.isEmpty || reading.titlesFromWords, reading.people.isEmpty,
+           reading.referenceTitles.isEmpty, reading.companies.isEmpty, reading.language == nil {
+            reading.filters.minimumScore = Self.crowdPleaserScore
+        }
+        let plan = reading
         // Factual filter requests do not need their plots scored for genre or release year.
         if filterOnly {
             await update(.complete)
@@ -301,8 +349,15 @@ public struct DescribedSearchService: Sendable {
         for name in plan.titleQueries {
             guard !finished() else { break }
             do {
-                let found = try await titleMatches(name)
-                await consume(found.map { AISearchCandidate(item: $0, evidence: "Database title search: \(name)") }, stage: .titles)
+                let matches = try await titleMatches(name)
+                let found = exactTitlesOnly ? matches.filter { Self.isNamed($0, name) }
+                    : plan.titleSequelsOnly ? matches.filter { Self.isNamedOrSequel($0, name) } : matches
+                if plan.titlesFromWords {
+                    // The words' own filters ("Scary Movie" reads horror, "1917" a year) never hide the title they name.
+                    await publish(found.filter { !excluded.contains($0.identity) && considered.insert($0.identity).inserted }, stage: .titles)
+                } else {
+                    await consume(found.map { AISearchCandidate(item: $0, evidence: "Database title search: \(name)") }, stage: .titles)
+                }
                 if !found.isEmpty, plan.people.isEmpty, plan.referenceTitles.isEmpty, plan.companies.isEmpty { break }
             } catch { recordFailure(error) }
         }
@@ -325,10 +380,9 @@ public struct DescribedSearchService: Sendable {
         }
         // A title the model named is the answer once found, as before. Words that only stood in for a title ("time travel") end
         // the search only when a title of exactly that name is found; otherwise the themes are searched.
-        let foundTitle = output.contains { item in
-            plan.titleQueries.contains { AISearchGrounding.normalized($0) == AISearchGrounding.normalized(item.name) }
-        }
-        if !finished(), plan.people.isEmpty, plan.titleQueries.isEmpty || output.isEmpty || (plan.titlesFromWords && !foundTitle),
+        let foundTitle = output.contains { item in plan.titleQueries.contains { Self.isNamed(item, $0) } }
+        let wordsAskMore = !foundTitle || wordsAreTopic || !plan.filters.genres.isEmpty
+        if !finished(), plan.people.isEmpty, plan.titleQueries.isEmpty || output.isEmpty || (plan.titlesFromWords && wordsAskMore),
            !plan.filters.isEmpty || plan.language != nil || !plan.companies.isEmpty || !references.isEmpty {
             var studios: [TMDbDiscoverQuery.Named] = []
             for name in plan.companies {
@@ -442,40 +496,61 @@ public struct DescribedSearchService: Sendable {
     /// TMDb's keyword for each phrase that is that phrase itself, in the phrases' order; a word inside a pair already found is not
     /// looked for again.
     private func exactKeywords(for phrases: [String]) async -> [TMDbDiscoverQuery.Named] {
-        let answers = await withTaskGroup(of: (Int, TMDbDiscoverQuery.Named?).self) { group in
+        let answers = await withTaskGroup(of: (Int, [TMDbDiscoverQuery.Named]).self) { group in
             for (index, phrase) in phrases.enumerated() {
-                group.addTask { (index, await keywords(phrase).first { AISearchGrounding.isSameTopic($0.name, phrase) }) }
+                group.addTask { (index, Self.sameTopic(await keywords(phrase), phrase)) }
             }
-            var found: [Int: TMDbDiscoverQuery.Named] = [:]
-            for await (index, match) in group { if let match { found[index] = match } }
+            var found: [Int: [TMDbDiscoverQuery.Named]] = [:]
+            for await (index, matches) in group where !matches.isEmpty { found[index] = matches }
             return found
         }
-        var chosen: [TMDbDiscoverQuery.Named] = []
+        var lists: [[TMDbDiscoverQuery.Named]] = []
         var coveredWords = Set<String>()
         for (index, phrase) in phrases.enumerated() {
-            guard let match = answers[index] else { continue }
-            let words = Set(AISearchGrounding.normalized(phrase).split(separator: " ").map { AISearchGrounding.stem(String($0)) })
-            guard !words.isSubset(of: coveredWords), !chosen.contains(match) else { continue }
-            chosen.append(match)
+            guard let matches = answers[index] else { continue }
+            let words = Set(AISearchGrounding.normalized(phrase).split(separator: " ").flatMap { AISearchGrounding.stems(String($0)) })
+            guard !words.isSubset(of: coveredWords) else { continue }
+            lists.append(matches)
             coveredWords.formUnion(words)
+        }
+        return Self.firstsFirst(lists)
+    }
+
+    /// Each topic's main keyword before any topic's second, so a second form never takes the place of another topic.
+    static func firstsFirst(_ lists: [[TMDbDiscoverQuery.Named]]) -> [TMDbDiscoverQuery.Named] {
+        var chosen: [TMDbDiscoverQuery.Named] = []
+        for rank in 0..<(lists.map(\.count).max() ?? 0) {
+            for list in lists where list.count > rank && !chosen.contains(list[rank]) { chosen.append(list[rank]) }
         }
         return chosen
     }
 
+    /// TMDb's keywords that are the topic itself, the singular one first and two at most: "zombie" tags thousands of titles and
+    /// "zombies" a handful, so both are asked for, and the topic is not left to the smaller one.
+    static func sameTopic(_ found: [TMDbDiscoverQuery.Named], _ phrase: String) -> [TMDbDiscoverQuery.Named] {
+        let same = found.filter { AISearchGrounding.isSameTopic($0.name, phrase) }
+        func isSingular(_ keyword: TMDbDiscoverQuery.Named) -> Bool {
+            AISearchGrounding.normalized(keyword.name).split(separator: " ").allSatisfy { AISearchGrounding.isSingular(String($0)) }
+        }
+        return Array((same.filter(isSingular) + same.filter { !isSingular($0) }).prefix(2))
+    }
+
     private func keywords(for topics: [String]) async -> [TMDbDiscoverQuery.Named] {
-        await withTaskGroup(of: (Int, TMDbDiscoverQuery.Named?).self) { group in
+        await withTaskGroup(of: (Int, [TMDbDiscoverQuery.Named]).self) { group in
             for (index, topic) in topics.prefix(DescribedSearch.maxMoods).enumerated() {
                 group.addTask { (index, await keyword(topic)) }
             }
-            var found: [(Int, TMDbDiscoverQuery.Named)] = []
-            for await (index, match) in group { if let match { found.append((index, match)) } }
-            var seen = Set<Int>()
-            return found.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0.id).inserted }
+            var found: [(Int, [TMDbDiscoverQuery.Named])] = []
+            for await answer in group { found.append(answer) }
+            return Self.firstsFirst(found.sorted { $0.0 < $1.0 }.map(\.1))
         }
     }
 
-    private func keyword(_ topic: String) async -> TMDbDiscoverQuery.Named? {
+    /// The topic's own keywords when TMDb has them (both "zombie" and "zombies"), else the one keyword that names it.
+    private func keyword(_ topic: String) async -> [TMDbDiscoverQuery.Named] {
         let found = await keywords(topic)
+        let same = Self.sameTopic(found, topic)
+        if !same.isEmpty { return same }
         func terms(_ text: String) -> Set<String> {
             Set(text.lowercased().split(whereSeparator: { !$0.isLetter }).map { word in
                 if word.count > 4, word.hasSuffix("ies") { return String(word.dropLast(3)) + "y" }
@@ -484,10 +559,11 @@ public struct DescribedSearchService: Sendable {
             })
         }
         let words = terms(topic)
-        return found.first { $0.name.caseInsensitiveCompare(topic) == .orderedSame }
+        let match = found.first { $0.name.caseInsensitiveCompare(topic) == .orderedSame }
             ?? found.first { match in
                 !words.isEmpty && words.isSubset(of: terms(match.name))
             }
+        return match.map { [$0] } ?? []
     }
 
     private static func facts(for query: TMDbDiscoverQuery) -> String {

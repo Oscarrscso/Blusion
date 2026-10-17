@@ -110,12 +110,15 @@ import StremioKit
         #expect(model.phase == .done, "AI and regular search have independent completion states")
     }
 
-    @Test func aDescriptionWithNothingUnderstoodFindsNothing() async {
+    /// It once found nothing, which read as the AI being "horribly restrictive" (17 Oct): it now gets well-liked popular titles.
+    @Test func aDescriptionWithNothingUnderstoodGetsWellLikedPopularTitles() async {
         let asked = Asked()
         let model = SearchViewModel(services: services(), debounce: .milliseconds(1), describer: describer(asked, answer: DescribedSearch()))
         model.query = "something to watch with my friends tonight"
         model.queryDidChange()
         await model.waitUntilDone()
-        #expect(model.describedItems.isEmpty && asked.queries.isEmpty)
+        #expect(model.describedItems == found)
+        #expect(!asked.queries.isEmpty)
+        #expect(asked.queries.allSatisfy { $0.minimumScore == DescribedSearchService.crowdPleaserScore && $0.keywords.isEmpty })
     }
 }

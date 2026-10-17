@@ -26,37 +26,55 @@ enum AISearchGrounding {
             + names(reading.writers, .writer, in: text) + names(reading.creators, .creator, in: text)
         let references = referenceTitles(reading.referenceTitles, in: text)
         let titleLike = mightBeTitle(text) && people.isEmpty
+        let whole = normalized(text)
         // A title the search wants something like is a reference, never a result ("like Prisoners" never lists Prisoners).
+        // One word that cannot be a title ("anime", "westerns") is never searched as one: films called "Anime" were listed first.
+        let oneWord = !whole.contains(" ")
         var titles = reading.titleQueries.filter { title in
-            (contains(text, title) || (titleLike && isSpelling(title, of: text)))
+            guard titleLike || !oneWord || normalized(title) != whole else { return false }
+            return (contains(text, title) || (titleLike && isSpelling(title, of: text)))
                 && !references.contains { normalized($0) == normalized(title) }
         }
         // Words that could be a title are searched as one unless the model read them as a story topic ("time travel", "heist"),
-        // which the theme searches then answer.
-        let titlesFromWords = titleLike && titles.isEmpty && themes(reading.themes, in: text, excluding: []).isEmpty
-        if titlesFromWords { titles = [text] }
+        // which the theme searches then answer. The model also gives the whole search back as a title, for a description ("sad
+        // movies", "best movies of 2023") as for a real one ("Scary Movie", "1917"). Either way the words stand in as the title:
+        // a film of that name is shown, and they stay the search's words, so what they ask for is still searched. Searching
+        // only for a film called "sad movies" found nothing and ended the search.
+        let echoed = titles.contains { normalized($0) == whole }
+        let titlesFromWords = echoed || (titleLike && titles.isEmpty && themes(reading.themes, in: text, excluding: []).isEmpty)
+        if titlesFromWords, titles.isEmpty { titles = [text] }
         let companies = reading.companies.filter { company in
             contains(text, company) || distinctiveWords(company).contains { words(text).contains($0) }
         }
         // The words that are left once named titles, people and studios are taken out are the search's own requirements.
-        let named = titles + references + people.map(\.name) + companies
+        let named = (titlesFromWords ? [] : titles) + references + people.map(\.name) + companies
         let rest = remove(named, from: text)
         var filters = DescribedSearch.reading(rest)
         let restWords = words(rest)
         if restWords.isDisjoint(with: kindWords) { filters.kind = nil }
         for genre in impliedGenres(in: restWords) where !filters.genres.contains(genre) { filters.genres.append(genre) }
         if filters.earliestYear == nil, filters.latestYear == nil { (filters.earliestYear, filters.latestYear) = era(in: restWords, now: now) }
+        // One bare year is the release year ("best movies of 2023"), once titles that hold a year are taken out.
+        let years = restWords.compactMap(Int.init).filter { (1900...2100).contains($0) }
+        if filters.earliestYear == nil, filters.latestYear == nil, years.count == 1 { (filters.earliestYear, filters.latestYear) = (years[0], years[0]) }
         let negated = hasNegation(rest)
         let excluded = negated ? reading.excludedTopics.filter { sharesWord($0, with: rest) } : []
         filters.moods = themes(reading.themes + filters.moods, in: rest, excluding: excluded)
+        let judged = judgement(in: rest)
+        // Words the model left out still count: "mind bending films" is searched for "mind bending", not for any film.
+        if filters.moods.isEmpty, !judged.isEmpty, !(titlesFromWords && titleLike) {
+            filters.moods = themes([judged], in: rest, excluding: excluded)
+        }
         let subjective = !references.isEmpty || !restWords.isDisjoint(with: subjectiveWords) || rest.lowercased().contains("feel-good")
         var plan = AISearchPlan(filters: filters, titleQueries: titles, referenceTitles: references, people: people,
-                                companies: companies, language: language(in: restWords), excludedTopics: excluded,
+                                companies: companies, language: language(inOrder: rest), excludedTopics: excluded,
                                 unwatchedOnly: unwatchedCues.contains { normalized(text).contains($0) },
                                 requiresSemanticRanking: subjective || !filters.moods.isEmpty)
         plan.trustsTopicMatches = !subjective
-        plan.judgement = judgement(in: rest)
+        plan.judgement = judged
         plan.titlesFromWords = titlesFromWords
+        // Words that do not read as a title keep only a film of that very name, or its sequels ("Scary Movie 3").
+        plan.titleSequelsOnly = echoed && !titleLike
         return plan
     }
 
@@ -64,8 +82,12 @@ enum AISearchGrounding {
     /// scores, runtimes, languages and filler are taken out, kept as typed ("feel-good brothers", "less depressing").
     static func judgement(in rest: String) -> String {
         var kept: [String] = []
+        var previous = ""
         for token in rest.split(whereSeparator: \.isWhitespace) {
             let parts = normalized(String(token)).split(separator: " ").map(String.init)
+            // Who is watching is no part of the story ("with my girlfriend").
+            defer { previous = parts.last ?? previous }
+            guard !["my", "our", "your", "his", "her", "their"].contains(previous) else { continue }
             guard parts.contains(where: { part in
                 !factWords.contains(part) && !TMDbDiscoverQuery.genreWords.contains(part) && languages[part] == nil
                     && Int(part) == nil && !isYearOrDecade(part)
@@ -115,9 +137,12 @@ enum AISearchGrounding {
     static func mightBeTitle(_ text: String) -> Bool {
         guard !DescribedSearch.readsLikeDescription(text), referenceTitles([], in: text).isEmpty else { return false }
         let list = normalized(text).split(separator: " ").map(String.init)
-        guard !list.isEmpty, Set(list).isDisjoint(with: kindWords), language(in: Set(list)) == nil,
+        // Filler alone ("something to watch tonight") names no title, though one word of it may ("Her", "Us"), and a year alone
+        // may be one ("1917").
+        guard !list.isEmpty, list.count == 1 || !list.allSatisfy(factWords.contains), Set(list).isDisjoint(with: kindWords),
+              language(in: Set(list)) == nil,
               DescribedSearch.reading(text).genres.isEmpty,
-              !list.contains(where: isYearOrDecade) else { return false }
+              (list.count == 1 && Int(list[0]) != nil) || !list.contains(where: isYearOrDecade) else { return false }
         return list.count == 1 || (Set(list).isDisjoint(with: subjectiveWords) && list.allSatisfy { genreHints[$0] == nil })
     }
 
@@ -192,7 +217,9 @@ enum AISearchGrounding {
         for candidate in candidates {
             let theme = candidate.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let themeWords = words(theme)
-            guard !theme.isEmpty, sharesWord(theme, with: text), !themeWords.isSubset(of: genreWords.union(factWords)),
+            // A year or a decade is a date the filters hold already ("2023" for "best movies of 2023"), never a theme.
+            guard !theme.isEmpty, !themeWords.allSatisfy({ Int($0) != nil || isYearOrDecade($0) }), sharesWord(theme, with: text),
+                  !themeWords.isSubset(of: genreWords.union(factWords).union(genreAdjectives)),
                   !excluded.contains(where: { $0.caseInsensitiveCompare(theme) == .orderedSame }),
                   !kept.contains(where: { $0 == theme }) else { continue }
             kept.append(theme)
@@ -229,15 +256,15 @@ enum AISearchGrounding {
 
     /// Whether TMDb's keyword is the topic itself, plurals aside ("brother" for "brothers", "bank robbery" for "bank robberies").
     static func isSameTopic(_ keyword: String, _ phrase: String) -> Bool {
-        let a = normalized(keyword).split(separator: " ").map { stem(String($0)) }
-        let b = normalized(phrase).split(separator: " ").map { stem(String($0)) }
-        return !a.isEmpty && a == b
+        let a = normalized(keyword).split(separator: " ").map { stems(String($0)) }
+        let b = normalized(phrase).split(separator: " ").map { stems(String($0)) }
+        return !a.isEmpty && a.count == b.count && zip(a, b).allSatisfy { !$0.isDisjoint(with: $1) }
     }
 
     /// The topic words no matched keyword covers. Empty means TMDb's keywords answer every topic the search names.
     static func uncoveredTopics(in text: String, by phrases: [String]) -> [String] {
-        let covered = Set(phrases.flatMap { normalized($0).split(separator: " ").map { stem(String($0)) } })
-        return topicWords(in: text).filter { !covered.contains(stem($0)) }
+        let covered = Set(phrases.flatMap { normalized($0).split(separator: " ").flatMap { stems(String($0)) } })
+        return topicWords(in: text).filter { covered.isDisjoint(with: stems($0)) }
     }
 
     /// Words that state a fact the reader takes, or carry nothing: never topics.
@@ -255,6 +282,8 @@ enum AISearchGrounding {
 
     static let kindWords: Set<String> = ["film", "films", "movie", "movies", "tv", "series", "show", "shows", "television"]
     private static let ignorable: Set<String> = ["a", "an", "the", "and", "of", "with", "about", "story", "stories", "something"]
+    /// Feel words that only say the genre they imply ("scary movies" is horror): no theme of their own to search or check.
+    private static let genreAdjectives: Set<String> = ["scary", "spooky", "romantic", "animated", "cartoon", "cartoons"]
     /// Words that ask for a feel rather than a fact. With one of them, every candidate's synopsis is checked by the model.
     static let subjectiveWords: Set<String> = [
         "less", "more", "but", "feel", "feels", "vibe", "vibes", "tone", "mood", "slow", "burn", "uplifting", "depressing", "sad",
@@ -270,6 +299,8 @@ enum AISearchGrounding {
         "norwegian": "no", "russian": "ru", "turkish": "tr", "thai": "th", "portuguese": "pt", "brazilian": "pt", "polish": "pl",
         "persian": "fa", "iranian": "fa", "dutch": "nl", "greek": "el", "arabic": "ar", "hebrew": "he", "israeli": "he",
         "finnish": "fi", "icelandic": "is", "indonesian": "id", "vietnamese": "vi", "tamil": "ta", "telugu": "te",
+        // Anime is Japanese animation: the genre comes from the genre words.
+        "anime": "ja",
     ]
     private static let genreHints: [String: String] = [
         "scary": "Horror", "spooky": "Horror", "slasher": "Horror", "romantic": "Romance", "anime": "Animation", "cartoon": "Animation",
@@ -279,6 +310,17 @@ enum AISearchGrounding {
     ]
 
     static func language(in words: Set<String>) -> String? { words.lazy.compactMap { languages[$0] }.first }
+    /// The first language the words name, in the order typed ("korean anime" is Korean).
+    static func language(inOrder text: String) -> String? {
+        normalized(text).split(separator: " ").lazy.compactMap { languages[String($0)] }.first
+    }
+
+    /// Whether every word of the search is a story topic, with no filler, genre, kind or date beside it ("zombies", "time
+    /// travel"; not "Toy Story").
+    static func isAllTopic(_ text: String) -> Bool {
+        let all = normalized(text).split(separator: " ")
+        return !all.isEmpty && topicWords(in: text).count == all.count
+    }
 
     private static func impliedGenres(in words: Set<String>) -> [String] {
         Array(Set(words.compactMap { genreHints[$0] })).sorted()
@@ -318,10 +360,19 @@ enum AISearchGrounding {
         return word
     }
 
+    /// The forms a word may have in the singular: "robberies" is "robbery", but "zombies" is "zombie", so a word in "ies" has both.
+    static func stems(_ word: String) -> Set<String> {
+        if word.count > 4, word.hasSuffix("ies") { return [String(word.dropLast(3)) + "y", String(word.dropLast())] }
+        return [stem(word)]
+    }
+
+    /// Whether a word is already singular: one of its singular forms is itself.
+    static func isSingular(_ word: String) -> Bool { stems(word).contains(word) }
+
     /// Whether a theme shares a word of three letters or more with the text, plurals aside ("brothers" and "brother").
     static func sharesWord(_ theme: String, with text: String) -> Bool {
-        let own = Set(words(text).filter { $0.count >= 3 }.map(stem))
-        return words(theme).contains { $0.count >= 3 && own.contains(stem($0)) }
+        let own = Set(words(text).filter { $0.count >= 3 }.flatMap(stems))
+        return words(theme).contains { $0.count >= 3 && !own.isDisjoint(with: stems($0)) }
     }
 
     /// The words of a studio's name that pick it out ("ghibli" in "Studio Ghibli"), not its "studio" or "pictures".

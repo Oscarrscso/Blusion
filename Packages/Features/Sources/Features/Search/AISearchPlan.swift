@@ -29,6 +29,8 @@ public struct AISearchPlan: Sendable, Equatable {
     var judgement = ""
     /// Set when the search's own words stand in as its title because the model named none, so only an exact match ends the search.
     var titlesFromWords = false
+    /// Set when the model gave back words that do not read as a title as one: only a title of that name or its sequels counts.
+    var titleSequelsOnly = false
 
     public init(filters: DescribedSearch, titleQueries: [String] = [], referenceTitles: [String] = [], people: [Person] = [],
                 companies: [String] = [], language: String? = nil, excludedTopics: [String] = [], unwatchedOnly: Bool = false,
