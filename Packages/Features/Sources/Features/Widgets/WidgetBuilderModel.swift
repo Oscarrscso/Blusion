@@ -12,7 +12,7 @@ public final class WidgetBuilderModel {
     /// One setting of a widget. Each is a pill in the strip; one that has a value is also a token in the sentence.
     public enum Field: String, CaseIterable, Identifiable, Sendable {
         case source, ordering, period, genres, keywords, excludedKeywords, score, votes, language, runtime, release, providers, region,
-             cast, crew, companies, catalogGenre, traktSort, title, limit, style, cards, posters, shuffle
+             cast, crew, companies, catalogGenre, traktSort, title, limit, style, cards, posters, shuffle, randomSource
         public var id: String { rawValue }
     }
 
@@ -347,7 +347,42 @@ public final class WidgetBuilderModel {
             Pill(field: .posters, title: "Posters", value: row.presentation.usesBetterPosters ? "Better Posters" : "Standard",
                  systemImage: "photo.artframe", isEnabled: true),
             Pill(field: .shuffle, title: "Shuffle", value: Self.shuffleText(row.shuffle), systemImage: "shuffle", isEnabled: true),
+            Pill(field: .randomSource, title: "Random Source", value: Self.randomSourceText(row.randomSource), systemImage: "dice",
+                 isEnabled: true),
         ]
+    }
+
+    /// A random source in a few words: "Off", "All Sources", "3 Sources".
+    public static func randomSourceText(_ random: RandomSource?) -> String {
+        guard let random else { return "Off" }
+        if random.usesAllSources { return "All Sources" }
+        return random.sources.count == 1 ? "1 Source" : "\(random.sources.count) Sources"
+    }
+
+    /// The catalogs a random source can pick from: every catalog of the installed addons.
+    public var randomSourceChoices: [WidgetsManagerViewModel.CatalogChoice] { manager.catalogChoices }
+
+    /// Turns the random source on (picking from every catalog, or keeping its sources) or off.
+    public func setRandomSource(_ random: RandomSource?) {
+        updateRow { $0.randomSource = random }
+    }
+
+    /// Adds a source to the ones the random source picks from, or takes it off. With none left, it picks from every catalog.
+    public func toggleRandomSource(_ source: WidgetSource) {
+        updateRow { row in
+            var random = row.randomSource ?? RandomSource()
+            if let index = random.sources.firstIndex(of: source) { random.sources.remove(at: index) } else { random.sources.append(source) }
+            row.randomSource = random
+        }
+    }
+
+    /// When the random source picks again.
+    public func setRandomSourceSchedule(_ schedule: WidgetShuffle) {
+        updateRow { row in
+            guard var random = row.randomSource else { return }
+            random.schedule = schedule
+            row.randomSource = random
+        }
     }
 
     /// A shuffle schedule in a few words: "Daily", "Every 1 to 6 hours". Nil is the widgets page's setting.

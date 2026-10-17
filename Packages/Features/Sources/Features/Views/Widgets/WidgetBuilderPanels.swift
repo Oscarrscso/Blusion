@@ -81,6 +81,7 @@ struct WidgetFieldPanel: View {
         case .cards: "Cards"
         case .posters: "Posters"
         case .shuffle: "Shuffle"
+        case .randomSource: "Random Source"
         }
     }
 
@@ -108,6 +109,7 @@ struct WidgetFieldPanel: View {
         case .cards: cardsContent
         case .posters: postersContent
         case .shuffle: shuffleContent
+        case .randomSource: randomSourceContent
         }
     }
 
@@ -522,6 +524,48 @@ struct WidgetFieldPanel: View {
             Text("""
                 Shuffles the order of this widget's titles. An order stays until its next shuffle. Like Other Widgets follows the Shuffle \
                 setting on the widgets page.
+                """)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A source picked at random for this widget: from every catalog, or from the ones ticked, picked again on a schedule. Home names
+    /// the widget after the source it picked.
+    private var randomSourceContent: some View {
+        let random = model.row.randomSource
+        let schedules = WidgetShuffle.choices.filter { $0 != .off }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            ChoiceList(rowCount: 2) {
+                ChoiceRow(title: "Off", isSelected: random == nil) { model.setRandomSource(nil) }
+                ChoiceRow(title: "All Sources", isSelected: random?.usesAllSources == true) {
+                    model.setRandomSource(RandomSource(schedule: random?.schedule ?? .daily))
+                }
+            }
+            labelled("Pick From") {
+                ChoiceList(rowCount: model.randomSourceChoices.count) {
+                    ForEach(model.randomSourceChoices) { choice in
+                        let source = WidgetSource.addonCatalog(choice.reference)
+                        ChoiceRow(title: choice.title, subtitle: choice.addonName, isSelected: random?.sources.contains(source) == true) {
+                            model.toggleRandomSource(source)
+                        }
+                    }
+                }
+            }
+            if random != nil {
+                labelled("New Source") {
+                    ChoiceList(rowCount: schedules.count) {
+                        ForEach(schedules, id: \.self) { schedule in
+                            ChoiceRow(title: WidgetBuilderModel.shuffleText(schedule), isSelected: random?.schedule == schedule) {
+                                model.setRandomSourceSchedule(schedule)
+                            }
+                        }
+                    }
+                }
+            }
+            Text("""
+                Home shows this widget with a source picked at random, from every catalog or from the ones ticked, named after the source, \
+                and picks again on the New Source schedule. With none ticked, it picks from every catalog.
                 """)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

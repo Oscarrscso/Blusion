@@ -42,6 +42,21 @@ public enum WidgetShuffle: Sendable, Equatable, Hashable, Codable {
     }
 }
 
+/// A row that takes its items from a source picked at random: from `sources`, or from every catalog of the installed addons when it is
+/// empty, picked again on `schedule`.
+public struct RandomSource: Sendable, Codable, Equatable, Hashable {
+    public var sources: [WidgetSource]
+    public var schedule: WidgetShuffle
+
+    public init(sources: [WidgetSource] = [], schedule: WidgetShuffle = .daily) {
+        self.sources = sources
+        self.schedule = schedule
+    }
+
+    /// True when the pick is from every catalog of the installed addons.
+    public var usesAllSources: Bool { sources.isEmpty }
+}
+
 /// The order a widget, or Home, keeps until its next shuffle: the seed it is shuffled with and when that seed gives way.
 public struct ShuffleState: Sendable, Equatable, Codable {
     public var seed: UInt64
@@ -113,6 +128,9 @@ public protocol WidgetShuffleStore: Sendable {
 public enum ShuffleKeys {
     /// The seed of Home's widget order.
     public static let order = "home.order"
+
+    /// The seed of a widget's random source.
+    public static func source(of id: String) -> String { "\(id)#source" }
 }
 
 public actor InMemoryWidgetShuffleStore: WidgetShuffleStore {
@@ -204,9 +222,92 @@ public enum WidgetShuffling {
             if let state { seeds[widget.id] = state.seed }
         }
         // Seeds of widgets no longer in the layout are let go.
-        let kept = Set(widgets.map(\.id)).union([ShuffleKeys.order])
+        let ids = widgets.map(\.id)
+        let kept = Set(ids).union(ids.map(ShuffleKeys.source(of:))).union([ShuffleKeys.order])
         states = states.filter { kept.contains($0.key) }
         return seeds
+    }
+
+    // MARK: Random sources
+
+    /// Every catalog of the enabled addons, in the user's order: what a random source picks from when it has no sources of its own.
+    public static func allSources(in addons: [InstalledAddon]) -> [WidgetSource] {
+        var seen = Set<AddonCatalogReference>()
+        var sources: [WidgetSource] = []
+        for addon in addons where addon.isEnabled {
+            for catalog in addon.manifest.browsableCatalogs() {
+                let reference = AddonCatalogReference(manifestID: addon.manifest.id, host: addon.displayHost, catalogType: catalog.type,
+                                                      catalogID: catalog.id)
+                if seen.insert(reference).inserted { sources.append(.addonCatalog(reference)) }
+            }
+        }
+        return sources
+    }
+
+    /// The source `seed` picks from `pool`, or nil from an empty pool.
+    public static func pick(from pool: [WidgetSource], seed: UInt64) -> WidgetSource? {
+        guard !pool.isEmpty else { return nil }
+        var random = SeededRandom(seed: seed)
+        return pool[Int(random.next() % UInt64(pool.count))]
+    }
+
+    /// A source's name as a row's title: "Popular Movies", "Trending Shows", a Trakt list's name. Nil when it cannot be named.
+    public static func title(of source: WidgetSource, in addons: [InstalledAddon]) -> String? {
+        switch source {
+        case .addonCatalog(let reference):
+            guard let match = reference.resolve(in: addons) else { return nil }
+            return DefaultWidgets.rowTitle(catalogName: match.catalog.name, type: match.catalog.type)
+        case .traktList(let list): return list.listName
+        case .traktFeed(let feed): return feed.title
+        case .tmdbDiscover(let query): return query.title
+        case .unsupported: return nil
+        }
+    }
+
+    /// The widgets with each random source picked: the row takes the picked source, and its title is that source's name. A pick stays
+    /// until its schedule's next time (its seed is kept in `states`). A pool with nothing in it leaves the widget as it is.
+    public static func pickingSources(_ widgets: [HomeWidget], addons: [InstalledAddon], states: inout [String: ShuffleState],
+                                      now: Date, calendar: Calendar, random: inout some RandomNumberGenerator) -> [HomeWidget] {
+        let every = allSources(in: addons)
+        return widgets.map { widget in
+            let key = ShuffleKeys.source(of: widget.id)
+            guard var row = loadingRow(of: widget), let setting = row.randomSource else {
+                states[key] = nil
+                return widget
+            }
+            // A ticked catalog whose addon has since been removed or turned off is left out; with none left, every catalog is the pool.
+            let available = setting.sources.filter { source in
+                guard case .addonCatalog(let reference) = source else { return true }
+                return reference.resolve(in: addons.filter(\.isEnabled)) != nil
+            }
+            let pool = available.isEmpty ? every : available
+            // A random source always picks again on some schedule: one saved as off picks daily.
+            let schedule = setting.schedule == .off ? WidgetShuffle.daily : setting.schedule
+            let state = ShuffleState.resolve(states[key], schedule: schedule, now: now, calendar: calendar, random: &random)
+            states[key] = state
+            guard let state, let picked = pick(from: pool, seed: state.seed) else { return widget }
+            row.source = picked
+            var result = widget
+            result.content = replacingRow(of: widget.content, with: row)
+            if let name = title(of: picked, in: addons) { result.title = name }
+            return result
+        }
+    }
+
+    private static func loadingRow(of widget: HomeWidget) -> RowConfiguration? {
+        switch widget.content {
+        case .hero(let row), .banner(let row), .row(let row): row
+        case .collection, .continueWatching, .unsupported: nil
+        }
+    }
+
+    private static func replacingRow(of content: HomeWidget.Content, with row: RowConfiguration) -> HomeWidget.Content {
+        switch content {
+        case .hero: .hero(row)
+        case .banner: .banner(row)
+        case .row: .row(row)
+        case .collection, .continueWatching, .unsupported: content
+        }
     }
 
     /// Home's widgets in a new order when the widgets page shuffles them, on its schedule. The showcase stays first and Continue

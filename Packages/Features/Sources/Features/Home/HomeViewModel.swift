@@ -84,7 +84,7 @@ public final class HomeViewModel {
             phase = .noAddons
             return
         }
-        let widgets = await shuffled(saved ?? DefaultWidgets.make(for: addons))
+        let widgets = await shuffled(saved ?? DefaultWidgets.make(for: addons), addons: addons)
         let known = await lastKnownItems(for: widgets)
         guard current == generation, !Task.isCancelled else { return }
         let previous = sections
@@ -126,9 +126,10 @@ public final class HomeViewModel {
         let current = sections[index]
         sections[index] = Section(widget: widget, state: current.state, issue: current.issue, isRefreshing: current.isRefreshing)
         isCustomised = true
-        // Saved in the saved layout's own order: Home may show its widgets shuffled.
+        // Saved into the saved widget, in the saved layout's own order: Home may show its widgets shuffled, and a widget with a random
+        // source shows the source it picked, not the ones it picks from.
         let saved = await services.widgets.load() ?? sections.map(\.widget)
-        await services.widgets.save(saved.map { $0.id == widget.id ? widget : $0 })
+        await services.widgets.save(saved.map { $0.id == sectionID ? HomeViewModel.withBetterPosters($0, on) : $0 })
     }
 
     /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
@@ -349,15 +350,25 @@ public final class HomeViewModel {
         return seed.flatMap { seed in items.map { $0.shuffled(seed: seed) } } ?? items
     }
 
-    /// The widgets in the order the shuffle settings give for this opening of Home, with each shuffled widget's seed in `itemSeeds`. The
-    /// seeds are saved, so an order lasts until its next time, across launches.
-    private func shuffled(_ widgets: [HomeWidget]) async -> [HomeWidget] {
+    /// A row widget with Better Posters turned on or off.
+    private static func withBetterPosters(_ widget: HomeWidget, _ on: Bool) -> HomeWidget {
+        guard case .row(var row) = widget.content else { return widget }
+        row.presentation.usesBetterPosters = on
+        var changed = widget
+        changed.content = .row(row)
+        return changed
+    }
+
+    /// The widgets in the order the shuffle settings give for this opening of Home, each random source picked, with each shuffled
+    /// widget's seed in `itemSeeds`. The seeds are saved, so an order or a pick lasts until its next time, across launches.
+    private func shuffled(_ widgets: [HomeWidget], addons: [InstalledAddon]) async -> [HomeWidget] {
         let settings = await services.widgetShuffle.settings()
         let saved = await services.widgetShuffle.states()
         var states = saved
         var random = SystemRandomNumberGenerator()
         let now = Date()
-        let ordered = WidgetShuffling.ordered(widgets, settings: settings, states: &states, now: now, calendar: .current, random: &random)
+        let picked = WidgetShuffling.pickingSources(widgets, addons: addons, states: &states, now: now, calendar: .current, random: &random)
+        let ordered = WidgetShuffling.ordered(picked, settings: settings, states: &states, now: now, calendar: .current, random: &random)
         itemSeeds = WidgetShuffling.itemSeeds(for: ordered, settings: settings, states: &states, now: now, calendar: .current,
                                               random: &random)
         if states != saved { await services.widgetShuffle.save(states) }

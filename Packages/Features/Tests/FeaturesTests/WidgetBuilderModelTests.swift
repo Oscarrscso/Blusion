@@ -448,9 +448,10 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         let model = builder(manager: manager)
         #expect(model.pills.map(\.field) == [
             .source, .ordering, .period, .genres, .keywords, .excludedKeywords, .score, .votes, .language, .runtime, .release,
-            .providers, .region, .cast, .crew, .companies, .title, .limit, .style, .cards, .posters, .shuffle,
+            .providers, .region, .cast, .crew, .companies, .title, .limit, .style, .cards, .posters, .shuffle, .randomSource,
         ])
-        #expect(model.pills.last?.value == "Like Other Widgets", "a new widget follows the widgets page's shuffle")
+        #expect(model.pills.dropLast().last?.value == "Like Other Widgets", "a new widget follows the widgets page's shuffle")
+        #expect(model.pills.last?.value == "Off", "and has no random source")
         let values = Dictionary(uniqueKeysWithValues: model.pills.map { ($0.field, $0.value) })
         #expect(values[.source] == "TMDB" && values[.ordering] == "Popular" && values[.period] == "Any time")
         #expect(values[.genres] == "Any" && values[.excludedKeywords] == "None" && values[.region] == irelandName)
@@ -473,7 +474,7 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         let (manager, _) = try await loadedManager()
         let withGenres = AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "movie", catalogID: "top")
         let model = builder(.edit, widget: rowWidget(id: "c", title: "Popular Movies", .addonCatalog(withGenres)), manager: manager)
-        #expect(model.pills.map(\.field) == [.source, .catalogGenre, .title, .limit, .style, .cards, .posters, .shuffle])
+        #expect(model.pills.map(\.field) == [.source, .catalogGenre, .title, .limit, .style, .cards, .posters, .shuffle, .randomSource])
         #expect(pill(model, .source)?.value == "Cinemeta" && pill(model, .catalogGenre)?.value == "All")
         #expect(plain(model) == "Show Popular Movies · Cinemeta .")
         model.setCatalogGenre("Action")
@@ -482,14 +483,14 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
 
         let withoutGenres = AddonCatalogReference(manifestID: "test.cinemeta", catalogType: "series", catalogID: "trending")
         let plainModel = builder(.edit, widget: rowWidget(id: "s", title: "Trending", .addonCatalog(withoutGenres)), manager: manager)
-        #expect(plainModel.pills.map(\.field) == [.source, .title, .limit, .style, .cards, .posters, .shuffle])
+        #expect(plainModel.pills.map(\.field) == [.source, .title, .limit, .style, .cards, .posters, .shuffle, .randomSource])
     }
 
     @Test func aTraktListHasItsSortAndATraktFeedHasNoSortAndBothSayWhatTheyShow() async throws {
         let (manager, _) = try await loadedManager()
         let list = TraktListReference(username: "tvgeniekodi", listSlug: "daily-picks", listName: "Daily Picks")
         let listModel = builder(.edit, widget: rowWidget(id: "t", title: "Daily Picks", .traktList(list)), manager: manager)
-        #expect(listModel.pills.map(\.field) == [.source, .traktSort, .title, .limit, .style, .cards, .posters, .shuffle])
+        #expect(listModel.pills.map(\.field) == [.source, .traktSort, .title, .limit, .style, .cards, .posters, .shuffle, .randomSource])
         #expect(pill(listModel, .source)?.value == "Trakt" && pill(listModel, .traktSort)?.value == "List Default")
         #expect(plain(listModel) == "Show the Trakt list Daily Picks .")
         listModel.setTraktSort(.title)
@@ -497,7 +498,7 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         #expect(plain(listModel) == "Show the Trakt list Daily Picks sorted by Title .")
 
         let feedModel = builder(.edit, widget: rowWidget(id: "f", title: "Trending Movies", .traktFeed(.moviesTrending)), manager: manager)
-        #expect(feedModel.pills.map(\.field) == [.source, .title, .limit, .style, .cards, .posters, .shuffle])
+        #expect(feedModel.pills.map(\.field) == [.source, .title, .limit, .style, .cards, .posters, .shuffle, .randomSource])
         #expect(plain(feedModel) == "Show Trending Movies from Trakt .")
     }
 
@@ -512,7 +513,7 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         ]
         for source in sources {
             let model = builder(.edit, widget: rowWidget(id: "x", title: "X", source), manager: manager)
-            #expect(model.pills.suffix(6).map(\.field) == [.title, .limit, .style, .cards, .posters, .shuffle], "the common pills end \(source)")
+            #expect(model.pills.suffix(7).map(\.field) == [.title, .limit, .style, .cards, .posters, .shuffle, .randomSource], "the common pills end \(source)")
         }
     }
 

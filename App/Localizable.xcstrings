@@ -1376,6 +1376,17 @@
         }
       }
     },
+    "Home shows this widget with a source picked at random, from every catalog or from the ones ticked, named after the source, and picks again on the New Source schedule. With none ticked, it picks from every catalog.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home shows this widget with a source picked at random, from every catalog or from the ones ticked, named after the source, and picks again on the New Source schedule. With none ticked, it picks from every catalog."
+          }
+        }
+      }
+    },
     "Host": {
       "extractionState": "manual",
       "localizations": {

@@ -42,17 +42,21 @@ public struct RowConfiguration: Sendable, Codable, Equatable, Hashable {
     /// When the row's items take a new random order. Nil follows the widgets page's setting (`WidgetShuffleSettings`), which is off
     /// unless changed. Written only when set, so a saved or imported widget reads as it did.
     public var shuffle: WidgetShuffle?
+    /// Set when the row takes its items from a source picked at random, which Home then shows in place of `source` (see
+    /// `WidgetShuffling.pickingSources`). Written only when set.
+    public var randomSource: RandomSource?
 
     public init(source: WidgetSource, presentation: WidgetPresentation = WidgetPresentation(), limit: Int = 20, cacheTTL: Int = 3600,
-                shuffle: WidgetShuffle? = nil) {
+                shuffle: WidgetShuffle? = nil, randomSource: RandomSource? = nil) {
         self.source = source
         self.presentation = presentation
         self.limit = min(max(limit, 1), 100)
         self.cacheTTL = min(max(cacheTTL, 0), 86_400)
         self.shuffle = shuffle
+        self.randomSource = randomSource
     }
 
-    private enum CodingKeys: String, CodingKey { case source, presentation, limit, cacheTTL, shuffle }
+    private enum CodingKeys: String, CodingKey { case source, presentation, limit, cacheTTL, shuffle, randomSource }
 
     /// Clamps stored values the same way `init` does, so an edited or newer file cannot break paging.
     public init(from decoder: Decoder) throws {
@@ -61,8 +65,9 @@ public struct RowConfiguration: Sendable, Codable, Equatable, Hashable {
                   presentation: try container.decodeIfPresent(WidgetPresentation.self, forKey: .presentation) ?? WidgetPresentation(),
                   limit: try container.decodeIfPresent(Int.self, forKey: .limit) ?? 20,
                   cacheTTL: try container.decodeIfPresent(Int.self, forKey: .cacheTTL) ?? 3600,
-                  // A shuffle this version cannot read (written by a newer one) is left out, not the whole widget.
-                  shuffle: (try? container.decodeIfPresent(WidgetShuffle.self, forKey: .shuffle)) ?? nil)
+                  // A shuffle or random source this version cannot read (written by a newer one) is left out, not the whole widget.
+                  shuffle: (try? container.decodeIfPresent(WidgetShuffle.self, forKey: .shuffle)) ?? nil,
+                  randomSource: (try? container.decodeIfPresent(RandomSource.self, forKey: .randomSource)) ?? nil)
     }
 }
 
