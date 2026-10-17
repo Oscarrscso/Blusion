@@ -104,14 +104,15 @@ struct AppDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: MetaPreview.self) { preview in
-                DetailView(preview: preview, services: services)
+                IMDbTitlePage(preview: preview, services: services) { DetailView(preview: $0, services: services) }
                     // Only a title opened from Search is recorded as a recent search, and the title's name is what is kept.
                     .onAppear { if path == \.searchPath { recordSearchedTitle(preview.name) } }
             }
             .navigationDestination(for: TitleDestination.self) { destination in
-                let detail = DetailView(preview: destination.preview, services: services, artwork: destination.artwork,
-                                        artworkChecked: destination.artworkChecked, handoff: destination.handoff,
-                                        streams: destination.streams)
+                let detail = IMDbTitlePage(preview: destination.preview, services: services) {
+                    DetailView(preview: $0, services: services, artwork: destination.artwork, artworkChecked: destination.artworkChecked,
+                               handoff: destination.handoff, streams: destination.streams)
+                }
                 if destination.opensInstantly {
                     detail.instantDestination()
                 } else {
