@@ -251,7 +251,12 @@ struct HomeView: View {
                 // The next shelf starts 20 pt below the hero: the shelf spacing that follows it, less the 20 pt gap wanted here.
                 .padding(.bottom, 20 - metrics.shelfSpacing)
         case .banner(let row):
+            // On iPhone a held card plays it, so the banner's menu is kept off its cards; the Mac's cards have their own menu.
+            #if targetEnvironment(macCatalyst)
             withWidgetMenu(HeroBannerSection(section: section, row: row, onRetry: { retry(section) }), section)
+            #else
+            HeroBannerSection(section: section, row: row, onRetry: { retry(section) }, menu: AnyView(widgetMenu(section)))
+            #endif
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
                       onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
@@ -305,11 +310,14 @@ struct HomeView: View {
 
     /// The long-press menu every widget shares, on a widget whose own menus are on its cards or none. A card's menu opens where it is.
     private func withWidgetMenu<Content: View>(_ content: Content, _ section: HomeViewModel.Section, removable: Bool = true) -> some View {
+        content.contextMenu { widgetMenu(section, removable: removable) }
+    }
+
+    /// What every widget's menu offers, for `section`.
+    private func widgetMenu(_ section: HomeViewModel.Section, removable: Bool = true) -> some View {
         let onRemove: (() -> Void)? = removable ? { removeWidget(section) } : nil
-        return content.contextMenu {
-            widgetActions(for: section.widget, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
-                          exportText: exportText(for: section), onRemove: onRemove)
-        }
+        return widgetActions(for: section.widget, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
+                             exportText: exportText(for: section), onRemove: onRemove)
     }
 
     private func retry(_ section: HomeViewModel.Section) {

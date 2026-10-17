@@ -22,6 +22,7 @@ struct DetailEpisodes: View {
 
     private var isLoadingStreams: Bool { loadingRequest != nil }
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
     /// The episode Shuffle last picked: the row scrolls it to the front of its season.
     @State private var shuffledEpisode: String?
@@ -253,8 +254,10 @@ struct DetailEpisodes: View {
             // The same card, the full width between the page margins, inset by its padding so the menu's corners do not cut into it. Its
             // still's corners follow the panel's, and the panel gets the hairline the app's glass cards have. The preview is on screen
             // only while the menu is open.
+            // In landscape the still sits beside the text: under it, a still as wide as the page is taller than the screen, and the menu
+            // cut the synopsis off.
             episodeCard(video, width: pageWidth - contentMargin * 2 - Self.previewPadding * 2, airsLater: airsLater,
-                        stillRadius: Self.previewStillRadius, showsWholeOverview: true)
+                        stillRadius: Self.previewStillRadius, showsWholeOverview: true, sideBySide: isLandscape)
                 .padding(Self.previewPadding)
                 .glassHairline(RoundedRectangle(cornerRadius: Self.previewPanelRadius, style: .continuous))
                 // Without the store the IMDb mark forgot the coloured-logos setting and changed colour while the card was held.
@@ -273,16 +276,16 @@ struct DetailEpisodes: View {
     /// One episode's card at `width`: the card in the list, and the menu's preview at the page's full width. The preview passes
     /// `showsWholeOverview`, so a held episode's synopsis is never cut; the list follows the full-width setting.
     private func episodeCard(_ video: Video, width: CGFloat, airsLater: Bool, isLoadingStreams: Bool = false,
-                             stillRadius: CGFloat = Theme.Radius.small, showsWholeOverview: Bool? = nil) -> EpisodeRow {
+                             stillRadius: CGFloat = Theme.Radius.small, showsWholeOverview: Bool? = nil, sideBySide: Bool = false) -> EpisodeRow {
         EpisodeRow(video: video, fraction: model.progressFraction(for: video), watched: model.isWatched(video),
-                   artwork: model.backdropURL, score: model.score(for: video), width: width,
+                   artwork: model.backdropURL, score: model.score(for: video), runtimeMinutes: model.runtimeMinutes(for: video), width: width,
                    showsWholeOverview: showsWholeOverview ?? model.matchesEpisodeWidthToText, airsLater: airsLater,
                    isLoadingStreams: isLoadingStreams,
-                   stillRadius: stillRadius)
+                   stillRadius: stillRadius, sideBySide: sideBySide)
     }
 }
 
-/// One episode: its still with the progress line or watched mark over it, the numbered title, the air date and rating, and the
+/// One episode: its still with the progress line or watched mark over it, the numbered title, the air date, length and rating, and the
 /// overview: three lines in a fixed-width card, all of it when the list is set to full width.
 private struct EpisodeRow: View {
     let video: Video
@@ -290,6 +293,15 @@ private struct EpisodeRow: View {
     let watched: Bool
     let artwork: URL?
     let score: DetailViewModel.EpisodeScore?
+    /// How long the episode runs, in minutes, once TMDb has said.
+    var runtimeMinutes: Int?
+
+    private var runtime: String? { runtimeMinutes.map(DetailViewModel.runtimeText(minutes:)) }
+
+    /// The length as VoiceOver reads it: "47 minutes", "1 hour, 2 minutes".
+    private var spokenRuntime: String? {
+        runtimeMinutes.map { Duration.seconds($0 * 60).formatted(.units(allowed: [.hours, .minutes], width: .wide)) }
+    }
     let width: CGFloat
     /// Set for a full-width card: the whole overview shows at its own height, so the rating sits under this episode's own text.
     var showsWholeOverview = false
@@ -299,41 +311,60 @@ private struct EpisodeRow: View {
     var isLoadingStreams = false
     /// The still's corner radius. The menu's preview gives it one that follows its panel's, which is rounder than a card's.
     var stillRadius: CGFloat = Theme.Radius.small
+    /// Set for the menu's preview in landscape: the still takes a little under half the width, with the text beside it, so the whole card
+    /// fits the screen's height.
+    var sideBySide = false
+
+    private var stillWidth: CGFloat { sideBySide ? (width * 0.45).rounded() : width }
 
     /// How far the progress line and the watched mark move in from the still's edges, so a rounder corner does not cut into them.
     private var overlayInset: CGFloat { max(0, stillRadius - Theme.Radius.small) * 0.3 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            still
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                if let episode = video.episode {
-                    Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(.secondary)
+        Group {
+            if sideBySide {
+                HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                    still
+                    text
                 }
-                Text(video.title)
-                    .font(.headline)
-                    .lineLimit(2)
-                if let overview = video.overview, !overview.isEmpty {
-                    JustifiedText(text: overview, textStyle: .footnote, color: .secondaryLabel,
-                                  lineLimit: showsWholeOverview ? 0 : 3)
+            } else {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    still
+                    text
                 }
-                dateAndScore
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: width, alignment: .leading)
         .multilineTextAlignment(.leading)
         .accessibilityElement(children: .combine)
     }
 
+    /// The numbered title, the overview, and the date, length and score.
+    private var text: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let episode = video.episode {
+                Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(.secondary)
+            }
+            Text(video.title)
+                .font(.headline)
+                .lineLimit(2)
+            if let overview = video.overview, !overview.isEmpty {
+                JustifiedText(text: overview, textStyle: .footnote, color: .secondaryLabel,
+                              lineLimit: showsWholeOverview ? 0 : 3)
+            }
+            dateAndScore
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// The episode's own still, or the series' backdrop when the addon sent none.
     private var still: some View {
-        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: width * 3)
-            .frame(width: width, height: width / CardAspect.wide.ratio)
+        ArtworkImage(url: video.thumbnail ?? artwork, maxPixelSize: stillWidth * 3)
+            .frame(width: stillWidth, height: stillWidth / CardAspect.wide.ratio)
             .opacity(airsLater ? 0.45 : 1)
             .overlay {
                 if !watched, let fraction {
-                    PlaybackProgressOverlay(fraction: fraction, width: width, inset: overlayInset)
+                    PlaybackProgressOverlay(fraction: fraction, width: stillWidth, inset: overlayInset)
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -365,14 +396,17 @@ private struct EpisodeRow: View {
             .accessibilityHidden(true)
     }
 
-    /// "Jan 20, 2008 · [IMDb] 8.9": the air date, then the score with the IMDb mark when it is IMDb's (a star when it is the addon's).
+    /// "Jan 20, 2008 · 47m · [IMDb] 8.9": the air date, the length, then the score with the IMDb mark when it is IMDb's (a star when it is
+    /// the addon's).
     @ViewBuilder
     private var dateAndScore: some View {
         let date = video.airDate?.formatted(date: .abbreviated, time: .omitted)
-        if date != nil || score != nil {
+        if date != nil || runtime != nil || score != nil {
             HStack(spacing: 5) {
                 if let date { Text(date) }
-                if date != nil, score != nil { Text("·") }
+                if date != nil, runtime != nil { Text("·") }
+                if let runtime { Text(runtime).monospacedDigit() }
+                if date != nil || runtime != nil, score != nil { Text("·") }
                 if let score {
                     if score.isIMDb {
                         ReviewSiteIcon(site: .imdb, size: 13)
@@ -387,7 +421,7 @@ private struct EpisodeRow: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([date, score.map {
+            .accessibilityLabel([date, spokenRuntime, score.map {
                 "\($0.isIMDb ? "IMDb rating" : video.ratingSource == .tmdb ? "TMDb rating" : "Rating") \($0.text)"
             }].compactMap { $0 }.joined(separator: ", "))
         }

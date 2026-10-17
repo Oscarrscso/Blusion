@@ -183,6 +183,8 @@ public struct RootTabView: View {
     @State private var router: AppRouter
     @State private var resume: ContinueWatchingModel
     @State private var titleActions: TitleActions
+    /// A poster held for a second plays: its streams load in `posterStarter`, which draws nothing.
+    @State private var posterPlay: PosterPlayLauncher
     @State private var isLandscape = false
     @State private var windowSafeArea = EdgeInsets()
     /// A phone turned sideways. A Mac window is never a phone, so `isPhoneLandscape` never governs its navigation bar, at any window shape.
@@ -205,6 +207,22 @@ public struct RootTabView: View {
         _router = State(initialValue: AppRouter(route: route))
         _resume = State(initialValue: ContinueWatchingModel(services: services))
         _titleActions = State(initialValue: TitleActions(services: services))
+        _posterPlay = State(initialValue: PosterPlayLauncher(services: services, failed: {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }))
+    }
+
+    /// A held poster's streams load here, in a picker that draws nothing and starts the stream Play would, in Infuse or here, whatever
+    /// Auto Pick's switch says. It stays once a stream has started, since the player it opened belongs to it.
+    @ViewBuilder
+    private var posterStarter: some View {
+        if let launch = posterPlay.launch {
+            StreamPickerView(request: launch.request, services: services, isEmbedded: true, isRevealed: false, isHeadless: true,
+                             forcesAutomaticStart: true, onAutomaticStart: { started in posterPlay.finish(launch.id, started: started) })
+                .id(launch.id)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
     }
 
     public var body: some View {
@@ -317,6 +335,7 @@ public struct RootTabView: View {
             addonLink = nil
         }
         .fullScreenCover(item: $router.demoPlan) { PlayerScreen(plan: $0, services: services) }
+        .background { posterStarter }
         .task {
             await Task.yield()
             guard !Task.isCancelled else { return }
@@ -330,6 +349,7 @@ public struct RootTabView: View {
         .environment(services.posterRatings)
         .environment(services.heroMeta)
         .environment(titleActions)
+        .environment(posterPlay)
         .environment(\.isLandscape, isLandscape)
         .environment(\.isPhoneLandscape, isPhoneLandscape)
         .environment(\.windowSafeArea, windowSafeArea)

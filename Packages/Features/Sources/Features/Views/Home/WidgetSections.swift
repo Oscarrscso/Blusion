@@ -51,7 +51,7 @@ struct WidgetRow: View {
         let widget = section.widget
         let presentation = row.presentation
         if case .loaded(let items) = section.state, !items.isEmpty {
-            MediaRow(widget.title, hideTitle: widget.hideTitle, onSeeAll: { router.homePath.append(seeAllRequest) }) {
+            let shelf = MediaRow(widget.title, hideTitle: widget.hideTitle, onSeeAll: { router.homePath.append(seeAllRequest) }) {
                 ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                     MediaCardLink(item: item, aspect: presentation.aspectRatio.cardAspect, size: presentation.cardStyle.cardSize,
                                   showsRating: presentation.showsRatings, usesBetterPosters: presentation.usesBetterPosters)
@@ -60,15 +60,13 @@ struct WidgetRow: View {
                         }
                 }
             }
-            // Long-pressing a poster row's shelf (its title or the space around the cards) offers the row's posters setting. A card keeps its own menu.
-            .contextMenu {
-                if presentation.aspectRatio == .poster, let onSetBetterPosters {
-                    Toggle("Better Posters", isOn: Binding(get: { presentation.usesBetterPosters }, set: onSetBetterPosters))
-                        .accessibilityIdentifier("board.betterPosters.\(widget.id)")
-                    Divider()
-                }
-                widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, exportText: exportText, onRemove: onRemove)
-            }
+            // Long-pressing a poster row's shelf (its title or the space around the cards) offers the row's posters setting. A card keeps its
+            // own hold: on iPhone it plays the card, so the row's menu is kept off the cards there; the Mac's cards have their own menu.
+            #if targetEnvironment(macCatalyst)
+            shelf.contextMenu { rowMenu }
+            #else
+            shelf.shelfMenu { rowMenu }
+            #endif
         } else {
             Group {
                 switch section.state {
@@ -99,6 +97,19 @@ struct WidgetRow: View {
             .contentShape(.rect)
             .contextMenu { widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, exportText: exportText, onRemove: onRemove) }
         }
+    }
+
+    /// The row's menu: its posters setting on a poster row, then what every widget's menu offers.
+    @ViewBuilder
+    private var rowMenu: some View {
+        let widget = section.widget
+        let presentation = row.presentation
+        if presentation.aspectRatio == .poster, let onSetBetterPosters {
+            Toggle("Better Posters", isOn: Binding(get: { presentation.usesBetterPosters }, set: onSetBetterPosters))
+                .accessibilityIdentifier("board.betterPosters.\(widget.id)")
+            Divider()
+        }
+        widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, exportText: exportText, onRemove: onRemove)
     }
 
     private var seeAllRequest: CatalogListRequest {

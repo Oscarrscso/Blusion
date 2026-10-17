@@ -69,6 +69,8 @@ struct MediaCard: View {
     let usesBetterPosters: Bool
     private var stretches = false
     private var zoomID: String?
+    /// True while a held poster's streams load: a spinner over the artwork, as on an episode's card.
+    private var isLoadingStreams = false
     /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that has not loaded (or did not).
     @State private var posterFellBack = false
     /// Mac: TMDb's backdrop with no words on it for this title, once it has been looked up. A landscape poster shows it in place of the
@@ -110,6 +112,13 @@ struct MediaCard: View {
     func stretched() -> MediaCard {
         var copy = self
         copy.stretches = true
+        return copy
+    }
+
+    /// Spins over the artwork while the card's streams load (see `PosterPlayLauncher`).
+    func loadingStreams(_ loading: Bool) -> MediaCard {
+        var copy = self
+        copy.isLoadingStreams = loading
         return copy
     }
 
@@ -210,6 +219,20 @@ struct MediaCard: View {
                     PosterRatingsOverlay(item: item, isLandscape: isLandscape)
                 }
             }
+            .overlay {
+                if isLoadingStreams {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        Spinner()
+                            .controlSize(.large)
+                    }
+                    .transition(.opacity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Loading streams")
+                    .accessibilityIdentifier("poster.loadingStreams")
+                }
+            }
+            .animation(.smooth(duration: 0.25), value: isLoadingStreams)
             .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
             .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
             #if targetEnvironment(macCatalyst)
@@ -309,6 +332,7 @@ struct MediaCardLink: View {
     private var stretches = false
     @Environment(\.zoomScope) private var zoomScope
     @Environment(TitleActions.self) private var actions: TitleActions?
+    @Environment(PosterPlayLauncher.self) private var posterPlay: PosterPlayLauncher?
 
     init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
          width: CGFloat? = nil, subtitle: String? = nil, usesBetterPosters: Bool = false) {
@@ -328,6 +352,7 @@ struct MediaCardLink: View {
         let card = MediaCard(item: item, aspect: aspect, size: size, showsTitle: showsTitle, showsRating: showsRating, width: width,
                              subtitle: subtitle, usesBetterPosters: usesBetterPosters)
             .zoomSource(sourceID)
+            .loadingStreams(posterPlay?.isLoading(item) == true)
         NavigationLink(value: TitleDestination(preview: item, sourceID: sourceID)) {
             stretches ? card.stretched() : card
         }
@@ -336,6 +361,10 @@ struct MediaCardLink: View {
         .titleTapHaptic()
         .prewarmsHeroArtwork(item)
         .help(item.name)
+        // Holding a poster for a second plays it, on iPhone and Mac. On iPhone that takes the hold its menu had; the menu's actions are on
+        // the title's page. The Mac keeps the menu, which a right click opens.
+        .holdsToPlay(item)
+        #if targetEnvironment(macCatalyst)
         .contextMenu {
             if let actions {
                 Button(actions.isSaved(item) ? "Remove from Library" : "Add to Library", systemImage: "bookmark") {
@@ -361,6 +390,7 @@ struct MediaCardLink: View {
                 }
             }
         }
+        #endif
     }
 
     /// The link takes the width it is offered, as a grid column does. See `MediaCard.stretched()`.

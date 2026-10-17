@@ -23,6 +23,12 @@ public final class DetailViewModel {
     public private(set) var matchesEpisodeWidthToText = false
     /// Seasons whose TMDb episode scores are already in `detail`, or on their way.
     private var episodeRatingSeasons: Set<Int> = []
+    /// How long each episode runs, in minutes, by episode id, from TMDb's season data. Filled a season at a time as its cards appear.
+    public private(set) var episodeRuntimes: [String: Int] = [:]
+    /// Seasons TMDb has answered for, even with no runtimes, so they are not asked again on this page. A failed lookup is asked again.
+    @ObservationIgnored private var runtimeSeasons: Set<Int> = []
+    /// The season lookups on their way. The page owns them: a card that scrolls away does not call its season's lookup off.
+    @ObservationIgnored private var runtimeTasks: [Int: Task<Void, Never>] = [:]
     /// Identities (`type/id`) of watched movies and episodes shown on this screen.
     public private(set) var watchedIdentities: Set<String> = []
     /// Share of the runtime saved for the movie and episodes shown here, by identity (0...1). Only progress that playback can
@@ -175,6 +181,17 @@ public final class DetailViewModel {
         await load()
     }
 
+    /// Only what Play needs: the details and what has been watched, for a poster held to play (see `PosterPlayLauncher`). No hero, reviews,
+    /// credits or trailers are asked for; the title's Play colour is read as for any page.
+    public func loadForPlayback() async {
+        let result = await services.browse.detail(for: preview)
+        guard !Task.isCancelled else { return }
+        detail = result.detail
+        isFallback = result.isFallback
+        isLoading = false
+        await refreshUserState()
+    }
+
     private func loadArtwork() async {
         // An artwork handed over by Home, or a lookup that has answered, is never fetched again.
         guard tmdbArtwork == nil, isLoadingArtwork else { return }
@@ -309,6 +326,40 @@ public final class DetailViewModel {
         detail.fillEpisodeRatings(season: season, scores: scores, source: .tmdb)
     }
 
+    /// How long `video` runs, in minutes. Nil until TMDb's season data is in, or when TMDb has none.
+    public func runtimeMinutes(for video: Video) -> Int? {
+        episodeRuntimes[video.id]
+    }
+
+    /// Minutes as a card writes them: "45m", "1h", "1h 2m".
+    nonisolated static func runtimeText(minutes: Int) -> String {
+        minutes < 60 ? "\(minutes)m" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    /// One TMDb lookup gives the runtimes of a season's episodes, shared by the season's cards. Without a TMDb read token nothing is asked.
+    private func loadEpisodeRuntimes(season: Int?) async {
+        guard let season, isSeries, !runtimeSeasons.contains(season), let seriesID = seriesIMDbID else { return }
+        if let pending = runtimeTasks[season] { return await pending.value }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.fetchEpisodeRuntimes(season: season, seriesID: seriesID)
+        }
+        runtimeTasks[season] = task
+        await task.value
+        runtimeTasks[season] = nil
+    }
+
+    private func fetchEpisodeRuntimes(season: Int, seriesID: String) async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { return }
+        guard let minutes = try? await TMDbRatings(client: services.client, readAccessToken: token)
+            .seasonEpisodeRuntimes(seriesIMDbID: seriesID, season: season) else { return }
+        runtimeSeasons.insert(season)
+        for video in detail.episodes(inSeason: season) {
+            if let episode = video.episode, let runtime = minutes[episode] { episodeRuntimes[video.id] = runtime }
+        }
+    }
+
     /// Switches the episode cards between their fixed width and the width of the text above them. The cards change at once; the
     /// choice is then saved, so every title page opens the same way.
     public func setMatchesEpisodeWidthToText(_ value: Bool) async {
@@ -434,10 +485,12 @@ public final class DetailViewModel {
     public var reviewServicesRevision: Int { services.posterRatings.reviewServicesRevision }
 
     /// A visible card checks IMDb first; TMDb fills any remaining gaps. The store coalesces requests and controls refresh/retry times.
+    /// The season's episode runtimes are looked up alongside.
     public func episodeAppeared(_ video: Video) async {
+        async let runtimes: Void = loadEpisodeRuntimes(season: video.season)
         await loadEpisodeScores(season: video.season)
-        guard !Task.isCancelled, score(for: video) == nil else { return }
-        await loadEpisodeRatings(season: video.season)
+        if !Task.isCancelled, score(for: video) == nil { await loadEpisodeRatings(season: video.season) }
+        await runtimes
     }
 
     /// Cards appearing together share the season lookup. Completed tasks are released so scrolling back can retry after a failure

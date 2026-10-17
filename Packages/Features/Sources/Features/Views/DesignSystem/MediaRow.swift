@@ -95,6 +95,8 @@ struct MediaRow<Content: View>: View {
     let hideTitle: Bool
     let onSeeAll: (() -> Void)?
     let content: () -> Content
+    /// The row's own menu, on its title and the space between its cards. A card's hold is the card's own: on iPhone it plays it.
+    private var shelfMenu: AnyView?
     @State private var zoomScope = UUID().uuidString
     @Environment(\.layoutMetrics) private var metrics
 
@@ -107,10 +109,18 @@ struct MediaRow<Content: View>: View {
         self.content = content
     }
 
+    /// Gives the row a menu on its title and the space between its cards, but not on the cards (see `shelfMenu`).
+    func shelfMenu<Items: View>(@ViewBuilder _ items: () -> Items) -> MediaRow {
+        var copy = self
+        copy.shelfMenu = AnyView(items())
+        return copy
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             if !hideTitle {
                 SectionHeader(title, subtitle: subtitle, onSeeAll: onSeeAll)
+                    .modifier(OptionalContextMenu(menu: shelfMenu))
                     .padding(.horizontal, metrics.pageMargin)
             }
             ScrollView(.horizontal) {
@@ -120,6 +130,16 @@ struct MediaRow<Content: View>: View {
                     }
                 }
                 .scrollTargetLayout()
+                // Behind the cards and out into the page margins: a press between or beside them opens the row's menu, and one on a card
+                // is the card's.
+                .background {
+                    if let shelfMenu {
+                        Color.clear
+                            .contentShape(.rect)
+                            .padding(.horizontal, -metrics.pageMargin)
+                            .contextMenu { shelfMenu }
+                    }
+                }
             }
             .shelfIndicators()
             .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
@@ -304,6 +324,18 @@ private struct UnloadedCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+/// A context menu when there is one to show; the view as it is otherwise.
+struct OptionalContextMenu: ViewModifier {
+    let menu: AnyView?
+
+    func body(content: Content) -> some View {
+        if let menu {
+            content.contextMenu { menu }
+        } else {
+            content
+        }
     }
 }
 #endif

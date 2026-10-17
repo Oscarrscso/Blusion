@@ -8,13 +8,18 @@ struct HeroBannerSection: View {
     let section: HomeViewModel.Section
     let row: RowConfiguration
     let onRetry: () -> Void
+    /// The widget's menu, on everything but the cards under the featured title, whose hold plays them. Nil when the page puts the menu
+    /// around the whole banner itself.
+    var menu: AnyView?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             if !section.widget.hideTitle {
-                header.padding(.horizontal, metrics.pageMargin)
+                header
+                    .modifier(OptionalContextMenu(menu: menu))
+                    .padding(.horizontal, metrics.pageMargin)
             }
             content
         }
@@ -38,20 +43,25 @@ struct HeroBannerSection: View {
         switch section.state {
         case .idle, .loading:
             HeroBannerPlaceholder()
+                .modifier(OptionalContextMenu(menu: menu))
         case .loaded(let items) where !items.isEmpty:
-            HeroBanner(items: items, row: row)
+            HeroBanner(items: items, row: row, menu: menu)
         case .loaded:
-            if let issue = section.issue {
-                IssueMessage(issue: issue)
-            } else {
-                Text("Nothing here yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, metrics.pageMargin)
+            Group {
+                if let issue = section.issue {
+                    IssueMessage(issue: issue)
+                } else {
+                    Text("Nothing here yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, metrics.pageMargin)
+                }
             }
+            .modifier(OptionalContextMenu(menu: menu))
         case .failed(let error):
             InlineErrorView(error.shortDescription, retry: onRetry)
                 .padding(.horizontal, metrics.pageMargin)
+                .modifier(OptionalContextMenu(menu: menu))
         }
     }
 }
@@ -61,19 +71,25 @@ struct HeroBannerSection: View {
 struct HeroBanner: View {
     let items: [MetaPreview]
     let row: RowConfiguration
+    /// The widget's menu, on the featured title and the space between the cards under it (see `HeroBannerSection.menu`).
+    var menu: AnyView?
     @Environment(\.layoutMetrics) private var metrics
     @State private var heroArtwork: TMDbArtwork?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             BannerFeature(item: items[0], showsRating: row.presentation.showsRatings, heroArtwork: $heroArtwork)
+                .modifier(OptionalContextMenu(menu: menu))
             if items.count > 1 {
-                MediaRow("", hideTitle: true) {
+                let tray = MediaRow("", hideTitle: true) {
                     ForEach(Array(items.dropFirst()), id: \.identity) { item in
                         MediaCardLink(item: item, aspect: .wide, size: row.presentation.cardStyle.cardSize,
                                       showsRating: row.presentation.showsRatings, width: cardWidth, subtitle: item.releaseInfo ?? " ",
                                       usesBetterPosters: row.presentation.usesBetterPosters)
                     }
+                }
+                Group {
+                    if let menu { tray.shelfMenu { menu } } else { tray }
                 }
                 .padding(.top, Theme.Spacing.m)
                 .padding(.bottom, Theme.Spacing.m)

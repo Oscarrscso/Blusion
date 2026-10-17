@@ -47,6 +47,8 @@ struct StreamPickerView: View {
     private let isHeadless: Bool
     /// Told once the automatic start on opening (Auto Pick's switch on) has started a stream (true), or has nothing to start (false).
     private let onAutomaticStart: ((Bool) -> Void)?
+    /// True for a picker that starts the best stream on opening whatever Auto Pick's switch says: a poster held to play it.
+    private let forcesAutomaticStart: Bool
     /// True from the moment the streams open with Auto Pick's switch on until it has had nothing to start. Meanwhile `onReady` waits, so
     /// a title's page keeps its details and its spinner instead of showing the list; once a stream has started it is never called.
     @State private var awaitsAutomaticStart = false
@@ -68,9 +70,10 @@ struct StreamPickerView: View {
 
     init(request: StreamRequest, services: AppServices, isEmbedded: Bool = false, isRevealed: Bool = true, onClose: (() -> Void)? = nil,
          onReady: (() -> Void)? = nil, scrollToRow: ((AnyHashable) -> Void)? = nil, episodeScore: DetailViewModel.EpisodeScore? = nil,
-         isHeadless: Bool = false, onAutomaticStart: ((Bool) -> Void)? = nil) {
+         isHeadless: Bool = false, forcesAutomaticStart: Bool = false, onAutomaticStart: ((Bool) -> Void)? = nil) {
         self.episodeScore = episodeScore
         self.isHeadless = isHeadless
+        self.forcesAutomaticStart = forcesAutomaticStart
         self.onAutomaticStart = onAutomaticStart
         self.services = services
         self.isEmbedded = isEmbedded
@@ -256,11 +259,13 @@ struct StreamPickerView: View {
                 // A picker that is never shown is done once it has started a stream: shown again after the player closes, it does not load.
                 if !model.hasLoaded, !isHeadless || !hasSelectedManually {
                     let settings = await services.settings.load()
-                    if settings.autoPlayBestStream, !hasSelectedManually { awaitsAutomaticStart = true }
-                    if settings.autoPlayBestStream { await model.loadForAutomaticSelection() } else { await model.load() }
+                    let startsAutomatically = settings.autoPlayBestStream || forcesAutomaticStart
+                    model.startsAutomaticallyAnyway = forcesAutomaticStart
+                    if startsAutomatically, !hasSelectedManually { awaitsAutomaticStart = true }
+                    if startsAutomatically { await model.loadForAutomaticSelection() } else { await model.load() }
                     // The picker was left while it loaded: nothing starts, and no Auto Pick is left waiting on a load that was called off.
                     guard !Task.isCancelled else { return }
-                    if settings.autoPlayBestStream, !hasSelectedManually {
+                    if startsAutomatically, !hasSelectedManually {
                         // With the switch on, opening the streams does what the Auto Pick button beside it does, for a viewer whose streams
                         // go to Infuse. Otherwise the best stream by rank starts, as automatic playback always has.
                         if settings.playerPreference.externalPlayer == .infuse, isInstalled(.infuse) {

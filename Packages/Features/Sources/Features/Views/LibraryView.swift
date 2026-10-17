@@ -159,11 +159,15 @@ struct LibraryView: View {
                             Badge(card.isShow ? "\(card.watchedCount) watched" : "Watched", systemImage: "checkmark").padding(6)
                         }
                         .accessibilityIdentifier("library.watched.\(card.id)")
+                        // On iPhone a held poster plays (see `MediaCardLink`); the title's page clears its watched mark. The Mac keeps
+                        // the menu, which a right click opens.
+                        #if targetEnvironment(macCatalyst)
                         .contextMenu {
                             Button(card.isShow ? "Mark Watched Episodes as Unwatched" : "Mark as Unwatched") {
                                 Task { await model.markUnwatched(card); await actions?.refresh() }
                             }
                         }
+                        #endif
                 }
             }
             .padding(.horizontal, metrics.pageMargin)

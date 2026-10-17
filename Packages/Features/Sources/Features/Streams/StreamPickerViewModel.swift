@@ -52,6 +52,9 @@ public final class StreamPickerViewModel {
     /// The addon Auto Pick waits for (see `AutoPickWait`), read as the streams load with Auto Pick's switch on. Nil waits for every addon,
     /// as Auto Pick always has.
     private var waitTarget: UUID?
+    /// Set for a picker that starts the best stream on opening whatever Auto Pick's switch says (a held poster): it then waits for the
+    /// addon Auto Pick waits for, as with the switch on.
+    public var startsAutomaticallyAnyway = false
 
     /// Extensions a file can carry for Infuse to name it by. Release names often end in something else ("...H.265-playWEB"), so only these
     /// count as the file's extension.
@@ -97,7 +100,7 @@ public final class StreamPickerViewModel {
         loadGeneration += 1
         let generation = loadGeneration
         settings = await services.settings.load()
-        waitTarget = settings.autoPlayBestStream ? await automaticWaitTarget() : nil
+        waitTarget = settings.autoPlayBestStream || startsAutomaticallyAnyway ? await automaticWaitTarget() : nil
         let (asked, responses) = await services.streams.fetch(request)
         guard !Task.isCancelled, generation == loadGeneration else { return }
         var config = settings.policy(fallbackEngineLinked: services.fallbackEngineLinked, decodesAV1InHardware: services.decodesAV1InHardware)
