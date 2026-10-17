@@ -10,8 +10,8 @@ struct SwipeRecord {
     /// How far a touch that starts at the screen's leading edge may travel and still be a tap: one there is most often the start of a
     /// swipe back.
     static let edgeSlop: CGFloat = 4
-    /// The strip along the screen's leading side where a touch counts as starting at the edge.
-    static let edgeWidth: CGFloat = 24
+    /// The strip along the screen's leading side where a touch counts as starting at the edge: the back swipe's own (see `BackSwipeRule`).
+    static let edgeWidth: CGFloat = BackSwipeRule.edgeWidth
     /// How long after a swipe lifts it still blocks a tap.
     static let lingerAfterLift: Duration = .milliseconds(400)
     /// How long a swipe still under the finger blocks a tap. Past this, the swipe has lost its end and no longer blocks anything.

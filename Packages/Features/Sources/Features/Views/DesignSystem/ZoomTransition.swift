@@ -245,9 +245,11 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     private weak var stack: UINavigationController?
     private weak var touched: UIView?
     private var startsAtEdge = false
+    /// Set once this swipe has gone back, so a swipe that goes on does not go back twice.
+    private var hasGoneBack = false
 
-    /// A swipe that starts this close to the leading edge closes the screen even over a shelf that has been scrolled.
-    private static let edgeWidth: CGFloat = 24
+    /// A swipe that starts this close to the leading edge goes back at once, even over a shelf that has been scrolled (see `BackSwipeRule`).
+    private static let edgeWidth = BackSwipeRule.edgeWidth
 
     var isDetached: Bool { stack == nil }
 
@@ -308,8 +310,19 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
         return dismissalPans(on: page).contains { $0 === recognizer }
     }
 
+    /// Goes back once the swipe means it (see `BackSwipeRule`): an edge swipe as it starts, a swipe on the page once it has travelled a
+    /// quarter of the page's width, clearly sideways. A swipe that stops short keeps the page.
     @objc private func swiped() {
-        guard pan.state == .began, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
+        switch pan.state {
+        case .began: hasGoneBack = false
+        case .changed: break
+        default: hasGoneBack = false; return
+        }
+        guard !hasGoneBack, let controller = pushed, !isLeaving(controller), let page = controller.viewIfLoaded else { return }
+        let movement = pan.translation(in: page)
+        let forward = isRightToLeft ? -movement.x : movement.x
+        guard BackSwipeRule.goesBack(forward: forward, vertical: movement.y, fromEdge: startsAtEdge, width: page.bounds.width) else { return }
+        hasGoneBack = true
         // The same light tap as opening a title, once per swipe that goes back.
         Haptics.tap()
         // A screen that was not popped stays, and keeps taking touches.
@@ -341,19 +354,22 @@ private final class BackSwipe: NSObject, UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         silenceSystemGestures()
         guard let page = pushed?.viewIfLoaded, let view = touch.view, view.isDescendant(of: page) else { return false }
+        // Only the touch that starts a swipe says where it began: a second finger landing at the edge mid-swipe changes nothing.
+        guard pan.state == .possible else { return true }
         touched = view
         let x = touch.location(in: page).x
         startsAtEdge = isRightToLeft ? x > page.bounds.width - Self.edgeWidth : x < Self.edgeWidth
         return true
     }
 
-    /// Only a swipe that is more sideways than vertical, towards the trailing edge, on a pushed screen that is not already on its way
-    /// out. Anything else fails here, and the page's scrolling carries on as it would without this recognizer.
+    /// Only a swipe towards the trailing edge that is more sideways than vertical from the edge, and twice as sideways on the page (see
+    /// `BackSwipeRule`), on a pushed screen that is not already on its way out. Anything else fails here, and the page's scrolling carries
+    /// on as it would without this recognizer.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let controller = pushed, let page = controller.viewIfLoaded else { return false }
         let movement = pan.translation(in: page)
         let forward = isRightToLeft ? -movement.x : movement.x
-        guard !isLeaving(controller), forward > abs(movement.y) else { return false }
+        guard !isLeaving(controller), BackSwipeRule.mayBegin(forward: forward, vertical: movement.y, fromEdge: startsAtEdge) else { return false }
         return startsAtEdge || !isOverScrolledShelf(within: page)
     }
 
