@@ -34,6 +34,11 @@ public final class StreamService: Sendable {
         await prefetches.prefetch(key: key) { [self] in await fetchFresh(request) }
     }
 
+    /// Returns once the lookup `prefetch` started for this title has every answer, or at once when none is running.
+    public func waitForPrefetch(_ request: StreamRequest) async {
+        await prefetches.waitUntilFinished(key: Self.prefetchKey(request))
+    }
+
     /// The title's page was left: an unclaimed lookup is cancelled after a short grace period.
     public func releasePrefetch(_ request: StreamRequest) {
         let key = Self.prefetchKey(request)

@@ -293,6 +293,8 @@ struct DetailView: View {
             }
             guard streams.request == nil else { return }
             model.prefetchStreams(for: model.primaryRequest)
+            // Shuffle's first episode is looked up next, so its first tap starts at once.
+            if model.canShuffle { model.prepareShuffle() }
         }
         // IMDb's reviews load in the background once the hero has settled, so a tap on the IMDb rating shows them at once.
         .task(id: model.hasSettledHero) { preloadReviews() }

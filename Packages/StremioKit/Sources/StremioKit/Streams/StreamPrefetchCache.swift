@@ -56,6 +56,12 @@ actor StreamPrefetchCache {
         }
     }
 
+    /// Returns once the lookup for `key` has every answer, or at once when there is none.
+    func waitUntilFinished(key: String) async {
+        guard let task = entries[key]?.task else { return }
+        await task.value
+    }
+
     /// The lookup's answers so far, then the rest as they arrive. Nil when there is no usable lookup.
     func claim(key: String) async -> Lookup? {
         expireStale()

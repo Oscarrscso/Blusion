@@ -439,11 +439,61 @@ public final class DetailViewModel {
         Task { await services.streams.prefetch(request) }
     }
 
-    /// Leaving the page lets an unclaimed lookup go (after a short grace).
+    /// Leaving the page lets an unclaimed lookup go (after a short grace), Shuffle's included.
     public func releaseStreamPrefetch() {
+        shuffleLookup?.cancel()
+        shuffleLookup = nil
+        if let shuffle = prefetchedShuffleRequest {
+            services.streams.releasePrefetch(shuffle)
+            prefetchedShuffleRequest = nil
+        }
         guard let request = prefetchedStreamRequest else { return }
         services.streams.releasePrefetch(request)
         prefetchedStreamRequest = nil
+    }
+
+    // MARK: Shuffle
+
+    /// The episode Shuffle plays next, picked ahead so the button can name it. The first one's streams are looked up as the page opens.
+    public private(set) var shuffleNext: Video?
+    /// The lookup started for the first `shuffleNext`, let go when the page is left.
+    private var prefetchedShuffleRequest: StreamRequest?
+    /// Waits for the Play button's lookup to finish, then starts Shuffle's.
+    private var shuffleLookup: Task<Void, Never>?
+    /// True once Shuffle has been tapped: later picks are not looked up ahead.
+    private var hasTakenShuffle = false
+
+    /// Picks Shuffle's first episode and looks up its streams once the Play button's lookup has every answer, so the two never ask the
+    /// addons at once, and the first tap of Shuffle starts at once. Coming back to the page looks the same episode up again.
+    public func prepareShuffle() {
+        guard !hasTakenShuffle, prefetchedShuffleRequest == nil else { return }
+        if shuffleNext == nil { shuffleNext = randomEpisode(avoiding: nextUp) }
+        guard let video = shuffleNext else { return }
+        let request = request(for: video)
+        prefetchedShuffleRequest = request
+        let play = prefetchedStreamRequest
+        let streams = services.streams
+        shuffleLookup = Task {
+            if let play { await streams.waitForPrefetch(play) }
+            guard !Task.isCancelled else { return }
+            await streams.prefetch(request)
+        }
+    }
+
+    /// Shuffle's episode for this tap: the one picked ahead, else a new pick. The next one is picked at once and named beside the button;
+    /// only the first is looked up ahead, so later taps load as Play does.
+    public func takeShuffle() -> Video? {
+        guard let video = shuffleNext ?? randomEpisode(avoiding: nil) else { return nil }
+        hasTakenShuffle = true
+        shuffleNext = randomEpisode(avoiding: video)
+        return video
+    }
+
+    /// A random episode that has aired, other than `avoiding` when there is another to pick.
+    private func randomEpisode(avoiding: Video?) -> Video? {
+        let aired = detail.episodesCountingAsWatched()
+        let others = aired.filter { $0.id != avoiding?.id }
+        return (others.isEmpty ? aired : others).randomElement()
     }
 
     /// Series: the episode to play next. The most recently updated unfinished episode, else the first unwatched one in watching

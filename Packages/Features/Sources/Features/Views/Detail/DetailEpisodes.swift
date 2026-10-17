@@ -23,6 +23,8 @@ struct DetailEpisodes: View {
     private var isLoadingStreams: Bool { loadingRequest != nil }
     @Environment(\.layoutMetrics) private var metrics
     @Environment(TitleActions.self) private var titleActions
+    /// The episode Shuffle last picked: the row scrolls it to the front of its season.
+    @State private var shuffledEpisode: String?
     /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
 
@@ -52,6 +54,7 @@ struct DetailEpisodes: View {
             HStack(spacing: Theme.Spacing.m) {
                 seasonMenu
                 shuffleButton
+                shuffleNextName
                 Spacer(minLength: 0)
                 episodeWidthToggle
             }
@@ -59,14 +62,22 @@ struct DetailEpisodes: View {
             if model.isLoading && model.episodes.isEmpty {
                 SkeletonRow(aspect: .wide)
             }
-            ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
-                        resetKey: "\(model.selectedSeason ?? -1)|\(model.matchesEpisodeWidthToText)|\(Int(width))") {
-                ForEach(model.episodes) { episode in
-                    episodeRow(episode, width: width)
-                        .id(episode.id).reportsShelfEdge(id: episode.id)
+            ScrollViewReader { proxy in
+                ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
+                            resetKey: "\(model.selectedSeason ?? -1)|\(model.matchesEpisodeWidthToText)|\(Int(width))") {
+                    ForEach(model.episodes) { episode in
+                        episodeRow(episode, width: width)
+                            .id(episode.id).reportsShelfEdge(id: episode.id)
+                    }
+                }
+                .animation(.snappy, value: model.matchesEpisodeWidthToText)
+                // Shuffle's episode becomes the first card in view, in its season, once the row has laid that season out.
+                .task(id: shuffledEpisode) {
+                    guard let shuffledEpisode else { return }
+                    try? await Task.sleep(for: .milliseconds(80))
+                    withAnimation(.snappy) { proxy.scrollTo(shuffledEpisode, anchor: .leading) }
                 }
             }
-            .animation(.snappy, value: model.matchesEpisodeWidthToText)
         }
         // A page that is left never stays blurred, even if its episode's menu was still open.
         .onDisappear { isHoldingEpisode = false }
@@ -106,6 +117,21 @@ struct DetailEpisodes: View {
         .accessibilityIdentifier("detail.seasonPicker")
     }
 
+    /// The episode Shuffle plays next, named very small beside it.
+    @ViewBuilder
+    private var shuffleNextName: some View {
+        if let next = model.shuffleNext, model.canShuffle {
+            let number = [next.season.map { "S\($0)" }, next.episode.map { "E\($0)" }].compactMap { $0 }.joined()
+            Text(number.isEmpty ? next.title : "\(number) · \(next.title)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityLabel("Shuffle plays \(next.title) next")
+                .accessibilityIdentifier("detail.shuffleNext")
+        }
+    }
+
     /// Shuffle, beside the season picker: a random episode that has aired, whose streams show as Play's do. While they load, a thin
     /// spinner takes the place of its symbol, at the same size. It is dimmed while there is nothing to pick, and takes no taps while any
     /// streams are loading. Only shown for a series, as this whole list is.
@@ -113,7 +139,13 @@ struct DetailEpisodes: View {
         let isShuffling = loadingTrigger == .shuffle
         return Button {
             guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
-            if let request = model.shuffledRequest() { play(request, .shuffle) }
+            // The episode's season opens with its card first in view, and its streams load (at once the first time: they were
+            // looked up as the page opened).
+            if let video = model.takeShuffle() {
+                if let season = video.season { model.selectedSeason = season }
+                shuffledEpisode = video.id
+                play(model.request(for: video), .shuffle)
+            }
         } label: {
             Image(systemName: "shuffle")
                 .font(.body.weight(.semibold))
