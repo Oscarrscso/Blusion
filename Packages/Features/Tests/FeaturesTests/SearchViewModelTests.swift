@@ -73,9 +73,10 @@ import StremioKitTestSupport
     }
 
     @Test func sectionsStayInAddonOrderWhateverOrderTheyAnswerIn() async throws {
-        // The first addon (host stub0) answers 150 ms late; the second (stub1) answers at once.
+        // The first addon (host stub0) answers 1.5 s late, long enough for the fast one's section to be seen on a busy Mac; the
+        // second (stub1) answers at once.
         let transport = StubTransport { request, _ in
-            if request.url?.host == "stub0.example.com" { try await Task.sleep(for: .milliseconds(150)) }
+            if request.url?.host == "stub0.example.com" { try await Task.sleep(for: .milliseconds(1500)) }
             return StubTransport.response(Data(#"{"metas":[{"id":"x"}]}"#.utf8), for: request)
         }
         let model = try await model(manifests: [manifest("first"), manifest("second")], transport: transport)

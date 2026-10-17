@@ -57,6 +57,15 @@ struct WidgetBuilderView: View {
                     .disabled(!model.canCommit)
                     .accessibilityIdentifier("widgetEditor.save")
             }
+            // The widget as saved, as text for Import Widgets.
+            if mode != .create, let saved = manager.widgets.first(where: { $0.id == model.widget.id }),
+               let text = WidgetsManagerViewModel.exportJSON(of: saved) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel("Export Widget")
+                        .accessibilityIdentifier("widgetEditor.export")
+                }
+            }
             // One Done key for every field of the open panel: the number pad has no return key of its own.
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

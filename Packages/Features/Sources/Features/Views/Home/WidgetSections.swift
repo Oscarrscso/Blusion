@@ -36,6 +36,8 @@ struct WidgetRow: View {
     let onEdit: () -> Void
     /// Puts a copy of this row straight after it, from its menu.
     var onDuplicate: (() -> Void)?
+    /// The row as text for Import Widgets, shared from its menu.
+    var exportText: String?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 
@@ -65,7 +67,7 @@ struct WidgetRow: View {
                         .accessibilityIdentifier("board.betterPosters.\(widget.id)")
                     Divider()
                 }
-                widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, onRemove: onRemove)
+                widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, exportText: exportText, onRemove: onRemove)
             }
         } else {
             Group {
@@ -95,7 +97,7 @@ struct WidgetRow: View {
             // opens across the whole row, not only over the text it shows.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
-            .contextMenu { widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, onRemove: onRemove) }
+            .contextMenu { widgetActions(for: widget, onEdit: onEdit, onDuplicate: onDuplicate, exportText: exportText, onRemove: onRemove) }
         }
     }
 
@@ -114,12 +116,17 @@ struct WidgetRow: View {
 /// confirmation, as the widgets page's does. Nil `onRemove` leaves removal out, for a widget Home always shows.
 @ViewBuilder
 func widgetActions(for widget: HomeWidget, onEdit: @escaping () -> Void, onDuplicate: (() -> Void)? = nil,
-                   onRemove: (() -> Void)?) -> some View {
+                   exportText: String? = nil, onRemove: (() -> Void)?) -> some View {
     Button("Edit Widget", action: onEdit)
         .accessibilityIdentifier("board.editWidget.\(widget.id)")
     if let onDuplicate {
         Button("Duplicate Widget", systemImage: "plus.square.on.square", action: onDuplicate)
             .accessibilityIdentifier("board.duplicateWidget.\(widget.id)")
+    }
+    // The widget as text that Import Widgets reads back, through the share sheet.
+    if let exportText {
+        ShareLink("Export Widget", item: exportText, preview: SharePreview(widget.title))
+            .accessibilityIdentifier("board.exportWidget.\(widget.id)")
     }
     if let onRemove {
         Divider()

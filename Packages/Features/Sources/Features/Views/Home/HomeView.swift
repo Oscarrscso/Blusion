@@ -254,7 +254,8 @@ struct HomeView: View {
             withWidgetMenu(HeroBannerSection(section: section, row: row, onRetry: { retry(section) }), section)
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
-                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section))
+                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
+                      exportText: exportText(for: section))
         case .collection(let items):
             withWidgetMenu(CollectionRow(widget: section.widget, items: items), section)
         case .continueWatching:
@@ -286,6 +287,13 @@ struct HomeView: View {
 
     private func removeWidget(_ section: HomeViewModel.Section) { Task { await model.removeWidget(sectionID: section.id) } }
 
+    /// The widget as saved, as text for Import Widgets: its own settings, not the order or source Home picked for it today. Nil for
+    /// Continue Watching, which every layout has.
+    private func exportText(for section: HomeViewModel.Section) -> String? {
+        guard !HomeLayout.isContinueWatching(section.widget) else { return nil }
+        return WidgetsManagerViewModel.exportJSON(of: model.layoutWidgets[section.id] ?? section.widget)
+    }
+
     /// Duplicates a widget from its menu, with a light tap, or nil for Continue Watching and the showcase, which are one of a kind.
     private func duplicateAction(for section: HomeViewModel.Section) -> (() -> Void)? {
         guard WidgetsManagerViewModel.isDuplicable(section.widget) else { return nil }
@@ -300,7 +308,7 @@ struct HomeView: View {
         let onRemove: (() -> Void)? = removable ? { removeWidget(section) } : nil
         return content.contextMenu {
             widgetActions(for: section.widget, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
-                          onRemove: onRemove)
+                          exportText: exportText(for: section), onRemove: onRemove)
         }
     }
 

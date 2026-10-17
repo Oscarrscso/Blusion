@@ -89,6 +89,15 @@ struct WidgetEditorView: View {
                     .accessibilityIdentifier("widgetEditor.save")
             }
             if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
+            // An existing widget, as saved, as text for Import Widgets.
+            if mode != .create, let saved = model.widgets.first(where: { $0.id == widget.id }), !HomeLayout.isContinueWatching(saved),
+               let text = WidgetsManagerViewModel.exportJSON(of: saved) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel("Export Widget")
+                        .accessibilityIdentifier("widgetEditor.export")
+                }
+            }
         }
         .sheet(isPresented: $showsTileSource) {
             NavigationStack {

@@ -31,6 +31,8 @@ public final class HomeViewModel {
     public private(set) var sections: [Section] = []
     /// The seed each shuffled widget's items take on this opening of Home (see `WidgetShuffling`). A widget without a shuffle has none.
     private var itemSeeds: [String: UInt64] = [:]
+    /// The widgets as saved, by id, before any shuffle or random source changed what Home shows: what a widget's export shares.
+    public private(set) var layoutWidgets: [String: HomeWidget] = [:]
     /// In-progress titles, newest first (`LibraryViewModel.continueWatching(from:)`).
     public private(set) var continueWatching: [WatchProgress] = []
     public enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
@@ -84,7 +86,9 @@ public final class HomeViewModel {
             phase = .noAddons
             return
         }
-        let widgets = await shuffled(saved ?? DefaultWidgets.make(for: addons), addons: addons)
+        let laidOut = saved ?? DefaultWidgets.make(for: addons)
+        layoutWidgets = Dictionary(laidOut.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let widgets = await shuffled(laidOut, addons: addons)
         let known = await lastKnownItems(for: widgets)
         guard current == generation, !Task.isCancelled else { return }
         let previous = sections
@@ -130,6 +134,7 @@ public final class HomeViewModel {
         // source shows the source it picked, not the ones it picks from.
         let saved = await services.widgets.load() ?? sections.map(\.widget)
         await services.widgets.save(saved.map { $0.id == sectionID ? HomeViewModel.withBetterPosters($0, on) : $0 })
+        layoutWidgets[sectionID] = layoutWidgets[sectionID].map { HomeViewModel.withBetterPosters($0, on) }
     }
 
     /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made

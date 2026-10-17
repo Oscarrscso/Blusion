@@ -315,6 +315,12 @@ public final class WidgetsManagerViewModel {
         return String(data: data, encoding: .utf8)
     }
 
+    /// One widget as the same JSON text, which Import Widgets reads back as that one widget. Nil if encoding fails.
+    nonisolated public static func exportJSON(of widget: HomeWidget) -> String? {
+        guard let data = try? FusionWidgetCodec.encode([widget]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     /// Decodes an import off the main actor. Addons it needs that are not installed hold it until the user decides; otherwise it is saved.
     private func importData(_ data: Data, mode: ImportMode) async {
         clearPending()

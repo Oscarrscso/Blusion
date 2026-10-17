@@ -1156,6 +1156,17 @@
         }
       }
     },
+    "Export Widget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Widget"
+          }
+        }
+      }
+    },
     "Fallback player": {
       "extractionState": "manual",
       "localizations": {
