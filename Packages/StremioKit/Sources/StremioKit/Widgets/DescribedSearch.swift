@@ -231,6 +231,15 @@ extension TMDbDiscoverQuery {
         return genreClues.lazy.compactMap { kind == .movie ? $0.movie : $0.series }.first { $0.name.lowercased() == wanted }
     }
 
+    /// Every word the genre table reads as a genre ("horror", "sci", "fi", "comedies").
+    public static let genreWords: Set<String> = {
+        var words = Set<String>()
+        for clue in genreClues {
+            for phrase in clue.phrases { words.formUnion(phrase.split(separator: " ").map(String.init)) }
+        }
+        return words
+    }()
+
     /// The genre names a text uses, in the table's order, as films name them.
     static func genreNames(in text: String) -> [String] {
         genreClues.filter { clue in clue.phrases.contains { text.contains(" \($0) ") } }.compactMap { $0.movie?.name }

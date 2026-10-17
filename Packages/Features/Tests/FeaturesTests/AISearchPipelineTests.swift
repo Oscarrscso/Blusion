@@ -52,13 +52,15 @@ import StremioKit
                                 name: "Title \(number)", releaseInfo: String(filters.earliestYear ?? 2000))
                 }
             }, ranker: Ranker(calls: calls, rejectAll: true))
+        // TMDb has no TV horror genre: a TV query would drop it and list any popular series, so "80s horror" asks films only.
+        let kinds: Set<TMDbDiscoverQuery.Kind> = request == "80s horror" ? [.movie] : [.movie, .series]
         let results = await service.titles(for: request) { await calls.update($0) }
-        #expect(results.count == 24, "a database-filter request has no arbitrary eight-pick limit or synopsis requirement")
+        #expect(results.count == 12 * kinds.count, "a database-filter request has no arbitrary eight-pick limit or synopsis requirement")
         #expect(await calls.plans == 1, "every query still invokes AI interpretation")
         #expect(await calls.ranks == 0, "plot inference cannot discard correct genre/year matches")
         let queries = await calls.queries
-        #expect(queries.count == 2)
-        #expect(Set(queries.map(\.kind)) == [.movie, .series])
+        #expect(queries.count == kinds.count)
+        #expect(Set(queries.map(\.kind)) == kinds)
         #expect(queries.allSatisfy { $0.releasedTo == "\(filters.latestYear!)-12-31" })
         #expect(await calls.updates.contains { !$0.items.isEmpty && $0.stage != .complete })
     }
@@ -129,7 +131,7 @@ import StremioKit
         let movie = MetaPreview(id: "tt1", type: "movie", name: "A Film Without a Synopsis")
         let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] }, titles: { query in
             await calls.query(query); return []
-        }, ranker: Ranker(calls: calls, rejectAll: true), peopleTitles: { people in
+        }, ranker: Ranker(calls: calls, rejectAll: true), peopleTitles: { people, _ in
             #expect(people == [person])
             return [AISearchCandidate(item: movie, evidence: "cast: Requested Actor")]
         })
@@ -160,6 +162,84 @@ import StremioKit
         let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
             titles: { _ in [] }, ranker: Ranker(calls: calls), titleMatches: { _ in [seed] }, related: { _ in [seed, match] })
         #expect(await service.titles(for: "something like Reference") == [match])
+    }
+
+    /// The wider pool keeps a requested genre (it once dropped Horror and listed Coronation Street for "slow burn psychological
+    /// horror"), draws on the genres feel words imply when none is named, and on a reference title's genres.
+    @Test(arguments: [
+        ("slow burn psychological horror", ["Horror"], [] as [String], [[27]]),
+        ("80s dark gritty", [], [], [[53, 80], [53]]),
+        ("something like Reference", [], ["Reference"], [[18, 53]]),
+    ])
+    func theWiderPoolKeepsTheGenreOrDrawsOnImpliedOnes(_ text: String, _ genres: [String], _ references: [String], _ expected: [[Int]]) async {
+        let calls = Calls()
+        let seed = MetaPreview(id: "tt1", type: "movie", name: "Reference", genres: ["Drama", "Thriller", "Crime"])
+        let years = text.hasPrefix("80s") ? (1980, 1989) : (nil, nil)
+        let filters = DescribedSearch(genres: genres, earliestYear: years.0, latestYear: years.1)
+        let plan = AISearchPlan(filters: filters, referenceTitles: references, requiresSemanticRanking: true)
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+            titles: { query in await calls.query(query); return [] }, ranker: Ranker(calls: calls),
+            titleMatches: { _ in [seed] }, related: { _ in [] })
+        _ = await service.titles(for: text)
+        let queries = await calls.queries
+        #expect(!queries.isEmpty)
+        #expect(Set(queries.map { $0.genres.map(\.id) }) == Set(expected))
+    }
+
+    /// The searches shown before the model's reading never show what the words rule out, or what the viewer has watched when only
+    /// unwatched titles are wanted: those wait for the reading and the viewing history.
+    @Test func earlyResultsWaitForExclusionsAndHistory() async {
+        let heist = MetaPreview(id: "tt1", type: "movie", name: "Seen Heist")
+        let other = MetaPreview(id: "tt2", type: "movie", name: "New Heist")
+        for (text, plan) in [
+            ("heist movies without violence", AISearchPlan(filters: DescribedSearch(kind: .movie, moods: ["heist"]), excludedTopics: ["violence"],
+                                                           requiresSemanticRanking: false)),
+            ("heist movies new to me", AISearchPlan(filters: DescribedSearch(kind: .movie, moods: ["heist"]), unwatchedOnly: true,
+                                                    requiresSemanticRanking: false)),
+        ] {
+            let calls = Calls()
+            let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { phrase in
+                [TMDbDiscoverQuery.Named(id: phrase.count, name: phrase)]
+            }, titles: { query in
+                await calls.query(query)
+                return [heist, other]
+            }, watched: { ["movie/tt1"] })
+            let items = await service.titles(for: text)
+            #expect(await calls.queries.allSatisfy { !$0.keywords.contains { $0.name.contains("violence") } }, "\(text)")
+            if plan.unwatchedOnly { #expect(items == [other]) }
+        }
+    }
+
+    /// Words searched as a title whose matches are only near ("Time Travel Tales" for "time travel") still get the theme search.
+    @Test func aTitleSearchWithoutAnExactMatchStillSearchesTheThemes() async {
+        let calls = Calls()
+        let near = MetaPreview(id: "tt1", type: "movie", name: "Time Travel Tales")
+        var plan = AISearchPlan(filters: DescribedSearch(moods: ["time travel"]), titleQueries: ["time travel"], requiresSemanticRanking: false)
+        plan.titlesFromWords = true
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { phrase in
+            [TMDbDiscoverQuery.Named(id: 1, name: phrase)]
+        }, titles: { query in
+            await calls.query(query)
+            return []
+        }, titleMatches: { _ in [near] })
+        _ = await service.titles(for: "time travel")
+        #expect(!(await calls.queries).isEmpty)
+    }
+
+    /// A title the model named ends the search once found, even under another name ("The Empire Strikes Back" for "Star Wars"), as
+    /// before: the years left in the words never fill the row with unrelated 80s films.
+    @Test func aNamedTitleFoundUnderAnotherNameStillEndsTheSearch() async {
+        let calls = Calls()
+        let found = [MetaPreview(id: "tt1", type: "movie", name: "The Empire Strikes Back", releaseInfo: "1980"),
+                     MetaPreview(id: "tt2", type: "movie", name: "Return of the Jedi", releaseInfo: "1983")]
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, earliestYear: 1980, latestYear: 1989), titleQueries: ["Star Wars"],
+                                requiresSemanticRanking: false)
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] }, titles: { query in
+            await calls.query(query)
+            return []
+        }, titleMatches: { _ in found })
+        #expect(await service.titles(for: "Star Wars movies from the 80s") == found)
+        #expect(await calls.queries.isEmpty)
     }
 
     @Test func explicitUnwatchedRequestExcludesHistoryBeforeRanking() async {
@@ -203,10 +283,13 @@ import StremioKit
         let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], minimumScore: 7),
                                 people: [.init(name: "Requested Actor", role: .cast)], language: "fr", requiresSemanticRanking: false)
         let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
-            titles: { _ in [] }, peopleTitles: { _ in [AISearchCandidate(item: metadata.item, evidence: "cast: Requested Actor", metadata: metadata)] })
+            titles: { _ in [] }, peopleTitles: { _, _ in [AISearchCandidate(item: metadata.item, evidence: "cast: Requested Actor", metadata: metadata)] })
         #expect(await service.titles(for: "highly rated French comedies starring Requested Actor").isEmpty)
     }
 
+    /// TMDb has tagged each of these with the one topic asked for, and the words ask for nothing a synopsis would have to show, so
+    /// they are shown before the model's reading and the model checks none of them (it rejected real heist comedies for "funny heist
+    /// movies" on 17 Oct). The topic pool still comes first and no generic popularity page is asked for.
     @Test func themeMatchesGetTheFirstSlotsAndFinishBeforeGenericPopularityPages() async {
         let calls = Calls()
         let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], moods: ["bank robbery"]))
@@ -221,10 +304,9 @@ import StremioKit
         }, ranker: Ranker(calls: calls))
         let items = await service.titles(for: "comedies about bank robberies") { await calls.update($0) }
         #expect(items.count == 24)
-        #expect(await calls.queries.count == 1)
-        #expect(await calls.ranks == 2)
+        #expect(Set(await calls.queries.map(\.kind)) == [.movie, .series], "a search that names no kind asks for films and series")
+        #expect(await calls.ranks == 0, "titles tagged with every requested topic need no synopsis check")
         let snapshots = await calls.updates.filter { !$0.items.isEmpty }.map(\.items)
-        #expect(snapshots.first?.count == 12)
         #expect(snapshots.allSatisfy { $0.allSatisfy { $0.name.hasPrefix("Heist Comedy") } })
     }
 
@@ -386,9 +468,11 @@ import StremioKit
     }
 
     @Test func titleWordsDoNotBecomeGenreScoreOrRuntimeRequirements() async {
-        let words = AISearchPlan.explicitFilters(in: "funny films like War of the Worlds under two hours", namedTitles: ["War of the Worlds"])
+        let words = AISearchGrounding.plan(ModelReading(referenceTitles: ["War of the Worlds"]),
+                                           for: "funny films like War of the Worlds under two hours").filters
         #expect(words.genres == ["Comedy"] && words.maximumRuntime == 120)
-        let titles = AISearchPlan.explicitFilters(in: "Best in Show and Short Term 12", namedTitles: ["Best in Show", "Short Term 12"])
+        let titles = AISearchGrounding.plan(ModelReading(titleQueries: ["Best in Show", "Short Term 12"]),
+                                            for: "Best in Show and Short Term 12").filters
         #expect(titles.minimumScore == nil && titles.maximumRuntime == nil)
 
         let calls = Calls()

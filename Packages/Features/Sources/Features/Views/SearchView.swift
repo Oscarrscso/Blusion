@@ -62,7 +62,10 @@ struct SearchView: View {
             .onChange(of: router.searchFocusRevision, initial: true) { focusField() }
             .onChange(of: model.query) { model.queryDidChange() }
             .onSubmit(of: .search) { Task { await model.submit() } }
-            .task { await model.refreshAvailability() }
+            .task {
+                await model.refreshAvailability()
+                model.prewarmAI()
+            }
             .onChange(of: router.tab) { old, _ in
                 if old == .settings { Task { await model.refreshAvailability() } }
             }

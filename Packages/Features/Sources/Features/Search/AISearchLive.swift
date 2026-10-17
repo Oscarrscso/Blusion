@@ -20,7 +20,7 @@ extension DescribedSearchService {
         }, ranker: OnDeviceDescriptionInterpreter.availableRanker(), titleMatches: { text in
             guard let api = await tmdb() else { throw WidgetSourceError.needsTMDbToken }
             return try await api.searchTitleItems(text, limit: 12)
-        }, peopleTitles: { people in
+        }, peopleTitles: { people, filters in
             guard let api = await tmdb() else { throw WidgetSourceError.needsTMDbToken }
             var credits: [TMDbPersonCredit] = []
             var identities: Set<String>?
@@ -45,7 +45,9 @@ extension DescribedSearchService {
                 if credits.isEmpty { credits = filmography }
                 facts.append("\(person.role.rawValue): \(match.name)")
             }
-            let chosen = credits.filter { identities?.contains($0.id) == true }
+            // Narrowed before the cap: Tom Hanks' two dozen most popular credits are talk shows and recent films, which left
+            // "Tom Hanks movies from the 90s" with nothing.
+            let chosen = credits.filter { identities?.contains($0.id) == true && Self.fitsFilmography($0, filters: filters) }
                 .sorted { $0.popularity > $1.popularity }
             // No unbounded per-title requests: at most six IMDb identities resolve concurrently.
             var result: [AISearchCandidate] = []
@@ -106,5 +108,21 @@ extension DescribedSearchService {
         }, pageTitles: { query, skip in
             try await content.items(for: .tmdbDiscover(query), limit: batchSize, skip: skip)
         })
+    }
+
+    /// Whether a credit is of the kind and years the search allows, and is a part rather than an appearance as themselves.
+    static func fitsFilmography(_ credit: TMDbPersonCredit, filters: DescribedSearch) -> Bool {
+        if let kind = filters.kind, credit.isMovie != (kind == .movie) { return false }
+        if filters.earliestYear != nil || filters.latestYear != nil {
+            guard let year = credit.year else { return false }
+            if let earliest = filters.earliestYear, year < earliest { return false }
+            if let latest = filters.latestYear, year > latest { return false }
+        }
+        let parts = credit.roles.filter { if case .acting = $0 { true } else { false } }
+        let appearances = parts.filter { role in
+            guard case .acting(let character) = role, let character = character?.lowercased() else { return false }
+            return ["self", "himself", "herself", "themselves"].contains { character.hasPrefix($0) }
+        }
+        return parts.isEmpty || appearances.count < parts.count || credit.roles.count > parts.count
     }
 }

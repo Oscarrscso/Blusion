@@ -218,6 +218,12 @@ public final class SearchViewModel {
         activeTerm = nil
     }
 
+    /// Loads the on-device model while Search is on screen, so a first search does not wait for it to load.
+    public func prewarmAI() {
+        guard aiAvailable else { return }
+        Task.detached(priority: .utility) { OnDeviceDescriptionInterpreter.prewarm() }
+    }
+
     /// Retry only AI work, retaining the normal search rows.
     public func retryAI() {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)

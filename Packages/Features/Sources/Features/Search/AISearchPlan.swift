@@ -21,6 +21,14 @@ public struct AISearchPlan: Sendable, Equatable {
     public var unwatchedOnly: Bool
     /// The lexical fallback can still find factual matches, but an inference failure must remain retryable.
     var interpretationFailed = false
+    /// Set when the words ask for nothing beyond facts and topics: titles TMDb has tagged with every requested topic then need no
+    /// synopsis check by the model, which is slow and was rejecting real heist comedies for "funny heist movies".
+    var trustsTopicMatches = false
+    /// What a synopsis must show beyond the database's facts, in the search's own words ("dark gritty", "less depressing"). The model
+    /// checking candidates is told this outright, since it otherwise took any title whose genre and years fit.
+    var judgement = ""
+    /// Set when the search's own words stand in as its title because the model named none, so only an exact match ends the search.
+    var titlesFromWords = false
 
     public init(filters: DescribedSearch, titleQueries: [String] = [], referenceTitles: [String] = [], people: [Person] = [],
                 companies: [String] = [], language: String? = nil, excludedTopics: [String] = [], unwatchedOnly: Bool = false,
@@ -37,10 +45,19 @@ public struct AISearchPlan: Sendable, Equatable {
         self.unwatchedOnly = unwatchedOnly
     }
 
-    /// Separate movie and TV queries map genres to each medium's IDs (878 versus 10765, for example).
+    /// Separate movie and TV queries map genres to each medium's IDs (878 versus 10765, for example). When the search names no kind,
+    /// a kind without one of the requested genres is not asked: TMDb has no TV horror, thriller, romance or history, and the TV query
+    /// dropped the genre and returned any popular series (The Mentalist for "slow burn psychological horror"). Series queries leave
+    /// out talk, news and reality TV, which no description here asks for ("80s dark gritty" listed Wheel of Fortune). When the words
+    /// name no kind, they also leave out cartoons from TV's merged genres, unless animation is asked for: "Sci-Fi & Fantasy" put
+    /// Pokémon and Ranma ½ in "dark atmospheric sci-fi". "Sci-fi series" keeps them.
     func queries(keywords: [TMDbDiscoverQuery.Named], excluded: [TMDbDiscoverQuery.Named] = [],
                  companies: [TMDbDiscoverQuery.Named] = []) -> [TMDbDiscoverQuery] {
-        let kinds = filters.kind.map { [$0] } ?? [.movie, .series]
+        var kinds = filters.kind.map { [$0] } ?? [.movie, .series]
+        if filters.kind == nil {
+            let covered = kinds.filter { kind in filters.genres.allSatisfy { TMDbDiscoverQuery.genre(named: $0, kind: kind) != nil } }
+            kinds = covered.isEmpty ? [.movie] : covered
+        }
         return kinds.map { kind in
             var search = filters
             search.kind = kind
@@ -48,21 +65,22 @@ public struct AISearchPlan: Sendable, Equatable {
             query.language = language
             query.excludedKeywords = excluded
             query.companies = companies
+            if kind == .series {
+                var left = Self.nonFictionTV
+                if filters.kind == nil, query.genres.contains(where: { Self.mergedTVGenres.contains($0.id) }),
+                   !query.genres.contains(where: { $0.id == 16 }) {
+                    left.append(TMDbDiscoverQuery.Named(id: 16, name: "Animation"))
+                }
+                query.excludedGenres += left.filter { genre in !query.excludedGenres.contains(genre) }
+            }
             return query
         }
     }
 
-    /// Words inside a named film are not genre, score or runtime constraints ("War of the Worlds", "Best in Show", "Short Term 12").
-    static func explicitFilters(in text: String, namedTitles: [String]) -> DescribedSearch {
-        var constraints = text
-        for title in namedTitles where !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let pattern = "(?<![[:alnum:]])" + NSRegularExpression.escapedPattern(for: title) + "(?![[:alnum:]])"
-            constraints = constraints.replacingOccurrences(of: pattern, with: " ", options: [.regularExpression, .caseInsensitive])
-        }
-        // A translated or corrected name may not occur verbatim. Let the model's parsed constraints stand in that case.
-        if !namedTitles.isEmpty, constraints == text { return DescribedSearch() }
-        return .reading(constraints)
-    }
+    static let nonFictionTV = [TMDbDiscoverQuery.Named(id: 10763, name: "News"), TMDbDiscoverQuery.Named(id: 10764, name: "Reality"),
+                               TMDbDiscoverQuery.Named(id: 10767, name: "Talk")]
+    /// TV genres that stand for two film genres: Action & Adventure, Sci-Fi & Fantasy.
+    static let mergedTVGenres: Set<Int> = [10759, 10765]
 }
 
 /// Facts attached only to search candidates; never written into a title's synopsis or saved metadata.
