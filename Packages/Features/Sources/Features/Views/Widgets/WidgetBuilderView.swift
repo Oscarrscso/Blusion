@@ -331,8 +331,8 @@ private struct PillList: View {
         Group(title: "List", tint: .blue, fields: [.source, .ordering, .catalogGenre, .traktSort]),
         // What the titles are about: purple.
         Group(title: "Content", tint: .purple, fields: [.genres, .keywords, .excludedKeywords, .language, .runtime]),
-        // Scores: the yellow of a star.
-        Group(title: "Ratings", tint: .yellow, fields: [.score, .votes]),
+        // Scores: the yellow of a star. They are IMDb's (see `TMDbDiscoverQuery.usesTMDbScores`).
+        Group(title: "IMDb Ratings", tint: .yellow, fields: [.score, .votes]),
         // When and where a title can be watched: green, as for something that is available.
         Group(title: "Dates and availability", tint: .green, fields: [.period, .release, .region, .providers]),
         // The people who made it: orange.

@@ -152,17 +152,17 @@ final class AppEnvironment {
             #endif
             traktSyncState = FileTraktSyncStateStore(fileURL: folder.appendingPathComponent("trakt-sync.json"))
         }
+        // IMDb's ratings dataset, downloaded in the background once a day and read offline. UI tests never touch the network or the disk.
+        var imdbDataset: IMDbRatingsService?
+        if !uiTesting, let directory = IMDbRatingsService.standardDirectory() { imdbDataset = IMDbRatingsService(directory: directory) }
         let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt, account: traktAccount,
-                                                 snapshots: snapshots)
+                                                 snapshots: snapshots, imdb: imdbDataset)
         let ratingsCache: any RatingsCache
         if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
             ratingsCache = FileRatingsCache(fileURL: caches.appendingPathComponent("poster-ratings.json"))
         } else {
             ratingsCache = InMemoryRatingsCache()
         }
-        // IMDb's ratings dataset, downloaded in the background once a day and read offline. UI tests never touch the network or the disk.
-        var imdbDataset: IMDbRatingsService?
-        if !uiTesting, let directory = IMDbRatingsService.standardDirectory() { imdbDataset = IMDbRatingsService(directory: directory) }
         let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache,
                                                dataset: imdbDataset, logger: logger)
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)

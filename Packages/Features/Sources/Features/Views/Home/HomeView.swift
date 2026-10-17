@@ -257,7 +257,7 @@ struct HomeView: View {
                       onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
                       exportText: exportText(for: section))
         case .collection(let items):
-            withWidgetMenu(CollectionRow(widget: section.widget, items: items), section)
+            withWidgetMenu(CollectionRow(widget: section.widget, items: items, photos: model.tilePhotos), section)
         case .continueWatching:
             // Continue Watching is always shown at the top of Home when the layout leaves it out, so removing it would only move it: it is
             // edited here, not removed. A card's own menu (removing it from Continue Watching) opens where it is.

@@ -211,17 +211,17 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
             return nil
         }
         #expect(separators == [",", ",", "and"])
-        #expect(plain(model) == "Make a movie list sorted by Popular , about animation , from last year and rated 7+ .")
+        #expect(plain(model) == "Make a movie list sorted by Popular , about animation , from last year and rated 7+ on IMDb .")
     }
 
     @Test func eachClauseReadsItsValue() async throws {
         let (manager, _) = try await loadedManager()
         let cases: [(TMDbDiscoverQuery, String)] = [
-            (TMDbDiscoverQuery(minimumScore: 7), "rated 7+"),
-            (TMDbDiscoverQuery(maximumScore: 6), "rated up to 6"),
-            (TMDbDiscoverQuery(minimumScore: 7, maximumScore: 9), "rated 7 to 9"),
-            (TMDbDiscoverQuery(minimumScore: 7.5, maximumScore: 8.5), "rated 7.5 to 8.5"),
-            (TMDbDiscoverQuery(minimumVotes: 500), "with 500+ votes"),
+            (TMDbDiscoverQuery(minimumScore: 7), "rated 7+ on IMDb"),
+            (TMDbDiscoverQuery(maximumScore: 6), "rated up to 6 on IMDb"),
+            (TMDbDiscoverQuery(minimumScore: 7, maximumScore: 9), "rated 7 to 9 on IMDb"),
+            (TMDbDiscoverQuery(minimumScore: 7.5, maximumScore: 8.5), "rated 7.5 to 8.5 on IMDb"),
+            (TMDbDiscoverQuery(minimumVotes: 500), "with 500+ IMDb votes"),
             (TMDbDiscoverQuery(minimumRuntime: 90), "running 90+ min"),
             (TMDbDiscoverQuery(maximumRuntime: 120), "running under 120 min"),
             (TMDbDiscoverQuery(minimumRuntime: 90, maximumRuntime: 120), "running 90 to 120 min"),
@@ -392,6 +392,18 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
         model.updateQuery { $0.period = .thisYear }
         #expect(model.query?.period == TMDbDiscoverQuery.Period.thisYear)
         #expect(model.query?.releasedFrom == nil && model.query?.releasedTo == nil)
+    }
+
+    @Test func aScoreOrVotesSetInTheEditorAreIMDbs() async throws {
+        let (manager, _) = try await loadedManager()
+        let model = tmdbBuilder(TMDbDiscoverQuery(minimumScore: 7, minimumVotes: 300, usesTMDbScores: true), manager: manager)
+        model.updateQuery { $0.language = "ja" }
+        #expect(model.query?.usesTMDbScores == true, "another filter leaves a search's TMDb scores as they are")
+        model.updateQuery { $0.minimumVotes = 10_000 }
+        #expect(model.query?.usesTMDbScores == false)
+        let scored = tmdbBuilder(TMDbDiscoverQuery(minimumScore: 7, usesTMDbScores: true), manager: manager)
+        scored.updateQuery { $0.maximumScore = 9 }
+        #expect(scored.query?.usesTMDbScores == false)
     }
 
     @Test func aBlankLanguageOrRegionIsStoredAsNilAndACodeIsKept() async throws {

@@ -63,8 +63,8 @@ struct WidgetFieldPanel: View {
         case .genres: "Genres"
         case .keywords: "Keywords"
         case .excludedKeywords: "Exclude Keywords"
-        case .score: "Score"
-        case .votes: "Vote Count"
+        case .score: "IMDb Score"
+        case .votes: "IMDb Votes"
         case .language: "Language"
         case .runtime: "Runtime"
         case .release: "Release Year"
@@ -291,7 +291,8 @@ struct WidgetFieldPanel: View {
         }
     }
 
-    private static let voteChoices = [50, 100, 250, 500, 1_000, 5_000, 10_000]
+    /// On IMDb's scale, where a well-known film has hundreds of thousands of votes.
+    private static let voteChoices = [1_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000]
 
     private var votesContent: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {

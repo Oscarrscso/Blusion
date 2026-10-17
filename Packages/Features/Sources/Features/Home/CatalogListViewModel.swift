@@ -33,8 +33,8 @@ public final class CatalogListViewModel {
     /// Loaded, and nothing to show. A failed load is not empty.
     public var isEmpty: Bool { state == .loaded && items.isEmpty }
 
-    private static let pageSize = 50
-    private static let mergedLimit = 100
+    nonisolated static let pageSize = 50
+    nonisolated static let mergedLimit = 100
 
     private let services: AppServices
     private var generation = 0

@@ -76,9 +76,10 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     public var genres: [Named]
     public var keywords: [Named]
     public var excludedKeywords: [Named]
-    /// TMDb's community score, 0 to 10.
+    /// The rating, 0 to 10: IMDb's for a widget once IMDb's dataset is on the device, else TMDb's community score (see `usesTMDbScores`).
     public var minimumScore: Double?
     public var maximumScore: Double?
+    /// The number of votes behind the rating, IMDb's or TMDb's as for the score.
     public var minimumVotes: Int?
     /// The original language as an ISO 639-1 code, such as "ja".
     public var language: String?
@@ -99,13 +100,17 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     /// True when the title names neither films nor shows: the list then holds both, interleaved, so a show such as The Simpsons is in an
     /// animation list as a film is. Written only when set, so a saved list keeps its encoding.
     public var spansBothKinds: Bool
+    /// True for a search's list, whose score and vote bounds are always TMDb's own; a widget's are IMDb's. Written only when set, so a
+    /// saved widget keeps its encoding.
+    public var usesTMDbScores: Bool
 
     public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],
                 excludedKeywords: [Named] = [], minimumScore: Double? = nil, maximumScore: Double? = nil, minimumVotes: Int? = nil,
                 language: String? = nil, minimumRuntime: Int? = nil, maximumRuntime: Int? = nil, releasedFrom: String? = nil,
                 releasedTo: String? = nil, providers: [Named] = [], region: String? = nil, cast: [Named] = [], crew: [Named] = [],
-                companies: [Named] = [], excludedGenres: [Named] = [], spansBothKinds: Bool = false) {
+                companies: [Named] = [], excludedGenres: [Named] = [], spansBothKinds: Bool = false, usesTMDbScores: Bool = false) {
         self.spansBothKinds = spansBothKinds
+        self.usesTMDbScores = usesTMDbScores
         self.kind = kind
         self.ordering = ordering
         self.period = period
@@ -131,7 +136,7 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case kind, ordering, period, genres, keywords, excludedKeywords, minimumScore, maximumScore, minimumVotes, language
         case minimumRuntime, maximumRuntime, releasedFrom, releasedTo, providers, region, cast, crew, companies, excludedGenres
-        case spansBothKinds
+        case spansBothKinds, usesTMDbScores
     }
 
     /// Every key is optional. An unknown `kind`, `ordering` or `period` falls back to its default, so a file from another version still
@@ -159,7 +164,8 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
             crew: try container.decodeIfPresent([Named].self, forKey: .crew) ?? [],
             companies: try container.decodeIfPresent([Named].self, forKey: .companies) ?? [],
             excludedGenres: try container.decodeIfPresent([Named].self, forKey: .excludedGenres) ?? [],
-            spansBothKinds: try container.decodeIfPresent(Bool.self, forKey: .spansBothKinds) ?? false)
+            spansBothKinds: try container.decodeIfPresent(Bool.self, forKey: .spansBothKinds) ?? false,
+            usesTMDbScores: try container.decodeIfPresent(Bool.self, forKey: .usesTMDbScores) ?? false)
     }
 
     /// Writes the keys the synthesized encoding wrote. `excludedGenres` is written only when it has genres, so a list that leaves none
@@ -187,6 +193,7 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
         try container.encode(companies, forKey: .companies)
         if !excludedGenres.isEmpty { try container.encode(excludedGenres, forKey: .excludedGenres) }
         if spansBothKinds { try container.encode(true, forKey: .spansBothKinds) }
+        if usesTMDbScores { try container.encode(true, forKey: .usesTMDbScores) }
     }
 
     /// The excluded genres the list does not name itself. A genre the list asks for is never left out, so the two cannot contradict.

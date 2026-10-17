@@ -33,6 +33,9 @@ public final class HomeViewModel {
     private var itemSeeds: [String: UInt64] = [:]
     /// The widgets as saved, by id, before any shuffle or random source changed what Home shows: what a widget's export shares.
     public private(set) var layoutWidgets: [String: HomeWidget] = [:]
+    /// The photo of each genre tile without a picture of its own, by `tilePhotoKey`: the artwork of a title in its genre, a different title
+    /// for each tile of a widget. A tile without one yet shows its colours.
+    public private(set) var tilePhotos: [String: URL] = [:]
     /// In-progress titles, newest first (`LibraryViewModel.continueWatching(from:)`).
     public private(set) var continueWatching: [WatchProgress] = []
     public enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
@@ -94,7 +97,9 @@ public final class HomeViewModel {
         let previous = sections
         sections = widgets.map { HomeViewModel.startingSection(for: $0, previous: previous, known: known) }
         phase = (saved == nil && widgets.isEmpty) ? .noCatalogs : .ready
+        let missingPhotos = await showKnownTilePhotos(for: widgets, generation: current)
         await loadRows(generation: current)
+        await loadTilePhotos(missingPhotos, widgets: widgets, generation: current)
     }
 
     /// Forgets every cached page, then loads again. The rows keep what they show until the new items arrive.
@@ -353,6 +358,115 @@ public final class HomeViewModel {
         guard await content.issue(with: row.source) == nil else { return nil }
         let items = await content.lastKnownItems(for: row.source, limit: row.limit)
         return seed.flatMap { seed in items.map { $0.shuffled(seed: seed) } } ?? items
+    }
+
+    // MARK: Genre tile photos
+
+    /// The key of a tile's photo in `tilePhotos`. It names the tile's sources too, so a tile edited to another genre never shows the old
+    /// genre's photo. Only for this run of the app: the photos are not saved.
+    nonisolated public static func tilePhotoKey(widgetID: String, tile: CollectionItem) -> String {
+        "\(widgetID)/\(tile.id)/\(tile.sources.hashValue)"
+    }
+
+    /// Whether a collection tile stands for a genre and has no picture of its own: every source is a catalog filtered to a genre, or a
+    /// TMDb list of named genres.
+    nonisolated static func isGenreTile(_ tile: CollectionItem) -> Bool {
+        tile.imageURL == nil && !tile.sources.isEmpty && tile.sources.allSatisfy { source in
+            switch source {
+            case .addonCatalog(let reference): return reference.genre?.isEmpty == false
+            case .tmdbDiscover(let query): return !query.genres.isEmpty
+            case .traktList, .traktFeed, .unsupported: return false
+            }
+        }
+    }
+
+    /// A photo for each tile, in order, from `items` by tile id: the artwork of the first title no earlier tile shows, the backdrop for a
+    /// wide or square tile and the poster for a poster tile. A tile whose titles have no artwork left gets none.
+    nonisolated static func tilePhotos(for tiles: [CollectionItem], items: [String: [MetaPreview]]) -> [String: URL] {
+        var shownTitles = Set<String>()
+        var shownPhotos = Set<URL>()
+        var photos: [String: URL] = [:]
+        for tile in tiles where photos[tile.id] == nil {
+            for item in items[tile.id] ?? [] {
+                guard let photo = tile.imageAspect == .poster ? item.poster : item.background,
+                      !shownTitles.contains(item.identity), !shownPhotos.contains(photo) else { continue }
+                photos[tile.id] = photo
+                shownTitles.insert(item.identity)
+                shownPhotos.insert(photo)
+                break
+            }
+        }
+        return photos
+    }
+
+    /// Gives every genre tile of the collections a photo from the titles last loaded for it, which asks nothing of the network. Returns the
+    /// tiles nothing was ever loaded for, so `loadTilePhotos` can load them once the rows are in. Answers to an older `load()` are dropped.
+    private func showKnownTilePhotos(for widgets: [HomeWidget], generation current: Int) async -> [(widgetID: String, tile: CollectionItem)] {
+        let tiles = widgets.flatMap { widget -> [(widgetID: String, tile: CollectionItem)] in
+            guard case .collection(let items) = widget.content else { return [] }
+            return items.filter(HomeViewModel.isGenreTile).map { (widget.id, $0) }
+        }
+        guard !tiles.isEmpty else { return [] }
+        let known = await HomeViewModel.tileItems(tiles, from: services.widgetContent, fresh: false)
+        guard current == generation, !Task.isCancelled else { return [] }
+        tilePhotos.merge(HomeViewModel.photos(widgets, items: known)) { _, new in new }
+        return tiles.filter { known[HomeViewModel.tilePhotoKey(widgetID: $0.widgetID, tile: $0.tile)] == nil }
+    }
+
+    /// Loads the titles of the tiles nothing was known for, as the tile's grid asks for them, so the grid reuses the page and the next
+    /// launch shows the photo at once from its snapshot. Each tile's photo is picked again with the known titles, so two tiles never share
+    /// a title. Answers to an older `load()` are dropped.
+    private func loadTilePhotos(_ tiles: [(widgetID: String, tile: CollectionItem)], widgets: [HomeWidget], generation current: Int) async {
+        guard !tiles.isEmpty, current == generation, !Task.isCancelled else { return }
+        let content = services.widgetContent
+        let fresh = await HomeViewModel.tileItems(tiles, from: content, fresh: true)
+        guard current == generation, !Task.isCancelled, !fresh.isEmpty else { return }
+        let all = widgets.flatMap { widget -> [(widgetID: String, tile: CollectionItem)] in
+            guard case .collection(let items) = widget.content else { return [] }
+            return items.filter(HomeViewModel.isGenreTile).map { (widget.id, $0) }
+        }
+        var items = await HomeViewModel.tileItems(all, from: content, fresh: false)
+        items.merge(fresh) { _, new in new }
+        guard current == generation, !Task.isCancelled else { return }
+        tilePhotos.merge(HomeViewModel.photos(widgets, items: items)) { _, new in new }
+    }
+
+    /// The photos of every collection's genre tiles, by `tilePhotoKey`, from `items` by the same key.
+    nonisolated private static func photos(_ widgets: [HomeWidget], items: [String: [MetaPreview]]) -> [String: URL] {
+        var photos: [String: URL] = [:]
+        for widget in widgets {
+            guard case .collection(let tiles) = widget.content else { continue }
+            let genreTiles = tiles.filter(isGenreTile)
+            var byTile: [String: [MetaPreview]] = [:]
+            for tile in genreTiles { byTile[tile.id] = items[tilePhotoKey(widgetID: widget.id, tile: tile)] }
+            let picked = tilePhotos(for: genreTiles, items: byTile)
+            for tile in genreTiles { photos[tilePhotoKey(widgetID: widget.id, tile: tile)] = picked[tile.id] }
+        }
+        return photos
+    }
+
+    /// The titles behind each tile, by `tilePhotoKey`, loaded concurrently: the last-known first page of a one-source tile, or a fresh load
+    /// asked as the tile's grid asks it. A tile whose source cannot load or fails has none.
+    nonisolated private static func tileItems(_ tiles: [(widgetID: String, tile: CollectionItem)], from content: WidgetContentService,
+                                              fresh: Bool) async -> [String: [MetaPreview]] {
+        await withTaskGroup(of: (String, [MetaPreview]).self, returning: [String: [MetaPreview]].self) { group in
+            for (widgetID, tile) in tiles {
+                group.addTask {
+                    let key = tilePhotoKey(widgetID: widgetID, tile: tile)
+                    if tile.sources.count > 1 {
+                        guard fresh else { return (key, []) }
+                        return (key, (try? await content.items(for: tile.sources, limit: CatalogListViewModel.mergedLimit)) ?? [])
+                    }
+                    let source = tile.sources[0]
+                    guard await content.issue(with: source) == nil else { return (key, []) }
+                    if !fresh { return (key, await content.lastKnownItems(for: source, limit: CatalogListViewModel.pageSize) ?? []) }
+                    return (key, (try? await content.items(for: source, limit: CatalogListViewModel.pageSize, skip: 0)) ?? [])
+                }
+            }
+            var items: [String: [MetaPreview]] = [:]
+            for await (key, list) in group where !list.isEmpty { items[key] = list }
+            return items
+        }
     }
 
     /// A row widget with Better Posters turned on or off.

@@ -66,7 +66,7 @@ public struct DescribedSearch: Sendable, Equatable {
     }
 
     /// The TMDb query, with the moods given as the keywords TMDb found for them. Genres TMDb does not have for the kind are dropped; a
-    /// score asks for enough votes that the score means something. Pure: nothing is requested.
+    /// score asks for enough votes that the score means something, both TMDb's own. Pure: nothing is requested.
     public func query(keywords: [TMDbDiscoverQuery.Named]) -> TMDbDiscoverQuery {
         let kind = kind ?? .movie
         func named(_ names: [String]) -> [TMDbDiscoverQuery.Named] {
@@ -92,7 +92,8 @@ public struct DescribedSearch: Sendable, Equatable {
                                  minimumVotes: minimumScore == nil ? 50 : 300,
                                  minimumRuntime: minimumRuntime, maximumRuntime: maximumRuntime,
                                  releasedFrom: earliest.map { "\($0)-01-01" }, releasedTo: latest.map { "\($0)-12-31" },
-                                 excludedGenres: named(excludedGenres), spansBothKinds: self.kind == nil && sameForBoth)
+                                 excludedGenres: named(excludedGenres), spansBothKinds: self.kind == nil && sameForBoth,
+                                 usesTMDbScores: true)
     }
 }
 

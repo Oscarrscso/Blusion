@@ -40,10 +40,12 @@ public final class WidgetContentService: Sendable {
     /// The country TMDb watch providers are looked up in when a discover list names none.
     private let region: @Sendable () -> String
     private let cache = WidgetItemCache()
+    /// IMDb's ratings on the device, which a discover widget's score and votes are checked against.
+    private let imdb: (any IMDbDataset)?
 
     public init(registry: AddonRegistry, client: AddonClient, settings: any SettingsStore,
                 trakt: TraktClient? = nil, account: TraktAccount? = nil, snapshots: (any WidgetSnapshotStore)? = nil,
-                now: @escaping @Sendable () -> Date = { Date() },
+                imdb: (any IMDbDataset)? = nil, now: @escaping @Sendable () -> Date = { Date() },
                 region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }) {
         self.registry = registry
         self.client = client
@@ -51,6 +53,7 @@ public final class WidgetContentService: Sendable {
         self.account = account
         self.trakt = trakt ?? TraktClient(client: client, account: account)
         self.snapshots = snapshots
+        self.imdb = imdb
         self.now = now
         self.region = region
     }
@@ -186,7 +189,7 @@ public final class WidgetContentService: Sendable {
             guard let token = await tmdbReadToken() else { throw WidgetSourceError.needsTMDbToken }
             do {
                 return try await TMDbRatings(client: client, readAccessToken: token)
-                    .discoverItems(query, limit: limit, skip: skip, defaultRegion: region(), today: now())
+                    .discoverItems(query, limit: limit, skip: skip, defaultRegion: region(), today: now(), imdb: imdb)
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }

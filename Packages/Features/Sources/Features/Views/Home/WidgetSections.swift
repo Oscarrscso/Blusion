@@ -175,6 +175,8 @@ struct UnsupportedWidgetRow: View {
 struct CollectionRow: View {
     let widget: HomeWidget
     let items: [CollectionItem]
+    /// The photos of genre tiles without a picture of their own, by `HomeViewModel.tilePhotoKey`.
+    var photos: [String: URL] = [:]
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -184,7 +186,8 @@ struct CollectionRow: View {
                      onSeeAll: widget.id == "auto.genres" ? { router.showSearchBrowse() } : nil) {
                 ForEach(items) { item in
                     NavigationLink(value: CatalogListRequest(title: item.title, sources: item.sources, presentation: WidgetPresentation())) {
-                        CollectionTile(title: item.title, imageURL: item.imageURL, aspect: item.imageAspect.cardAspect, hideTitle: item.hideTitle)
+                        CollectionTile(title: item.title, imageURL: item.imageURL ?? photos[HomeViewModel.tilePhotoKey(widgetID: widget.id, tile: item)],
+                                       aspect: item.imageAspect.cardAspect, hideTitle: item.hideTitle)
                     }
                     .buttonStyle(PressableCardStyle())
                 }

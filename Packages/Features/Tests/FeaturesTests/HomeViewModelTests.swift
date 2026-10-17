@@ -336,7 +336,7 @@ private let savedContinueWatching = HomeWidget(id: "cw", title: "Continue", cont
         let model = HomeViewModel(services: try await services([cinemeta], transport: transport))
         await model.load()
         let first = transport.callCount
-        #expect(first == 2, "the spotlight shares its catalog request with the matching row")
+        #expect(first == 6, "the spotlight shares its catalog request with the matching row, and each of the four genre tiles asks once for its photo")
         await model.load()
         #expect(transport.callCount == first, "a second load within the cache TTL is served from memory")
         await model.refresh()

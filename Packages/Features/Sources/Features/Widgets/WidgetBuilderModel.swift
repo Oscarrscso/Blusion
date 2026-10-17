@@ -222,9 +222,10 @@ public final class WidgetBuilderModel {
             clauses.append(Self.clause("from", [Self.token(.period, Self.periodPhrase(period))]))
         }
         if let text = Self.releaseText(query) { clauses.append(Self.clause("released", [Self.token(.release, text)])) }
-        if let text = Self.scoreText(query) { clauses.append(Self.clause("rated", [Self.token(.score, text)])) }
+        // A widget's score and votes are IMDb's (see `TMDbDiscoverQuery.usesTMDbScores`), and the sentence says so.
+        if let text = Self.scoreText(query) { clauses.append(Self.clause("rated", [Self.token(.score, text + " on IMDb")])) }
         if query.isSet(.votes), let votes = query.minimumVotes {
-            clauses.append(Self.clause("with", [Self.token(.votes, "\(votes)+ votes")]))
+            clauses.append(Self.clause("with", [Self.token(.votes, "\(votes)+ IMDb votes")]))
         }
         if let code = query.language { clauses.append(Self.clause("in", [Self.token(.language, Self.languageName(code))])) }
         if let text = Self.runtimeText(query) { clauses.append(Self.clause("running", [Self.token(.runtime, text)])) }
@@ -322,8 +323,8 @@ public final class WidgetBuilderModel {
             filterPill(.genres, "Genres", "theatermasks", .genres, Self.listValue(query.genres, none: "Any")),
             filterPill(.keywords, "Keywords", "tag", .keywords, Self.listValue(query.keywords, none: "Any")),
             filterPill(.excludedKeywords, "Exclude", "tag.slash", .excludedKeywords, Self.listValue(query.excludedKeywords, none: "None")),
-            filterPill(.score, "Score", "star", .score, Self.scoreText(query) ?? "Any"),
-            filterPill(.votes, "Votes", "person.3", .votes, query.minimumVotes.map { "\($0)+" } ?? "Any"),
+            filterPill(.score, "IMDb Score", "star", .score, Self.scoreText(query) ?? "Any"),
+            filterPill(.votes, "IMDb Votes", "person.3", .votes, query.minimumVotes.map { "\($0)+" } ?? "Any"),
             filterPill(.language, "Language", "globe", .language, query.language.map(Self.languageName) ?? "Any"),
             filterPill(.runtime, "Runtime", "clock", .runtime, Self.runtimeText(query) ?? "Any"),
             filterPill(.release, "Release", "calendar.badge.clock", .release, Self.releaseText(query) ?? "Any"),
@@ -431,6 +432,11 @@ public final class WidgetBuilderModel {
         guard let current = query else { return }
         var edited = current
         change(&edited)
+        if edited.minimumScore != current.minimumScore || edited.maximumScore != current.maximumScore
+            || edited.minimumVotes != current.minimumVotes {
+            // A score or vote count set here is IMDb's, as the editor says, even on a list a search made with TMDb's.
+            edited.usesTMDbScores = false
+        }
         let periodChanged = edited.period != current.period
         let releaseChanged = edited.releasedFrom != current.releasedFrom || edited.releasedTo != current.releasedTo
         let releaseIsSet = edited.releasedFrom != nil || edited.releasedTo != nil
