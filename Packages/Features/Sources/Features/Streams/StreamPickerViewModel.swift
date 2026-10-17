@@ -307,8 +307,12 @@ public final class StreamPickerViewModel {
     private func automaticWaitTarget() async -> UUID? {
         guard settings.autoPickWait != .allAddons else { return nil }
         let enabled = await services.registry.addons.filter(\.isEnabled).map(\.id)
-        return AddonSpeedChoice.target(for: settings.autoPickWait, enabled: enabled, results: await services.addonSpeed.results(),
-                                       preferredResolution: settings.preferredResolution)
+        let current = await services.addonSpeed.autoPick()
+        let target = AddonSpeedChoice.target(for: settings.autoPickWait, enabled: enabled, results: await services.addonSpeed.results(),
+                                             preferredResolution: settings.preferredResolution, current: current)
+        // Auto's pick is kept, so the next load only moves from it to an addon that is clearly faster.
+        if settings.autoPickWait == .fastest, target != current { await services.addonSpeed.setAutoPick(target) }
+        return target
     }
 
     /// True once the addon Auto Pick waits for has answered with a stream it can start: one Infuse can take for Auto Pick, any stream

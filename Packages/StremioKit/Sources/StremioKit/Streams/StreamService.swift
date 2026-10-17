@@ -9,12 +9,16 @@ public final class StreamService: Sendable {
     private let sniffConcurrency: Int
     /// Lookups started ahead of the picker (see `prefetch`).
     private let prefetches = StreamPrefetchCache()
+    /// Told how long each addon took to answer, so the speed results learn from real loads (see `AddonSpeedStore`).
+    private let timings: (any StreamTimingRecorder)?
 
-    public init(registry: AddonRegistry, client: AddonClient, sniffer: (any ContainerSniffing)? = nil, sniffConcurrency: Int = 4) {
+    public init(registry: AddonRegistry, client: AddonClient, sniffer: (any ContainerSniffing)? = nil, sniffConcurrency: Int = 4,
+                timings: (any StreamTimingRecorder)? = nil) {
         self.registry = registry
         self.client = client
         self.sniffer = sniffer ?? RangedContainerSniffer(client: client)
         self.sniffConcurrency = max(1, sniffConcurrency)
+        self.timings = timings
     }
 
     /// Addons that will be asked, in the user's order, and the stream of their answers as each arrives. A lookup started by `prefetch` for
@@ -41,10 +45,58 @@ public final class StreamService: Sendable {
     private func fetchFresh(_ request: StreamRequest) async -> (asked: [AddonSummary], responses: AsyncStream<AddonResponse<[AddonStream]>>) {
         let addons = await registry.addons(for: .stream, type: request.type, id: request.id)
         let client = self.client
+        let timings = self.timings
+        // Each answer is timed here, once, as it arrives: a prefetched lookup that the picker claims later is not timed again. The time is
+        // recorded on a task of its own, so no answer waits on it. An answer with no streams says nothing about the addon's speed for
+        // titles it has, and is not counted, nor is a load made while offline. A load called off after `cutOffSample` counts with the
+        // time it had run: the addon took at least that long, and leaving it out would make a slow addon look fast.
         let responses = FanOut.run(over: addons) { addon in
-            try await client.streams(base: addon.baseURL, type: request.type, id: request.id)
+            let clock = ContinuousClock()
+            let started = clock.now
+            do {
+                let streams = try await client.streams(base: addon.baseURL, type: request.type, id: request.id)
+                if let timings, !streams.isEmpty {
+                    let elapsed = started.duration(to: clock.now)
+                    let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+                    Task.detached(priority: .utility) {
+                        let sharpest = streams.compactMap { StreamQuality.parse($0).resolution }.max()
+                        await timings.record(addon.id, seconds: seconds, resolution: sharpest)
+                    }
+                }
+                return streams
+            } catch {
+                if let timings {
+                    let elapsed = started.duration(to: clock.now)
+                    if Task.isCancelled || StreamService.isCancellation(error) {
+                        if elapsed >= StreamService.cutOffSample {
+                            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+                            Task.detached(priority: .utility) { await timings.record(addon.id, seconds: seconds, resolution: nil) }
+                        }
+                    } else if StreamService.countsAsFailure(error) {
+                        Task.detached(priority: .utility) { await timings.record(addon.id, seconds: nil, resolution: nil) }
+                    }
+                }
+                throw error
+            }
         }
         return (addons.map(\.summary), responses)
+    }
+
+    /// A load called off after running this long is counted with the time it ran (see `fetchFresh`).
+    static let cutOffSample: Duration = .seconds(1)
+
+    static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || AddonError.from(error) == .cancelled
+    }
+
+    /// Whether a failed answer counts against the addon: not when the load was called off, the device is offline, or the addon simply has
+    /// nothing for this title.
+    static func countsAsFailure(_ error: Error) -> Bool {
+        if error is CancellationError { return false }
+        switch AddonError.from(error) {
+        case .cancelled, .offline, .notFound: return false
+        default: return true
+        }
     }
 
     /// Probes `targets` with at most `sniffConcurrency` requests in flight and yields each result as it completes.

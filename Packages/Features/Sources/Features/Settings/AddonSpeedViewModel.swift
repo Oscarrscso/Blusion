@@ -63,7 +63,8 @@ public final class AddonSpeedViewModel {
         let enabled = await services.registry.addons.filter(\.isEnabled)
         let results = await services.addonSpeed.results()
         rows = enabled.map { Row(addon: $0.summary, result: results[$0.id]) }
-        fastest = AddonSpeedChoice.fastest(enabled: enabled.map(\.id), results: results, preferredResolution: preferredResolution)
+        fastest = AddonSpeedChoice.fastest(enabled: enabled.map(\.id), results: results, preferredResolution: preferredResolution,
+                                           current: await services.addonSpeed.autoPick())
     }
 
     // MARK: Words

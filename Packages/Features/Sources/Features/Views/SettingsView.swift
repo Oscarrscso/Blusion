@@ -717,7 +717,7 @@ private struct AddonSpeedSettingsPage: View {
                 if isOnline {
                     Text("""
                         Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. \
-                        Every request is a real lookup, so the test only runs when you start it.
+                        Every request is a real lookup, so the test only runs when you start it. Your own loads keep the times up to date.
                         """)
                 } else {
                     Text("You're offline. Connect to test your addons.")

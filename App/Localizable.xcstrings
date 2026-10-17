@@ -1134,13 +1134,13 @@
         }
       }
     },
-    "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it.": {
+    "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it. Your own loads keep the times up to date.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it."
+            "value": "Every addon is asked at the same time, as when you press Play, each for three films and three episodes in turn. Every request is a real lookup, so the test only runs when you start it. Your own loads keep the times up to date."
           }
         }
       }

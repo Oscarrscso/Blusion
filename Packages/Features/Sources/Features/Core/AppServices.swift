@@ -58,7 +58,9 @@ public struct AppServices: Sendable {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
-        self.streams = streams ?? StreamService(registry: registry, client: client)
+        let addonSpeed = addonSpeed ?? InMemoryAddonSpeedStore()
+        self.addonSpeed = addonSpeed
+        self.streams = streams ?? StreamService(registry: registry, client: client, timings: addonSpeed)
         self.subtitles = subtitles ?? SubtitleService(registry: registry, client: client)
         let settings = settings ?? InMemorySettingsStore()
         self.settings = settings
@@ -79,7 +81,6 @@ public struct AppServices: Sendable {
         self.heroMeta = heroMeta ?? HeroMetaStore(browse: self.browse)
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
-        self.addonSpeed = addonSpeed ?? InMemoryAddonSpeedStore()
         self.speedTester = speedTester ?? AddonSpeedTester(registry: registry)
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
         self.traktAccount = traktAccount
