@@ -36,6 +36,7 @@ public struct StreamFacts: Sendable, Equatable {
         add("Container", item.container.map { $0.fileExtension.uppercased() })
         add("Addon", item.addon.name)
         add("Also from", item.alsoProvidedBy.isEmpty ? nil : item.alsoProvidedBy.map(\.name).joined(separator: ", "))
+        add("TorBox", TorBoxCache.detect(in: stream).map { $0 == .cached ? "Cached, plays at once" : "Not cached, fetched first" })
         if case .torrent(let hash, let fileIndex, let sources) = stream.source {
             add("Info hash", hash, isIdentifier: true)
             add("File index", fileIndex.map { String($0) })

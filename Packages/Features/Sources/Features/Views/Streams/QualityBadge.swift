@@ -58,11 +58,34 @@ struct SpatialAudioBadge: View {
     }
 }
 
+/// The TorBox mark as its symbol alone, for a row with no room for its letters. VoiceOver still says what it means.
+struct TorBoxMark: View {
+    let cache: TorBoxCache
+
+    var body: some View {
+        Image(systemName: cache == .cached ? "bolt.fill" : "hourglass")
+            .qualityBadgeChrome(tint: cache == .cached ? QualityBadge.cachedGreen : .white)
+            .accessibilityLabel(Text(verbatim: cache == .cached ? "Cached on TorBox" : "Not cached on TorBox"))
+    }
+}
+
 extension QualityBadge {
     /// The champagne of a 4K picture: the one premium accent on the list.
     static let premium = Color(red: 0.93, green: 0.82, blue: 0.62)
     /// A cool lilac for high dynamic range, quieter than the accent.
     static let dynamicRange = Color(red: 0.80, green: 0.76, blue: 0.98)
+    /// A soft green for a file TorBox already holds.
+    static let cachedGreen = Color(red: 0.62, green: 0.88, blue: 0.68)
+
+    /// Whether TorBox holds the stream's file: its name beside a bolt when it does, beside an hourglass when TorBox would fetch it
+    /// first. "TB", as the addons write it, where the row is narrow (iPhone in portrait).
+    static func torBox(_ cache: TorBoxCache, compact: Bool) -> QualityBadge {
+        let title = compact ? "TB" : "TorBox"
+        switch cache {
+        case .cached: return QualityBadge(title, symbol: "bolt.fill", tint: cachedGreen, spokenAs: "Cached on TorBox")
+        case .notCached: return QualityBadge(title, symbol: "hourglass", spokenAs: "Not cached on TorBox")
+        }
+    }
 
     static func resolution(_ label: String, is4K: Bool) -> QualityBadge {
         QualityBadge(label, symbol: is4K ? "4k.tv" : "tv", tint: is4K ? premium : .white)

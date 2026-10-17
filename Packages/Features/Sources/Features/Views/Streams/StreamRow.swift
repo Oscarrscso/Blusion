@@ -3,7 +3,7 @@ import SwiftUI
 import StremioKit
 
 /// One stream as a card, in the title page's design: a "Best match" label for the stream Auto Pick recommends, small badges for sharpness,
-/// REMUX, source and, where iOS plays it over AirPods, Dolby Atmos. A web release's streaming service sits in a box to the left of the
+/// REMUX, source, where iOS plays it over AirPods, Dolby Atmos, and whether TorBox holds the file already. A web release's streaming service sits in a box to the left of the
 /// release name, which is in up to two lines, with one grey line of facts (size, codec, audio). A note appears when the stream opens
 /// elsewhere or Blusion cannot play it. A round mark at the trailing edge says what a tap does. The technical details fold away in a
 /// section of their own, so tapping the card always plays.
@@ -13,8 +13,17 @@ struct StreamRow: View {
     var isBest = false
     /// True when the release name says REMUX, as the stream's parsed quality reads it.
     var isRemux = false
+    /// Whether TorBox holds this stream's file already, as the addon marks it, read once. Nil for a stream that is not on TorBox.
+    private let torBox: TorBoxCache?
     /// Compact width (iPhone in portrait) takes the short badge words: "RMX" and "DV".
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    init(item: RankedStream, isBest: Bool = false, isRemux: Bool = false) {
+        self.item = item
+        self.isBest = isBest
+        self.isRemux = isRemux
+        self.torBox = TorBoxCache.detect(in: item.stream)
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
@@ -28,18 +37,10 @@ struct StreamRow: View {
                         .accessibilityIdentifier("stream.bestMatch")
                 }
                 if hasBadges {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        if let label = item.quality.resolutionLabel {
-                            QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
-                        }
-                        if item.quality.isHDR || item.quality.isDolbyVision {
-                            QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision, compact: horizontalSizeClass == .compact)
-                        }
-                        if isRemux { QualityBadge.remux(compact: horizontalSizeClass == .compact) }
-                        if let source = item.quality.source {
-                            QualityBadge.source(source, is4K: (item.quality.resolution ?? 0) >= 2160)
-                        }
-                        if playsAtmosOverAirPods { SpatialAudioBadge() }
+                    // The TorBox mark gives up its letters before the row runs out of room, so no badge is cut.
+                    ViewThatFits(in: .horizontal) {
+                        badges(torBoxTitled: true)
+                        badges(torBoxTitled: false)
                     }
                 }
                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
@@ -98,10 +99,33 @@ struct StreamRow: View {
         return true
     }
 
+    private func badges(torBoxTitled: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            if let label = item.quality.resolutionLabel {
+                QualityBadge.resolution(label, is4K: (item.quality.resolution ?? 0) >= 2160)
+            }
+            if item.quality.isHDR || item.quality.isDolbyVision {
+                QualityBadge.hdr(dolbyVision: item.quality.isDolbyVision, compact: horizontalSizeClass == .compact)
+            }
+            if isRemux { QualityBadge.remux(compact: horizontalSizeClass == .compact) }
+            if let source = item.quality.source {
+                QualityBadge.source(source, is4K: (item.quality.resolution ?? 0) >= 2160)
+            }
+            if playsAtmosOverAirPods { SpatialAudioBadge() }
+            if let torBox {
+                if torBoxTitled {
+                    QualityBadge.torBox(torBox, compact: horizontalSizeClass == .compact)
+                } else {
+                    TorBoxMark(cache: torBox)
+                }
+            }
+        }
+    }
+
     /// Whether any badge applies, so the badge row is left out for a stream with none and takes no spacing.
     private var hasBadges: Bool {
         item.quality.resolutionLabel != nil || item.quality.isHDR || item.quality.isDolbyVision || isRemux || item.quality.source != nil
-            || playsAtmosOverAirPods
+            || playsAtmosOverAirPods || torBox != nil
     }
 
     /// Keep the release name, not the badges' resolution/HDR: the file name when the addon gives one, else the name of the file it links to.
