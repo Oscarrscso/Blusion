@@ -13,6 +13,8 @@ struct DetailReviews: View {
     }
 
     let reviews: [TMDbReview]
+    /// What several of the reviews praise and complain about, from their text, under the heading. Nil shows nothing.
+    var consensus: String?
     let width: CGFloat
     let contentMargin: CGFloat
     @State private var reviewSort = ReviewSort.highestRated
@@ -46,6 +48,22 @@ struct DetailReviews: View {
                 .accessibilityIdentifier("detail.reviews.sort")
             }
             .padding(.horizontal, contentMargin)
+            if let consensus {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
+                    Image(systemName: "sparkles")
+                        .font(.caption2.weight(.semibold))
+                        .accessibilityHidden(true)
+                    Text(consensus)
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, contentMargin)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("What reviewers say: \(consensus)")
+                .accessibilityIdentifier("detail.reviews.consensus")
+                .transition(.opacity)
+            }
             ScrollViewReader { proxy in
                 // A plain row, not a lazy one: a few dozen reviews are all built, so the shelf is exactly as tall as its tallest card
                 // and grows and shrinks with an opened card's own animation.

@@ -191,7 +191,10 @@ struct DetailView: View {
                                 }
                                 VStack(alignment: .leading, spacing: metrics.titleSectionSpacing) {
                                     if !model.reviews.isEmpty {
-                                        DetailReviews(reviews: model.reviews, width: geometry.size.width, contentMargin: contentMargin)
+                                        DetailReviews(reviews: model.reviews, consensus: model.reviewConsensus, width: geometry.size.width,
+                                                      contentMargin: contentMargin)
+                                            // The reviews' consensus is read once they are in, and again only for a different set.
+                                            .task(id: model.reviews.map(\.id)) { await model.loadReviewConsensus() }
                                     }
                                     DetailCredits(model: model, contentMargin: contentMargin, pageWidth: geometry.size.width)
                                 }
@@ -207,6 +210,8 @@ struct DetailView: View {
                     .padding(.bottom, Theme.Spacing.xxl)
                     // The panel's appearance and disappearance moves the content below it, rather than jumping.
                     .animation(.snappy(duration: 0.35), value: model.trailer.showsPanel)
+                    // The reviews' consensus line arrives seconds after them: it fades in and the content below moves down with it.
+                    .animation(.smooth(duration: 0.35), value: model.reviewConsensus)
                     // The system draws the held episode and its menu above the page, so they stay sharp.
                     .blur(radius: isHoldingEpisode ? Self.heldBlur : 0)
                     .animation(.easeOut(duration: 0.2), value: isHoldingEpisode)

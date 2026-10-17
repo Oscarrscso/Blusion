@@ -37,6 +37,9 @@ public final class DetailViewModel {
     public private(set) var tmdbArtwork: TMDbArtwork?
     public private(set) var isLoadingArtwork = true
     public private(set) var reviews: [TMDbReview] = []
+    /// What several of the TMDb reviews praise and complain about, from their own text, by the on-device model. Nil until it has read
+    /// them, with too few reviews, or where Apple Intelligence is not available.
+    public private(set) var reviewConsensus: String?
     /// The YouTube trailers and teasers TMDb lists for the title. Empty until TMDb answers, or when no read token is saved.
     public private(set) var tmdbVideos: [TMDbVideo] = []
     /// The title's preview from Apple's iTunes store: a direct file the app plays. Nil until the search answers, or when the store has none.
@@ -204,6 +207,15 @@ public final class DetailViewModel {
         let cast = Array(titleCredits.cast.prefix(20))
         let castIDs = Set(cast.map(\.id))
         return cast + titleCredits.keyCrew.filter { !castIDs.contains($0.id) }
+    }
+
+    /// Sums up the TMDb reviews the page has, once per set of reviews. The page asks once its reviews are in.
+    public func loadReviewConsensus(using summarizer: (any ReviewSummarizing)? = nil) async {
+        // Another set of reviews never keeps the last set's line while its own is read.
+        reviewConsensus = ReviewConsensusReader.cache[reviews.map(\.id)]
+        let line = await ReviewConsensusReader.line(for: reviews, using: summarizer ?? ReviewConsensusReader.available())
+        guard !Task.isCancelled else { return }
+        reviewConsensus = line
     }
 
     private func loadReviews() async {
