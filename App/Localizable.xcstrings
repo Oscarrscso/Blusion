@@ -3191,6 +3191,39 @@
         }
       }
     },
+    "Shuffle widget order too": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuffle widget order too"
+          }
+        }
+      }
+    },
+    "Shuffles the order of this widget's titles. An order stays until its next shuffle. Like Other Widgets follows the Shuffle setting on the widgets page.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuffles the order of this widget's titles. An order stays until its next shuffle. Like Other Widgets follows the Shuffle setting on the widgets page."
+          }
+        }
+      }
+    },
+    "Shuffles the titles in every widget that has no shuffle of its own, and with Shuffle widget order, the order of Home's widgets; the showcase and Continue Watching keep their places. An order stays until its next shuffle.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shuffles the titles in every widget that has no shuffle of its own, and with Shuffle widget order, the order of Home's widgets; the showcase and Continue Watching keep their places. An order stays until its next shuffle."
+          }
+        }
+      }
+    },
     "Sign In": {
       "extractionState": "manual",
       "localizations": {

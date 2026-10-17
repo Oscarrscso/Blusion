@@ -56,6 +56,7 @@ public struct DataResetService: Sendable {
             await services.widgetContent.invalidate()
         case .widgets:
             await services.widgets.save(nil)
+            await services.widgetShuffle.clear()
             await services.widgetContent.forgetEverything()
         case .addons:
             for addon in await services.registry.addons { try? await services.registry.remove(id: addon.id) }

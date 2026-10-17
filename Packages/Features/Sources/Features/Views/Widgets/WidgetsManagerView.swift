@@ -282,6 +282,39 @@ struct WidgetsManagerView: View {
         }
     }
 
+    /// Shuffle for every widget without its own (see a widget's Shuffle setting), and for the order of Home's widgets.
+    private var shuffleSettings: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack {
+                Text("Shuffle").font(.title3.weight(.semibold))
+                Spacer(minLength: 0)
+                Picker("Shuffle", selection: Binding(get: { model.shuffle.schedule }, set: { schedule in
+                    var settings = model.shuffle
+                    settings.schedule = schedule
+                    Task { await model.setShuffle(settings) }
+                })) {
+                    ForEach(WidgetShuffle.choices, id: \.self) { Text(WidgetBuilderModel.shuffleText($0)).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityIdentifier("widgets.shuffle")
+            }
+            Toggle("Shuffle widget order too", isOn: Binding(get: { model.shuffle.shufflesOrder }, set: { on in
+                var settings = model.shuffle
+                settings.shufflesOrder = on
+                Task { await model.setShuffle(settings) }
+            }))
+            .disabled(model.shuffle.schedule == .off)
+            .accessibilityIdentifier("widgets.shuffleOrder")
+            Text("""
+                Shuffles the titles in every widget that has no shuffle of its own, and with Shuffle widget order, the order of Home's \
+                widgets; the showcase and Continue Watching keep their places. An order stays until its next shuffle.
+                """)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     // MARK: Grid
 
     private var grid: some View {
@@ -361,6 +394,7 @@ struct WidgetsManagerView: View {
                 if model.catalogChoices.isEmpty {
                     Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").font(.footnote).foregroundStyle(.secondary)
                 }
+                shuffleSettings
                 importAndExport
                 if model.isCustomised {
                     Button("Use Automatic Layout", role: .destructive) { showsReset = true }
@@ -387,6 +421,7 @@ struct WidgetsManagerView: View {
             ToolbarItem(placement: .topBarTrailing) { addMenu }
         }
         .task { await model.load() }
+        .task { await model.loadShuffle() }
         .onAppear { syncOrder() }
         // The saved list has changed: the grid follows it, unless a card is being dragged. A change that makes the drag's order the saved
         // one ends the drag's own order.

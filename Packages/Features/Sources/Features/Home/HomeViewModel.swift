@@ -29,6 +29,8 @@ public final class HomeViewModel {
 
     public private(set) var phase: Phase = .loading
     public private(set) var sections: [Section] = []
+    /// The seed each shuffled widget's items take on this opening of Home (see `WidgetShuffling`). A widget without a shuffle has none.
+    private var itemSeeds: [String: UInt64] = [:]
     /// In-progress titles, newest first (`LibraryViewModel.continueWatching(from:)`).
     public private(set) var continueWatching: [WatchProgress] = []
     public enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
@@ -82,7 +84,7 @@ public final class HomeViewModel {
             phase = .noAddons
             return
         }
-        let widgets = saved ?? DefaultWidgets.make(for: addons)
+        let widgets = await shuffled(saved ?? DefaultWidgets.make(for: addons))
         let known = await lastKnownItems(for: widgets)
         guard current == generation, !Task.isCancelled else { return }
         let previous = sections
@@ -107,7 +109,7 @@ public final class HomeViewModel {
         sections[index].state = .loading
         sections[index].isRefreshing = false
         sections[index].issue = nil
-        let result = await HomeViewModel.fetch(id: sectionID, row: row, from: services.widgetContent)
+        let result = await HomeViewModel.fetch(id: sectionID, row: row, from: services.widgetContent, seed: itemSeeds[sectionID])
         guard current == generation, !Task.isCancelled else { return }
         apply(result)
     }
@@ -124,7 +126,9 @@ public final class HomeViewModel {
         let current = sections[index]
         sections[index] = Section(widget: widget, state: current.state, issue: current.issue, isRefreshing: current.isRefreshing)
         isCustomised = true
-        await services.widgets.save(sections.map(\.widget))
+        // Saved in the saved layout's own order: Home may show its widgets shuffled.
+        let saved = await services.widgets.load() ?? sections.map(\.widget)
+        await services.widgets.save(saved.map { $0.id == widget.id ? widget : $0 })
     }
 
     /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
@@ -186,7 +190,9 @@ public final class HomeViewModel {
             // Items from before stay on the copy until its fresh ones arrive, as on the original.
             guard original.isRefreshing, let row = loadingConfiguration(copy.content) else { return }
             let current = generation
-            let result = await HomeViewModel.fetch(id: copy.id, row: row, from: services.widgetContent)
+            // The copy takes the original's order until Home next opens.
+            itemSeeds[copy.id] = itemSeeds[sectionID]
+            let result = await HomeViewModel.fetch(id: copy.id, row: row, from: services.widgetContent, seed: itemSeeds[copy.id])
             guard current == generation, !Task.isCancelled else { return }
             apply(result)
         }
@@ -271,13 +277,14 @@ public final class HomeViewModel {
     /// Loads every hero and row at once; each one fills in as its answer arrives. Answers to an older `load()` are dropped.
     private func loadRows(generation current: Int) async {
         let content = services.widgetContent
+        let seeds = itemSeeds
         var rows: [(id: String, row: RowConfiguration)] = []
         for section in sections {
             if let row = loadingConfiguration(section.widget.content) { rows.append((section.id, row)) }
         }
         await withTaskGroup(of: RowResult.self) { group in
             for (id, row) in rows {
-                group.addTask { await HomeViewModel.fetch(id: id, row: row, from: content) }
+                group.addTask { await HomeViewModel.fetch(id: id, row: row, from: content, seed: seeds[id]) }
             }
             for await result in group where current == generation {
                 apply(result)
@@ -288,13 +295,14 @@ public final class HomeViewModel {
     /// The last items of every hero and row, looked up concurrently before any network load starts. Rows with nothing known are left out.
     private func lastKnownItems(for widgets: [HomeWidget]) async -> [String: [MetaPreview]] {
         let content = services.widgetContent
+        let seeds = itemSeeds
         var rows: [(id: String, row: RowConfiguration)] = []
         for widget in widgets {
             if let row = loadingConfiguration(widget.content) { rows.append((widget.id, row)) }
         }
         return await withTaskGroup(of: (String, [MetaPreview]?).self, returning: [String: [MetaPreview]].self) { group in
             for (id, row) in rows {
-                group.addTask { (id, await HomeViewModel.knownItems(for: row, from: content)) }
+                group.addTask { (id, await HomeViewModel.knownItems(for: row, from: content, seed: seeds[id])) }
             }
             var known: [String: [MetaPreview]] = [:]
             for await (id, items) in group {
@@ -315,14 +323,16 @@ public final class HomeViewModel {
         sections[index].issue = result.issue
     }
 
-    /// The items of one row. The issue is checked first, so a source that cannot load (say, a removed addon) never answers from the cache.
-    nonisolated private static func fetch(id: String, row: RowConfiguration, from content: WidgetContentService) async -> RowResult {
+    /// The items of one row, in the order `seed` gives when the row is shuffled. The issue is checked first, so a source that cannot load
+    /// (say, a removed addon) never answers from the cache.
+    nonisolated private static func fetch(id: String, row: RowConfiguration, from content: WidgetContentService,
+                                          seed: UInt64? = nil) async -> RowResult {
         if let issue = await content.issue(with: row.source) {
             return RowResult(id: id, state: .loaded([]), issue: issue)
         }
         do {
             let items = try await content.items(for: row.source, limit: row.limit, cacheTTL: row.cacheTTL)
-            return RowResult(id: id, state: .loaded(items), issue: nil)
+            return RowResult(id: id, state: .loaded(seed.map(items.shuffled(seed:)) ?? items), issue: nil)
         } catch let error as WidgetSourceError {
             guard case .addon(let addonError) = error else { return RowResult(id: id, state: .loaded([]), issue: error) }
             return RowResult(id: id, state: .failed(addonError), issue: nil)
@@ -332,9 +342,26 @@ public final class HomeViewModel {
     }
 
     /// The items a row can show before its fresh load. A source that cannot load shows nothing, so a removed addon's items never linger.
-    nonisolated private static func knownItems(for row: RowConfiguration, from content: WidgetContentService) async -> [MetaPreview]? {
+    nonisolated private static func knownItems(for row: RowConfiguration, from content: WidgetContentService,
+                                               seed: UInt64?) async -> [MetaPreview]? {
         guard await content.issue(with: row.source) == nil else { return nil }
-        return await content.lastKnownItems(for: row.source, limit: row.limit)
+        let items = await content.lastKnownItems(for: row.source, limit: row.limit)
+        return seed.flatMap { seed in items.map { $0.shuffled(seed: seed) } } ?? items
+    }
+
+    /// The widgets in the order the shuffle settings give for this opening of Home, with each shuffled widget's seed in `itemSeeds`. The
+    /// seeds are saved, so an order lasts until its next time, across launches.
+    private func shuffled(_ widgets: [HomeWidget]) async -> [HomeWidget] {
+        let settings = await services.widgetShuffle.settings()
+        let saved = await services.widgetShuffle.states()
+        var states = saved
+        var random = SystemRandomNumberGenerator()
+        let now = Date()
+        let ordered = WidgetShuffling.ordered(widgets, settings: settings, states: &states, now: now, calendar: .current, random: &random)
+        itemSeeds = WidgetShuffling.itemSeeds(for: ordered, settings: settings, states: &states, now: now, calendar: .current,
+                                              random: &random)
+        if states != saved { await services.widgetShuffle.save(states) }
+        return ordered
     }
 
     /// What a hero or row shows before its fresh load: the items already on screen for the same widget, else its last-known items,

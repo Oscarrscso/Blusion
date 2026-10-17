@@ -39,15 +39,20 @@ public struct RowConfiguration: Sendable, Codable, Equatable, Hashable {
     public var limit: Int
     /// Seconds a loaded page is reused, clamped to 0...86_400 by `init`.
     public var cacheTTL: Int
+    /// When the row's items take a new random order. Nil follows the widgets page's setting (`WidgetShuffleSettings`), which is off
+    /// unless changed. Written only when set, so a saved or imported widget reads as it did.
+    public var shuffle: WidgetShuffle?
 
-    public init(source: WidgetSource, presentation: WidgetPresentation = WidgetPresentation(), limit: Int = 20, cacheTTL: Int = 3600) {
+    public init(source: WidgetSource, presentation: WidgetPresentation = WidgetPresentation(), limit: Int = 20, cacheTTL: Int = 3600,
+                shuffle: WidgetShuffle? = nil) {
         self.source = source
         self.presentation = presentation
         self.limit = min(max(limit, 1), 100)
         self.cacheTTL = min(max(cacheTTL, 0), 86_400)
+        self.shuffle = shuffle
     }
 
-    private enum CodingKeys: String, CodingKey { case source, presentation, limit, cacheTTL }
+    private enum CodingKeys: String, CodingKey { case source, presentation, limit, cacheTTL, shuffle }
 
     /// Clamps stored values the same way `init` does, so an edited or newer file cannot break paging.
     public init(from decoder: Decoder) throws {
@@ -55,7 +60,9 @@ public struct RowConfiguration: Sendable, Codable, Equatable, Hashable {
         self.init(source: try container.decode(WidgetSource.self, forKey: .source),
                   presentation: try container.decodeIfPresent(WidgetPresentation.self, forKey: .presentation) ?? WidgetPresentation(),
                   limit: try container.decodeIfPresent(Int.self, forKey: .limit) ?? 20,
-                  cacheTTL: try container.decodeIfPresent(Int.self, forKey: .cacheTTL) ?? 3600)
+                  cacheTTL: try container.decodeIfPresent(Int.self, forKey: .cacheTTL) ?? 3600,
+                  // A shuffle this version cannot read (written by a newer one) is left out, not the whole widget.
+                  shuffle: (try? container.decodeIfPresent(WidgetShuffle.self, forKey: .shuffle)) ?? nil)
     }
 }
 

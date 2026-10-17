@@ -80,6 +80,7 @@ struct WidgetFieldPanel: View {
         case .style: "Style"
         case .cards: "Cards"
         case .posters: "Posters"
+        case .shuffle: "Shuffle"
         }
     }
 
@@ -106,6 +107,7 @@ struct WidgetFieldPanel: View {
         case .style: styleContent
         case .cards: cardsContent
         case .posters: postersContent
+        case .shuffle: shuffleContent
         }
     }
 
@@ -498,6 +500,28 @@ struct WidgetFieldPanel: View {
             Text("""
                 Poster cards take their artwork from the BetterPosters addon (btttr.cc), which draws a tag, the genre and the IMDb rating on \
                 each poster. A title it has no artwork for keeps its usual poster. Wide and square cards are not changed.
+                """)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// When this widget's titles take a new random order: on the widgets page's schedule, never, or on one of its own.
+    private var shuffleContent: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            ChoiceList(rowCount: WidgetShuffle.choices.count + 1) {
+                ChoiceRow(title: WidgetBuilderModel.shuffleText(nil), isSelected: model.row.shuffle == nil) {
+                    model.updateRow { $0.shuffle = nil }
+                }
+                ForEach(WidgetShuffle.choices, id: \.self) { choice in
+                    ChoiceRow(title: WidgetBuilderModel.shuffleText(choice), isSelected: model.row.shuffle == choice) {
+                        model.updateRow { $0.shuffle = choice }
+                    }
+                }
+            }
+            Text("""
+                Shuffles the order of this widget's titles. An order stays until its next shuffle. Like Other Widgets follows the Shuffle \
+                setting on the widgets page.
                 """)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

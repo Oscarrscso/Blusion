@@ -38,6 +38,8 @@ public struct AppServices: Sendable {
     public let handoffs: any HandoffStore
     /// The addon speed test's results, by addon (see `AddonSpeedTester`), and the tester that makes them.
     public let addonSpeed: any AddonSpeedStore
+    /// The widgets page's shuffle settings and the seed of every shuffled order (see `WidgetShuffling`).
+    public let widgetShuffle: any WidgetShuffleStore
     public let speedTester: AddonSpeedTester
     public let searchHistory: any SearchHistoryStore
     public let traktAccount: TraktAccount
@@ -54,7 +56,8 @@ public struct AppServices: Sendable {
                 handoffs: (any HandoffStore)? = nil, searchHistory: (any SearchHistoryStore)? = nil, traktAccount: TraktAccount? = nil,
                 trakt: TraktClient? = nil, secretsInKeychain: Bool = true, bestBlurays: BestBluraysClient? = nil,
                 traktSyncState: (any TraktSyncStateStore)? = nil, syncSchedulesItself: Bool = false, heroMeta: HeroMetaStore? = nil,
-                addonSpeed: (any AddonSpeedStore)? = nil, speedTester: AddonSpeedTester? = nil) {
+                addonSpeed: (any AddonSpeedStore)? = nil, speedTester: AddonSpeedTester? = nil,
+                widgetShuffle: (any WidgetShuffleStore)? = nil) {
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -82,6 +85,7 @@ public struct AppServices: Sendable {
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)
         self.handoffs = handoffs ?? InMemoryHandoffStore()
         self.speedTester = speedTester ?? AddonSpeedTester(registry: registry)
+        self.widgetShuffle = widgetShuffle ?? InMemoryWidgetShuffleStore()
         self.searchHistory = searchHistory ?? InMemorySearchHistoryStore()
         self.traktAccount = traktAccount
         self.trakt = trakt

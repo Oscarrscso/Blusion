@@ -140,6 +140,22 @@ public final class WidgetsManagerViewModel {
         report("These widgets changed elsewhere. Try again.", isError: true)
     }
 
+    /// The widgets page's shuffle settings: the schedule for every widget without its own, and whether Home's widgets are shuffled too.
+    public private(set) var shuffle = WidgetShuffleSettings()
+
+    /// Reads the shuffle settings.
+    public func loadShuffle() async {
+        shuffle = await services.widgetShuffle.settings()
+    }
+
+    /// Saves the shuffle settings. Turning the schedule off stops shuffling Home's widgets too.
+    public func setShuffle(_ settings: WidgetShuffleSettings) async {
+        var settings = settings
+        if settings.schedule == .off { settings.shufflesOrder = false }
+        shuffle = settings
+        await services.widgetShuffle.save(settings)
+    }
+
     /// Appended at the end. A widget whose id the list already uses gets a new one.
     public func add(_ widget: HomeWidget) async {
         guard let current = await savedList() else { return }

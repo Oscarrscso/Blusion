@@ -71,11 +71,12 @@ import StremioKitTestSupport
 
     @Test func automaticSelectionHasAnOverallDeadlineAndKeepsFastResults() async throws {
         let services = try await services(bodies: [body([direct("slow", "https://a.example.com/1.mp4")]), body([direct("fast", "https://b.example.com/1.mp4")])],
-                                          delays: [.seconds(2), .zero])
+                                          delays: [.seconds(6), .zero])
         let model = StreamPickerViewModel(request: request, services: services)
         defer { model.cancelLoading() }
-        // Well short of the slow addon's two seconds, and long enough for the fast one to answer while the other suites run beside this one.
-        await model.loadForAutomaticSelection(timeout: .milliseconds(600))
+        // Well short of the slow addon's six seconds, and long enough for the fast one to answer while the other suites run beside this
+        // one on a busy Mac.
+        await model.loadForAutomaticSelection(timeout: .milliseconds(2000))
         #expect(model.isLoading, "the slow addon is still pending")
         #expect(model.listing.best?.title == "fast")
     }

@@ -12,7 +12,7 @@ public final class WidgetBuilderModel {
     /// One setting of a widget. Each is a pill in the strip; one that has a value is also a token in the sentence.
     public enum Field: String, CaseIterable, Identifiable, Sendable {
         case source, ordering, period, genres, keywords, excludedKeywords, score, votes, language, runtime, release, providers, region,
-             cast, crew, companies, catalogGenre, traktSort, title, limit, style, cards, posters
+             cast, crew, companies, catalogGenre, traktSort, title, limit, style, cards, posters, shuffle
         public var id: String { rawValue }
     }
 
@@ -346,7 +346,20 @@ public final class WidgetBuilderModel {
             Pill(field: .cards, title: "Cards", value: cards, systemImage: "rectangle.portrait", isEnabled: true),
             Pill(field: .posters, title: "Posters", value: row.presentation.usesBetterPosters ? "Better Posters" : "Standard",
                  systemImage: "photo.artframe", isEnabled: true),
+            Pill(field: .shuffle, title: "Shuffle", value: Self.shuffleText(row.shuffle), systemImage: "shuffle", isEnabled: true),
         ]
+    }
+
+    /// A shuffle schedule in a few words: "Daily", "Every 1 to 6 hours". Nil is the widgets page's setting.
+    public static func shuffleText(_ shuffle: WidgetShuffle?) -> String {
+        switch shuffle {
+        case nil: "Like Other Widgets"
+        case .off?: "Off"
+        case .everyOpen?: "Every Time Home Opens"
+        case .hourly?: "Hourly"
+        case .daily?: "Daily"
+        case .randomTimes(let low, let high)?: "At Random, Every \(low) to \(high) Hours"
+        }
     }
 
     // MARK: Selecting
