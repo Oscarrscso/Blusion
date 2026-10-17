@@ -8,10 +8,17 @@ import StremioKit
     private actor Calls {
         var plans = 0
         var ranks = 0
+        var fetches = 0
         var queries: [TMDbDiscoverQuery] = []
         var updates: [AISearchUpdate] = []
-        func plan() { plans += 1 }
+        private var planWaiter: CheckedContinuation<Void, Never>?
+        func plan() { plans += 1; planWaiter?.resume(); planWaiter = nil }
+        func waitForPlan() async {
+            if plans > 0 { return }
+            await withCheckedContinuation { planWaiter = $0 }
+        }
         func rank() { ranks += 1 }
+        func nextFetch() -> Int { fetches += 1; return fetches }
         func query(_ value: TMDbDiscoverQuery) { queries.append(value) }
         func update(_ value: AISearchUpdate) { updates.append(value) }
     }
@@ -58,18 +65,20 @@ import StremioKit
 
     private actor Gate {
         private var open = false
-        private var continuation: CheckedContinuation<Void, Never>?
+        private var continuations: [CheckedContinuation<Void, Never>] = []
         func wait() async {
             if open { return }
-            await withCheckedContinuation { continuation = $0 }
+            await withCheckedContinuation { continuations.append($0) }
         }
-        func release() { open = true; continuation?.resume(); continuation = nil }
+        func release() { open = true; continuations.forEach { $0.resume() }; continuations = [] }
     }
 
     private struct WaitingInterpreter: DescriptionInterpreting {
         let gate: Gate
+        var calls: Calls?
         func interpret(_ text: String) async -> DescribedSearch { .reading(text) }
         func plan(_ text: String) async -> AISearchPlan {
+            if let calls { await calls.plan() }
             await gate.wait()
             return AISearchPlan(filters: .reading(text))
         }
@@ -82,7 +91,7 @@ import StremioKit
             pageTitles: { query, skip in
                 await calls.query(query)
                 guard skip < 12 else { return [] }
-                return (skip..<(skip + 6)).map {
+                return (skip..<(skip + DescribedSearchService.batchSize)).map {
                     MetaPreview(id: "tt\(query.kind.rawValue)\($0)", type: query.kind == .movie ? "movie" : "series",
                                 name: "Title \($0)", releaseInfo: "1995")
                 }
@@ -93,7 +102,7 @@ import StremioKit
             if !update.items.isEmpty { await gate.release() }
         }
         let snapshots = await calls.updates.filter { !$0.items.isEmpty }.map(\.items)
-        #expect(snapshots.first?.count == 6)
+        #expect(snapshots.first?.count == DescribedSearchService.batchSize)
         #expect(items.count == 24)
         for pair in zip(snapshots, snapshots.dropFirst()) {
             #expect(pair.1.starts(with: pair.0), "later batches append without replacing or shuffling visible cards")
@@ -109,8 +118,8 @@ import StremioKit
         let items = await service.titles(for: "tense crime films about paranoia") { await calls.update($0) }
         let sizes = await calls.updates.map { $0.items.count }
         #expect(items.count == 18)
-        #expect(sizes.contains(6) && sizes.contains(12) && sizes.contains(18))
-        #expect(await calls.ranks == 3)
+        #expect(sizes.contains(12) && sizes.contains(18))
+        #expect(await calls.ranks == 2, "twelve candidates share one short selection call")
     }
 
     @Test func metadataOnlyCastSearchUsesVerifiedCreditsWithoutNeedingASynopsis() async {
@@ -196,5 +205,200 @@ import StremioKit
         let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
             titles: { _ in [] }, peopleTitles: { _ in [AISearchCandidate(item: metadata.item, evidence: "cast: Requested Actor", metadata: metadata)] })
         #expect(await service.titles(for: "highly rated French comedies starring Requested Actor").isEmpty)
+    }
+
+    @Test func themeMatchesGetTheFirstSlotsAndFinishBeforeGenericPopularityPages() async {
+        let calls = Calls()
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], moods: ["bank robbery"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in
+            [.init(id: 100, name: "bank robbery")]
+        }, titles: { query in
+            await calls.query(query)
+            #expect(!query.keywords.isEmpty, "a useful theme pool must finish without generic pages spending the model budget")
+            return (1...24).map {
+                MetaPreview(id: "tt\($0)", type: "movie", name: "Heist Comedy \($0)", description: "An inept gang robs a bank.")
+            }
+        }, ranker: Ranker(calls: calls))
+        let items = await service.titles(for: "comedies about bank robberies") { await calls.update($0) }
+        #expect(items.count == 24)
+        #expect(await calls.queries.count == 1)
+        #expect(await calls.ranks == 2)
+        let snapshots = await calls.updates.filter { !$0.items.isEmpty }.map(\.items)
+        #expect(snapshots.first?.count == 12)
+        #expect(snapshots.allSatisfy { $0.allSatisfy { $0.name.hasPrefix("Heist Comedy") } })
+    }
+
+    @Test func laterPagesSurviveMissingIMDbIdentitiesInAnEarlierWindow() async {
+        let calls = Calls()
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Drama"], moods: ["isolation"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+            titles: { _ in [] }, ranker: Ranker(calls: calls), pageTitles: { query, skip in
+                await calls.query(query)
+                guard skip < 24 else { return [] }
+                // Only one of the twelve database entries in each window has an IMDb identity.
+                return [MetaPreview(id: "tt\(skip + 1)", type: "movie", name: "Isolated \(skip)", description: "A solitary journey.")]
+            })
+        let items = await service.titles(for: "dramas about isolation")
+        #expect(items.map(\.name) == ["Isolated 0", "Isolated 12"])
+        #expect(await calls.queries.count == 3)
+    }
+
+    @Test func aSlowMovieRequestCannotHideTheFirstSeriesResult() async {
+        let gate = Gate()
+        let calls = Calls()
+        let show = MetaPreview(id: "tt1", type: "series", name: "A 90s Comedy", releaseInfo: "1995")
+        let service = DescribedSearchService(interpreter: WaitingInterpreter(gate: gate), keywords: { _ in [] }, titles: { query in
+            if query.kind == .movie { await gate.wait(); return [] }
+            return [show]
+        })
+        let result = await service.titles(for: "90s comedy") { update in
+            await calls.update(update)
+            if update.items.contains(show) { await gate.release() }
+        }
+        #expect(result == [show])
+        #expect(await calls.updates.contains { $0.items == [show] && $0.stage != .complete })
+    }
+
+    private struct FailingRanker: CandidateRanking {
+        let calls: Calls
+        struct Refused: Error {}
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            await calls.rank()
+            throw Refused()
+        }
+    }
+
+    @Test func modelFailuresHaveOneSearchWideBudgetAndAVisibleRetryState() async {
+        let calls = Calls()
+        let plan = AISearchPlan(filters: DescribedSearch(genres: ["Crime"], moods: ["paranoia"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+            titles: { _ in [] }, ranker: FailingRanker(calls: calls), pageTitles: { query, skip in
+                (skip..<(skip + DescribedSearchService.batchSize)).map {
+                    MetaPreview(id: "tt\(query.kind.rawValue)\($0)", type: query.kind == .movie ? "movie" : "series",
+                                name: "Crime \($0)", description: "A paranoid investigation.")
+                }
+            })
+        #expect(await service.titles(for: "crime stories about paranoia") { await calls.update($0) }.isEmpty)
+        #expect(await calls.ranks <= DescribedSearchService.rankingAttemptLimit)
+        #expect(await calls.updates.last?.issue == .ranking)
+        #expect(await calls.updates.last?.stage == .complete)
+    }
+
+    @Test func databaseFailuresAreDifferentFromAnEmptyRecommendationList() async {
+        let calls = Calls()
+        let service = DescribedSearchService(interpreter: KeywordDescriptionInterpreter(), keywords: { _ in [] }, titles: { _ in
+            throw WidgetSourceError.needsTMDbToken
+        })
+        #expect(await service.titles(for: "90s comedy") { await calls.update($0) }.isEmpty)
+        #expect(await calls.updates.last?.issue == .needsTMDbToken)
+    }
+
+    @Test func submittingAnInFlightQueryDoesNotRestartOnDeviceInference() async {
+        let calls = Calls()
+        let gate = Gate()
+        let service = DescribedSearchService(interpreter: WaitingInterpreter(gate: gate, calls: calls),
+                                             keywords: { _ in [] }, titles: { _ in [] })
+        let client = AddonClient()
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client)
+        let model = SearchViewModel(services: services, debounce: .milliseconds(1), describer: service, usesLivePicker: false)
+        model.query = "dark crime movies"
+        model.queryDidChange()
+        await calls.waitForPlan()
+        await model.submit()
+        await gate.release()
+        await model.waitUntilDone()
+        #expect(await calls.plans == 1)
+        #expect(model.aiPhase == .done)
+    }
+
+    @Test func rankingSeesStoryEvidenceBeyondTheOldSynopsisCutoff() {
+        let introduction = String(repeating: "A seemingly ordinary day. ", count: 12)
+        let item = MetaPreview(id: "tt1", type: "movie", name: "A Story", description: introduction + "A bank robbery changes everything.")
+        #expect(DescribedSearchService.line(item).contains("bank robbery"))
+    }
+
+    @Test func cachedSelectionsCannotFollowReorderedCandidatesOrOutliveTheirExpiry() async {
+        let cache = AISearchInferenceCache()
+        let date = Date(timeIntervalSince1970: 1_000)
+        let key = AISearchInferenceCache.RankingKey(request: "tense crime", references: [], candidates: ["First", "Second"], watched: [])
+        let reordered = AISearchInferenceCache.RankingKey(request: "tense crime", references: [], candidates: ["Second", "First"], watched: [])
+        await cache.store([2], for: key, at: date)
+        #expect(await cache.ranking(for: key, at: date) == [2])
+        #expect(await cache.ranking(for: reordered, at: date) == nil, "a candidate number is valid only for the identical input list")
+        #expect(await cache.ranking(for: key, at: date.addingTimeInterval(901)) == nil)
+    }
+
+    @Test func failedAISearchCanRetryWithoutRestartingTheNormalSearch() async {
+        let calls = Calls()
+        let item = MetaPreview(id: "tt1", type: "movie", name: "Recovered")
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Crime"]), requiresSemanticRanking: false)
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] }, titles: { _ in
+            if await calls.nextFetch() == 1 { throw WidgetSourceError.addon(.invalidJSON) }
+            return [item]
+        })
+        let client = AddonClient()
+        let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
+                                   client: client)
+        let model = SearchViewModel(services: services, describer: service, usesLivePicker: false)
+        model.query = "dark crime films"
+        await model.submit()
+        await model.waitUntilDone()
+        #expect(model.aiIssue == .database)
+        #expect(!model.showsNoResults, "a failed database request does not prove there are no matches")
+        #expect(model.phase == .done)
+        model.retryAI()
+        #expect(model.phase == .done && model.aiPhase == .searching)
+        await model.waitUntilDone()
+        #expect(model.describedItems == [item])
+        #expect(model.aiIssue == nil)
+    }
+
+    private struct InvalidNumbersRanker: CandidateRanking {
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            [Int.min, 0, 2, 2, 99, 1].map { RankedCandidate(number: $0, reason: "") }
+        }
+    }
+
+    @Test func modelSelectionsCannotInventTitlesDuplicateCardsOrOverflowAnIndex() async {
+        let calls = Calls()
+        let movies = [MetaPreview(id: "tt1", type: "movie", name: "First"), MetaPreview(id: "tt2", type: "movie", name: "Second")]
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Drama"], moods: ["isolation"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+                                             titles: { _ in movies }, ranker: InvalidNumbersRanker())
+        #expect(await service.titles(for: "dramas about isolation").map(\.name) == ["Second", "First"])
+    }
+
+    @Test func knownGenreConflictsAreRejectedBeforeTheModelAndTVGenresUseTheirOwnIDs() async {
+        let calls = Calls()
+        let films = [MetaPreview(id: "tt1", type: "movie", name: "Wrong", genres: ["Romance"]),
+                     MetaPreview(id: "tt2", type: "movie", name: "Right", genres: ["Comedy"])]
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Comedy"], moods: ["quirky"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] },
+                                             titles: { _ in films }, ranker: Ranker(calls: calls))
+        #expect(await service.titles(for: "quirky comedies").map(\.name) == ["Right"])
+
+        let show = MetaPreview(id: "tt3", type: "series", name: "A Science Fiction Show", genres: ["Sci-Fi & Fantasy"])
+        let tvPlan = AISearchPlan(filters: DescribedSearch(kind: .series, genres: ["Science Fiction"], moods: ["cerebral"]))
+        let tvService = DescribedSearchService(interpreter: Interpreter(answer: tvPlan, calls: calls), keywords: { _ in [] },
+                                               titles: { _ in [show] }, ranker: Ranker(calls: calls))
+        #expect(await tvService.titles(for: "cerebral sci-fi series") == [show])
+    }
+
+    @Test func titleWordsDoNotBecomeGenreScoreOrRuntimeRequirements() async {
+        let words = AISearchPlan.explicitFilters(in: "funny films like War of the Worlds under two hours", namedTitles: ["War of the Worlds"])
+        #expect(words.genres == ["Comedy"] && words.maximumRuntime == 120)
+        let titles = AISearchPlan.explicitFilters(in: "Best in Show and Short Term 12", namedTitles: ["Best in Show", "Short Term 12"])
+        #expect(titles.minimumScore == nil && titles.maximumRuntime == nil)
+
+        let calls = Calls()
+        let film = MetaPreview(id: "tt1", type: "movie", name: "War of the Worlds", genres: ["Science Fiction"])
+        let service = DescribedSearchService(interpreter: KeywordDescriptionInterpreter(), keywords: { _ in [] }, titles: { query in
+            await calls.query(query)
+            return []
+        }, ranker: Ranker(calls: calls, rejectAll: true), titleMatches: { _ in [film] })
+        #expect(await service.titles(for: "War of the Worlds") == [film])
+        #expect(await calls.ranks == 0)
+        #expect(await calls.queries.isEmpty)
     }
 }

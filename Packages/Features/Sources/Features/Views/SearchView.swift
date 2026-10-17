@@ -229,12 +229,22 @@ struct SearchView: View {
                         ForEach(model.describedItems, id: \.identity) { MediaCardLink(item: $0) }
                     }
                     .accessibilityIdentifier("search.ai.matches")
-                } else if model.aiPhase == .done {
+                } else if model.aiPhase == .done, model.aiIssue == nil {
                     Text("No confident AI matches for this search.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                         .accessibilityIdentifier("search.ai.empty")
+                }
+                if model.aiPhase == .done, let issue = model.aiIssue {
+                    HStack {
+                        Text(LocalizedStringKey(issue.text))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("Retry") { model.retryAI() }
+                    }
+                    .padding(.horizontal, metrics.pageMargin)
+                    .accessibilityIdentifier("search.ai.retry")
                 }
             }
         }

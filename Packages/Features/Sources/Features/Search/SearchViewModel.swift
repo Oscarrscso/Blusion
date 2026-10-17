@@ -37,6 +37,7 @@ public final class SearchViewModel {
     /// Independent of the normal addon search; the AI row keeps showing a spinner until its own work ends.
     public private(set) var aiPhase: Phase = .idle
     public private(set) var aiStage: AISearchUpdate.Stage = .interpreting
+    public private(set) var aiIssue: AISearchUpdate.Issue?
     private var aiRequestID = UUID()
 
     /// A genre of one catalog, offered on the idle Search page. `source` opens that catalog filtered to the genre.
@@ -69,6 +70,7 @@ public final class SearchViewModel {
     private let debounce: Duration
     private let history: any SearchHistoryStore
     private var task: Task<Void, Never>?
+    private var activeTerm: String?
     /// Titles TMDb has for a search typed as a description, in their own row. Empty for a search that reads like a title.
     public private(set) var describedItems: [MetaPreview] = []
     private let describer: DescribedSearchService
@@ -97,7 +99,7 @@ public final class SearchViewModel {
     /// Nothing came back and every addon failed because the device is offline.
     public var isOffline: Bool { !hasResults && Connectivity.isOffline(failures.map(\.error)) }
     /// "No results" needs an addon that could have answered; with none installed the screen says so instead.
-    public var showsNoResults: Bool { phase == .done && aiPhase == .done && !hasResults && failures.isEmpty }
+    public var showsNoResults: Bool { phase == .done && aiPhase == .done && !hasResults && failures.isEmpty && aiIssue == nil }
     public var showsNoSearchableAddons: Bool { !hasSearchableAddons }
 
     /// Results across all addons, grouped by content type: movie first, then series, then other types in order of first appearance.
@@ -141,10 +143,12 @@ public final class SearchViewModel {
 
     /// Call whenever the query changes. Cancel old work immediately and debounce both search paths.
     public func queryDidChange() {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !term.isEmpty, activeTerm == term, phase == .searching || aiPhase == .searching { return }
         task?.cancel()
         aiTask?.cancel()
+        activeTerm = nil
         aiRequestID = UUID()
-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { reset(); return }
         sections = []
         failures = []
@@ -152,6 +156,8 @@ public final class SearchViewModel {
         picks = []
         phase = .searching
         aiPhase = .searching
+        aiStage = .interpreting
+        aiIssue = nil
         task = Task { [weak self] in
             guard let self else { return }
             try? await Task.sleep(for: debounce)
@@ -163,17 +169,24 @@ public final class SearchViewModel {
     /// The keyboard's Search button skips the debounce but still starts both paths.
     public func submit() async {
         guard !Task.isCancelled else { return }
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { task?.cancel(); reset(); return }
+        // Submitting while the same debounced search is already running must not restart expensive on-device inference.
+        if activeTerm == term, phase == .searching || aiPhase == .searching {
+            await task?.value
+            return
+        }
         task?.cancel()
         aiTask?.cancel()
         aiRequestID = UUID()
-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else { reset(); return }
         sections = []
         failures = []
         describedItems = []
         picks = []
         phase = .searching
         aiPhase = .searching
+        aiStage = .interpreting
+        aiIssue = nil
         let search = Task { [weak self] in
             guard let self else { return }
             await self.run(term)
@@ -201,6 +214,16 @@ public final class SearchViewModel {
         picks = []
         phase = .idle
         aiPhase = .idle
+        aiIssue = nil
+        activeTerm = nil
+    }
+
+    /// Retry only AI work, retaining the normal search rows.
+    public func retryAI() {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return }
+        aiPhase = .searching
+        searchAI(term)
     }
 
     /// Every nonempty search runs on-device AI, even a single name like "Dune".
@@ -211,6 +234,7 @@ public final class SearchViewModel {
         let requestID = UUID()
         aiRequestID = requestID
         aiStage = .interpreting
+        aiIssue = nil
         aiTask = Task { [weak self] in
             let items = await describer.titles(for: term) { [weak self] update in
                 guard !Task.isCancelled else { return }
@@ -228,10 +252,12 @@ public final class SearchViewModel {
         guard aiRequestID == requestID, query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
         describedItems = update.items
         aiStage = update.stage
+        aiIssue = update.issue
     }
 
     private func run(_ term: String) async {
         guard !Task.isCancelled, query.trimmingCharacters(in: .whitespacesAndNewlines) == term else { return }
+        activeTerm = term
         sections = []
         failures = []
         describedItems = []

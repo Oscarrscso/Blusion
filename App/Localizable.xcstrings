@@ -177,6 +177,17 @@
         }
       }
     },
+    "Add a TMDB Read Access Token in Settings to use AI Search.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a TMDB Read Access Token in Settings to use AI Search."
+          }
+        }
+      }
+    },
     "Add an addon": {
       "extractionState": "manual",
       "localizations": {
@@ -2245,6 +2256,17 @@
         }
       }
     },
+    "On-device AI couldn't check some matches. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device AI couldn't check some matches. Try again."
+          }
+        }
+      }
+    },
     "On-device AI isn't available. Enable Apple Intelligence to search by meaning.": {
       "extractionState": "manual",
       "localizations": {
@@ -2894,6 +2916,17 @@
         }
       }
     },
+    "Retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        }
+      }
+    },
     "Review services": {
       "extractionState": "manual",
       "localizations": {
@@ -3330,6 +3363,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Small"
+          }
+        }
+      }
+    },
+    "Some search data couldn't load. Try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some search data couldn't load. Try again."
           }
         }
       }

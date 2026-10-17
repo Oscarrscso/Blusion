@@ -19,6 +19,8 @@ public struct AISearchPlan: Sendable, Equatable {
     public var excludedTopics: [String]
     public var requiresSemanticRanking: Bool
     public var unwatchedOnly: Bool
+    /// The lexical fallback can still find factual matches, but an inference failure must remain retryable.
+    var interpretationFailed = false
 
     public init(filters: DescribedSearch, titleQueries: [String] = [], referenceTitles: [String] = [], people: [Person] = [],
                 companies: [String] = [], language: String? = nil, excludedTopics: [String] = [], unwatchedOnly: Bool = false,
@@ -49,6 +51,18 @@ public struct AISearchPlan: Sendable, Equatable {
             return query
         }
     }
+
+    /// Words inside a named film are not genre, score or runtime constraints ("War of the Worlds", "Best in Show", "Short Term 12").
+    static func explicitFilters(in text: String, namedTitles: [String]) -> DescribedSearch {
+        var constraints = text
+        for title in namedTitles where !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let pattern = "(?<![[:alnum:]])" + NSRegularExpression.escapedPattern(for: title) + "(?![[:alnum:]])"
+            constraints = constraints.replacingOccurrences(of: pattern, with: " ", options: [.regularExpression, .caseInsensitive])
+        }
+        // A translated or corrected name may not occur verbatim. Let the model's parsed constraints stand in that case.
+        if !namedTitles.isEmpty, constraints == text { return DescribedSearch() }
+        return .reading(constraints)
+    }
 }
 
 /// Facts attached only to search candidates; never written into a title's synopsis or saved metadata.
@@ -62,6 +76,18 @@ public struct AISearchCandidate: Sendable {
 }
 
 public struct AISearchUpdate: Sendable {
+    public enum Issue: Sendable, Equatable {
+        case needsTMDbToken, database, ranking
+
+        public var text: String {
+            switch self {
+            case .needsTMDbToken: "Add a TMDB Read Access Token in Settings to use AI Search."
+            case .database: "Some search data couldn't load. Try again."
+            case .ranking: "On-device AI couldn't check some matches. Try again."
+            }
+        }
+    }
+
     public enum Stage: Sendable, Equatable {
         case interpreting, filters, titles, people, similar, themes, ranking, complete
         public var text: String {
@@ -79,4 +105,11 @@ public struct AISearchUpdate: Sendable {
     }
     public let items: [MetaPreview]
     public let stage: Stage
+    public let issue: Issue?
+
+    public init(items: [MetaPreview], stage: Stage, issue: Issue? = nil) {
+        self.items = items
+        self.stage = stage
+        self.issue = issue
+    }
 }

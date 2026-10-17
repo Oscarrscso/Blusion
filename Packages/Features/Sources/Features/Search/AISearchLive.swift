@@ -18,10 +18,10 @@ extension DescribedSearchService {
             // Only one small window is resolved at a time. Each query is cached by WidgetContentService.
             try await content.items(for: .tmdbDiscover(query), limit: 18)
         }, ranker: OnDeviceDescriptionInterpreter.availableRanker(), titleMatches: { text in
-            guard let api = await tmdb() else { return [] }
+            guard let api = await tmdb() else { throw WidgetSourceError.needsTMDbToken }
             return try await api.searchTitleItems(text, limit: 12)
         }, peopleTitles: { people in
-            guard let api = await tmdb() else { return [] }
+            guard let api = await tmdb() else { throw WidgetSourceError.needsTMDbToken }
             var credits: [TMDbPersonCredit] = []
             var identities: Set<String>?
             var facts: [String] = []
@@ -76,7 +76,7 @@ extension DescribedSearchService {
             guard let api = await tmdb() else { return [] }
             return (try? await api.searchCompanies(text)) ?? []
         }, related: { seed in
-            guard let api = await tmdb() else { return [] }
+            guard let api = await tmdb() else { throw WidgetSourceError.needsTMDbToken }
             let titles = try await api.relatedTitles(imdbID: seed.id, type: seed.type)
             var result: [MetaPreview] = []
             for start in stride(from: 0, to: min(titles.count, 18), by: 6) {
