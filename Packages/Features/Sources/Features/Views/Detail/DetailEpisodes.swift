@@ -25,6 +25,10 @@ struct DetailEpisodes: View {
     @Environment(TitleActions.self) private var titleActions
     /// The episode Shuffle last picked: the row scrolls it to the front of its season.
     @State private var shuffledEpisode: String?
+    /// Whether the episode Shuffle plays next is named beside it. Hidden until the space beside Shuffle is tapped; a second tap hides it.
+    @State private var showsShuffleNext = false
+    /// The name's size: a little under `caption2`, and scaled with the text size.
+    @ScaledMetric(relativeTo: .caption2) private var shuffleNextSize: CGFloat = 10
     /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
 
@@ -54,8 +58,7 @@ struct DetailEpisodes: View {
             HStack(spacing: Theme.Spacing.m) {
                 seasonMenu
                 shuffleButton
-                shuffleNextName
-                Spacer(minLength: 0)
+                shuffleNextArea
                 episodeWidthToggle
             }
             .padding(.horizontal, contentMargin)
@@ -117,18 +120,35 @@ struct DetailEpisodes: View {
         .accessibilityIdentifier("detail.seasonPicker")
     }
 
-    /// The episode Shuffle plays next, named very small beside it.
+    /// The space between Shuffle and the width toggle. With an episode picked, a tap there names the episode Shuffle plays next, very
+    /// small after a dash, and another tap hides it again. Without one it is only space.
     @ViewBuilder
-    private var shuffleNextName: some View {
+    private var shuffleNextArea: some View {
         if let next = model.shuffleNext, model.canShuffle {
             let number = [next.season.map { "S\($0)" }, next.episode.map { "E\($0)" }].compactMap { $0 }.joined()
-            Text(number.isEmpty ? next.title : "\(number) · \(next.title)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .accessibilityLabel("Shuffle plays \(next.title) next")
-                .accessibilityIdentifier("detail.shuffleNext")
+            let name = number.isEmpty ? next.title : "\(number) · \(next.title)"
+            ZStack(alignment: .leading) {
+                if showsShuffleNext {
+                    Text(verbatim: "- \(name)")
+                        .font(.system(size: shuffleNextSize))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .transition(.opacity)
+                        .accessibilityIdentifier("detail.shuffleNext")
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: Self.secondaryControlHeight, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) { showsShuffleNext.toggle() }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(showsShuffleNext ? "Shuffle plays \(next.title) next" : "Show the episode Shuffle plays next")
+            .accessibilityIdentifier("detail.shuffleNextArea")
+        } else {
+            Spacer(minLength: 0)
         }
     }
 

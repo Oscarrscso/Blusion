@@ -44,10 +44,18 @@ public final class DetailViewModel {
     public private(set) var tmdbVideos: [TMDbVideo] = []
     /// The title's preview from Apple's iTunes store: a direct file the app plays. Nil until the search answers, or when the store has none.
     public private(set) var itunesTrailer: Trailer?
+    /// The lookups of the trailers beyond the addon's (TMDb's videos and the iTunes preview), shared by the page's load and a trailer tap
+    /// that comes before it gets to them.
+    private var trailerSourcesTask: Task<Void, Never>?
+    /// Set once every place a trailer can come from has answered, so a title with none dims its trailer button only then.
+    public private(set) var hasCheckedTrailerSources = false
     /// The cast and crew with TMDb ids and photos. Nil until TMDb answers, or when no read token is saved.
     public private(set) var titleCredits: TMDbTitleCredits?
     /// Titles TMDb recommends for this one, for the shelf at the bottom of the page. Empty until TMDb answers.
     public private(set) var relatedTitles: [TMDbRelatedTitle] = []
+    /// What TMDb knows beyond the addon's details (studios, countries, language, budget, a series' network and run), for Information. Nil
+    /// until TMDb answers, or when no read token is saved.
+    public private(set) var titleFacts: TMDbTitleFacts?
     /// The US age rating ("R", "TV-MA") for the meta line. Nil until TMDb answers, or when it has none.
     public private(set) var certification: String?
     /// Set once the hero picture and logo have loaded (or five seconds have passed), so the page's other requests may start.
@@ -117,6 +125,7 @@ public final class DetailViewModel {
     public func load(afterHero hero: (@MainActor @Sendable () async -> Void)? = nil) async {
         isLoading = true
         episodeRatingSeasons.removeAll()
+        trailerSourcesTask = nil
         // The artwork lookup and then the hero picture and logo come first and alone: nothing else starts until they are loaded
         // (or five seconds have passed), so no other request can delay them.
         await loadArtwork()
@@ -135,28 +144,30 @@ public final class DetailViewModel {
         loadRevision += 1
         isFallback = result.isFallback
         if !result.isFallback { services.heroMeta.record(detail.preview, for: preview) }
+        // What has been watched is read with the details, so Play and the episodes are right the moment they show: a tap on Play made
+        // while the page loaded plays the episode it names.
+        await refreshUserState()
+        // A series opens on the season of its next episode, so the list starts where the viewer left off.
+        if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
         isLoading = false
         // A show's picture loads once its episodes are on the page; the rating row waits for it.
         if isSeries {
             if let hero, !hasSettledHero { await loadHero(hero) }
             hasSettledHero = true
         }
-        await refreshUserState()
-        // A series opens on the season of its next episode, so the list starts where the viewer left off.
-        if selectedSeason == nil { selectedSeason = nextUp?.season ?? detail.seasons.first }
         // Reviews and cast photos are secondary: they start after the hero and the page above, and never hold up the page above.
         async let reviews: Void = loadReviews()
         async let credits: Void = loadTitleCredits()
         async let related: Void = loadRelatedTitles()
         async let rating: Void = loadCertification()
-        async let videos: Void = loadVideos()
-        async let previews: Void = loadPreview()
+        async let trailerSources: Void = loadTrailerSources()
+        async let facts: Void = loadTitleFacts()
         await reviews
         await credits
         await related
         await rating
-        await videos
-        await previews
+        await trailerSources
+        await facts
     }
 
     public func refresh() async {
@@ -172,6 +183,14 @@ public final class DetailViewModel {
         let artwork = await services.posterRatings.heroArtwork(for: preview)
         guard !Task.isCancelled else { return }
         tmdbArtwork = artwork
+    }
+
+    private func loadTitleFacts() async {
+        let settings = await services.settings.load()
+        guard let token = settings.tmdbReadToken, !token.isEmpty else { titleFacts = nil; return }
+        let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).titleFacts(imdbID: preview.id, type: preview.type)
+        guard !Task.isCancelled else { return }
+        titleFacts = loaded ?? nil
     }
 
     private func loadTitleCredits() async {
@@ -224,6 +243,30 @@ public final class DetailViewModel {
         let loaded = try? await TMDbRatings(client: services.client, readAccessToken: token).reviews(imdbID: preview.id, type: preview.type)
         guard !Task.isCancelled else { return }
         reviews = loaded ?? []
+    }
+
+    /// TMDb's videos and the iTunes preview, looked up once per load of the page: a trailer tap and the page's load share the lookup.
+    private func loadTrailerSources() async {
+        if let trailerSourcesTask { return await trailerSourcesTask.value }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            async let videos: Void = self.loadVideos()
+            async let preview: Void = self.loadPreview()
+            await videos
+            await preview
+            self.hasCheckedTrailerSources = true
+        }
+        trailerSourcesTask = task
+        await task.value
+    }
+
+    /// Returns once the details are in, the caller is cancelled, or `deadline` has passed (a page left while it loaded never finishes). A
+    /// tap made while the page is still loading waits here, so its button works from the moment it is shown.
+    public func waitForDetails(deadline: Duration = .seconds(30)) async {
+        let end = ContinuousClock.now.advanced(by: deadline)
+        while isLoading, !Task.isCancelled, ContinuousClock.now < end {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 
     private func loadVideos() async {
@@ -622,8 +665,8 @@ public final class DetailViewModel {
                              tmdb: tmdbVideos)
     }
 
-    /// Whether the trailer button can do anything: a trailer is known.
-    public var canPlayTrailer: Bool { !trailers.isEmpty }
+    /// Whether the trailer button can do anything: a trailer is known, or its sources have not all answered yet, so a tap waits for them.
+    public var canPlayTrailer: Bool { !trailers.isEmpty || !hasCheckedTrailerSources }
 
     /// A rating's site, shown on the page under the ratings: its reviews for this title, or a search when the site has no page for it.
     public struct OpenedReviews: Equatable, Sendable {
@@ -634,15 +677,20 @@ public final class DetailViewModel {
 
     /// The reviews opened from a rating, under the ratings. Nil when none are open.
     public private(set) var openedReviews: OpenedReviews?
+    /// The site that stays on screen while another rating's site loads in its place. Nil once the new one shows, or when none was open.
+    public private(set) var shownReviews: OpenedReviews?
 
     /// A rating's tap: shows its site's reviews under the ratings, or closes them when that site's are already open. Another site's reviews
-    /// replace the ones open. The inline trailer stops when reviews open, since one player or page is shown on the page at a time.
+    /// replace the ones open once they have loaded: until then the open site stays on screen. The inline trailer stops when reviews open,
+    /// since one player or page is shown on the page at a time.
     public func toggleReviews(_ site: ReviewSite, url: URL, isSearch: Bool) {
-        if openedReviews?.site == site {
+        if openedReviews?.site == site || shownReviews?.site == site {
             closeReviews()
             return
         }
         trailer.cancel()
+        // The site on screen: the open one once it has loaded, or the one still kept while another loaded.
+        if let open = openedReviews, !reviewsLoading { shownReviews = open }
         openedReviews = OpenedReviews(site: site, url: url, isSearch: isSearch)
         reviewsLoading = true
         startReviewsTimeout()
@@ -651,6 +699,7 @@ public final class DetailViewModel {
     /// Closes the reviews opened from a rating.
     public func closeReviews() {
         openedReviews = nil
+        shownReviews = nil
         reviewsDidLoad()
     }
 
@@ -658,11 +707,12 @@ public final class DetailViewModel {
     public private(set) var reviewsLoading = false
     @ObservationIgnored private var reviewsLoadTimeout: Task<Void, Never>?
 
-    /// The reviews' page has loaded, or failed to: the spinner stops and the reviews open.
+    /// The reviews' page has loaded, or failed to: the spinner stops and the reviews open, in place of the site kept on screen meanwhile.
     public func reviewsDidLoad() {
         reviewsLoadTimeout?.cancel()
         reviewsLoadTimeout = nil
         reviewsLoading = false
+        shownReviews = nil
     }
 
     /// A page that never finishes must not hold the spinner forever, so the reviews open after this long regardless.
@@ -685,6 +735,7 @@ public final class DetailViewModel {
     /// with YouTube before it is tried in the page's embedded player. Reviews opened from a rating are closed first.
     public func toggleTrailer() {
         openedReviews = nil
+        shownReviews = nil
         trailer.toggle(TrailerLoader.Source(
             plan: { [weak self] in
                 guard let self else { return TrailerPlan(trailers: []) }
@@ -699,7 +750,12 @@ public final class DetailViewModel {
     /// The trailers to try, best first: the iTunes preview and the addon's direct links, then the best YouTube trailers (see
     /// `TrailerCatalog.playbackOrder`).
     public func trailerPlan() async -> TrailerPlan {
-        TrailerPlan(trailers: TrailerCatalog.playbackOrder(previews: itunesTrailer.map { [$0] } ?? [], addonYouTubeIDs: detail.trailers,
+        // A tap made while the page loads waits for the details and the trailers they lead to, rather than finding none.
+        if !hasCheckedTrailerSources {
+            await waitForDetails()
+            if !Task.isCancelled { await loadTrailerSources() }
+        }
+        return TrailerPlan(trailers: TrailerCatalog.playbackOrder(previews: itunesTrailer.map { [$0] } ?? [], addonYouTubeIDs: detail.trailers,
                                                           addonURLs: detail.trailerURLs, tmdb: tmdbVideos))
     }
 

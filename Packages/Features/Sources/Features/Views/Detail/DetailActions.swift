@@ -20,6 +20,8 @@ struct DetailActions: View {
     let play: (StreamRequest) -> Void
     @Environment(\.isLandscape) private var isLandscape
     @Environment(TitleActions.self) private var titleActions
+    /// Play was tapped while a series' episodes were still arriving: its spinner shows, and it plays once they are in.
+    @State private var playsWhenLoaded = false
 
     /// Whether the text and the actions lead. Beside the artwork on iPhone in landscape; always on the Mac, whose title page sets them over
     /// the picture's left edge.
@@ -70,9 +72,20 @@ struct DetailActions: View {
     private var metaGenres: [String] { model.heroMetaGenres }
 
     /// The one main action. A movie plays itself; a series plays its next episode. While its streams load it shows a spinner, and a
-    /// tap then calls them off. While a series' episodes are still arriving, a placeholder holds the place.
+    /// tap then calls them off. While a series' episodes are still arriving it already takes a tap: it spins, and plays the next episode
+    /// once they are in.
     @ViewBuilder
     private var primaryAction: some View {
+        primaryButton
+            .onChange(of: model.isLoading) { _, loading in
+                guard !loading, playsWhenLoaded else { return }
+                playsWhenLoaded = false
+                if let request = model.primaryRequest { play(request) }
+            }
+    }
+
+    @ViewBuilder
+    private var primaryButton: some View {
         if let request = model.primaryRequest {
             Button {
                 // A swipe that ends on Play, such as one going back, starts nothing, as on a stream's card.
@@ -111,16 +124,30 @@ struct DetailActions: View {
             .disabled(true)
             .accessibilityIdentifier("detail.playButton")
         } else if model.isLoading {
-            Capsule()
-                .fill(Theme.surfaceStrong)
-                #if targetEnvironment(macCatalyst)
-                // Play keeps its own width on the Mac, so the placeholder holds about the width a title's Play takes.
-                .frame(width: 280, height: CircleActionButton.diameter)
-                #else
-                .frame(height: CircleActionButton.diameter)
-                #endif
-                .shimmering()
-                .accessibilityHidden(true)
+            Button {
+                guard !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
+                playsWhenLoaded.toggle()
+            } label: {
+                Label("Play", systemImage: "play.fill")
+                    .opacity(playsWhenLoaded ? 0 : 1)
+                    .overlay {
+                        if playsWhenLoaded {
+                            Spinner()
+                                .controlSize(.small)
+                                .transition(.opacity)
+                        }
+                    }
+                    .animation(.smooth(duration: 0.25), value: playsWhenLoaded)
+            }
+            .buttonStyle(PrimaryActionButtonStyle(minWidth: Self.playMinWidth))
+            .allowsHitTesting(!blocksPlay)
+            .background {
+                Capsule()
+                    .fill(PlayColourStore.colour(hex: model.playColourHex) ?? Color.clear)
+                    .animation(.smooth(duration: 0.3), value: model.playColourHex)
+            }
+            .accessibilityLabel(playsWhenLoaded ? "Play, loading" : "Play")
+            .accessibilityIdentifier("detail.playButton")
         }
     }
 
@@ -200,18 +227,23 @@ struct DetailActions: View {
     private var watchedAction: some View {
         if model.isSeries {
             let watched = model.isSeriesWatched
+            // While the episodes are still arriving it takes a tap, and acts once they are in: a show already watched asks before it is
+            // cleared, as it does once loaded.
+            let hasNoEpisodes = model.detail.videos.isEmpty && !model.isLoading
             CircleActionButton(title: "Watched", systemImage: "eye", isOn: watched, quietRevision: model.loadRevision) {
-                if watched {
-                    isConfirmingUnmarkShow = true
-                } else {
-                    Task {
+                Task {
+                    await model.waitForDetails()
+                    guard !model.isLoading else { return }
+                    if model.isSeriesWatched {
+                        isConfirmingUnmarkShow = true
+                    } else if !model.detail.videos.isEmpty {
                         await model.setSeriesWatched(true)
                         await titleActions.refresh()
                     }
                 }
             }
-            .disabled(model.detail.videos.isEmpty)
-            .opacity(model.detail.videos.isEmpty ? 0.4 : 1)
+            .disabled(hasNoEpisodes)
+            .opacity(hasNoEpisodes ? 0.4 : 1)
             .accessibilityValue(watched ? "Every episode watched" : "Not watched")
             .accessibilityHint(watched ? "Clears the watched mark from every episode" : "Marks every episode that has aired as watched")
             .accessibilityIdentifier("detail.watchedButton")

@@ -171,7 +171,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             }
             // Placed after the trailer's panel, so that panel keeps its place in the view tree while reviews open.
             if let reviews = model.openedReviews {
-                DetailReviewsPanel(reviews: reviews, item: model.detail.preview, isLoading: model.reviewsLoading,
+                DetailReviewsPanel(reviews: reviews, shown: model.shownReviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                    onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
             }
             if overviewIsCut { synopsis }

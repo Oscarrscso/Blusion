@@ -23,18 +23,21 @@ struct DetailRatings: View {
             }
             .frame(maxWidth: buttonsWidth ?? .infinity, alignment: .leading)
             if let reviews = model.openedReviews {
-                DetailReviewsPanel(reviews: reviews, item: model.detail.preview, isLoading: model.reviewsLoading,
+                DetailReviewsPanel(reviews: reviews, shown: model.shownReviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                    onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
-                    .padding(.top, model.reviewsLoading ? 0 : Theme.Spacing.m)
+                    .padding(.top, model.reviewsLoading && model.shownReviews == nil ? 0 : Theme.Spacing.m)
             }
         }
     }
 }
 
 /// The reviews of one rating's site, on the page: the site's name and a close button over the site itself. It is as wide as the rating
-/// buttons above it, and stays until it is closed or another rating is tapped.
+/// buttons above it, and stays until it is closed or another rating is tapped. Another rating's site loads behind the open one, which stays
+/// on screen until the new one has loaded.
 struct DetailReviewsPanel: View {
     let reviews: DetailViewModel.OpenedReviews
+    /// The site kept on screen while `reviews` loads behind it. Nil when `reviews` is the one on screen, or is the first to open.
+    var shown: DetailViewModel.OpenedReviews?
     let item: MetaPreview
     /// True until the page has loaded: a spinner shows over it.
     var isLoading = false
@@ -63,14 +66,28 @@ struct DetailReviewsPanel: View {
         #endif
     }
 
+    /// The site on screen: the one kept while another loads, else the open one.
+    private var visible: DetailViewModel.OpenedReviews { isLoading ? shown ?? reviews : reviews }
+
+    /// The pages in the panel: the one kept on screen, then the one loading behind it. Each keeps its view, so the new one is shown as it
+    /// loaded, not loaded again.
+    private var pages: [DetailViewModel.OpenedReviews] {
+        guard let shown, shown.site != reviews.site, isLoading else { return [reviews] }
+        return [shown, reviews]
+    }
+
+    /// True while the first site loads: the panel takes no room yet. With a site kept on screen, the panel stays open.
+    private var isCollapsed: Bool { isLoading && (shown == nil || shown?.site == reviews.site) }
+
     var body: some View {
+        let visible = visible
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                ReviewSiteIcon(site: reviews.site, size: 14, keepsColour: true)
-                Text(reviews.site.name)
+                ReviewSiteIcon(site: visible.site, size: 14, keepsColour: true)
+                Text(visible.site.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
-                if reviews.isSearch && !ReviewPageReader.supports(reviews.site) {
+                if visible.isSearch && !ReviewPageReader.supports(visible.site) {
                     Text("Search")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.6))
@@ -87,30 +104,38 @@ struct DetailReviewsPanel: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close \(reviews.site.name) reviews")
+                .accessibilityLabel("Close \(visible.site.name) reviews")
                 .accessibilityIdentifier("detail.reviews.close")
             }
             .padding(.leading, 12)
             .padding(.trailing, 6)
             .padding(.vertical, 4)
             Divider()
-            ReviewWebView(site: reviews.site, url: reviews.url, item: item, onLoaded: onLoaded)
-                // A new site gets a new page with its own script, so its view is rebuilt rather than reused.
-                .id(reviews.site)
-                .frame(height: pageHeightNow)
-                .overlay {
-                    if isLoading { Spinner().controlSize(.large) }
+            ZStack {
+                // A new site gets a new page with its own script, so its view is rebuilt rather than reused. Only the page opened last
+                // reports its load.
+                ForEach(pages, id: \.site) { page in
+                    let isVisible = page.site == visible.site
+                    ReviewWebView(site: page.site, url: page.url, item: item, onLoaded: page.site == reviews.site ? onLoaded : {})
+                        .opacity(isVisible ? 1 : 0)
+                        .allowsHitTesting(isVisible)
+                        .accessibilityHidden(!isVisible)
                 }
-                .accessibilityIdentifier("detail.reviewsWeb")
+            }
+            .frame(height: pageHeightNow)
+            .overlay {
+                if isCollapsed { Spinner().controlSize(.large) }
+            }
+            .accessibilityIdentifier("detail.reviewsWeb")
         }
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .frame(maxWidth: .infinity)
         // Takes no room and draws nothing while the page loads, so the screen does not move; the page keeps its full size inside, so it
         // still loads. Once it has, the reviews open.
-        .frame(height: isLoading ? 0 : nil, alignment: .top)
+        .frame(height: isCollapsed ? 0 : nil, alignment: .top)
         .clipped()
-        .animation(.snappy(duration: 0.35), value: isLoading)
+        .animation(.snappy(duration: 0.35), value: isCollapsed)
         .id(Self.scrollID)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("detail.reviewsPanel")
@@ -335,12 +360,16 @@ extension ReviewPageRules {
     /// Letterboxd's reviews have no heading the script can find, so its page reports ready after its load and two frames, as it always did.
     static let loadedScript = #"""
     (function () {
+      var sent = false;
+      function post() {
+        if (sent) { return; }
+        sent = true;
+        window.webkit.messageHandlers.painted.postMessage('painted');
+      }
+      // Two frames after the load, or a quarter of a second should frames not come (a page loading behind another one).
       function painted() {
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            window.webkit.messageHandlers.painted.postMessage('painted');
-          });
-        });
+        requestAnimationFrame(function () { requestAnimationFrame(post); });
+        setTimeout(post, 250);
       }
       if (document.readyState === 'complete') { painted(); } else { window.addEventListener('load', painted); }
     })();

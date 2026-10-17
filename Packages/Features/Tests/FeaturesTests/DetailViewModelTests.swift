@@ -322,6 +322,27 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(movie.openedReviews == nil)
     }
 
+    @Test func theOpenSiteStaysOnScreenWhileAnotherLoads() async throws {
+        let services = try await installedServices()
+        let movie = DetailViewModel(preview: MetaPreview(id: "mock:movie4", type: "movie", name: "P"), services: services)
+        let imdb = DetailViewModel.OpenedReviews(site: .imdb, url: URL(string: "https://www.imdb.com/title/mock:movie4/")!, isSearch: false)
+        let letterboxd = DetailViewModel.OpenedReviews(site: .letterboxd, url: URL(string: "https://letterboxd.com/search/P/")!, isSearch: true)
+        let rottenTomatoes = DetailViewModel.OpenedReviews(site: .rottenTomatoes, url: URL(string: "https://www.rottentomatoes.com/search?search=P")!,
+                                                           isSearch: true)
+        movie.toggleReviews(imdb.site, url: imdb.url, isSearch: imdb.isSearch)
+        #expect(movie.shownReviews == nil, "nothing was open to keep")
+        movie.reviewsDidLoad()
+        movie.toggleReviews(letterboxd.site, url: letterboxd.url, isSearch: letterboxd.isSearch)
+        #expect(movie.openedReviews == letterboxd && movie.shownReviews == imdb, "IMDb stays on screen while Letterboxd loads")
+        movie.toggleReviews(rottenTomatoes.site, url: rottenTomatoes.url, isSearch: rottenTomatoes.isSearch)
+        #expect(movie.openedReviews == rottenTomatoes && movie.shownReviews == imdb, "still the page on screen, not the one that never showed")
+        movie.reviewsDidLoad()
+        #expect(movie.openedReviews == rottenTomatoes && movie.shownReviews == nil, "the new site takes its place once loaded")
+        movie.toggleReviews(imdb.site, url: imdb.url, isSearch: imdb.isSearch)
+        movie.toggleReviews(rottenTomatoes.site, url: rottenTomatoes.url, isSearch: rottenTomatoes.isSearch)
+        #expect(movie.openedReviews == nil && movie.shownReviews == nil, "a tap on the site on screen closes the reviews")
+    }
+
     @Test func openingReviewsStopsTheTrailerAndStartingTheTrailerClosesThem() async throws {
         let services = try await installedServices()
         let movie = DetailViewModel(preview: MetaPreview(id: "mock:movie4", type: "movie", name: "P"), services: services)
@@ -656,6 +677,29 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(!model.canPlayTrailer, "no trailer known: the button does nothing")
     }
 
+    @Test func playIsRightTheMomentTheEpisodesArrive() async throws {
+        let services = try await installedServices()
+        await saveProgress(services, id: "mock:series1:2:2", type: "series", position: 300, duration: 1200, updatedAt: Date(),
+                           season: 2, episode: 2)
+        let model = DetailViewModel(preview: MetaPreview(id: "mock:series1", type: "series", name: "S"), services: services)
+        let whenLoaded = SeenRequest()
+        // A show's hero loads once its episodes are in, so this runs the moment the page stops loading.
+        await model.load(afterHero: { whenLoaded.id = model.isLoading ? nil : model.primaryRequest?.id })
+        #expect(whenLoaded.id == "mock:series1:2:2", "a Play tapped while the page loaded resumes the episode in progress")
+        #expect(model.selectedSeason == 2)
+    }
+
+    @Test func theTrailerButtonWorksBeforeTheDetailsArrive() async throws {
+        let trailers = #"[{"title":"Direct","url":"https://cdn.example.com/t.mp4"}]"#
+        let services = try await trailerServices(trailers: trailers)
+        let model = DetailViewModel(preview: MetaPreview(id: "tt7200001", type: "movie", name: "Trailer Movie", releaseInfo: "2010"),
+                                    services: services)
+        #expect(model.canPlayTrailer, "a tap is taken while the details load")
+        async let plan = model.trailerPlan()
+        await model.load()
+        #expect(await plan.trailers.map(\.id) == ["url:https://cdn.example.com/t.mp4"], "the tap waited for the details' trailer")
+    }
+
     @Test func theTrailerPlanListsTheAddonsDirectLinkBeforeItsYouTubeIDs() async throws {
         let trailers = #"[{"title":"Trailer","ytId":"EXeTwQWrcwY"},{"title":"Direct","url":"https://cdn.example.com/t.mp4"}]"#
         let services = try await trailerServices(trailers: trailers)
@@ -667,4 +711,10 @@ private struct NoITunesTransport: HTTPTransport {
         #expect(plan.trailers.map(\.id) == ["url:https://cdn.example.com/t.mp4", "yt:EXeTwQWrcwY"],
                 "the direct file is tried first; the YouTube id is the fallback")
     }
+}
+
+/// What a test saw at one moment of a load.
+@MainActor
+private final class SeenRequest {
+    var id: String?
 }
