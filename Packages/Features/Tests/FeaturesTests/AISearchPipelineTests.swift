@@ -140,6 +140,52 @@ import StremioKit
         #expect(await calls.queries.isEmpty)
     }
 
+    private actor Overlap {
+        var running = 0
+        var most = 0
+        func enter() { running += 1; most = max(most, running) }
+        func leave() { running -= 1 }
+    }
+
+    /// Accepts every candidate; the first batch answers last, so later batches finish first.
+    private struct SlowRanker: CandidateRanking {
+        let overlap: Overlap
+        func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate] {
+            await overlap.enter()
+            try? await Task.sleep(for: .milliseconds(candidates.first?.hasPrefix("Title 1,") == true ? 80 : 10))
+            await overlap.leave()
+            return candidates.indices.map { RankedCandidate(number: $0 + 1, reason: "") }
+        }
+    }
+
+    @Test func candidateBatchesAreCheckedTwoAtATimeAndShownInOrder() async {
+        let calls = Calls()
+        let overlap = Overlap()
+        let plan = AISearchPlan(filters: DescribedSearch(kind: .movie, genres: ["Crime"], moods: ["paranoia"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] }, titles: { _ in
+            (1...36).map { MetaPreview(id: "tt\($0)", type: "movie", name: "Title \($0)", description: "A paranoid investigation.") }
+        }, ranker: SlowRanker(overlap: overlap))
+        let items = await service.titles(for: "tense crime films about paranoia") { await calls.update($0) }
+        #expect(await overlap.most == DescribedSearchService.rankingConcurrency)
+        #expect(items.count >= 24)
+        #expect(items.map(\.name) == (1...items.count).map { "Title \($0)" }, "the first batch's picks come first, though it answered last")
+        let snapshots = await calls.updates.filter { !$0.items.isEmpty }.map(\.items)
+        for pair in zip(snapshots, snapshots.dropFirst()) { #expect(pair.1.starts(with: pair.0)) }
+    }
+
+    /// A page that fills the candidate limit at once still has its candidates checked, rather than none of them.
+    @Test func candidatesTakenUpToTheLimitAreStillChecked() async {
+        let calls = Calls()
+        let plan = AISearchPlan(filters: DescribedSearch(genres: ["Comedy"], moods: ["paranoia"]))
+        let service = DescribedSearchService(interpreter: Interpreter(answer: plan, calls: calls), keywords: { _ in [] }, titles: { query in
+            (1...40).map { MetaPreview(id: "tt\(query.kind.rawValue)\($0)", type: query.kind == .movie ? "movie" : "series", name: "Title \($0)",
+                                       description: "A paranoid comedy.") }
+        }, ranker: Ranker(calls: calls))
+        let items = await service.titles(for: "comedies about paranoia")
+        #expect(items.count >= DescribedSearchService.semanticTarget)
+        #expect(await calls.ranks <= DescribedSearchService.rankingAttemptLimit)
+    }
+
     @Test func languageStudioAndExclusionsReachBothDatabaseQueries() async {
         let calls = Calls()
         let plan = AISearchPlan(filters: DescribedSearch(genres: ["Animation"], excludedGenres: ["Horror"]),

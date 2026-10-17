@@ -68,6 +68,46 @@ public struct DescribedSearchService: Sendable {
     static let semanticTarget = 18
     /// Includes retries: a rejected batch cannot cause a fresh retry tree for every database page.
     static let rankingAttemptLimit = 8
+    /// Candidate batches the model checks at once.
+    static let rankingConcurrency = 2
+
+    struct RankOutcome: Sendable {
+        var items: [MetaPreview]
+        /// Model calls made, the split halves' included.
+        var attempts: Int
+        var failed: Bool
+    }
+
+    /// The batch's titles the model picks, in its order, never one twice or one it was not shown. After a failure the batch is
+    /// tried once more as two halves when `canSplit`, which can salvage a good half without retrying every synopsis.
+    static func rank(_ batch: [AISearchCandidate], ranker: any CandidateRanking, request: String, references: [String],
+                     canSplit: Bool) async -> RankOutcome {
+        func select(_ part: [AISearchCandidate]) async throws -> [MetaPreview] {
+            // No generated explanations are displayed in this row. Give the model enough story evidence and ask only for selections.
+            let ranked = try await ranker.rank(request: request, references: references,
+                                               candidates: part.map { line($0.item, evidence: $0.evidence) }, watched: [])
+            var selected = Set<Int>()
+            return ranked.compactMap { entry in
+                guard (1...part.count).contains(entry.number), selected.insert(entry.number).inserted else { return nil }
+                return part[entry.number - 1].item
+            }
+        }
+        guard !Task.isCancelled else { return RankOutcome(items: [], attempts: 0, failed: false) }
+        do {
+            return RankOutcome(items: try await select(batch), attempts: 1, failed: false)
+        } catch {
+            guard !Task.isCancelled else { return RankOutcome(items: [], attempts: 1, failed: false) }
+            guard canSplit else { return RankOutcome(items: [], attempts: 1, failed: true) }
+            let midpoint = batch.count / 2
+            var outcome = RankOutcome(items: [], attempts: 1, failed: false)
+            for half in [Array(batch[..<midpoint]), Array(batch[midpoint...])] {
+                guard !Task.isCancelled else { break }
+                outcome.attempts += 1
+                do { outcome.items += try await select(half) } catch { if !Task.isCancelled { outcome.failed = true } }
+            }
+            return outcome
+        }
+    }
 
     public func titles(for text: String, onUpdate: @escaping @Sendable (AISearchUpdate) async -> Void = { _ in }) async -> [MetaPreview] {
         let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -191,64 +231,71 @@ public struct DescribedSearchService: Sendable {
             Task.isCancelled || output.count >= target || considered.count >= Self.candidateLimit
                 || (plan.requiresSemanticRanking && ranker != nil && rankingAttempts >= Self.rankingAttemptLimit)
         }
-        func rank(_ batch: [AISearchCandidate]) async -> [MetaPreview] {
-            guard let ranker, !batch.isEmpty, !Task.isCancelled, rankingAttempts < Self.rankingAttemptLimit else { return [] }
-            rankingAttempts += 1
-            do {
-                // No generated explanations are displayed in this row. Give the model enough story evidence and ask only for selections.
-                let ranked = try await ranker.rank(request: request, references: references.map { Self.line($0) },
-                                                   candidates: batch.map { Self.line($0.item, evidence: $0.evidence) }, watched: [])
-                var selected = Set<Int>()
-                return ranked.compactMap { entry in
-                    guard (1...batch.count).contains(entry.number), selected.insert(entry.number).inserted else { return nil }
-                    return batch[entry.number - 1].item
+        /// Takes each list's fresh candidates and publishes them, after the model's check when the search needs one. Batches are
+        /// checked two at a time (on this Mac two calls side by side took about as long as one), and published in the lists' order.
+        func consume(_ lists: [(found: [AISearchCandidate], stage: AISearchUpdate.Stage, verified: Bool)]) async {
+            guard !finished(), let first = lists.first else { return }
+            await update(first.stage)
+            var batches: [[AISearchCandidate]] = []
+            for list in lists {
+                let fresh = list.found.filter { candidate in
+                    let item = candidate.item
+                    guard !excluded.contains(item.identity), Self.fits(item, filters: plan.filters),
+                          Self.fitsMetadata(candidate, plan: plan), considered.count < Self.candidateLimit else { return false }
+                    return considered.insert(item.identity).inserted
                 }
-            } catch {
-                guard !Task.isCancelled else { return [] }
-                // One bounded split can salvage a good half without recursively retrying every synopsis.
-                guard batch.count > 1, rankingAttempts + 2 <= Self.rankingAttemptLimit else {
-                    issue = issue ?? .ranking
-                    return []
-                }
-                let midpoint = batch.count / 2
-                var recovered: [MetaPreview] = []
-                for half in [Array(batch[..<midpoint]), Array(batch[midpoint...])] {
-                    guard !Task.isCancelled else { return [] }
-                    rankingAttempts += 1
-                    do {
-                        let ranked = try await ranker.rank(request: request, references: references.map { Self.line($0) },
-                                                           candidates: half.map { Self.line($0.item, evidence: $0.evidence) }, watched: [])
-                        var selected = Set<Int>()
-                        recovered += ranked.compactMap { entry in
-                            guard (1...half.count).contains(entry.number), selected.insert(entry.number).inserted else { return nil }
-                            return half[entry.number - 1].item
-                        }
-                    } catch {
-                        if !Task.isCancelled { issue = issue ?? .ranking }
+                for start in stride(from: 0, to: fresh.count, by: Self.batchSize) {
+                    let batch = Array(fresh[start..<min(start + Self.batchSize, fresh.count)])
+                    if ranker != nil, plan.requiresSemanticRanking, !list.verified {
+                        batches.append(batch)
+                    } else {
+                        guard !Task.isCancelled, output.count < target else { return }
+                        await publish(batch.map(\.item), stage: list.stage)
                     }
                 }
-                return recovered
             }
-        }
-        func consume(_ found: [AISearchCandidate], stage: AISearchUpdate.Stage, verified: Bool = false) async {
-            guard !finished() else { return }
-            await update(stage)
-            let fresh = found.filter { candidate in
-                let item = candidate.item
-                guard !excluded.contains(item.identity), Self.fits(item, filters: plan.filters),
-                      Self.fitsMetadata(candidate, plan: plan), considered.count < Self.candidateLimit else { return false }
-                return considered.insert(item.identity).inserted
-            }
-            for start in stride(from: 0, to: fresh.count, by: Self.batchSize) {
-                guard !Task.isCancelled, output.count < target else { return }
-                let batch = Array(fresh[start..<min(start + Self.batchSize, fresh.count)])
-                if ranker != nil, plan.requiresSemanticRanking, !verified {
-                    await update(.ranking)
-                    await publish(await rank(batch), stage: .ranking)
-                } else {
-                    await publish(batch.map(\.item), stage: stage)
+            guard let ranker, !batches.isEmpty, !Task.isCancelled, output.count < target else { return }
+            await update(.ranking)
+            let referenceLines = references.map { Self.line($0) }
+            var next = 0
+            var shown = 0
+            var done: [Int: [MetaPreview]] = [:]
+            var reserved: [Int: Int] = [:]
+            await withTaskGroup(of: (Int, RankOutcome).self) { group in
+                var running = 0
+                while true {
+                    // Each call holds its own attempt and, when it may split after a failure, the two halves' too, so the
+                    // search-wide budget holds however many calls run at once; what a call did not use is given back.
+                    // Not `finished()`: reaching the candidate limit must not leave candidates already taken unchecked.
+                    while running < Self.rankingConcurrency, next < batches.count, !Task.isCancelled, output.count < target {
+                        let batch = batches[next]
+                        let canSplit = batch.count > 1 && rankingAttempts + 3 <= Self.rankingAttemptLimit
+                        let reserve = canSplit ? 3 : 1
+                        guard rankingAttempts + reserve <= Self.rankingAttemptLimit else { break }
+                        rankingAttempts += reserve
+                        reserved[next] = reserve
+                        let index = next
+                        group.addTask {
+                            (index, await Self.rank(batch, ranker: ranker, request: request, references: referenceLines, canSplit: canSplit))
+                        }
+                        next += 1
+                        running += 1
+                    }
+                    guard let (index, outcome) = await group.next() else { break }
+                    running -= 1
+                    rankingAttempts -= (reserved[index] ?? 1) - outcome.attempts
+                    if outcome.failed, !Task.isCancelled { issue = issue ?? .ranking }
+                    done[index] = outcome.items
+                    while let items = done.removeValue(forKey: shown) {
+                        await publish(items, stage: .ranking)
+                        shown += 1
+                    }
+                    if Task.isCancelled { group.cancelAll() }
                 }
             }
+        }
+        func consume(_ found: [AISearchCandidate], stage: AISearchUpdate.Stage) async {
+            await consume([(found, stage, false)])
         }
 
         for name in plan.titleQueries {
@@ -327,36 +374,56 @@ public struct DescribedSearchService: Sendable {
                 }.filter { !$0.isEmpty }
                 var exhausted = Set<TMDbDiscoverQuery>()
 
-                func discover(_ queries: [TMDbDiscoverQuery], page: Int, stage: AISearchUpdate.Stage, verified: Bool = false) async {
-                    guard !finished() else { return }
-                    await update(stage)
+                /// One page of every query in the rounds, asked together; the candidates are then taken in the rounds' order.
+                func discover(_ rounds: [(queries: [TMDbDiscoverQuery], stage: AISearchUpdate.Stage, verified: Bool)], page: Int) async {
+                    guard !finished(), let first = rounds.first(where: { !$0.queries.isEmpty }) else { return }
+                    await update(first.stage)
+                    var pages: [TMDbDiscoverQuery: [MetaPreview]] = [:]
+                    // A first page already searched before the model's reading is not asked for again.
+                    var asked: [TMDbDiscoverQuery] = []
+                    for query in rounds.flatMap(\.queries)
+                        where !exhausted.contains(query) && !(page == 0 && earlyQueries.contains(query)) && !asked.contains(query) {
+                        asked.append(query)
+                    }
                     await withTaskGroup(of: (TMDbDiscoverQuery, Result<[MetaPreview], any Error>).self) { group in
-                        // A first page already searched before the model's reading is not asked for again.
-                        for query in queries where !exhausted.contains(query) && !(page == 0 && earlyQueries.contains(query)) {
+                        for query in asked {
                             group.addTask {
                                 do { return (query, .success(try await fetch(query, page: page))) } catch { return (query, .failure(error)) }
                             }
                         }
                         for await (query, result) in group {
-                            guard !finished() else { group.cancelAll(); break }
+                            guard !Task.isCancelled else { group.cancelAll(); break }
                             switch result {
                             case .success(let found):
                                 if found.isEmpty { exhausted.insert(query) }
-                                let facts = Self.facts(for: query)
-                                await consume(found.map { AISearchCandidate(item: $0, evidence: facts) }, stage: stage, verified: verified)
+                                pages[query] = found
                             case .failure(let error):
                                 recordFailure(error)
                                 exhausted.insert(query)
                             }
                         }
                     }
+                    var lists: [(found: [AISearchCandidate], stage: AISearchUpdate.Stage, verified: Bool)] = []
+                    for round in rounds {
+                        for query in round.queries {
+                            guard let found = pages.removeValue(forKey: query) else { continue }
+                            let facts = Self.facts(for: query)
+                            lists.append((found.map { AISearchCandidate(item: $0, evidence: facts) }, round.stage, round.verified))
+                        }
+                    }
+                    await consume(lists)
                 }
                 // Give requested themes the first slots and the first inference budget. Broaden one page at a time for recall.
-                // Never exhaust generic popularity pages before even requesting the relevant pool.
+                // Never exhaust generic popularity pages before even requesting the relevant pool. When the model checks every
+                // candidate, the theme and wider pools of a page are asked and checked together.
+                let wider = broad.map { (queries: $0, stage: AISearchUpdate.Stage.filters, verified: false) }
                 for page in 0..<(pageTitles == nil ? 1 : 3) {
-                    await discover(themed, page: page, stage: .themes, verified: verifiedThemes)
-                    if (ranker != nil && !verifiedThemes) || themed.isEmpty || output.isEmpty {
-                        for round in broad where !finished() { await discover(round, page: page, stage: .filters) }
+                    let themes = (queries: themed, stage: AISearchUpdate.Stage.themes, verified: verifiedThemes)
+                    if ranker != nil, !verifiedThemes {
+                        await discover([themes] + wider, page: page)
+                    } else {
+                        await discover([themes], page: page)
+                        if themed.isEmpty || output.isEmpty { await discover(wider, page: page) }
                     }
                     if finished() { break }
                 }
