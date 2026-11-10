@@ -548,6 +548,7 @@ public final class DetailViewModel {
             await services.progress.save(WatchProgress(id: request.identity, type: request.type, contentID: request.id, title: request.title,
                                                        poster: request.poster, position: 0, duration: 0, isWatched: true, updatedAt: Date(),
                                                        season: request.season, episode: request.episode))
+            await services.queueNextContinueEpisode(after: request)
         } else {
             await services.progress.remove(request.identity)
         }
@@ -609,6 +610,9 @@ public final class DetailViewModel {
                               season: video.season, episode: video.episode)
             }
             await services.progress.save(records)
+            if let last = episodes.last {
+                await services.queueNextContinueEpisode(after: request(for: last))
+            }
         } else {
             await services.progress.remove(episodes.map { episodeIdentity($0) })
         }
@@ -684,6 +688,7 @@ public final class DetailViewModel {
     }
 
     public var isSeries: Bool { detail.type == "series" || !detail.videos.isEmpty }
+
     public var seasons: [Int] { detail.seasons }
     public var episodes: [Video] { selectedSeason.map { detail.episodes(inSeason: $0) } ?? [] }
 
@@ -1021,10 +1026,10 @@ public final class DetailViewModel {
         "\(detail.type.isEmpty ? "series" : detail.type)/\(video.id)"
     }
 
-    /// Started but not watched.
+    /// Started or queued to continue, but not watched.
     private func isUnfinished(_ identity: String) -> Bool {
         guard let record = savedProgress[identity] else { return false }
-        return !record.isWatched && record.position > 0
+        return !record.isWatched && (record.isQueuedForContinue == true || record.position > 0)
     }
 
     private func lastUpdate(_ video: Video) -> Date {
@@ -1047,3 +1052,4 @@ private final class ResumeOnce: @unchecked Sendable {
         pending?.resume()
     }
 }
+

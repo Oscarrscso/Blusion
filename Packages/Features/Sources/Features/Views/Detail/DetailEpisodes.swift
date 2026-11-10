@@ -16,8 +16,8 @@ struct DetailEpisodes: View {
     let play: (StreamRequest, StreamTrigger) -> Void
     /// Highest Quality or Data Saver from an episode's hold menu: the best stream at that quality starts.
     let playAtQuality: (StreamRequest, PlayQuality) -> Void
-    /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and the episodes take no taps then, since a tap
-    /// would call that lookup off or start a second one.
+    /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and that episode's card take no taps then; any
+    /// other episode's card loads its own streams in their place.
     var loadingRequest: StreamRequest?
     /// What asked for the loading streams. Only that control shows a spinner: Shuffle in place of its symbol, an episode on its card.
     var loadingTrigger: StreamTrigger?
@@ -136,7 +136,8 @@ struct DetailEpisodes: View {
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
     private var seasonMenu: some View {
-        Menu {
+        let shape = RoundedRectangle(cornerRadius: Self.secondaryControlHeight / 2 * metrics.cornerScale(for: .actionButtons), style: .continuous)
+        return Menu {
             ForEach(model.seasons, id: \.self) { season in
                 Button(season == 0 ? "Specials" : "Season \(season)") {
                     if model.selectedSeason != season { Haptics.play(.choices) }
@@ -163,11 +164,14 @@ struct DetailEpisodes: View {
             }
             .padding(.horizontal, 10)
             .frame(height: Self.secondaryControlHeight)
-            .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
-            .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: model.playColourHex) ?? .clear)), in: ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
-            .glassHover(ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
+            .contentShape(shape)
+            .contentShape(.contextMenuPreview, shape)
+            .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: model.playColourHex) ?? .clear)), in: shape)
+            .clipShape(shape)
+            .glassHover(shape)
         }
         .buttonStyle(.plain)
+        .buttonBorderShape(.roundedRectangle(radius: Self.secondaryControlHeight / 2 * metrics.cornerScale(for: .actionButtons)))
         .frame(height: Self.secondaryControlHeight)
         .accessibilityIdentifier("detail.seasonPicker")
     }
@@ -284,11 +288,12 @@ struct DetailEpisodes: View {
         let airsLater = !video.hasAired()
         let request = model.request(for: video)
         let hasNoStreams = unavailableStreams.contains(request.identity)
+        let isThisLoading = loadingRequest?.identity == request.identity
         let card = Button {
             // As Shuffle does: the episode's streams load on this page, with a spinner on its card only, and replace the details once
-            // ready. One lookup at a time, so a second tap does not call it off or open another. A swipe that ends on the card, such as
-            // one going back, plays nothing, as on a stream's card.
-            guard !isLoadingStreams, !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
+            // ready. A tap on another episode while they load switches the lookup to that one; the loading card itself takes no taps.
+            // A swipe that ends on the card, such as one going back, plays nothing, as on a stream's card.
+            guard !isThisLoading, !SwipeRecord.latest.isSwipe(at: ContinuousClock.now) else { return }
             play(request, .episode)
         } label: {
             episodeCard(video, width: width, airsLater: airsLater,
@@ -306,7 +311,7 @@ struct DetailEpisodes: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableCardStyle.poster)
-        .allowsHitTesting(!isLoadingStreams)
+        .allowsHitTesting(!isThisLoading)
         // An episode that has not aired cannot be opened: its card shows the air date instead.
         .disabled(airsLater || hasNoStreams)
         .titleTapHaptic()
@@ -763,3 +768,4 @@ private struct EpisodeRow: View {
     }
 }
 #endif
+

@@ -88,6 +88,27 @@ public struct PlaybackCandidate: Sendable, Equatable, Identifiable {
     }
 }
 
+/// A repeating programme list. Requests keep each show's own identity for subtitles and watch progress.
+public struct PlaybackQueue: Sendable, Equatable {
+    public let title: String
+    public let requests: [StreamRequest]
+    public let index: Int
+    /// Each item plays from its beginning, as a channel's programmes do, rather than from saved progress.
+    public let startsFromBeginning: Bool
+
+    public init(title: String, requests: [StreamRequest], index: Int = 0, startsFromBeginning: Bool = false) {
+        self.title = title
+        self.requests = requests
+        self.index = requests.indices.contains(index) ? index : 0
+        self.startsFromBeginning = startsFromBeginning
+    }
+
+    public var next: PlaybackQueue? {
+        guard !requests.isEmpty else { return nil }
+        return PlaybackQueue(title: title, requests: requests, index: (index + 1) % requests.count, startsFromBeginning: startsFromBeginning)
+    }
+}
+
 /// What to play and what to fall back on: the chosen stream first, then every other playable stream in rank order.
 /// If one fails, the coordinator moves to the next (PLAN M5: auto-advance on failure).
 public struct PlaybackPlan: Sendable, Equatable, Identifiable, Hashable {
@@ -103,24 +124,42 @@ public struct PlaybackPlan: Sendable, Equatable, Identifiable, Hashable {
     public let retriesInFallbackEngine: Bool
     /// A stream the first fallback engine cannot start is retried once in the full-featured engine. False unless a second engine is linked and in use.
     public let retriesInBackupEngine: Bool
+    public let queue: PlaybackQueue?
+    /// An explicit start, including zero, takes precedence over ordinary Continue Watching progress.
+    public let initialPosition: TimeInterval?
 
     public init(id: UUID = UUID(), request: StreamRequest, candidates: [PlaybackCandidate], retriesInFallbackEngine: Bool = false,
-                retriesInBackupEngine: Bool = false) {
+                retriesInBackupEngine: Bool = false, queue: PlaybackQueue? = nil, initialPosition: TimeInterval? = nil) {
         self.id = id
         self.request = request
         self.candidates = candidates
         self.retriesInFallbackEngine = retriesInFallbackEngine
         self.retriesInBackupEngine = retriesInBackupEngine
+        self.queue = queue
+        self.initialPosition = initialPosition.flatMap { $0.isFinite ? max(0, $0) : nil }
+    }
+
+    /// The plan inside `queue`. A nil `position` resumes saved progress as usual; zero starts over.
+    public func inQueue(_ queue: PlaybackQueue, startingAt position: TimeInterval? = nil) -> PlaybackPlan {
+        PlaybackPlan(id: id, request: request, candidates: candidates, retriesInFallbackEngine: retriesInFallbackEngine,
+                     retriesInBackupEngine: retriesInBackupEngine, queue: queue, initialPosition: position)
     }
 
     /// `nil` when `chosen` isn't playable. The retry follows the same policy that routed the streams, so Settings decides it too.
     public static func make(request: StreamRequest, chosen: RankedStream, from listing: StreamListing) -> PlaybackPlan? {
         guard let first = PlaybackCandidate(chosen) else { return nil }
         let rest = AutoStreamRanking.ranked(listing.playable.filter { $0.id != chosen.id }, duration: request.expectedDuration, preferences: listing.preferences).compactMap { PlaybackCandidate($0.item) }
-        return PlaybackPlan(request: request, candidates: [first] + rest, retriesInFallbackEngine: listing.config.fallbackEngineAvailable,
+        // Different addons often return the same URL. Retry it only once with the same headers.
+        var candidates = [first]
+        for candidate in rest where candidate.cacheStatus != .uncached {
+            guard !candidates.contains(where: { $0.url == candidate.url && $0.headers == candidate.headers }) else { continue }
+            candidates.append(candidate)
+        }
+        return PlaybackPlan(request: request, candidates: candidates, retriesInFallbackEngine: listing.config.fallbackEngineAvailable,
                             retriesInBackupEngine: listing.config.fallbackEngineAvailable && listing.config.backupEngineAvailable)
     }
 
     public static func == (lhs: PlaybackPlan, rhs: PlaybackPlan) -> Bool { lhs.id == rhs.id }
     public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
+

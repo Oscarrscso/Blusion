@@ -1,8 +1,8 @@
 import Foundation
 import StremioKit
 
-/// What asked for a title's streams on its page: Play, Shuffle or an episode's card. Only that control shows a spinner while they load,
-/// and the others take no taps until they are ready.
+/// What asked for a title's streams on its page: Play, Shuffle or an episode's card. Only that control shows a spinner while they load.
+/// Play and Shuffle take no taps until they are ready; another episode's card loads that episode's streams instead.
 enum StreamTrigger: Equatable {
     case play, shuffle, episode
 }
@@ -34,10 +34,11 @@ struct TitleStreams: Equatable {
     var pickerID: String { "\(request?.id ?? "-")|\(restarts)" }
 
     /// Play, Shuffle or an episode's card was tapped. Its streams load, with a spinner on that control only; a second tap while they load
-    /// calls them off. After Auto Pick has started a stream, a tap picks again.
+    /// calls them off. Another item while they load, such as a different episode after a card tapped by mistake, loads in their place.
+    /// After Auto Pick has started a stream, a tap picks again.
     mutating func show(_ request: StreamRequest, from trigger: StreamTrigger) {
         isReady = false
-        if hasStarted {
+        if hasStarted || (self.request != nil && self.request?.identity != request.identity) {
             hasStarted = false
             restarts += 1
             self.request = request

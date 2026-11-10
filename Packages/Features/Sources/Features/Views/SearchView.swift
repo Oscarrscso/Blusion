@@ -43,7 +43,11 @@ struct SearchView: View {
         .task {
             await model.refreshAvailability()
             model.prewarmAI()
+            if (model.phase == .idle || model.aiPhase == .idle), !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.queryDidChange()
+            }
         }
+        .onDisappear { model.cancel() }
         .onChange(of: router.tab) { old, _ in
             if old == .settings { Task { await model.refreshAvailability() } }
         }
@@ -67,12 +71,17 @@ struct SearchView: View {
                         .onSubmit { Task { await model.submit() } }
                         .padding(.horizontal, metrics.gridPageMargin)
                     #endif
+                    TonightControls(model: model) { selectedType = "all"; isSearchFocused = false }
+                        .padding(.horizontal, metrics.gridPageMargin)
                     if model.isOffline {
                         OfflineBanner()
                     } else if !model.failures.isEmpty {
                         WrappingStack { ForEach(model.failures) { ErrorChip(text: $0.text) } }
                             .padding(.horizontal, metrics.gridPageMargin)
                             .accessibilityIdentifier("search.failures")
+                        Button("Retry Search") { Task { await model.submit() } }
+                            .buttonStyle(.bordered)
+                            .padding(.horizontal, metrics.gridPageMargin)
                     }
                     if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         if model.showsNoSearchableAddons {
@@ -225,14 +234,7 @@ struct SearchView: View {
     }
 
     private var resultItems: [MetaPreview] {
-        if selectedType == "ai" { return model.describedItems }
-        let items = model.groups.flatMap(\.items)
-        // Add semantic matches after title matches, showing each title only once.
-        var seen = Set(items.map(\.identity))
-        let combined = items + model.describedItems.filter { seen.insert($0.identity).inserted }
-        return combined.filter {
-            selectedType == "all" || $0.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == selectedType
-        }
+        model.results(type: selectedType)
     }
 
     private var isLoadingResults: Bool {
@@ -253,10 +255,16 @@ struct SearchView: View {
             .navigationAlignedWidth(margin: metrics.gridPageMargin)
             .accessibilityIdentifier("search.filters")
 
+            SearchRefinements(model: model)
+                .padding(.horizontal, metrics.gridPageMargin)
+
             if !resultItems.isEmpty {
                 MediaGrid(items: resultItems, fillsWidth: true)
             } else if isLoadingResults {
                 MediaGridPlaceholder(aspect: .poster, fillsWidth: true)
+            } else if model.filter.isActive, model.hasResults {
+                EmptyStateView("No matches for these filters", systemImage: "line.3.horizontal.decrease",
+                               actionTitle: "Clear Filters", action: { model.clearFilters() })
             } else if !model.isOffline, model.failures.isEmpty || selectedType == "ai" {
                 EmptyStateView("No results", systemImage: "magnifyingglass")
                     .accessibilityIdentifier("search.empty")
@@ -286,3 +294,4 @@ struct SearchView: View {
 
 }
 #endif
+

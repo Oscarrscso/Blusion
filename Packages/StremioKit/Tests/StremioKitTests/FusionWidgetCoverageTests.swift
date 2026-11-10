@@ -140,7 +140,7 @@ import Testing
         switch content {
         case .row(let row), .hero(let row), .banner(let row): return [row.source]
         case .collection(let tiles): return tiles.flatMap(\.sources)
-        case .continueWatching, .unsupported: return []
+        case .continueWatching, .blusionTV, .unsupported: return []
         }
     }
 

@@ -225,6 +225,8 @@ struct PlayerContent: View {
     @State private var holdProgress = HoldDragProgress()
     @State private var nativeFrameEngineID: ObjectIdentifier?
     @State private var nextEpisode = NextEpisodeState.notStarted
+    @State private var channelAdvanceFailed = false
+    @State private var advanceTask: Task<Void, Never>?
     @State private var nextPrompt = UpNextPrompt.hidden
     /// The running countdown of `nextPrompt`, called off with `stopCountdown`.
     @State private var upNextCountdown: Task<Void, Never>?
@@ -430,6 +432,15 @@ struct PlayerContent: View {
             withAnimation(.easeInOut(duration: 0.2)) { hiddenSkipMarker = marker }
         }
         .task { await model.start() }
+        .alert("Next programme unavailable", isPresented: $channelAdvanceFailed) {
+            Button("Retry") {
+                nextEpisode = .notStarted
+                playNextEpisode()
+            }
+            Button("Close", role: .cancel) { close() }
+        } message: {
+            Text("No playable stream was found for the next programme.")
+        }
         .task(id: infoModel.ratingsRevision) {
             await infoModel.load()
             guard !Task.isCancelled, infoModel.openedReviews == nil,
@@ -500,6 +511,7 @@ struct PlayerContent: View {
             // the app leaving the front — backgrounding, a lock — does not: the session stays on the air at the app level, and this
             // screen or a rebuilt one reattaches to it when it comes back.
             if LivePlaybackSession.closesOnDisappear(scenePhase: scenePhase) {
+                if departure != .handedOver { advanceTask?.cancel() }
                 Task {
                     await model.close()
                     livePlayback.forget(model)
@@ -1070,6 +1082,8 @@ struct PlayerContent: View {
     #endif
 
     private func close() {
+        advanceTask?.cancel()
+        leaveUpNext()
         Task {
             await model.close()
             await model.clearSessionSnapshot()
@@ -1083,23 +1097,34 @@ struct PlayerContent: View {
         guard departure == .staying else { return }
         departure = .movingOn
         stopCountdown()
-        Task {
+        advanceTask = Task {
             await model.close()
             livePlayback.forget(model)
             // A readying under way finishes first: it is the quicker start.
             if case .readying(let task) = nextEpisode { await task.value }
-            departure = .handedOver
+            guard !Task.isCancelled else { return }
             if case .ready(let ready) = nextEpisode {
-                nextEpisode = .handedOver
                 await model.saveSessionSnapshot(for: ready.plan, candidateIndex: ready.model.currentStreamIndex)
+                guard !Task.isCancelled else { await ready.model.close(); return }
+                nextEpisode = .handedOver
+                departure = .handedOver
                 onNextPlan(ready.plan, ready.model)
             } else if let next = await model.prepareNextEpisode() {
+                guard !Task.isCancelled else { return }
                 await model.saveSessionSnapshot(for: next)
+                guard !Task.isCancelled else { return }
+                departure = .handedOver
                 onNextPlan(next, nil)
             } else {
+                guard !Task.isCancelled else { return }
                 // No auto-selectable stream: back to the picker, with no session for the episode that just ended.
-                await model.clearSessionSnapshot()
-                dismiss()
+                if model.plan.queue != nil {
+                    departure = .staying
+                    channelAdvanceFailed = true
+                } else {
+                    await model.clearSessionSnapshot()
+                    dismiss()
+                }
             }
         }
     }
@@ -1134,13 +1159,15 @@ struct PlayerContent: View {
     /// Called every half second. When the end comes up (`UpNextTiming`) the next episode starts loading off screen; once it is ready,
     /// Next Episode shows and counts down. Seeking back out of the end takes the button away again.
     private func updateUpNext() {
-        guard model.hasNextEpisode, model.failureMessage == nil, departure == .staying else { return }
+        guard model.hasNextEpisode, model.failureMessage == nil, departure == .staying, !channelAdvanceFailed else { return }
         let creditsToEnd = model.activeSkipMarker.map { $0.kind == .credits && model.skipEndsMedia($0) } ?? false
         let nearEnd = UpNextTiming.isNearEnd(position: model.state.position, duration: model.duration, creditsToEnd: creditsToEnd)
         if !nearEnd && !(model.duration.map { $0 > 0 && $0 - model.state.position <= 45 } ?? false), nextPrompt == .creditsChosen {
             nextPrompt = .hidden
         }
         if nearEnd, case .notStarted = nextEpisode { readyNextEpisode() }
+        // A channel readies its next programme, but lets the current programme finish instead of cutting its credits short.
+        if model.plan.queue != nil { return }
         let inLast45Seconds = model.duration.map { $0.isFinite && $0 > 0 && $0 - model.state.position <= 45 } ?? false
         // Show the action even if preload is slow; keep it up once its countdown starts.
         let isReady = if case .ready = nextEpisode { true } else { false }

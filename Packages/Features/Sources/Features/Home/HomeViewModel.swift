@@ -97,7 +97,19 @@ public final class HomeViewModel {
         }
         let laidOut = saved ?? DefaultWidgets.make(for: addons)
         layoutWidgets = Dictionary(laidOut.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let widgets = await shuffled(laidOut, addons: addons)
+        var widgets = await shuffled(laidOut, addons: addons)
+        if UserDefaults.standard.bool(forKey: OptimisationSettings.lowPerformanceWidgetsKey) {
+            widgets = widgets.map { widget in
+                guard var row = loadingConfiguration(widget.content) else { return widget }
+                row.limit = 15
+                row.layout = nil
+                row.presentation = WidgetPresentation(showsRatings: false, usesHeroPosters: false)
+                var widget = widget
+                widget.content = .row(row)
+                widget.hideTitle = false
+                return widget
+            }
+        }
         guard current == generation, !Task.isCancelled else { return }
         let previous = sections
         sections = widgets.map { HomeViewModel.startingSection(for: $0, previous: previous, known: [:]) }
@@ -192,9 +204,21 @@ public final class HomeViewModel {
         isCustomised = true
         // Saved into the saved widget, in the saved layout's own order: Home may show its widgets shuffled, and a widget with a random
         // source shows the source it picked, not the ones it picks from.
-        let saved = await services.widgets.load() ?? sections.map(\.widget)
+        let saved = await services.widgets.load() ?? sections.map { layoutWidgets[$0.id] ?? $0.widget }
         await services.widgets.save(saved.map { $0.id == sectionID ? HomeViewModel.withBetterPosters($0, on) : $0 })
         layoutWidgets[sectionID] = layoutWidgets[sectionID].map { HomeViewModel.withBetterPosters($0, on) }
+    }
+
+    /// Adds Blusion TV to a saved layout that has never had it, once, right after Continue Watching. Removed later, it stays removed.
+    public func placeBlusionTVOnce(defaults: UserDefaults = .standard) async {
+        let key = "home.blusionTVPlaced.v1"
+        guard !defaults.bool(forKey: key) else { return }
+        defaults.set(true, forKey: key)
+        guard var list = await services.widgets.load(), !list.contains(where: { $0.content == .blusionTV }) else { return }
+        let index = list.firstIndex(where: HomeLayout.isContinueWatching).map { $0 + 1 } ?? 0
+        let id = list.contains { $0.id == DefaultWidgets.blusionTVID } ? UUID().uuidString : DefaultWidgets.blusionTVID
+        list.insert(HomeWidget(id: id, title: "Blusion TV", content: .blusionTV), at: index)
+        await services.widgets.save(list)
     }
 
     /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
@@ -207,7 +231,7 @@ public final class HomeViewModel {
             await load()
             return
         }
-        let current = saved ?? sections.map(\.widget)
+        let current = saved ?? sections.map { layoutWidgets[$0.id] ?? $0.widget }
         guard current.contains(where: { $0.id == sectionID }) else {
             await load()
             return
@@ -234,7 +258,7 @@ public final class HomeViewModel {
             await load()
             return
         }
-        let current = saved ?? sections.map(\.widget)
+        let current = saved ?? sections.map { layoutWidgets[$0.id] ?? $0.widget }
         guard let list = WidgetsManagerViewModel.duplicating(sectionID, in: current),
               let index = list.firstIndex(where: { $0.id == sectionID }) else { return }
         isCustomised = true
@@ -581,6 +605,6 @@ private struct RowResult: Sendable {
 private func loadingConfiguration(_ content: HomeWidget.Content) -> RowConfiguration? {
     switch content {
     case .hero(let row), .banner(let row), .row(let row): return row
-    case .collection, .continueWatching, .unsupported: return nil
+    case .collection, .continueWatching, .blusionTV, .unsupported: return nil
     }
 }

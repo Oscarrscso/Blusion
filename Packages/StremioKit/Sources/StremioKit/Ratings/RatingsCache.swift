@@ -105,8 +105,9 @@ public actor FileRatingsCache: RatingsCache {
     }
 
     private func trimToCapacity() {
-        let excess = entries.count - maxEntries
-        guard excess > 0 else { return }
+        guard entries.count > maxEntries else { return }
+        // A tenth more than the excess goes, as `TitleMarksCache` trims: a full cache otherwise sorted every entry on each store.
+        let excess = entries.count - maxEntries + maxEntries / 10
         for (key, _) in entries.sorted(by: { $0.value.fetchedAt < $1.value.fetchedAt }).prefix(excess) {
             entries[key] = nil
         }

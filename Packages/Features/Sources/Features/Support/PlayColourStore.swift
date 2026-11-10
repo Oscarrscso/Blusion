@@ -18,6 +18,9 @@ final class PlayColourStore {
     /// Titles being read now, so cards that show the same title at once read it once.
     private var reading: Set<String> = []
     private let file: URL?
+    /// Colours decided since the last write, and the task that writes them (see `save`).
+    private var isUnsaved = false
+    private var saving: Task<Void, Never>?
 
     init(file: URL? = PlayColourStore.defaultFile) {
         self.file = file
@@ -169,10 +172,22 @@ final class PlayColourStore {
         [rgb.red, rgb.green, rgb.blue].map { String(format: "%02x", Int(($0 * 255).rounded())) }.joined()
     }
 
+    /// Colours are decided a row of cards at a time, so they are written together a moment later, one write after another. Writing the
+    /// whole file for every title cost a row's worth of writes at once, which could also land out of order and save an older copy last.
     private func save() {
         guard let file else { return }
-        let snapshot = entries
-        Task.detached(priority: .utility) { PlayColourStore.write(snapshot, to: file) }
+        isUnsaved = true
+        guard saving == nil else { return }
+        saving = Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, self.isUnsaved else { break }
+                self.isUnsaved = false
+                let snapshot = self.entries
+                await Task.detached(priority: .utility) { PlayColourStore.write(snapshot, to: file) }.value
+            }
+            self?.saving = nil
+        }
     }
 
     nonisolated static func read(_ file: URL) -> [String: String] {

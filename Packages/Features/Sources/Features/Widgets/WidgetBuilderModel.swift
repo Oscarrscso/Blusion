@@ -691,7 +691,7 @@ public final class WidgetBuilderModel {
     private static func rowOf(_ content: HomeWidget.Content) -> RowConfiguration? {
         switch content {
         case .row(let row), .hero(let row), .banner(let row): return row
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 

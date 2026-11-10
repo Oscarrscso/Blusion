@@ -392,7 +392,8 @@ public final class StreamPickerViewModel {
     /// Known details of Auto Pick's current candidate, refreshed as addons answer. Nil until a candidate has details to show.
     public var recommendedStreamLabel: String? {
         guard let item = bestToPlay else { return nil }
-        let details = [item.quality.resolutionLabel,
+        let readiness: String? = StreamAvailability.cacheStatus(for: item.stream) == .cached ? "Cached" : nil
+        let details = [readiness, item.quality.resolutionLabel,
                        item.quality.isRemux ? "REMUX" : item.quality.source?.label,
                        StreamDelivery.detect(in: item.stream)?.title].compactMap { $0 }
         return details.isEmpty ? nil : details.joined(separator: " · ")
@@ -540,6 +541,17 @@ public final class StreamPickerViewModel {
         }
     }
 
+    /// Channels always play in-app, under the same availability and quality rules as Auto Pick.
+    public var bestInAppPlan: PlaybackPlan? {
+        var builtIn = listing
+        var config = builtIn.config
+        config.playerPreference = .builtIn
+        builtIn.update(config: config)
+        guard let best = AutoStreamRanking.best(from: builtIn.playable, duration: request.expectedDuration,
+                                               preferences: rankingPreferences) else { return nil }
+        return PlaybackPlan.make(request: request, chosen: best.item, from: builtIn)
+    }
+
     /// Plays the stream in Blusion even though it would be handed off, when Blusion itself can play it. nil when it cannot.
     public func inAppChoice(for item: RankedStream) -> Choice? {
         var builtIn = listing.config
@@ -610,3 +622,4 @@ public final class StreamPickerViewModel {
         return item.stream.subtitles.first { LanguageCodes.matches($0.lang, preferred: language) }?.url
     }
 }
+

@@ -256,7 +256,7 @@ public enum WidgetShuffling {
     public static func schedule(for widget: HomeWidget, settings: WidgetShuffleSettings) -> WidgetShuffle {
         switch widget.content {
         case .hero(let row), .banner(let row), .row(let row): row.shuffle ?? settings.schedule
-        case .collection, .continueWatching, .unsupported: .off
+        case .collection, .continueWatching, .blusionTV, .unsupported: .off
         }
     }
 
@@ -355,7 +355,7 @@ public enum WidgetShuffling {
     private static func loadingRow(of widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .hero(let row), .banner(let row), .row(let row): row
-        case .collection, .continueWatching, .unsupported: nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: nil
         }
     }
 
@@ -364,7 +364,7 @@ public enum WidgetShuffling {
         case .hero: .hero(row)
         case .banner: .banner(row)
         case .row: .row(row)
-        case .collection, .continueWatching, .unsupported: content
+        case .collection, .continueWatching, .blusionTV, .unsupported: content
         }
     }
 

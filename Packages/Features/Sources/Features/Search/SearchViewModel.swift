@@ -56,6 +56,22 @@ public final class SearchViewModel {
     }
 
     public var query = ""
+    public private(set) var tonightQuery: String?
+    private var tonightOffset = 0
+    public var isTonightSearch: Bool { tonightQuery != nil && query == tonightQuery }
+
+    public func chooseTonight(mood: String, minutes: Int) {
+        clearFilters()
+        tonightOffset = 0
+        let text = "\(mood) movies under \(minutes) minutes"
+        tonightQuery = text
+        query = text
+        queryDidChange()
+    }
+
+    public func reshuffleTonight() { tonightOffset += 3 }
+
+    public var filter = SearchResultFilter()
     public private(set) var sections: [Section] = []
     public private(set) var failures: [Failure] = []
     public private(set) var phase: Phase = .idle
@@ -84,15 +100,18 @@ public final class SearchViewModel {
     public private(set) var picks: [WatchPick] = []
     /// Nil where the on-device model is not available: such a search is then read as a description.
     private let picker: WatchPicker?
+    private let includesAISearch: Bool
 
     /// Never label a TMDb-only fallback as on-device model output.
-    public var aiAvailable: Bool { picker != nil || describer.ranker != nil }
+    public var aiAvailable: Bool { includesAISearch && (picker != nil || describer.ranker != nil) }
 
     /// `history` keeps the recent searches. Without one they live only as long as this model.
     public init(services: AppServices, debounce: Duration = .milliseconds(300), history: (any SearchHistoryStore)? = nil,
-                describer: DescribedSearchService? = nil, picker: WatchPicker? = nil, usesLivePicker: Bool = true) {
+                describer: DescribedSearchService? = nil, picker: WatchPicker? = nil, usesLivePicker: Bool = true,
+                includesAISearch: Bool = true) {
         let store = history ?? InMemorySearchHistoryStore()
         self.services = services
+        self.includesAISearch = includesAISearch
         self.describer = describer ?? .live(services)
         self.picker = picker ?? (usesLivePicker ? WatchPicker.live(services) : nil)
         self.debounce = debounce
@@ -106,6 +125,38 @@ public final class SearchViewModel {
     /// "No results" needs an addon that could have answered; with none installed the screen says so instead.
     public var showsNoResults: Bool { phase == .done && aiPhase == .done && !hasResults && failures.isEmpty && aiIssue == nil }
     public var showsNoSearchableAddons: Bool { !hasSearchableAddons }
+
+    private var combinedResults: [MetaPreview] { groups.flatMap(\.items) + describedItems }
+
+    public func results(type: String = "all") -> [MetaPreview] {
+        if isTonightSearch {
+            let items = SearchResults.ranked(describedItems, query: query, filter: filter, semantic: true)
+                .filter { $0.type == "movie" && (type == "all" || type == "ai" || type == "movie") }
+            guard !items.isEmpty else { return [] }
+            let start = tonightOffset % items.count
+            return Array((Array(items[start...]) + Array(items[..<start])).prefix(3))
+        }
+        let source = type == "ai" ? describedItems : combinedResults
+        let items = source.filter { type == "all" || type == "ai" || Self.groupType($0.type) == type }
+        return SearchResults.ranked(items, query: query, filter: filter, semantic: type == "ai")
+    }
+
+    public var availableGenres: [String] {
+        Array(Set(combinedResults.flatMap(\.genres))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    public var availableYears: [Int] { Array(Set(combinedResults.compactMap { SearchResults.year(of: $0) })).sorted(by: >) }
+
+    public func clearFilters() { filter = SearchResultFilter() }
+
+    public func cancel() {
+        task?.cancel()
+        aiTask?.cancel()
+        aiRequestID = UUID()
+        activeTerm = nil
+        if phase == .searching { phase = .idle }
+        if aiPhase == .searching { aiPhase = .idle }
+    }
 
     /// Results across all addons, grouped by content type: movie first, then series, then other types in order of first appearance.
     /// Within a group items keep addon order (the user's order) then the addon's own order; duplicates (same `identity`) appear once.
@@ -177,6 +228,8 @@ public final class SearchViewModel {
         guard !Task.isCancelled else { return }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { task?.cancel(); reset(); return }
+        recentQueries = Self.recording(term, into: recentQueries)
+        history.save(recentQueries)
         // Submitting while the same debounced search is already running must not restart expensive on-device inference.
         if activeTerm == term, phase == .searching || aiPhase == .searching {
             await task?.value
@@ -214,6 +267,7 @@ public final class SearchViewModel {
     private func reset() {
         aiTask?.cancel()
         aiRequestID = UUID()
+        filter = SearchResultFilter()
         sections = []
         failures = []
         describedItems = []
@@ -242,12 +296,16 @@ public final class SearchViewModel {
     /// One plan covers title, metadata, people, similarity and semantic searches with cumulative updates.
     private func searchAI(_ term: String) {
         aiTask?.cancel()
+        guard includesAISearch else { aiPhase = .done; return }
         let describer = describer
         let requestID = UUID()
         aiRequestID = requestID
         aiStage = .interpreting
         aiIssue = nil
         aiTask = Task { [weak self] in
+            // Give title results a head start and avoid starting inference between keystrokes.
+            do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
+            guard !Task.isCancelled else { return }
             let items = await describer.titles(for: term) { [weak self] update in
                 guard !Task.isCancelled else { return }
                 await self?.applyAIUpdate(update, term: term, requestID: requestID)
@@ -377,3 +435,4 @@ public final class SearchViewModel {
         query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
+

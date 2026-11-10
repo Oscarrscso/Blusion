@@ -48,12 +48,6 @@ public struct VideoGeometry: Equatable, Sendable {
         PictureGeometry.sourceCropRect(source: source, pixelAspectRatio: pixelAspectRatio, cleanAperture: cleanAperture, crop: crop)
     }
 
-    /// Scale a fitted original frame just enough to fill; there is no overshoot or second crop.
-    public static func fillScale(bounds: CGSize, source: CGSize, crop: Double?, stretch: Bool, zoom: Double = 1) -> CGSize {
-        PictureGeometry(bounds: bounds, source: source, crop: crop, fit: stretch ? .stretch : .fill, zoom: zoom)?.fittedScale
-            ?? CGSize(width: 1, height: 1)
-    }
-
     public static func keptFraction(aspect: Double, crop: Double?) -> CGRect {
         PictureGeometry.keptFraction(aspect: aspect, crop: crop)
     }

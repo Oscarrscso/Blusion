@@ -170,7 +170,7 @@ extension HomeWidget {
                 tiles[index].sources = tiles[index].sources.map { $0.readingSavedTMDbFilters(title: tileTitle) }
             }
             widget.content = .collection(tiles)
-        case .continueWatching, .unsupported:
+        case .continueWatching, .blusionTV, .unsupported:
             break
         }
         return widget

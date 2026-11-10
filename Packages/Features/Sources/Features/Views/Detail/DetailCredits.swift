@@ -3,31 +3,28 @@ import SwiftUI
 import StremioKit
 import UIKit
 
-/// The title's cast and crew, with photos from TMDb when it has them and the addon's plain names when it does not. On iPhone the information
-/// block follows them; on Mac it sits at the top of the page instead.
+/// The title's cast and crew, with photos from TMDb when it has them and the addon's plain names when it does not.
 struct DetailCredits: View {
     let model: DetailViewModel
     let contentMargin: CGFloat
-    /// The page's width, so four whole cast cards fit across it.
+    /// The page's width, used to size the cast cards.
     let pageWidth: CGFloat
     @Environment(\.layoutMetrics) private var metrics
-    /// Appearance's title page sections: Cast & Crew and Information.
+    /// Appearance's Cast & Crew visibility.
     @Environment(\.appAppearance) private var appearance
 
     var body: some View {
-        // A faint line parts the cast from the information, as it parts the page's other sections.
         TitleSections(contentMargin: contentMargin) {
             if !appearance.showsCast {
-                // Appearance's Cast & Crew is off: the information alone.
                 EmptyView()
             } else if let group = model.shownCreditGroup, let people = model.shownCredits, !people.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     // TMDb's cast and crew, one part at a time, with photos. The heading is the part shown and the menu of the others.
                     CreditGroupMenu(groups: model.creditGroups, shown: group, playColourHex: model.playColourHex) { model.creditGroup = $0 }
                         .padding(.horizontal, contentMargin)
-                    // Four whole cards across the page, the fifth peeking in; never wider than a shelf's usual card.
+                    // Smaller than the four-across layout and the shelf's usual cards.
                     let cardWidth = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin, spacing: metrics.cardSpacing,
-                                                             maximum: metrics.posterWidth)
+                                                             maximum: metrics.posterWidth) * 0.8
                     // Keyed on the width, so the row measures its height again when the cards change size (the phone turned). Each
                     // photo loads as its card scrolls on, behind the rest of the page. A part has a row of its own, so it starts at its
                     // first card.
@@ -45,7 +42,7 @@ struct DetailCredits: View {
                         .frame(height: 28)
                         .padding(.horizontal, contentMargin)
                     let width = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin,
-                                                         spacing: metrics.cardSpacing, maximum: metrics.posterWidth)
+                                                         spacing: metrics.cardSpacing, maximum: metrics.posterWidth) * 0.8
                     ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
                         ForEach(0..<6, id: \.self) { index in
                             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -91,12 +88,6 @@ struct DetailCredits: View {
                     }
                 }
             }
-            // The information follows the cast and crew on iPhone and on the Mac alike.
-            if appearance.showsInformation {
-                DetailInformation(model: model)
-                    .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-                    .padding(.horizontal, contentMargin)
-            }
         }
         .detailLoadingTransition(model.isLoadingCredits)
         .environment(\.showsArtworkLoadingSpinner, true)
@@ -137,6 +128,7 @@ private struct CreditGroupMenu: View {
         }
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
+        .buttonBorderShape(.roundedRectangle(radius: 14 * metrics.cornerScale(for: .actionButtons)))
         .frame(maxWidth: .infinity, alignment: .leading)
         // Still the section's heading, so the headings rotor finds it.
         .accessibilityAddTraits(.isHeader)
@@ -147,7 +139,8 @@ private struct CreditGroupMenu: View {
     }
 
     private var groupLabel: some View {
-        HStack(spacing: 4) {
+        let shape = RoundedRectangle(cornerRadius: 14 * metrics.cornerScale(for: .actionButtons), style: .continuous)
+        return HStack(spacing: 4) {
             Text(shown.title)
                 .font(.subheadline.weight(.semibold))
             if groups.count > 1 {
@@ -161,10 +154,12 @@ private struct CreditGroupMenu: View {
         .padding(.horizontal, 12)
         .frame(height: 28)
         // The tint belongs to the glass inside the label, just like Sort and AI, so it travels with the system menu animation.
-        .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)), in: ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
+        .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)), in: shape)
         .animation(.smooth(duration: 0.3), value: playColourHex)
-        .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
-        .glassHover(ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
+        .contentShape(shape)
+        .contentShape(.contextMenuPreview, shape)
+        .clipShape(shape)
+        .glassHover(shape)
     }
 }
 #endif

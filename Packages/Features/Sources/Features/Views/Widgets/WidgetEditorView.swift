@@ -43,7 +43,7 @@ struct WidgetEditorView: View {
     private static func row(of widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .row(let row), .hero(let row), .banner(let row): return row
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 
@@ -62,7 +62,7 @@ struct WidgetEditorView: View {
             case .collection(let tiles):
                 titleSection
                 tilesSection(tiles)
-            case .continueWatching:
+            case .continueWatching, .blusionTV:
                 titleSection
             case .row, .hero, .banner:
                 // Never drawn here: `WidgetBuilderView` shows these.

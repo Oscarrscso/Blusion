@@ -74,7 +74,7 @@ public enum WidgetStyle: String, CaseIterable, Identifiable, Sendable {
         case .row(let row): self = row.layout.map { WidgetStyle($0) } ?? .row
         case .hero: self = .spotlight
         case .banner: self = .banner
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 
@@ -95,7 +95,7 @@ public enum WidgetStyle: String, CaseIterable, Identifiable, Sendable {
         let old: RowConfiguration
         switch widget.content {
         case .row(let row), .hero(let row), .banner(let row): old = row
-        case .collection, .continueWatching, .unsupported: return widget
+        case .collection, .continueWatching, .blusionTV, .unsupported: return widget
         }
         guard let current = WidgetStyle(widget.content), current != style else { return widget }
         var row = old

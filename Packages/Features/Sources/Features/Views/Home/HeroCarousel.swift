@@ -150,7 +150,7 @@ struct HeroCarousel: View {
                                 .tag(Optional(item.identity))
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .tabViewStyle(.page(indexDisplayMode: items.count > 1 && appearance.showsPageDots ? .always : .never))
                     // Plays once each time Home returns from a title (the revision changes), never on first appearance. It starts a little
                     // larger and the frame below clips it, so the picture always reaches the screen's edges: started smaller, it showed
                     // black borders round the picture until it settled.
@@ -176,9 +176,6 @@ struct HeroCarousel: View {
                         }
                     }
                 }
-            }
-            .overlay(alignment: .bottom) {
-                if items.count > 1 && appearance.showsPageDots { pageDots(bottom: isLandscape ? Theme.Spacing.m : 0) }
             }
             // Keep the native menu outside the paging TabView so its pages remain visible.
             .contextMenu {
@@ -232,23 +229,6 @@ struct HeroCarousel: View {
         let next = items[(currentIndex + 1) % items.count].identity
         turnsBySelf = true
         withAnimation(.snappy(duration: 0.5)) { pageID = next }
-    }
-
-    /// The page dots. In portrait they sit at the page's bottom edge, under the metadata line, which now runs lower (see `HeroPage.pageContent`),
-    /// so a line that wraps to two lines still clears them.
-    private func pageDots(bottom: CGFloat) -> some View {
-        HStack(spacing: 6) {
-            ForEach(items, id: \.identity) { item in
-                let isCurrent = item.identity == (pageID ?? items.first?.identity)
-                ScaledCapsule(scale: metrics.cornerScale(for: .artwork))
-                    .fill(.white.opacity(isCurrent ? 0.95 : 0.35))
-                    .frame(width: isCurrent ? 16 : 6, height: 6)
-            }
-        }
-        .animation(.snappy(duration: 0.25), value: pageID)
-        .padding(.bottom, bottom)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

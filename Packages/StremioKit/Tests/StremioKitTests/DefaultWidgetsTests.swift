@@ -25,7 +25,7 @@ import StremioKitTestSupport
     private func configuration(_ widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .row(let config), .hero(let config), .banner(let config): return config
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 
@@ -36,20 +36,21 @@ import StremioKitTestSupport
 
     @Test func theFixtureGivesSpotlightContinueAndOneRowPerBrowsableCatalog() throws {
         let widgets = DefaultWidgets.make(for: [try cinemeta()])
-        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.row.org.example.cinemeta.movie.top", "auto.row.org.example.cinemeta.series.top"])
-        #expect(widgets.map(\.title) == ["Spotlight", "Continue", "Popular Movies", "Popular Series"])
+        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.row.org.example.cinemeta.movie.top", "auto.row.org.example.cinemeta.series.top"])
+        #expect(widgets.map(\.title) == ["Spotlight", "Continue", "Blusion TV", "Popular Movies", "Popular Series"])
 
         let hero = try #require(configuration(widgets[0]))
         #expect(widgets[0].hideTitle && hero.limit == 8)
         #expect(hero.source == .addonCatalog(AddonCatalogReference(manifestID: "org.example.cinemeta", host: "cinemeta.example.com", catalogType: "movie",
             catalogID: "top")))
         #expect(widgets[1].content == .continueWatching)
+        #expect(widgets[2].content == .blusionTV)
 
-        let movies = try #require(configuration(widgets[2]))
+        let movies = try #require(configuration(widgets[3]))
         #expect(movies.limit == 20 && movies.presentation == WidgetPresentation(), "automatic rows show ratings; Settings can turn them off everywhere")
         #expect(movies.source == .addonCatalog(AddonCatalogReference(manifestID: "org.example.cinemeta", host: "cinemeta.example.com", catalogType: "movie",
             catalogID: "top")))
-        let shows = try #require(configuration(widgets[3]))
+        let shows = try #require(configuration(widgets[4]))
         #expect(shows.source == .addonCatalog(AddonCatalogReference(manifestID: "org.example.cinemeta", host: "cinemeta.example.com", catalogType: "series",
             catalogID: "top")))
     }
@@ -64,7 +65,7 @@ import StremioKitTestSupport
         #expect(DefaultWidgets.make(for: [try cinemeta(enabled: false)]).isEmpty)
         let other = try installed(manifest("other", catalogs: [CatalogDescriptor(type: "movie", id: "films", name: "Films")]), host: "other.example.com")
         let widgets = DefaultWidgets.make(for: [try cinemeta(enabled: false), other])
-        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.row.other.movie.films"])
+        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.row.other.movie.films"])
     }
 
     @Test func theLayoutIsTheSameEveryTimeAndDoesNotDependOnInstallIdentity() throws {
@@ -99,7 +100,7 @@ import StremioKitTestSupport
             CatalogDescriptor(type: "series", id: "c", name: "C"),
         ]), host: "multi.example.com")
         let widgets = DefaultWidgets.make(for: [addon])
-        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.row.multi.movie.a", "auto.row.multi.movie.b", "auto.genres", "auto.row.multi.series.c"])
+        #expect(widgets.map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.row.multi.movie.a", "auto.row.multi.movie.b", "auto.genres", "auto.row.multi.series.c"])
 
         let browse = try #require(widgets.first { $0.id == "auto.genres" })
         #expect(browse.title == "Browse by Genre" && browse.hideTitle == false)
@@ -113,8 +114,8 @@ import StremioKitTestSupport
 
     @Test func theGenreRowGoesLastWhenThereAreFewerThanTwoRows() throws {
         let addon = try installed(manifest("one", catalogs: [CatalogDescriptor(type: "movie", id: "a", name: "A", extra: [genres(4)])]), host: "one.example.com")
-        #expect(DefaultWidgets.make(for: [addon]).map(\.id) == ["auto.hero", "auto.continue", "auto.row.one.movie.a", "auto.genres"])
-        #expect(DefaultWidgets.make(for: [addon], maxRows: 0).map(\.id) == ["auto.hero", "auto.continue", "auto.genres"])
+        #expect(DefaultWidgets.make(for: [addon]).map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.row.one.movie.a", "auto.genres"])
+        #expect(DefaultWidgets.make(for: [addon], maxRows: 0).map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.genres"])
     }
 
     @Test func theGenreRowNeedsAtLeastFourGenresFromTheFirstCatalogThatHasThem() throws {
@@ -135,12 +136,12 @@ import StremioKitTestSupport
             CatalogDescriptor(type: "movie", id: "b", name: "B", extra: [genres(5)]),
             CatalogDescriptor(type: "movie", id: "c", name: "C"),
         ]), host: "capped.example.com")
-        #expect(DefaultWidgets.make(for: [addon], maxRows: 1).map(\.id) == ["auto.hero", "auto.continue", "auto.row.capped.movie.a", "auto.genres"])
+        #expect(DefaultWidgets.make(for: [addon], maxRows: 1).map(\.id) == ["auto.hero", "auto.continue", "auto.tv", "auto.row.capped.movie.a", "auto.genres"])
 
         let many = try installed(manifest("many", catalogs: (1...16).map { CatalogDescriptor(type: "movie", id: "c\($0)", name: "Catalog \($0)") }),
                                  host: "many.example.com")
         let widgets = DefaultWidgets.make(for: [many])
-        #expect(widgets.count == 2 + 14, "fourteen rows by default")
+        #expect(widgets.count == 3 + 14, "fourteen rows by default")
         #expect(!widgets.contains { $0.id == "auto.genres" })
     }
 
@@ -163,7 +164,7 @@ import StremioKitTestSupport
         let second = try installed(try ResponseDecoder.manifest(from: Fixture.data("manifests/10-cinemeta-like.json")), host: "mirror.example.com")
         let widgets = DefaultWidgets.make(for: [first, second])
         #expect(widgets.map(\.id) == DefaultWidgets.make(for: [first]).map(\.id), "the first install's rows, once each")
-        #expect(configuration(widgets[2])?.source == .addonCatalog(AddonCatalogReference(manifestID: "org.example.cinemeta", host: "cinemeta.example.com",
+        #expect(configuration(widgets[3])?.source == .addonCatalog(AddonCatalogReference(manifestID: "org.example.cinemeta", host: "cinemeta.example.com",
             catalogType: "movie", catalogID: "top")))
     }
 }

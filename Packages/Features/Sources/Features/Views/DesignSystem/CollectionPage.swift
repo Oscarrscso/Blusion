@@ -106,16 +106,48 @@ struct CollectionPage: UIViewRepresentable {
         var pointerPause: ScrollPointerPause?
         var scrollToTop: Int?
         var jumpToTop: Int?
-        private var blockIndex: [String: Int] = [:]
         private var lastRanges: [String: ClosedRange<Int>?] = [:]
         private var lastOffset: CGFloat?
 
         /// Item ids are the block's id and the card's id, so two grids can show one title.
         private func itemID(_ block: CollectionBlock, _ id: String) -> String { "\(block.id)\u{1F}\(id)" }
 
+        /// The blocks last applied: each one's id and, for a grid, its cards' ids.
+        private var applied: [(id: String, cards: [String]?)] = []
+        private var appliedFullIDs: [String] = []
+
+        /// Whether the page lists what it listed at the last `apply`, so the data source already holds it.
+        private func listsAppliedBlocks(_ blocks: [CollectionBlock]) -> Bool {
+            guard blocks.count == applied.count else { return false }
+            for (block, last) in zip(blocks, applied) {
+                guard block.id == last.id else { return false }
+                switch block.kind {
+                case .full: if last.cards != nil { return false }
+                case .grid(let ids, _, _, _): if last.cards != ids { return false }
+                }
+            }
+            return true
+        }
+
         func apply() {
             guard let page, let dataSource else { return }
-            blockIndex = Dictionary(page.blocks.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+            // Most updates change what the cells show, not which cells there are: those only refresh the cells on screen, without
+            // building every card's id and a whole snapshot again, which a long grid paid for on each update.
+            if listsAppliedBlocks(page.blocks) {
+                let visible = collectionView?.indexPathsForVisibleItems.compactMap { dataSource.itemIdentifier(for: $0) } ?? []
+                let refresh = Array(Set(appliedFullIDs + visible))
+                if !refresh.isEmpty {
+                    var refreshed = dataSource.snapshot()
+                    refreshed.reconfigureItems(refresh)
+                    dataSource.apply(refreshed, animatingDifferences: false)
+                }
+                reportVisibleRanges()
+                return
+            }
+            applied = page.blocks.map { block -> (id: String, cards: [String]?) in
+                if case .grid(let ids, _, _, _) = block.kind { return (id: block.id, cards: ids) }
+                return (id: block.id, cards: nil)
+            }
             var snapshot = NSDiffableDataSourceSnapshot<String, String>()
             var fullIDs: [String] = []
             for block in page.blocks {
@@ -150,6 +182,7 @@ struct CollectionPage: UIViewRepresentable {
                 refreshed.reconfigureItems(refresh)
                 dataSource.apply(refreshed, animatingDifferences: false)
             }
+            appliedFullIDs = fullIDs
             reportVisibleRanges()
         }
 
@@ -230,6 +263,8 @@ struct CollectionPage: UIViewRepresentable {
             let host = UIHostingController(rootView: cell(0).environment(\.self, environment))
             host.sizingOptions = []
             let height = max(1, host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height.rounded(.up))
+            // Dragging the window's edge asks for a height at every width it passes; those are not kept for good.
+            if cardHeights.count >= 64 { cardHeights.removeAll() }
             cardHeights[key] = height
             return height
         }

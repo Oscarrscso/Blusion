@@ -161,7 +161,7 @@ struct DetailView: View {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
                                            isTruncated: $isDescriptionTruncated, foldedLines: 5, isLoading: model.isLoading)
                         } information: {
-                            // The information follows the cast, as on iPhone (see DetailCredits), not at the top of the page.
+                            // Information appears below Reviews and Cast & Crew on both platforms.
                             EmptyView()
                         }
                         #else
@@ -234,8 +234,8 @@ struct DetailView: View {
                                     .padding(.top, isLandscape
                                         ? metrics.titleRatingsGap - TitleHero.landscapeContentBottomInset
                                         : metrics.titleRatingsGap)
-                                // Appearance's Section order puts Cast & Crew and Information before the reviews or after them.
-                                let credits = appearance.showsCast || appearance.showsInformation
+                                // Section order moves only Cast & Crew; Information stays below both sections.
+                                let credits = appearance.showsCast
                                     ? DetailCredits(model: model, contentMargin: contentMargin, pageWidth: geometry.size.width) : nil
                                 // Each section below has a faint line above it, as far from it as the one under the ratings.
                                 TitleSections(contentMargin: contentMargin) {
@@ -261,6 +261,11 @@ struct DetailView: View {
                                             .id(ReviewConsensusReader.key(for: model.reviews))
                                     }
                                     if appearance.sectionOrder == .reviewsFirst, let credits { credits }
+                                    if appearance.showsInformation {
+                                        DetailInformation(model: model)
+                                            .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+                                            .padding(.horizontal, contentMargin)
+                                    }
                                     if let franchise = model.franchise {
                                         titleShelf(franchise.name, titles: franchise.parts, isLoading: false, identifier: "detail.franchise")
                                     }

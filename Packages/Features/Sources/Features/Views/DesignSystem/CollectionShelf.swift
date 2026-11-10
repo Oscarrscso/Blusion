@@ -50,8 +50,9 @@ struct CollectionShelf<Item, Cell: View>: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.shelf = self
         coordinator.environment = context.environment
-        // Home scrolling moves this row under the pointer too: its cards ignore the pointer until Home settles.
-        coordinator.pointerPause?.setExternallyPaused(context.environment.homeScroll?.isScrolling ?? false)
+        // Home scrolling moves this row under the pointer too: its cards ignore the pointer until Home settles. The coordinator watches
+        // Home's scroll itself. Read here, a scroll starting or stopping updated every shelf, and an update refreshes each card on screen.
+        coordinator.follow(context.environment.homeScroll)
         if let layout = view.collectionViewLayout as? SnappingShelfLayout {
             let height = coordinator.height(for: self, environment: context.environment)
             let size = CGSize(width: itemWidth, height: height)
@@ -93,6 +94,29 @@ struct CollectionShelf<Item, Cell: View>: UIViewRepresentable {
         var scrollToStart: Int?
         private var measured: (key: String, height: CGFloat)?
         private var lastRange: ClosedRange<Int>?
+        private weak var homeScroll: HomeScrollState?
+        /// Counts the scroll states followed, so a watch on one that has been replaced ends.
+        private var homeScrollWatch = 0
+
+        /// Pauses the pointer over this row's cards while `scroll` says Home is scrolling.
+        func follow(_ scroll: HomeScrollState?) {
+            guard scroll !== homeScroll || homeScrollWatch == 0 else { return }
+            homeScroll = scroll
+            homeScrollWatch += 1
+            watchHomeScroll(homeScrollWatch)
+        }
+
+        private func watchHomeScroll(_ watch: Int) {
+            guard watch == homeScrollWatch else { return }
+            guard let homeScroll else {
+                pointerPause?.setExternallyPaused(false)
+                return
+            }
+            let isScrolling = withObservationTracking { homeScroll.isScrolling } onChange: { [weak self] in
+                Task { @MainActor in self?.watchHomeScroll(watch) }
+            }
+            pointerPause?.setExternallyPaused(isScrolling)
+        }
 
         /// The first card's height at the row's width, measured once per key in a throwaway hosting controller.
         func height(for shelf: CollectionShelf, environment: EnvironmentValues) -> CGFloat {

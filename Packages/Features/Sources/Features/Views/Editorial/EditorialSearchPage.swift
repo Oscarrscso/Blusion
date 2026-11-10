@@ -68,6 +68,8 @@ struct EditorialSearchPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 field
+                TonightControls(model: model) { selectedType = "all"; isFieldFocused = false }
+                    .padding(.vertical, Theme.Spacing.m)
                 if hasQuery {
                     resultsPage.transition(.opacity)
                 } else {
@@ -287,6 +289,9 @@ struct EditorialSearchPage: View {
                 .accessibilityAddTraits(.isHeader)
             }
             .padding(.top, Theme.Spacing.xl)
+            SearchRefinements(model: model, showsGenre: false)
+                .tint(.black)
+                .padding(.top, Theme.Spacing.l)
             resultRow
                 .padding(.top, 40)
             tagStack
@@ -523,3 +528,4 @@ private struct EditorialResultCard: View {
     }
 }
 #endif
+

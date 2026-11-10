@@ -498,15 +498,6 @@ struct ReviewSummaryPipeline: ReviewSummarizing {
         return indices.map { ranked[$0] }
     }
 
-    /// A merge must never erase an entire sentiment because its statements have fewer supporters than the other kinds.
-    private static func preservingKinds(_ merged: [Theme], from original: [Theme]) -> [Theme] {
-        var kept = merged
-        for kind in Kind.allCases where !kept.contains(where: { $0.kind == kind }) {
-            if let point = ranked(original).first(where: { $0.kind == kind }) { kept.append(point) }
-        }
-        return coalesced(kept)
-    }
-
     private static func coalesced(_ themes: [Theme]) -> [Theme] {
         var kept: [Theme] = []
         var positions: [String: Int] = [:]

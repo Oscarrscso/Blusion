@@ -296,11 +296,10 @@ private struct AppearancePreviewContent: View {
     /// The title page's sections below the episodes, as Appearance orders and shows them.
     private var sectionsInOrder: [String] {
         let reviews = appearance.showsReviews ? ["Reviews"] : []
-        var credits: [String] = []
-        if appearance.showsCast { credits.append("Cast & Crew") }
-        if appearance.showsInformation { credits.append("Information") }
+        let credits = appearance.showsCast ? ["Cast & Crew"] : []
+        let information = appearance.showsInformation ? ["Information"] : []
         let middle = appearance.sectionOrder == .reviewsFirst ? reviews + credits : credits + reviews
-        return ["Episodes"] + middle + (appearance.showsRelated ? ["More Like This"] : [])
+        return ["Episodes"] + middle + information + (appearance.showsRelated ? ["More Like This"] : [])
             + (appearance.showsWatchAnywhere ? ["Watch Anywhere"] : [])
     }
 }

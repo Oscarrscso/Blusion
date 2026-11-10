@@ -88,10 +88,6 @@ public final class SettingsViewModel {
         await update { $0.preferredResolution = value }
     }
 
-    public func setDataSaver(_ value: Bool) async {
-        await update { $0.dataSaver = value }
-    }
-
     public func setDataSaverLevel(_ level: DataSaverLevel) async {
         await update { $0.dataSaverLevel = level }
     }

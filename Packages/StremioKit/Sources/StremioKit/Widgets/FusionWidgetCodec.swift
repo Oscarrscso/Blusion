@@ -104,6 +104,8 @@ public enum FusionWidgetCodec {
                 content = .collection(tiles)
             case "blusion.continueWatching":
                 content = .continueWatching
+            case "blusion.tv":
+                content = .blusionTV
             default:
                 // A type this version cannot show is kept as a placeholder, so the layout round-trips and Home can say so.
                 content = .unsupported(type: type)
@@ -345,6 +347,8 @@ public enum FusionWidgetCodec {
             object["dataSource"] = ["kind": "collection", "payload": payload] as [String: Any]
         case .continueWatching:
             object["type"] = "blusion.continueWatching"
+        case .blusionTV:
+            object["type"] = "blusion.tv"
         }
         return object
     }

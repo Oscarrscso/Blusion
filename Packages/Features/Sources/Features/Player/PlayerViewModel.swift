@@ -155,7 +155,8 @@ public final class PlayerViewModel {
         self.services = services
         self.snapshotStore = snapshotStore ?? PlaybackSession.store
         self.isPrivateSession = isPrivateSession
-        self.persistsSession = !isPrivateSession()
+        // Channels reopen through their current guide, not a stale episode snapshot after the schedule has moved on.
+        self.persistsSession = !isPrivateSession() && plan.queue == nil
         self.now = now
         self.lastInteraction = now()
     }
@@ -243,6 +244,9 @@ public final class PlayerViewModel {
         // session whose snapshot was at its start.
         var resume = ProgressRecorder.resumePosition(for: previous)
         if let position = pendingResume?.position, position > 0 { resume = position }
+        if let position = plan.initialPosition { resume = position }
+        if plan.queue != nil, !holding, !isPrivateSession() { await snapshotStore.clear() }
+        guard !isClosed, !Task.isCancelled else { return }
         resumeWasPaused = pendingResume?.wasPaused ?? false
         let session = ProgressSession(request: plan.request, previous: previous, store: services.progress)
         session.isRecording = !holding
@@ -480,7 +484,7 @@ public final class PlayerViewModel {
     public var currentStreamIndex: Int { coordinator?.candidateIndex ?? 0 }
     /// The stream playing now, as its addon listed it (the options panel's Info).
     public var currentCandidate: PlaybackCandidate? { coordinator?.current }
-    public var hasNextEpisode: Bool { !plan.isOffline && plan.request.nextRequest != nil }
+    public var hasNextEpisode: Bool { !plan.isOffline && (plan.queue?.next != nil || plan.request.nextRequest != nil) }
     /// AVPlayer and AetherEngine play in a layer Picture in Picture can take. mpv has none, so its window never becomes possible.
     public var canPictureInPicture: Bool {
         guard let route = coordinator?.current?.route else { return false }
@@ -1298,6 +1302,19 @@ public final class PlayerViewModel {
     /// Streams for the next episode, auto-selecting one in the same bingeGroup as the current stream (PLAN M4).
     /// nil when there is no next episode or no matching stream: the caller then shows the picker for it.
     public func prepareNextEpisode() async -> PlaybackPlan? {
+        if var nextQueue = plan.queue?.next {
+            // A queue passes over up to two items with no playable stream, so a channel moves on rather than stopping.
+            for _ in 0..<min(3, nextQueue.requests.count) {
+                let picker = StreamPickerViewModel(request: nextQueue.requests[nextQueue.index], services: services)
+                await picker.loadForAutomaticSelection(stopsForWaitTarget: false)
+                picker.cancelLoading()
+                guard !Task.isCancelled else { return nil }
+                if let chosen = picker.bestInAppPlan { return chosen.inQueue(nextQueue, startingAt: nextQueue.startsFromBeginning ? 0 : nil) }
+                guard let after = nextQueue.next else { return nil }
+                nextQueue = after
+            }
+            return nil
+        }
         guard !plan.isOffline, let next = plan.request.nextRequest else { return nil }
         let picker = StreamPickerViewModel(request: next, services: services)
         defer { picker.cancelLoading() }

@@ -49,6 +49,18 @@ import Testing
         #expect(streams.loadingTrigger == nil)
     }
 
+    @Test func anotherEpisodeWhileTheyLoadLoadsInTheirPlace() {
+        let other = StreamRequest(type: "series", id: "tt0903747:2:6", title: "Breaking Bad", season: 2, episode: 6)
+        var streams = TitleStreams()
+        streams.show(episode, from: .episode)
+        let first = streams.pickerID
+        streams.show(other, from: .episode)
+        #expect(streams.request == other, "a card tapped by mistake can be corrected")
+        #expect(streams.loadingRequest == other)
+        #expect(streams.loadingTrigger == .episode)
+        #expect(streams.pickerID != first, "with a picker of its own")
+    }
+
     /// With Auto Pick on, the list never appears: once it has started a stream, a later "ready" reveals nothing.
     @Test(arguments: [StreamTrigger.play, .shuffle, .episode])
     func aStreamAutoPickStartedNeverShowsTheList(trigger: StreamTrigger) {

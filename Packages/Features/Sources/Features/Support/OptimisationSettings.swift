@@ -5,6 +5,8 @@ import Foundation
 /// device-local setting (UserDefaults only, never synced); the Mac reads the same keys. The defaults are the app's behaviour before these
 /// settings existed, except saving power, which is on.
 enum OptimisationSettings {
+    static let lowPerformanceWidgetsKey = "widgets.lowPerformanceMode"
+
     struct Option: Identifiable, Hashable {
         let label: String
         let value: Int
@@ -89,6 +91,6 @@ enum OptimisationSettings {
 
     // MARK: All of them
 
-    static let allKeys = [LazyLoadLookahead.defaultsKey, homePreloadKey, prefetchesStreamsKey, readiesFirstStreamKey, pictureMemoryKey,
-                          downloadSlotsKey, savesPowerKey]
+    static let allKeys = [lowPerformanceWidgetsKey, LazyLoadLookahead.defaultsKey, homePreloadKey, prefetchesStreamsKey,
+                          readiesFirstStreamKey, pictureMemoryKey, downloadSlotsKey, savesPowerKey]
 }

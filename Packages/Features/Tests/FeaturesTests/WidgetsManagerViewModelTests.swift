@@ -558,7 +558,7 @@ private extension HomeWidget.Content {
     var rowSource: WidgetSource? {
         switch self {
         case .row(let row), .hero(let row), .banner(let row): return row.source
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 }

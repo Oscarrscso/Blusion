@@ -6,6 +6,7 @@ import UIKit
 /// Home: the spotlight, then one section per widget of the user's layout (or the automatic one). Each section fills in as its addon
 /// answers, and every state (loading, nothing installed, nothing to browse, an issue, offline) has a look of its own.
 struct HomeView: View {
+    @AppStorage(OptimisationSettings.lowPerformanceWidgetsKey) private var lowPerformanceMode = false
     @State private var model: HomeViewModel
     @State private var scroll = HomeScrollState()
     @State private var heroScroll = DetailHeroScrollState()
@@ -68,7 +69,10 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .pageTopBar(hidden: heroIsFirst || isPhoneLandscape)
             .pageTabBar(hidden: isPhoneInLandscape)
-            .task { await model.observeAddons() }
+            .task {
+                await model.placeBlusionTVOnce()
+                await model.observeAddons()
+            }
             // Auto Pick's switch is changed away from Home, so a Continue Watching card reads it again whenever Home shows.
             .task(id: scenePhase) { await launcher.refreshAutoPick() }
             .task(id: scenePhase == .active && router.tab == .home) {
@@ -92,6 +96,7 @@ struct HomeView: View {
             .onChange(of: router.userStateRevision) { _, _ in Task { await model.refreshContinueWatching() } }
             // Command-R on Mac reloads everything Home shows (see `HomeViewModel.refresh()`).
             .onChange(of: router.homeRefreshRevision) { _, _ in Task { await model.refresh() } }
+            .onChange(of: lowPerformanceMode) { _, _ in Task { await model.load() } }
             // Coming back from Settings or the Widgets tab: addons or widgets may have changed, and Home's own copy of them with them.
             .onChange(of: router.tab) { old, _ in
                 if old == .settings || old == .widgets { Task { await model.load() } }
@@ -166,29 +171,16 @@ struct HomeView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; Spinner() }.padding(.top, Theme.Spacing.m) }
-            .scrollIndicators(.visible, axes: .vertical)
-            .scrollIndicatorsFlash(onAppear: true)
-                .screenBackground()
-                .ignoresSafeArea(.container, edges: sideEdges)
+            statePage(topPadding: Theme.Spacing.m) { Spinner() }
         case .noAddons:
-            ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; EmptyAddonsView(onOpenAddons: { router.showAddons() }) } }
-            .scrollIndicators(.visible, axes: .vertical)
-            .scrollIndicatorsFlash(onAppear: true)
-                .screenBackground()
-                .ignoresSafeArea(.container, edges: sideEdges)
+            statePage { EmptyAddonsView(onOpenAddons: { router.showAddons() }) }
         case .noCatalogs:
-            ScrollView { VStack(spacing: Theme.rowSpacing) {
-                continueRow
+            statePage {
                 EmptyStateView("Nothing to browse", systemImage: "rectangle.stack",
                            message: "None of your addons offers catalogs. Install one that does, or search by title.",
                            actionTitle: "Open Addons", action: { router.showAddons() })
                 .accessibilityIdentifier("board.noCatalogs")
-            } }
-            .scrollIndicators(.visible, axes: .vertical)
-            .scrollIndicatorsFlash(onAppear: true)
-                .screenBackground()
-                .ignoresSafeArea(.container, edges: sideEdges)
+            }
         case .ready:
             #if targetEnvironment(macCatalyst)
             macReady
@@ -196,6 +188,15 @@ struct HomeView: View {
             ready
             #endif
         }
+    }
+
+    /// Home before it has rows to show: Continue Watching over `message`, in the page's own scroll.
+    private func statePage<Message: View>(topPadding: CGFloat = 0, @ViewBuilder _ message: () -> Message) -> some View {
+        ScrollView { VStack(spacing: Theme.rowSpacing) { continueRow; message() }.padding(.top, topPadding) }
+            .scrollIndicators(.visible, axes: .vertical)
+            .scrollIndicatorsFlash(onAppear: true)
+            .screenBackground()
+            .ignoresSafeArea(.container, edges: sideEdges)
     }
 
     #if targetEnvironment(macCatalyst)
@@ -360,7 +361,8 @@ struct HomeView: View {
             #endif
         case .row(let row):
             WidgetRow(section: section, row: row, onRetry: { retry(section) }, onSetBetterPosters: betterPostersSetter(for: section),
-                      onRemove: { removeWidget(section) }, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
+                      onRemove: { removeWidget(section) }, onEdit: { editing = model.layoutWidgets[section.id] ?? section.widget },
+                      onDuplicate: duplicateAction(for: section),
                       exportText: exportText(for: section))
         case .collection(let items):
             withWidgetMenu(CollectionRow(widget: section.widget, items: items, photos: model.tilePhotos), section)
@@ -371,6 +373,8 @@ struct HomeView: View {
                                                onRemove: removeContinue, onMarkWatched: markContinueWatched, title: section.widget.title, hideTitle: section.widget.hideTitle,
                                                launcher: launcher),
                            section, removable: false)
+        case .blusionTV:
+            withWidgetMenu(BlusionTVRow(services: services, title: section.widget.title, hideTitle: section.widget.hideTitle), section)
         case .unsupported:
             withWidgetMenu(UnsupportedWidgetRow(widget: section.widget), section)
         }
@@ -402,7 +406,7 @@ struct HomeView: View {
 
     /// The Better Posters menu of a row, offered only once the layout is saved: the automatic layout is not saved by a change.
     private func betterPostersSetter(for section: HomeViewModel.Section) -> ((Bool) -> Void)? {
-        guard model.isCustomised else { return nil }
+        guard model.isCustomised, !lowPerformanceMode else { return nil }
         return { on in Task { await model.setBetterPosters(on, sectionID: section.id) } }
     }
 
@@ -443,7 +447,8 @@ struct HomeView: View {
     /// What every widget's menu offers, for `section`.
     private func widgetMenu(_ section: HomeViewModel.Section, removable: Bool = true) -> some View {
         let onRemove: (() -> Void)? = removable ? { removeWidget(section) } : nil
-        return widgetActions(for: section.widget, onEdit: { editing = section.widget }, onDuplicate: duplicateAction(for: section),
+        return widgetActions(for: model.layoutWidgets[section.id] ?? section.widget,
+                             onEdit: { editing = model.layoutWidgets[section.id] ?? section.widget }, onDuplicate: duplicateAction(for: section),
                              exportText: exportText(for: section), onRemove: onRemove)
     }
 

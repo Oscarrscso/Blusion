@@ -249,9 +249,6 @@ extension TMDbDiscoverQuery {
         genreClues.filter { clue in clue.phrases.contains { text.contains(" \($0) ") } }.compactMap { $0.movie?.name }
     }
 
-    /// Whether a text names any genre.
-    static func namesGenre(in text: String) -> Bool { !genreNames(in: text).isEmpty }
-
     private static func phraseWords(_ text: String) -> [String] {
         text.lowercased().filter { $0 != "'" && $0 != "\u{2019}" }.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
     }

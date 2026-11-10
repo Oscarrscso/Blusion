@@ -25,6 +25,8 @@ public struct HomeWidget: Sendable, Codable, Equatable, Hashable, Identifiable {
         case collection([CollectionItem])
         /// The user's in-progress titles (Blusion only).
         case continueWatching
+        /// The user's Blusion TV channels, each with what is on now (Blusion only).
+        case blusionTV
         /// A Fusion widget type this version cannot show (for example a calendar). Kept, with its type, so an imported layout survives
         /// and the UI can say so. Its contents are not kept: they may carry addon links.
         case unsupported(type: String)

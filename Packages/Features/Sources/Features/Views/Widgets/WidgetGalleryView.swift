@@ -20,9 +20,9 @@ struct WidgetGalleryView: View {
 
     /// What the page offers, in its order: the styles, then the collections and Continue Watching.
     private enum Option: Hashable, Identifiable {
-        case style(WidgetStyle), genres, services, continueWatching
+        case style(WidgetStyle), genres, services, continueWatching, blusionTV
 
-        static var all: [Option] { WidgetStyle.allCases.map(Option.style) + [.genres, .services, .continueWatching] }
+        static var all: [Option] { WidgetStyle.allCases.map(Option.style) + [.genres, .services, .continueWatching, .blusionTV] }
 
         var id: String {
             switch self {
@@ -30,6 +30,7 @@ struct WidgetGalleryView: View {
             case .genres: "genres"
             case .services: "services"
             case .continueWatching: "continue"
+            case .blusionTV: "tv"
             }
         }
 
@@ -39,6 +40,7 @@ struct WidgetGalleryView: View {
             case .genres: "Genre Collection"
             case .services: "Streaming Services"
             case .continueWatching: "Continue Watching"
+            case .blusionTV: "Blusion TV"
             }
         }
 
@@ -48,6 +50,7 @@ struct WidgetGalleryView: View {
             case .genres: "square.grid.2x2"
             case .services: "play.tv"
             case .continueWatching: "play.circle"
+            case .blusionTV: "tv"
             }
         }
     }
@@ -61,6 +64,7 @@ struct WidgetGalleryView: View {
 
     private var hasGenres: Bool { model.catalogChoices.contains { !$0.genres.isEmpty } }
     private var hasContinue: Bool { model.widgets.contains { $0.content == .continueWatching } }
+    private var hasTV: Bool { model.widgets.contains { $0.content == .blusionTV } }
 
     var body: some View {
         GeometryReader { geometry in
@@ -116,8 +120,13 @@ struct WidgetGalleryView: View {
         switch option {
         case .genres: hasGenres
         case .continueWatching: !hasContinue
+        case .blusionTV: !hasTV
         case .style, .services: true
         }
+    }
+
+    private func isAdded(_ option: Option) -> Bool {
+        (option == .continueWatching && hasContinue) || (option == .blusionTV && hasTV)
     }
 
     private func choose(_ option: Option) {
@@ -126,6 +135,7 @@ struct WidgetGalleryView: View {
         case .genres: showsGenreCollection = true
         case .services: add(WidgetsManagerViewModel.makeServicesCollection())
         case .continueWatching: add(HomeWidget(title: "Continue", content: .continueWatching))
+        case .blusionTV: add(HomeWidget(title: "Blusion TV", content: .blusionTV))
         }
     }
 
@@ -147,9 +157,9 @@ struct WidgetGalleryView: View {
                 }
                 .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                // Continue Watching is one of a kind: once on Home it reads Added.
+                // Continue Watching and Blusion TV are one of a kind: once on Home they read Added.
                 Button { choose(option) } label: {
-                    Text(option == .continueWatching && hasContinue ? "Added" : "Add")
+                    Text(isAdded(option) ? "Added" : "Add")
                         .fontWeight(.semibold)
                         .pointerFeedback()
                 }
@@ -158,7 +168,7 @@ struct WidgetGalleryView: View {
                     ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons)))
                 .controlSize(.small)
                 .disabled(!enabled)
-                .accessibilityLabel(option == .continueWatching && hasContinue ? "\(option.name) Added" : "Add \(option.name)")
+                .accessibilityLabel(isAdded(option) ? "\(option.name) Added" : "Add \(option.name)")
                 .accessibilityIdentifier("widgets.gallery.\(option.id)")
             }
             .padding(.horizontal, homeMetrics.pageMargin)
@@ -184,6 +194,7 @@ struct WidgetGalleryView: View {
         case .genres: genresPreview
         case .services: servicesPreview
         case .continueWatching: continuePreview
+        case .blusionTV: tvPreview
         }
     }
 
@@ -235,6 +246,23 @@ struct WidgetGalleryView: View {
             ForEach(Array(GallerySamples.items.prefix(6).enumerated()), id: \.offset) { index, item in
                 ProgressCard(title: item.name, artwork: item.background, logo: item.logo, fraction: [0.62, 0.3, 0.84][index % 3],
                              duration: 7200, width: homeMetrics.continueCardWidth)
+            }
+        }
+    }
+
+    /// Channels on Continue Watching's cards, each with what is on now and what follows, as Home's Blusion TV shows them.
+    private var tvPreview: some View {
+        let shows = GallerySamples.items.filter { $0.type == "series" } + GallerySamples.items.filter { $0.type != "series" }
+        return MediaRow("Blusion TV", hideTitle: true, aspect: .wide, cardWidth: homeMetrics.continueCardWidth) {
+            ForEach(Array(["Drama", "Late Night", "Classics", "Weekend"].enumerated()), id: \.offset) { index, channel in
+                let item = shows[index]
+                VStack(alignment: .leading, spacing: 2) {
+                    ProgressCard(title: item.name, subtitle: "S\(index + 1) E\(index + 4)", artwork: item.background, logo: item.logo,
+                                 fraction: [0.45, 0, 0.7, 0][index], duration: 2700, width: homeMetrics.continueCardWidth)
+                        .padding(.bottom, Theme.Spacing.xs)
+                    TVCardCaption(caption: channel, detail: "Next · \(shows[index + 1].name)")
+                }
+                .frame(width: homeMetrics.continueCardWidth, alignment: .leading)
             }
         }
     }

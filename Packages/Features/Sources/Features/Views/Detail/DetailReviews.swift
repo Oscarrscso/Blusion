@@ -399,15 +399,32 @@ private struct FoldingWidth: ViewModifier, Animatable {
 /// TMDb reviews can mix Markdown with inline HTML. Convert the supported HTML
 /// formatting to Markdown so JustifiedText keeps native typography, links and sizing.
 private enum ReviewTextMarkup {
+    /// Compiled once: a review card converts its text every time it is drawn.
+    private static let links = try! NSRegularExpression(
+        pattern: #"<a\b[^>]*\bhref\s*=\s*["'](https?://[^"']+)["'][^>]*>(.*?)</a\s*>"#,
+        options: [.caseInsensitive, .dotMatchesLineSeparators]
+    )
+    private static let entities = try! NSRegularExpression(pattern: #"&(#(?:[xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z]+);"#)
+    /// The converted text of the reviews on show, so a card that is drawn again does not convert its review again. `NSCache` is
+    /// thread-safe.
+    nonisolated(unsafe) private static let converted: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 64
+        return cache
+    }()
+
     static func markdown(_ raw: String) -> String {
         guard raw.contains("<") || raw.contains("&") else { return raw }
+        if let known = converted.object(forKey: raw as NSString) { return known as String }
+        let text = convert(raw)
+        converted.setObject(text as NSString, forKey: raw as NSString)
+        return text
+    }
+
+    private static func convert(_ raw: String) -> String {
         var text = raw
 
         // Preserve safe HTML links using the Markdown links JustifiedText already handles.
-        let links = try! NSRegularExpression(
-            pattern: #"<a\b[^>]*\bhref\s*=\s*["'](https?://[^"']+)["'][^>]*>(.*?)</a\s*>"#,
-            options: [.caseInsensitive, .dotMatchesLineSeparators]
-        )
         text = links.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
                                               withTemplate: "[$2]($1)")
 
@@ -435,7 +452,6 @@ private enum ReviewTextMarkup {
             "hellip": "…", "mdash": "—", "ndash": "–", "lsquo": "‘", "rsquo": "’",
             "ldquo": "“", "rdquo": "”", "bull": "•", "copy": "©"
         ]
-        let entities = try! NSRegularExpression(pattern: #"&(#(?:[xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z]+);"#)
         let original = text as NSString
         for match in entities.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
             let entity = original.substring(with: match.range(at: 1))

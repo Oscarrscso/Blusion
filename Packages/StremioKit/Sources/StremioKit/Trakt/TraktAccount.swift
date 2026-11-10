@@ -541,10 +541,9 @@ public actor TraktAccount {
 
     /// Additions carry `watched_at`; removals pass `dated: false` and send the same titles and episodes without dates.
     private static func historyPayload(_ items: [TraktWatchedItem], dated: Bool = true) -> [String: Any] {
-        let formatter = ISO8601DateFormatter()
         func stamped(_ item: TraktWatchedItem, _ fields: [String: Any]) -> [String: Any] {
             guard dated else { return fields }
-            return fields.merging(["watched_at": formatter.string(from: item.watchedAt)]) { $1 }
+            return fields.merging(["watched_at": TraktDate.string(from: item.watchedAt)]) { $1 }
         }
         let movies: [[String: Any]] = items.filter { $0.preview.type == "movie" && isIMDb($0.preview.id) }.map {
             stamped($0, ["ids": ["imdb": $0.preview.id]])
@@ -639,10 +638,7 @@ private struct TraktSyncEntry: Decodable {
     }
 
     fileprivate static func date(_ text: String?) -> Date? {
-        guard let text else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+        text.flatMap(TraktDate.parse)
     }
 }
 

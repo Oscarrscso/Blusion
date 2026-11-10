@@ -99,7 +99,7 @@ public final class WidgetsManagerViewModel {
 
     /// Continue Watching and the showcase are one of a kind, so they are not duplicated.
     nonisolated public static func isDuplicable(_ widget: HomeWidget) -> Bool {
-        !HomeLayout.isContinueWatching(widget) && !HomeLayout.isShowcase(widget)
+        !HomeLayout.isContinueWatching(widget) && !HomeLayout.isShowcase(widget) && widget.content != .blusionTV
     }
 
     /// `list` with a copy of the widget `id` straight after it: the same kind, title, source, filters and look, under `newID`. Nil when
@@ -420,6 +420,7 @@ public final class WidgetsManagerViewModel {
         case .banner(let row): return "Carousel · \(describe(row.source))"
         case .collection(let tiles): return "Collection · \(WidgetsManagerViewModel.plural(tiles.count, "tile"))"
         case .continueWatching: return "Continue"
+        case .blusionTV: return "Blusion TV"
         case .unsupported(let type): return "Can't show yet · \(type)"
         }
     }
@@ -450,6 +451,8 @@ public final class WidgetsManagerViewModel {
             }
         case .continueWatching:
             lines.append(("Shows", "Titles in progress, from Trakt and this device"))
+        case .blusionTV:
+            lines.append(("Shows", "What is on each of your channels now"))
         case .unsupported:
             lines.append(("Status", "Blusion can't show this kind of row yet."))
         }
@@ -466,6 +469,7 @@ public final class WidgetsManagerViewModel {
         case .banner: return "Carousel"
         case .collection: return "Collection"
         case .continueWatching: return "Continue Watching"
+        case .blusionTV: return "Blusion TV"
         case .unsupported(let type): return "Not supported (\(type))"
         }
     }

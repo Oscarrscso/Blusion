@@ -3,6 +3,9 @@ import Foundation
 /// The Home layout for a user who never customised it. It is built from the browsable catalogs of the enabled addons, in the user's
 /// order. Ids are deterministic, so the layout is the same from one launch to the next.
 public enum DefaultWidgets {
+    /// The id of the Blusion TV widget, in the automatic layout and when Home first adds it to a saved one.
+    public static let blusionTVID = "auto.tv"
+
     public static func make(for addons: [InstalledAddon], maxRows: Int = 14) -> [HomeWidget] {
         let entries = considered(addons)
         guard let first = entries.first else { return [] }
@@ -15,7 +18,8 @@ public enum DefaultWidgets {
         let hero = HomeWidget(id: "auto.hero", title: "Spotlight", hideTitle: true,
                               content: .hero(RowConfiguration(source: .addonCatalog(spotlight.reference()), limit: 8)))
         let continueWatching = HomeWidget(id: HomeLayout.continueWatchingID, title: "Continue", content: .continueWatching)
-        return [hero, continueWatching] + rows
+        let tv = HomeWidget(id: blusionTVID, title: "Blusion TV", content: .blusionTV)
+        return [hero, continueWatching, tv] + rows
     }
 
     /// "Popular" + "movie" -> "Popular Movies". A name that already contains the type word (any case) is left alone ("Netflix Movies").

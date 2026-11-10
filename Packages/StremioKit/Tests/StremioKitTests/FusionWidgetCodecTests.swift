@@ -34,7 +34,7 @@ private let bigSample = #"""
     private func config(_ widget: HomeWidget) -> RowConfiguration? {
         switch widget.content {
         case .row(let config), .hero(let config), .banner(let config): return config
-        case .collection, .continueWatching, .unsupported: return nil
+        case .collection, .continueWatching, .blusionTV, .unsupported: return nil
         }
     }
 
