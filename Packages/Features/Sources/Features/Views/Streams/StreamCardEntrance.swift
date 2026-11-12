@@ -39,7 +39,7 @@ private struct StreamCardEntrance: ViewModifier {
                 guard !isShown else { return }
                 log.shown.insert(id)
                 let delay = order < Self.staggered ? Double(order) * Self.step : 0
-                withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.42, dampingFraction: 0.86).delay(delay)) {
+                withAnimation(reduceMotion ? Theme.Motion.fade : .spring(response: 0.42, dampingFraction: 0.86).delay(delay)) {
                     isShown = true
                 }
             }

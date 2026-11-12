@@ -116,8 +116,8 @@ private struct SpineCard: View, Equatable {
                 Spacer(minLength: Theme.Spacing.s)
                 if let year = item.releaseInfo, !year.isEmpty {
                     Text(year)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
+                        .font(Theme.Typography.microStrong)
+                        .foregroundStyle(Theme.dimText)
                         .lineLimit(1)
                 }
             }

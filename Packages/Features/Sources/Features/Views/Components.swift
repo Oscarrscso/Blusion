@@ -35,9 +35,9 @@ struct OfflineBanner: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(Connectivity.offlineTitle)
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                 Text(Connectivity.offlineMessage)
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

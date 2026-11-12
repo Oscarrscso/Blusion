@@ -1,6 +1,25 @@
 #if canImport(UIKit)
 import SwiftUI
 
+/// Apply the filter's shape to the native menu too, so its border and presentation preview match its label.
+struct FilterMenu<Content: View, Label: View>: View {
+    @Environment(\.layoutMetrics) private var metrics
+    var minHeight: CGFloat = 44
+    @ViewBuilder let content: Content
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        let radius = minHeight / 2 * metrics.cornerScale(for: .filters)
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        Menu { content } label: { label }
+            .buttonStyle(.hoverPlain)
+            .buttonBorderShape(.roundedRectangle(radius: radius))
+            .contentShape(shape)
+            .contentShape(.contextMenuPreview, shape)
+            .clipShape(shape)
+    }
+}
+
 /// The label of a filter menu: a Liquid Glass capsule with a chevron, tinted when a filter in it is active. Used by the Library and
 /// Discover, so their filter rows look the same.
 struct FilterMenuLabel: View {
@@ -22,12 +41,12 @@ struct FilterMenuLabel: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: minHeight / 2 * metrics.cornerScale(for: .filters), style: .continuous)
         HStack(spacing: 5) {
-            if let systemImage { Image(systemName: systemImage).font(.caption) }
+            if let systemImage { Image(systemName: systemImage).font(Theme.Typography.caption) }
             Text(title).lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
-            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+            Image(systemName: "chevron.down").font(Theme.Typography.microStrong)
         }
-        .font(.subheadline.weight(.semibold))
+        .font(Theme.Typography.mediumStrong)
         .foregroundStyle(tint)
         .padding(.horizontal, Theme.Spacing.m)
         .frame(maxWidth: .infinity, minHeight: minHeight)
@@ -68,8 +87,10 @@ struct ActiveFilterChips: View {
 }
 
 /// The filter block the Library and Discover share, so the two pages look the same and differ only in their options: the type selector,
-/// menus that fill one row on Mac and wrap on iPhone, then a removable chip for each active filter. The menus sit midway between the
-/// selector and the grid; chips under them keep their own padding, and go with the last chip so clearing every filter leaves no gap.
+/// menus that wrap on iPhone, then a removable chip for each active filter. The menus sit midway between the selector and the grid;
+/// chips under them keep their own padding, and go with the last chip so clearing every filter leaves no gap. On Mac the menus share
+/// one row with the page's heading: the heading at the leading margin, the menus at their own widths ending on the trailing margin, where
+/// the grid's last column ends.
 struct BrowseFilterBar<Menus: View>: View {
     /// The type selector. Nil hides it (a source with one type has nothing to choose).
     let kinds: Kinds?
@@ -77,6 +98,10 @@ struct BrowseFilterBar<Menus: View>: View {
     /// Names the chips: each is "<identifier>.chip.<id>".
     let identifier: String
     let clearAll: () -> Void
+    /// Mac only: the page's heading, drawn at the start of the menus' row. iPhone pages draw their own title above the bar.
+    var heading: Text? = nil
+    /// Mac only: a mark before the heading, such as a streaming service's logo.
+    var headingMark: AnyView? = nil
     @ViewBuilder let menus: Menus
     @Environment(\.layoutMetrics) private var metrics
 
@@ -92,41 +117,98 @@ struct BrowseFilterBar<Menus: View>: View {
     static var menuHeight: CGFloat { 34 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: metrics.controlSpacing) {
+        VStack(alignment: .leading, spacing: sectionSpacing) {
             if let kinds {
                 QualitySelector(titles: kinds.titles, selection: kinds.selection, symbols: kinds.symbols,
                                 accessibilityID: kinds.identifier)
                     .navigationAlignedWidth(margin: metrics.pageMargin)
             }
             VStack(alignment: .leading, spacing: metrics.controlSpacing) {
+                #if targetEnvironment(macCatalyst)
+                macRow
+                #else
                 GlassEffectContainer(spacing: metrics.cardSpacing) {
-                    Group {
-                        #if targetEnvironment(macCatalyst)
-                        HStack(spacing: metrics.cardSpacing) {
-                            menus
-                        }
-                        .frame(maxWidth: .infinity)
-                        #else
-                        ViewThatFits(in: .horizontal) {
-                            menuGrid(columns: 4)
-                                .frame(minWidth: 4 * 140 + 3 * metrics.controlSpacing)
-                            menuGrid(columns: 2)
-                        }
-                        #endif
+                    ViewThatFits(in: .horizontal) {
+                        menuGrid(columns: 4)
+                            .frame(minWidth: 4 * 140 + 3 * metrics.controlSpacing)
+                        menuGrid(columns: 2)
                     }
                     // Match the floating landscape Back button's row so the shorter menu capsules share its vertical centreline.
                     .frame(minHeight: 44, alignment: .center)
                 }
+                #endif
                 if !chips.isEmpty {
                     ActiveFilterChips(chips: chips, identifier: identifier, clearAll: clearAll)
                 }
             }
             .padding(.horizontal, metrics.pageMargin)
         }
-        .padding(.bottom, metrics.controlSpacing)
+        .padding(.bottom, sectionSpacing)
         .buttonStyle(.hoverPlain)
         .buttonBorderShape(.roundedRectangle(radius: Self.menuHeight / 2 * metrics.cornerScale(for: .filters)))
     }
+
+    /// The gaps around the menus' row: the filter controls' own on iPhone. On Mac the row heads the grid, so it keeps a shelf header's gap
+    /// from the selector above and the cards below.
+    private var sectionSpacing: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        metrics.headerSpacing
+        #else
+        metrics.controlSpacing
+        #endif
+    }
+
+    #if targetEnvironment(macCatalyst)
+    /// One row on every grid page: the heading at the leading margin, and the menus, each at its own width, ending on the trailing margin
+    /// where the grid's last column ends. They stay there on a page without a heading. A heading too long to share the row takes its own
+    /// above the menus; menus too many for the window's width scroll.
+    private var macRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.l) {
+                if heading != nil {
+                    macHeading.frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Spacer(minLength: 0)
+                }
+                macMenus
+            }
+            VStack(alignment: .leading, spacing: metrics.controlSpacing) {
+                macHeading
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        macMenus
+                    }
+                    ScrollView(.horizontal) { macMenus }
+                        .scrollIndicators(.hidden)
+                        .scrollClipDisabled()
+                }
+            }
+        }
+        .frame(minHeight: 44)
+    }
+
+    @ViewBuilder
+    private var macHeading: some View {
+        if let heading {
+            HStack(spacing: Theme.Spacing.m) {
+                headingMark
+                heading
+                    .headingStyle()
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    private var macMenus: some View {
+        GlassEffectContainer(spacing: metrics.cardSpacing) {
+            HStack(spacing: metrics.cardSpacing) { menus }
+                .fixedSize()
+        }
+    }
+    #endif
 
     private func menuGrid(columns: Int) -> some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: metrics.controlSpacing), count: columns),
@@ -147,6 +229,7 @@ struct RatingPicker: View {
                 Text(LibraryFiltering.minimumRatingText(value)).tag(Double?.some(value))
             }
         }
+        .buttonCursor()
         .accessibilityIdentifier("library.filter.rating.threshold")
     }
 }

@@ -98,32 +98,46 @@ private func externalIDRequests(_ transport: StubTransport, tmdbID: Int? = nil) 
         return (request.path, request.query.map { "\($0.name)=\($0.value ?? "")" })
     }
 
-    @Test func exactTitleSearchQueriesTmdbMoviesAndSeriesAndKeepsOverviews() async throws {
+    @Test func oneMultiSearchFindsTitlesWithTheirIdentitiesAndPeopleApart() async throws {
         let transport = StubTransport { request, _ in
             let path = request.url?.path ?? ""
-            if path == "/3/search/movie" {
-                return StubTransport.response(Data(
-                    #"{"results":[{"id":155,"title":"Dune","overview":"A hero crosses a dangerous desert.","release_date":"2021-10-22"}]}"#.utf8),
-                    for: request)
-            }
-            if path == "/3/search/tv" {
-                return StubTransport.response(Data(
-                    #"{"results":[{"id":211,"name":"Dune","overview":"A desert-world miniseries.","first_air_date":"2000-12-03"}]}"#.utf8),
-                    for: request)
+            if path == "/3/search/multi" {
+                return StubTransport.response(Data(#"""
+                    {"results":[
+                    {"id":155,"media_type":"movie","title":"Dune","original_title":"Dune","overview":"A hero crosses a dangerous desert.","release_date":"2021-10-22","genre_ids":[878]},
+                    {"id":31,"media_type":"person","name":"Tom Hanks","known_for_department":"Acting","profile_path":"/hanks.jpg"},
+                    {"id":211,"media_type":"tv","name":"Dune","original_name":"Frank Herbert's Dune","overview":"A desert-world miniseries.","first_air_date":"2000-12-03"},
+                    {"id":900,"media_type":"movie","title":"No Identity"},
+                    {"id":7,"media_type":"collection","name":"Dune Collection"},
+                    {"id":31,"media_type":"person","name":"Tom Hanks"}
+                    ]}
+                    """#.utf8), for: request)
             }
             let parts = path.split(separator: "/")
-            if parts.count == 4, parts[3] == "external_ids", let id = Int(parts[2]) {
+            if parts.count == 4, parts[3] == "external_ids", let id = Int(parts[2]), id != 900 {
                 return StubTransport.response(Data(#"{"imdb_id":"tt\#(1_000_000 + id)"}"#.utf8), for: request)
             }
             return StubTransport.response(Data(), status: 404, for: request)
         }
-        let items = try await ratings(transport).searchTitleItems("Dune", limit: 12)
-        #expect(items.map(\.type) == ["movie", "series"])
-        #expect(items.map(\.name) == ["Dune", "Dune"])
-        #expect(items.map(\.description) == ["A hero crosses a dangerous desert.", "A desert-world miniseries."])
-        let titleCalls = transport.requests.filter { ($0.url?.path ?? "").hasPrefix("/3/search/") }
-        #expect(titleCalls.count == 2)
-        #expect(titleCalls.allSatisfy { queryValue($0.url, "query") == "Dune" })
+        let hits = try await ratings(transport).searchMulti("Dune")
+        #expect(hits.titles.map(\.identity) == ["movie/tt1000155", "series/tt1000211"], "a title without an IMDb id is left out")
+        #expect(hits.titles.map(\.description) == ["A hero crosses a dangerous desert.", "A desert-world miniseries."])
+        #expect(hits.titles.first?.releaseInfo == "2021" && hits.titles.first?.genres == ["Science Fiction"])
+        #expect(hits.originalNames == ["series/tt1000211": "Frank Herbert's Dune"], "only a name that differs is kept")
+        #expect(hits.people == [TMDbTitlePerson(id: 31, name: "Tom Hanks", roles: ["Acting"], isCast: true,
+                                                profile: URL(string: "https://image.tmdb.org/t/p/w342/hanks.jpg"))])
+        let searches = transport.requests.filter { ($0.url?.path ?? "").hasPrefix("/3/search/") }
+        #expect(searches.count == 1 && queryValue(searches.first?.url, "query") == "Dune")
+
+        let peopleOnly = try await ratings(transport).searchMulti("Dune", limit: 0)
+        #expect(peopleOnly.titles.isEmpty && peopleOnly.people.count == 1)
+    }
+
+    @Test func aMultiSearchWithoutACredentialAsksNothing() async throws {
+        let transport = StubTransport(data: Data())
+        let ratings = TMDbRatings(client: makeClient(transport), readAccessToken: "  ")
+        #expect(try await ratings.searchMulti("Dune") == .empty)
+        #expect(transport.callCount == 0)
     }
 
     // MARK: Requests

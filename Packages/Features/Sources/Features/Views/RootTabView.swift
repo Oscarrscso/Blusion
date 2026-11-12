@@ -84,9 +84,10 @@ public struct RootTabView: View {
         _titleActions = State(initialValue: TitleActions(services: services))
     }
 
-    public var body: some View {
+    /// The tabs and their bars and landscape controls.
+    private var tabs: some View {
         @Bindable var router = router
-        TabView(selection: Binding(get: { router.tab }, set: {
+        return TabView(selection: Binding(get: { router.tab }, set: {
             Haptics.play(.navigation)
             router.tapTab($0)
         })) {
@@ -178,6 +179,7 @@ public struct RootTabView: View {
             }
         }
         .modifier(TabBarStyle())
+        .background { appearance.pageBackground.ignoresSafeArea() }
         .scrollEdgeEffectHidden(isPhoneLandscape || Self.isMacCatalyst, for: .top)
         .scrollEdgeEffectHidden(isPhoneInLandscape, for: .bottom)
         .pageTopBar(hidden: isPhoneLandscape)
@@ -238,6 +240,12 @@ public struct RootTabView: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    /// The page's events, alerts and environment, split from `tabs` so the compiler type-checks each chain in reasonable time.
+    public var body: some View {
+        @Bindable var router = router
+        tabs
         .onChange(of: router.tab) { _, _ in
             landscapeTabs.reset()
             landscapeTabs.clearPageTitle()
@@ -307,6 +315,9 @@ public struct RootTabView: View {
             MacPageNavigationOverlay()
         }
         .environment(macNavigation)
+        .buttonStyle(PointingHandButtonStyle(style: .automatic))
+        .menuStyle(PointingHandMenuStyle())
+        .toggleStyle(PointingHandToggleStyle())
         #endif
         .environment(router)
         .environment(livePlayback)

@@ -62,7 +62,7 @@ struct DetailActions: View {
                         .downloadErrors(model.downloadManager)
                     if model.isFallback && !model.isLoading {
                         Label("Only basic details are available for this title.", systemImage: "info.circle")
-                            .font(.footnote)
+                            .font(Theme.Typography.small)
                             .foregroundStyle(.secondary)
                             .lineLimit(leadsText ? nil : 1)
                             .accessibilityIdentifier("detail.fallbackNote")
@@ -85,7 +85,7 @@ struct DetailActions: View {
     @ViewBuilder
     private var primaryAction: some View {
         primaryButton
-            .animation(.smooth(duration: 0.3), value: model.playColourHex)
+            .animation(Theme.Motion.standard, value: model.playColourHex)
             .onChange(of: model.isLoading) { _, loading in
                 guard !loading, playsWhenLoaded else { return }
                 playsWhenLoaded = false
@@ -135,11 +135,11 @@ struct DetailActions: View {
                                 .transition(.opacity)
                         }
                     }
-                    .animation(.smooth(duration: 0.25), value: isLoadingStreams)
-                    .animation(.smooth(duration: 0.3), value: model.titlePrices)
-                    .animation(.smooth(duration: 0.3), value: knownStreamer)
-                    .animation(.smooth(duration: 0.3), value: bestDisc)
-                    .animation(.smooth(duration: 0.3), value: openedInPlayer)
+                    .animation(Theme.Motion.quick, value: isLoadingStreams)
+                    .animation(Theme.Motion.standard, value: model.titlePrices)
+                    .animation(Theme.Motion.standard, value: knownStreamer)
+                    .animation(Theme.Motion.standard, value: bestDisc)
+                    .animation(Theme.Motion.standard, value: openedInPlayer)
             }
             .buttonStyle(PrimaryActionButtonStyle(glass: playGlass, height: CircleActionButton.diameter, tint: playColour))
             .contextMenu {
@@ -181,7 +181,7 @@ struct DetailActions: View {
                                 .transition(.opacity)
                         }
                     }
-                    .animation(.smooth(duration: 0.25), value: playsWhenLoaded)
+                    .animation(Theme.Motion.quick, value: playsWhenLoaded)
             }
             .buttonStyle(PrimaryActionButtonStyle(glass: playGlass, height: CircleActionButton.diameter, tint: playColour))
             .allowsHitTesting(!blocksPlay)
@@ -198,14 +198,14 @@ struct DetailActions: View {
         HStack(spacing: Theme.Spacing.s) {
             Text(label)
             Text(detail)
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .opacity(detailOpacity)
         }
         #else
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
             Text(detail)
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .opacity(detailOpacity)
         }
         #endif

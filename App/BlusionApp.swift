@@ -104,6 +104,12 @@ struct RootView: View {
         #if targetEnvironment(macCatalyst)
         .modifier(MacWindowSize())
         .background(MacTitlebar())
+        #else
+        // Portrait Orientation Lock lifted while the app is open: each turn of the device asks iOS to read its orientation again.
+        .onAppear { UIDevice.current.beginGeneratingDeviceOrientationNotifications() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            InterfaceRotation.refresh()
+        }
         #endif
         .environment(\.openURL, OpenURLAction { url in
             guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return .systemAction }
@@ -153,6 +159,10 @@ struct RootView: View {
         }
         // An app left open for days is still checked once a day: coming back to the front asks again, and the 24-hour rule decides.
         .onChange(of: scenePhase) { _, phase in
+            #if !targetEnvironment(macCatalyst)
+            // Back from Control Center, where the lock may just have been turned off.
+            if phase == .active { InterfaceRotation.refresh() }
+            #endif
             if phase == .active, isReady { refreshIMDbDataset() }
             guard isReady else { return }
             let sync = environment.services.traktSync
@@ -265,6 +275,26 @@ private struct MacWindowSize: ViewModifier {
             content.frame(minWidth: 800, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
         } else {
             content
+        }
+    }
+}
+#endif
+
+#if !targetEnvironment(macCatalyst)
+/// Asks iOS to check the window's orientation against the device's again. iOS does not always do so when Portrait Orientation Lock is
+/// turned off while the app is open, which left the app upright until it was reopened. This never overrides the lock: with it on, the
+/// system keeps the window as it is. A Mac window does not rotate, so this is iPhone and iPad only.
+@MainActor
+enum InterfaceRotation {
+    static func refresh() {
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            for window in scene.windows {
+                var controller = window.rootViewController
+                while let current = controller {
+                    current.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    controller = current.presentedViewController
+                }
+            }
         }
     }
 }

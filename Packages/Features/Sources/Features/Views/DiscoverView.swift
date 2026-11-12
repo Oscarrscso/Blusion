@@ -33,6 +33,7 @@ struct DiscoverView: View {
     #if targetEnvironment(macCatalyst)
     /// The Mac's page: the filters, the grid and its status in one UIKit scroll (see `MacGridPage`), so a long grid scrolls smoothly.
     private var macPage: some View {
+        // The heading is drawn by the filter bar, in the menus' row.
         var parts: [MacGridPage.Part] = [.full(id: "filters", view: AnyView(filters))]
         if !model.visibleItems.isEmpty {
             parts.append(.grid(MacTitleGrid(id: "results", items: model.visibleItems, fillsWidth: true,
@@ -57,6 +58,7 @@ struct DiscoverView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    heading
                     if model.hasSources {
                         filters
                         VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
@@ -74,23 +76,44 @@ struct DiscoverView: View {
             .trackLandscapeTabScroll()
             .screenBackground()
             .browsePageTopMargin()
-            .navigationTitle("")
+            .navigationTitle(isPhoneInLandscape ? "" : "Discover")
             .macRootNavigation()
             .pageTabBar(hidden: isPhoneInLandscape)
             #if !targetEnvironment(macCatalyst)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: .title)
+            // The page draws its own title, as on the Mac, so the gaps above and below it match.
+            .toolbar(.hidden, for: .navigationBar)
             #endif
             .accessibilityIdentifier("discover.scroll")
             // A tap on Discover's tab item goes back to its first page, and scrolls it to the top.
             .onChange(of: router.tabTapRevisions[.discover, default: 0]) { _, _ in
-                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+                withAnimation(Theme.Motion.snap) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
     }
 
     /// `isPhoneLandscape` is also true on an iPad turned sideways, so the device is checked as well.
     private var isPhoneInLandscape: Bool { isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone }
+
+    @ViewBuilder
+    private var heading: some View {
+        #if targetEnvironment(macCatalyst)
+        Text("Discover")
+            .headingStyle()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.bottom, metrics.headerSpacing)
+            .accessibilityAddTraits(.isHeader)
+        #else
+        // The same large title as the category pages, without the empty navigation bar row above it.
+        Text("Discover")
+            // The navigation bar's large title: a fixed 34pt bold at its 16pt inset, as on the category pages.
+            .font(.system(size: 34, weight: .bold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, isPhoneInLandscape ? metrics.pageMargin : Theme.Spacing.l)
+            .padding(.bottom, isPhoneInLandscape ? Theme.Spacing.l : Theme.Spacing.m)
+            .accessibilityAddTraits(.isHeader)
+        #endif
+    }
 
     /// Discover supplies the controls; BrowseFilterBar owns their layout on both platforms.
     private var filters: some View {
@@ -124,10 +147,10 @@ struct DiscoverView: View {
             model.maximumYear = nil
             model.minimumRating = nil
             if model.selectedGenre != nil { Task { await model.select(genre: nil) } }
-        }) {
+        }, heading: Text("Discover")) {
             // Filters first, then the order, the same as the Library: two even rows on iPhone, one on Mac.
             let genres = model.genres
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 Picker("Genre", selection: Binding<String?> { model.selectedGenre } set: { genre in Task { await model.select(genre: genre) } }) {
                     Text("Any").tag(String?.none)
                     ForEach(genres, id: \.self) { Text($0).tag(String?.some($0)) }
@@ -138,7 +161,7 @@ struct DiscoverView: View {
             }
             .disabled(genres.isEmpty)
             .accessibilityIdentifier("discover.genreMenu")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 ReleaseYearOptions(minimumYear: $model.minimumYear, maximumYear: $model.maximumYear,
                                    identifier: "discover.filter.year")
             } label: {
@@ -146,14 +169,14 @@ struct DiscoverView: View {
                                 minHeight: BrowseFilterBar<EmptyView>.menuHeight)
             }
             .accessibilityIdentifier("discover.filter.year")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 RatingPicker(threshold: $model.minimumRating)
             } label: {
                 FilterMenuLabel("Rating", systemImage: "star.fill", isActive: model.minimumRating != nil,
                                 minHeight: BrowseFilterBar<EmptyView>.menuHeight)
             }
             .accessibilityIdentifier("discover.filter.rating")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 Picker("Sort by", selection: $model.sort) {
                     ForEach(CatalogListSort.allCases.filter { $0 != .shuffle }) {
                         Label($0.title, systemImage: $0.systemImage).tag($0)

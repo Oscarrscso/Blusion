@@ -53,15 +53,18 @@ private struct UpNextCaption: View {
     let name: String?
     let width: CGFloat
     let height: CGFloat
+    /// The small type on the artwork, at its own sizes by default and following the text size from there.
+    @ScaledMetric(relativeTo: .caption2) private var smallText: CGFloat = 9
+    @ScaledMetric(relativeTo: .caption2) private var captionText: CGFloat = 10
 
     var body: some View {
         BottomFade(length: 1.0 / 3.0)
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 1) {
                     if let name, !name.isEmpty {
-                        Text(name).font(.system(size: 10, weight: .semibold))
+                        Text(name).font(.system(size: captionText, weight: .semibold))
                     }
-                    Text(episode).font(.system(size: 9, weight: .medium)).foregroundStyle(.white.opacity(0.75))
+                    Text(episode).font(.system(size: smallText, weight: .medium)).foregroundStyle(Theme.dimText)
                 }
                 .lineLimit(1)
                 .foregroundStyle(.white)
@@ -142,7 +145,7 @@ private struct ContinueWatchingHoldModifier: ViewModifier {
                         .accessibilityLabel("Loading streams")
                     }
                 }
-                .animation(.smooth(duration: 0.25), value: isLoading)
+                .animation(Theme.Motion.quick, value: isLoading)
                 .zoomSource(id: sourceID, in: zoomNamespace, cornerRadius: CardAspect.wide.cornerRadius * metrics.cornerScale(for: .artwork))
                 .contentShape(Rectangle())
         }
@@ -234,6 +237,9 @@ struct PlaybackProgressOverlay: View {
     var inset: CGFloat = 0
     /// Appearance's progress line: its colour and thickness, and whether the minutes left show beside it.
     @Environment(\.appAppearance) private var appearance
+    /// The small type on the artwork, at its own sizes by default and following the text size from there.
+    @ScaledMetric(relativeTo: .caption2) private var smallText: CGFloat = 9
+    @ScaledMetric(relativeTo: .caption2) private var captionText: CGFloat = 10
 
     private var hasProgress: Bool { fraction.isFinite && fraction > 0 && fraction < 1 }
 
@@ -248,7 +254,7 @@ struct PlaybackProgressOverlay: View {
             CardCaption(width: width, inset: inset) {
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: smallText, weight: .semibold))
                     ScaledCapsule(scale: metrics.cornerScale(for: .artwork))
                         .fill(.white.opacity(0.32))
                         .overlay(alignment: .leading) {
@@ -258,13 +264,13 @@ struct PlaybackProgressOverlay: View {
                         .frame(height: appearance.progressThickness.points)
                     if appearance.showsTimeLeft, let remainingTime {
                         Text(remainingTime)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: captionText, weight: .medium))
                             .monospacedDigit()
                             .fixedSize()
                     }
                     if let episode, !episode.isEmpty {
                         Text(episode)
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: smallText, weight: .semibold))
                             .foregroundStyle(.black)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)

@@ -98,7 +98,7 @@ struct WidgetRow: View {
                             IssueMessage(issue: issue)
                         } else {
                             Text("Nothing here yet")
-                                .font(.subheadline)
+                                .font(Theme.Typography.medium)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, metrics.pageMargin)
                         }
@@ -186,7 +186,7 @@ struct UnsupportedWidgetRow: View {
     var body: some View {
         RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
             Text("Blusion can't show this kind of row yet.")
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, metrics.pageMargin)
         }
@@ -229,6 +229,7 @@ struct CollectionRow: View {
 
 /// The titles to resume, as wide cards with their progress. Each opens its streams, where the player resumes.
 struct ContinueWatchingRow: View {
+    @AppStorage(AppearancePreferences.defaultsKey) private var appearance = AppearancePreferences()
     let items: [ContinueWatchingEntry]
     let state: HomeViewModel.ContinueState
     let retry: () -> Void
@@ -245,7 +246,7 @@ struct ContinueWatchingRow: View {
     @State private var scrollToStart = 0
 
     var body: some View {
-        let shown = items.filter { kind.includes($0.request) }
+        let shown = Array(items.filter { kind.includes($0.request) }.prefix(appearance.continueWatchingLimit))
         ScrollViewReader { proxy in
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 if !hideTitle {
@@ -308,13 +309,13 @@ struct ContinueWatchingRow: View {
                 } else if !items.isEmpty {
                     // Hold the rail's height, so switching to an empty kind does not move the page below.
                     Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
-                        .font(.subheadline)
+                        .font(Theme.Typography.medium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
                         .padding(.horizontal, metrics.pageMargin)
                 } else {
                     emptyState
-                        .font(.subheadline)
+                        .font(Theme.Typography.medium)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                 }
@@ -415,7 +416,7 @@ struct IssueMessage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(text)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if issue == .needsTraktClientID {

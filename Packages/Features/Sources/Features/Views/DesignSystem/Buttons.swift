@@ -52,6 +52,7 @@ private struct PrimaryActionButton: View {
                     .frame(height: height)
                     .contentShape([.interaction, .contextMenuPreview, .hoverEffect], shape), in: shape)
                     .glassHover(shape)
+                    .buttonOutline(shape)
             }
             .buttonStyle(.plain)
             .contentShape(.contextMenuPreview, shape)
@@ -71,6 +72,7 @@ private struct PrimaryActionButton: View {
         }
         .finishedButtonStyle(glass, finish: appearance.buttonFinish, fill: solidFill ?? (.white, .black))
         .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
+        .buttonOutline(playBorderShape)
         .controlSize(.large)
         .frame(height: CircleActionButton.diameter)
         #else
@@ -84,11 +86,16 @@ private struct PrimaryActionButton: View {
         }
         .finishedButtonStyle(glass, finish: appearance.buttonFinish, fill: solidFill ?? (.white, .black))
         .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
+        .buttonOutline(playBorderShape)
         // A main action is one size up from the controls around it.
         .controlSize(controlSize == .regular ? .large : controlSize)
         .pointerFeedback()
         #endif
         }
+    }
+
+    private var playBorderShape: ButtonBorderShape {
+        metrics.cornerScale(for: .playButton) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton))
     }
 
     /// Play's own fill: solid white or the accent when Appearance sets one (Colour → Play button), with dark or light text to suit;
@@ -139,11 +146,16 @@ struct GlassCapsuleButtonStyle: PrimitiveButtonStyle {
             configuration.trigger()
         } label: {
             configuration.label
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .pointerFeedback()
         }
         .finishedButtonStyle(nil, finish: appearance.buttonFinish)
-        .buttonBorderShape(metrics.cornerScale(for: .actionButtons) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons)))
+        .buttonBorderShape(shape)
+        .buttonOutline(shape)
+    }
+
+    private var shape: ButtonBorderShape {
+        metrics.cornerScale(for: .actionButtons) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons))
     }
 }
 
@@ -164,12 +176,12 @@ extension View {
     fileprivate func configurableGlassButtonStyle(_ glass: Glass?) -> some View {
         if #available(iOS 26.1, macCatalyst 26.1, *) {
             if let glass {
-                buttonStyle(GlassButtonStyle(glass))
+                buttonStyle(PointingHandButtonStyle(style: GlassButtonStyle(glass)))
             } else {
-                buttonStyle(GlassButtonStyle())
+                buttonStyle(PointingHandButtonStyle(style: GlassButtonStyle()))
             }
         } else {
-            buttonStyle(GlassButtonStyle())
+            buttonStyle(PointingHandButtonStyle(style: GlassButtonStyle()))
         }
     }
 
@@ -183,12 +195,12 @@ extension View {
             configurableGlassButtonStyle(glass)
         case .solid:
             if let fill {
-                buttonStyle(.borderedProminent).tint(fill.fill).foregroundStyle(fill.text)
+                buttonStyle(PointingHandButtonStyle(style: .borderedProminent)).tint(fill.fill).foregroundStyle(fill.text)
             } else {
-                buttonStyle(.bordered).tint(.white)
+                buttonStyle(PointingHandButtonStyle(style: .bordered)).tint(.white)
             }
         case .flat:
-            buttonStyle(.borderless).tint(fill?.fill ?? .white)
+            buttonStyle(PointingHandButtonStyle(style: .borderless)).tint(fill?.fill ?? .white)
         }
     }
 
@@ -196,9 +208,9 @@ extension View {
     @ViewBuilder
     func finishedProminentButtonStyle(_ finish: AppearancePreferences.ButtonFinish) -> some View {
         switch finish {
-        case .glass: buttonStyle(.glassProminent)
-        case .solid: buttonStyle(.borderedProminent)
-        case .flat: buttonStyle(.borderless)
+        case .glass: buttonStyle(PointingHandButtonStyle(style: .glassProminent))
+        case .solid: buttonStyle(PointingHandButtonStyle(style: .borderedProminent))
+        case .flat: buttonStyle(PointingHandButtonStyle(style: .borderless))
         }
     }
 
@@ -260,10 +272,36 @@ private struct ButtonSurface<S: Shape>: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         switch appearance.buttonFinish {
-        case .glass: content.glassEffect(glass, in: shape)
-        case .solid: content.background(.white.opacity(0.14), in: shape)
-        case .flat: content
+        case .glass: content.glassEffect(glass, in: shape).buttonOutline(shape)
+        case .solid: content.background(.white.opacity(0.14), in: shape).buttonOutline(shape)
+        case .flat: content.buttonOutline(shape)
         }
+    }
+}
+
+/// Appearance → Outline buttons: the cards' hairline around a button, at Outline's strength (Default while cards have none).
+private struct ButtonOutline<S: Shape>: ViewModifier {
+    @Environment(\.appAppearance) private var appearance
+    @Environment(\.pixelLength) private var pixelLength
+    let shape: S
+
+    func body(content: Content) -> some View {
+        let outline: AppearancePreferences.Outline = appearance.outline == .off ? .standard : appearance.outline
+        content.overlay {
+            if appearance.outlinesButtons {
+                shape.stroke(outline == .standard ? Theme.artworkBorder : Color.white.opacity(outline.opacity),
+                             lineWidth: pixelLength * outline.pixels)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+extension View {
+    /// The cards' hairline around a button's `shape`, when Appearance → Outline buttons is on.
+    func buttonOutline(_ shape: some Shape) -> some View {
+        modifier(ButtonOutline(shape: shape))
     }
 }
 
@@ -274,9 +312,11 @@ private struct CircularGlassButton: ViewModifier {
     @Environment(\.layoutMetrics) private var metrics
 
     func body(content: Content) -> some View {
+        let shape: ButtonBorderShape = metrics.includesCircularButtons
+            ? .roundedRectangle(radius: CircleActionButton.diameter / 2 * metrics.cornerScale(for: group)) : .circle
         content.buttonStyle(HoverGlassButtonStyle(glass: glass))
-            .buttonBorderShape(metrics.includesCircularButtons
-                ? .roundedRectangle(radius: CircleActionButton.diameter / 2 * metrics.cornerScale(for: group)) : .circle)
+            .buttonBorderShape(shape)
+            .buttonOutline(shape)
             .controlSize(size)
     }
 }
@@ -338,7 +378,7 @@ struct CircleActionButton: View {
                     // A little greyed, like the link arrow on the rating buttons; while on, the colour it was given (the Play colour).
                     .foregroundStyle(isOn ? onColour ?? .white.opacity(0.6) : .white.opacity(0.6))
                     // A colour that arrives after the page opens fades in with Play's own (see `DetailActions`).
-                    .animation(.smooth(duration: 0.3), value: onColour)
+                    .animation(Theme.Motion.standard, value: onColour)
                     .contentTransition(.symbolEffect(.replace))
                     // Every symbol is a different width; the label fills the same square so each button is the same circle.
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -351,7 +391,7 @@ struct CircleActionButton: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
-            .animation(.smooth(duration: 0.25), value: isLoading)
+            .animation(Theme.Motion.quick, value: isLoading)
         }
         // The large size, like the main action beside it on the title page, so the two read as one row.
         .modifier(CircleActionSizing(exact: exactSize))

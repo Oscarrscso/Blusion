@@ -44,7 +44,7 @@ private struct SectionHeaderLabel: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -58,7 +58,7 @@ private struct SectionHeaderLabel: View {
     private var titleText: Text {
         guard withChevron else { return Text(title) }
         let chevron = Text(Image(systemName: "chevron.right"))
-            .font(.footnote.weight(.semibold))
+            .font(Theme.Typography.smallStrong)
             .foregroundStyle(.secondary)
             .baselineOffset(2)
         return Text("\(title) \(chevron)")

@@ -80,7 +80,7 @@ struct DetailReviews: View {
                     } else if let summaryError {
                         Button(action: { summaryRetry += 1 }) {
                             Label(summaryError, systemImage: "arrow.clockwise")
-                                .font(.subheadline)
+                                .font(Theme.Typography.medium)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.leading)
                         }
@@ -90,7 +90,7 @@ struct DetailReviews: View {
                             .accessibilityIdentifier("detail.reviews.consensus")
                     } else if ReviewConsensusReader.available() == nil {
                         Text("On-device AI summary is unavailable.")
-                            .font(.subheadline)
+                            .font(Theme.Typography.medium)
                             .foregroundStyle(.secondary)
                     } else {
                         // Covers the short interval before the background summarisation task starts.
@@ -118,7 +118,7 @@ struct DetailReviews: View {
                                 }
                                 .padding(ReviewCard.padding)
                                 .frame(width: metrics.episodeWidth)
-                                .cardSurface(group: .reviews)
+                                .cardSurface(cornerRadius: Theme.Radius.card, group: .reviews)
                                 .reportsShelfEdge(id: index)
                                 .accessibilityElement(children: .ignore)
                                 .accessibilityLabel("Loading review")
@@ -173,7 +173,7 @@ struct DetailReviews: View {
     /// during the system's menu presentation and dismissal animations.
     private func reviewHeadingControl(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(.caption2.weight(.semibold))
+            .font(Theme.Typography.microStrong)
             .foregroundStyle(.white)
             .frame(width: 24, height: 24)
             .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
@@ -185,7 +185,7 @@ struct DetailReviews: View {
 
     /// The AI button reveals this panel and starts summarisation only when requested.
     private func aiSummaryPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.cornerScale(for: .reviews), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .reviews), style: .continuous)
         return VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
                 Image(systemName: "sparkles")
@@ -197,7 +197,7 @@ struct DetailReviews: View {
                     .foregroundStyle(.primary)
                 Spacer(minLength: Theme.Spacing.s)
                 Text("On-device")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
             }
             content()
@@ -205,7 +205,7 @@ struct DetailReviews: View {
         .padding(Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.035), in: shape)
-        .overlay { shape.strokeBorder(Theme.separator, lineWidth: 0.7).allowsHitTesting(false) }
+        .overlay { CardOutline(shape: shape, minimumWidth: Theme.cardHairlineWidth) }
     }
 
     private var summaryLoading: some View {
@@ -242,14 +242,14 @@ struct DetailReviews: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             if let overall {
                 Text(overall)
-                    .font(.body)
+                    .font(Theme.Typography.large)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if praised == nil && criticised == nil {
                 // Sparse or older plain-text summaries still have a readable primary line.
                 ForEach(other.indices, id: \.self) { index in
                     Text(other[index])
-                        .font(.body)
+                        .font(Theme.Typography.large)
                         .foregroundStyle(.primary)
                 }
             }
@@ -266,7 +266,7 @@ struct DetailReviews: View {
             if praised != nil || criticised != nil || overall != nil {
                 ForEach(other.indices, id: \.self) { index in
                     Text(other[index])
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -284,7 +284,7 @@ struct DetailReviews: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(text)
-                    .font(.body)
+                    .font(Theme.Typography.large)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -495,7 +495,7 @@ struct ReviewCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     // Short cards cut a long name to one line; an expanded card has the width, so the name wraps in full.
-                    Text(review.author).font(.headline).lineLimit(isExpanded ? nil : 1)
+                    Text(review.author).font(Theme.Typography.headline).lineLimit(isExpanded ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     if let rating = review.rating {
@@ -506,7 +506,7 @@ struct ReviewCard: View {
                                         stars >= Double(index) + 0.5 ? "star.leadinghalf.filled" : "star")
                             }
                         }
-                        .font(.caption.weight(.semibold))
+                        .font(Theme.Typography.captionStrong)
                         .foregroundStyle(.white)
                         // The stars keep their width; the name takes what is left, and wraps or cuts before the stars are squeezed.
                         .fixedSize()
@@ -540,9 +540,10 @@ struct ReviewCard: View {
             }
         }
         .padding(Self.padding)
-        .cardSurface(group: .reviews)
-        // Fixed-width text never draws outside the card while it grows or shrinks.
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.cornerScale(for: .reviews), style: .continuous))
+        // Fixed-width text never draws outside the card while it grows or shrinks. The card's hairline is drawn after the clip, so its
+        // corners are not cut thinner.
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .reviews), style: .continuous))
+        .cardSurface(cornerRadius: Theme.Radius.card, group: .reviews)
         .pointerFeedback(folds)
     }
 

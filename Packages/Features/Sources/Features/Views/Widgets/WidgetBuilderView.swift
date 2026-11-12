@@ -69,6 +69,7 @@ struct WidgetBuilderView: View {
                let text = WidgetsManagerViewModel.exportJSON(of: saved) {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                        .buttonCursor()
                         .accessibilityLabel("Export Widget")
                         .accessibilityIdentifier("widgetEditor.export")
                 }
@@ -139,7 +140,7 @@ struct WidgetBuilderView: View {
     /// The notice that a TMDB list cannot be read until a TMDB token is saved in Settings.
     private var tokenNotice: some View {
         Text("TMDB lists need a TMDB Read Access Token. Add one in Settings › Ratings, or choose another source.")
-            .font(.subheadline)
+            .font(Theme.Typography.medium)
             .foregroundStyle(.secondary)
             .padding(Theme.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -423,6 +424,7 @@ private struct PillButton: View {
                 .opacity(pill.isEnabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .buttonCursor()
         .disabled(!pill.isEnabled)
         .accessibilityLabel("\(pill.title), \(pill.value)")
         .accessibilityIdentifier("widgetBuilder.pill.\(pill.field.rawValue)")
@@ -470,7 +472,7 @@ private struct PillRow: View {
         HStack(spacing: Theme.Spacing.s) {
             // A size at which the widest symbols (three people, the masks) stay inside the box, so no icon runs into its title.
             Image(systemName: systemImage)
-                .font(.footnote.weight(.semibold))
+                .font(Theme.Typography.smallStrong)
                 .foregroundStyle(tint)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 0) {
@@ -479,7 +481,7 @@ private struct PillRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(value)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

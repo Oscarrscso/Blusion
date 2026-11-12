@@ -158,7 +158,10 @@ public struct TMDbRatings: Sendable {
         if let average = match.vote_average, average.isFinite, (0...10).contains(average), (match.vote_count ?? 0) > 0 {
             rating = average
         } else { rating = nil }
-        return ReviewRatings(tmdb: rating, tmdbURL: URL(string: "https://www.themoviedb.org/\(type == "movie" ? "movie" : "tv")/\(match.id)"))
+        // Anime is Japanese-language animation (TMDb's genre 16).
+        let isAnime = match.original_language?.lowercased() == "ja" && (match.genre_ids ?? []).contains(16)
+        return ReviewRatings(tmdb: rating, tmdbURL: URL(string: "https://www.themoviedb.org/\(type == "movie" ? "movie" : "tv")/\(match.id)"),
+                             isAnime: isAnime)
     }
 
     /// The TMDb id for an IMDb title, looked up once per session (see `TMDbTitleIDCache`). Nil when TMDb does not know the title.
@@ -379,7 +382,13 @@ public struct TMDbRatings: Sendable {
         let movie_results: [Match]?
         let tv_results: [Match]?
     }
-    struct Match: Decodable { let id: Int; let vote_average: Double?; let vote_count: Int? }
+    struct Match: Decodable {
+        let id: Int
+        let vote_average: Double?
+        let vote_count: Int?
+        let original_language: String?
+        let genre_ids: [Int]?
+    }
 
     private struct SeasonResponse: Decodable { let episodes: [Episode]? }
     private struct Episode: Decodable { let episode_number: Int?; let vote_average: Double?; let vote_count: Int? }

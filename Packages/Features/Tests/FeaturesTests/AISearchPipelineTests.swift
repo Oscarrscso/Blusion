@@ -56,7 +56,7 @@ import StremioKit
         let kinds: Set<TMDbDiscoverQuery.Kind> = request == "80s horror" ? [.movie] : [.movie, .series]
         let results = await service.titles(for: request) { await calls.update($0) }
         #expect(results.count == 12 * kinds.count, "a database-filter request has no arbitrary eight-pick limit or synopsis requirement")
-        #expect(await calls.plans == 1, "every query still invokes AI interpretation")
+        #expect(await calls.plans == 0, "plain filters are read from the words: no model interprets them")
         #expect(await calls.ranks == 0, "plot inference cannot discard correct genre/year matches")
         let queries = await calls.queries
         #expect(queries.count == kinds.count)
@@ -347,7 +347,7 @@ import StremioKit
         let client = AddonClient()
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
                                    client: client)
-        let model = SearchViewModel(services: services, debounce: .milliseconds(1), describer: service, usesLivePicker: false)
+        let model = SearchViewModel(services: services, debounce: .milliseconds(1), describer: service)
         model.query = "90s comedy"
         model.queryDidChange()
         try await waitUntil { model.describedItems == [item] }
@@ -467,7 +467,7 @@ import StremioKit
         let client = AddonClient()
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
                                    client: client)
-        let model = SearchViewModel(services: services, debounce: .milliseconds(1), describer: service, usesLivePicker: false)
+        let model = SearchViewModel(services: services, debounce: .milliseconds(1), describer: service)
         model.query = "dark crime movies"
         model.queryDidChange()
         await calls.waitForPlan()
@@ -476,6 +476,20 @@ import StremioKit
         await model.waitUntilDone()
         #expect(await calls.plans == 1)
         #expect(model.aiPhase == .done)
+    }
+
+    @Test func runtimesKindsAndYearsAreCheckedFromTheTitlesOwnFacts() {
+        #expect(DescribedSearchService.minutes("2h 17min") == 137 && DescribedSearchService.minutes("98 min") == 98)
+        #expect(DescribedSearchService.minutes(nil) == nil)
+        let zodiac = MetaPreview(id: "tt0443706", type: "movie", name: "Zodiac", releaseInfo: "2007", genres: ["Crime"], runtime: "157 min")
+        #expect(DescribedSearchService.heading(zodiac) == "Zodiac (2007), film. Crime. 157 min")
+        #expect(!DescribedSearchService.fitsRuntime(zodiac, DescribedSearch(maximumRuntime: 120)))
+        let films = DescribedSearch(kind: .movie, earliestYear: 2010)
+        let show = MetaPreview(id: "tt1", type: "series", name: "Show", releaseInfo: "2015")
+        let undated = MetaPreview(id: "tt2", type: "movie", name: "Undated")
+        #expect(!DescribedSearchService.fitsKindAndYears(show, films) && !DescribedSearchService.fitsKindAndYears(zodiac, films))
+        #expect(DescribedSearchService.fitsKindAndYears(undated, films), "a title with no known year is kept")
+        #expect(DescribedSearchService.fitsKindAndYears(show, DescribedSearch()))
     }
 
     @Test func rankingSeesStoryEvidenceBeyondTheOldSynopsisCutoff() {
@@ -506,7 +520,7 @@ import StremioKit
         let client = AddonClient()
         let services = AppServices(registry: AddonRegistry(store: InMemoryAddonStore(), secrets: InMemorySecretStore(), client: client),
                                    client: client)
-        let model = SearchViewModel(services: services, describer: service, usesLivePicker: false)
+        let model = SearchViewModel(services: services, describer: service)
         model.query = "dark crime films"
         await model.submit()
         await model.waitUntilDone()

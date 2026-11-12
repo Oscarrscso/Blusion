@@ -19,6 +19,7 @@ struct StreamsSettingsPage: View {
                                           set: { value in Haptics.play(.choices); Task { await model.setPreferredResolution(value) } })) {
                     ForEach(SettingsViewModel.resolutionOptions) { Text($0.label).tag($0.value) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.resolution")
                 // Ultra keeps to 720p and the leanest encodes.
                 Picker("Data Saver",
@@ -26,6 +27,7 @@ struct StreamsSettingsPage: View {
                                           set: { level in Haptics.play(.choices); Task { await model.setDataSaverLevel(level) } })) {
                     ForEach(DataSaverLevel.allCases) { Text($0.title).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.dataSaver")
             }
             Section("Auto Pick") {
@@ -35,14 +37,12 @@ struct StreamsSettingsPage: View {
                 .accessibilityIdentifier("settings.autoPlay")
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     Text("Prefer")
-                    Picker("Prefer", selection: Binding(get: { model.settings.autoPickSource }, set: { value in
+                    CornerSegmentedPicker("Prefer", options: StreamSourcePreference.allCases, selection: Binding(get: { model.settings.autoPickSource }, set: { value in
                         Haptics.play(.choices)
                         Task { await model.setAutoPickSource(value) }
                     })) {
-                        ForEach(StreamSourcePreference.allCases) { Text($0.title).tag($0) }
+                        $0.title
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
                     .accessibilityIdentifier("settings.autoPickSource")
                 }
                 SettingsSubpageLink(id: "streams.addonSpeed") {
@@ -108,7 +108,7 @@ struct PerformanceSettingsPage: View {
                         Spacer()
                         Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label)
                     }
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 }
@@ -131,6 +131,7 @@ struct PerformanceSettingsPage: View {
                 })) {
                     ForEach(ImageCachePolicy.diskSizeOptions, id: \.self) { Text(Self.sizeName($0)).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.imageCache.size")
                 LabeledContent("Disk cache used") {
                     Text(diskInUse.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? "—")
@@ -205,6 +206,7 @@ struct PerformanceSettingsPage: View {
         })) {
             ForEach(options) { Text($0.label).tag($0.value) }
         }
+        .buttonCursor()
         .accessibilityIdentifier(id)
     }
 
@@ -247,12 +249,12 @@ struct RatingsSettingsPage: View {
                     .accessibilityIdentifier("settings.reviews.refresh")
                 if let error = services.posterRatings.omdbError ?? services.posterRatings.reviewServiceIssue {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.orange)
                         .accessibilityIdentifier("settings.reviews.error")
                 } else if let message = model.lastMessage {
                     Text(message)
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.reviews.message")
                 }
@@ -265,7 +267,7 @@ struct RatingsSettingsPage: View {
                         .map { $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? "Not yet")
                     LabeledContent("Size on disk", value: status.fileSize.map { $0.formatted(.byteCount(style: .file)) } ?? "Unknown")
                 }
-                if let url = IMDbAttribution.termsURL { Link("IMDb Data Terms", destination: url) }
+                if let url = IMDbAttribution.termsURL { Link("IMDb Data Terms", destination: url).buttonCursor() }
             } header: {
                 Text("IMDb")
             } footer: {
@@ -306,7 +308,7 @@ struct ServerSettingsPage: View {
                     .accessibilityIdentifier("settings.serverURL")
                 if let message = model.serverURLMessage {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.orange)
                         .accessibilityIdentifier("settings.serverURL.message")
                 }
@@ -336,7 +338,7 @@ struct DataSettingsPage: View {
             if let message = model.lastMessage {
                 Section {
                     Label(message, systemImage: "checkmark.circle")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.clearMessage")
                 }
@@ -386,7 +388,7 @@ struct SyncFolderSettingsPage: View {
                 }
                 if failed {
                     Label("That folder can't be used.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.orange)
                 }
             }
@@ -443,14 +445,14 @@ private struct AddonSpeedSettingsPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.addon.name)
                             Text(AddonSpeedViewModel.detail(for: row.result))
-                                .font(.footnote)
+                                .font(Theme.Typography.small)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                         Spacer(minLength: 0)
                         if row.id == model.fastest {
                             Text("Fastest")
-                                .font(.caption.weight(.semibold))
+                                .font(Theme.Typography.captionStrong)
                                 .padding(.horizontal, Theme.Spacing.s)
                                 .padding(.vertical, 3)
                                 .background(.tint.opacity(0.25), in: ScaledCapsule(scale: metrics.cornerScale(for: .settingsRows)))
@@ -525,28 +527,27 @@ struct AcknowledgementsView: View {
     var aetherEngineLinked = false
 
     var body: some View {
-        List(Acknowledgement.all(fallbackEngineLinked: fallbackEngineLinked, aetherEngineLinked: aetherEngineLinked)) { item in
-            VStack(alignment: .leading, spacing: 4) {
-                if item.name == "TMDB" {
-                    Image("ReviewTMDB").resizable().scaledToFit()
-                        .frame(width: 80, height: 35)
-                        .accessibilityLabel("TMDB")
+        SettingsList {
+            Section {
+                ForEach(Acknowledgement.all(fallbackEngineLinked: fallbackEngineLinked, aetherEngineLinked: aetherEngineLinked)) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        if item.name == "TMDB" {
+                            Image("ReviewTMDB").resizable().scaledToFit()
+                                .frame(width: 80, height: 35)
+                                .accessibilityLabel("TMDB")
+                        }
+                        Text(item.name).font(Theme.Typography.headline)
+                        Text(item.license).font(Theme.Typography.medium).foregroundStyle(.secondary)
+                        Text(item.detail).font(Theme.Typography.small)
+                        if let url = item.sourceURL { Link("Source", destination: url).font(Theme.Typography.small).buttonCursor() }
+                    }
+                    .accessibilityElement(children: .contain)
                 }
-                Text(item.name).font(.headline)
-                Text(item.license).font(.subheadline).foregroundStyle(.secondary)
-                Text(item.detail).font(.footnote)
-                if let url = item.sourceURL { Link("Source", destination: url).font(.footnote) }
             }
-            .accessibilityElement(children: .contain)
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .scrollContentBackground(.hidden)
-        .readableColumn()
-        .screenBackground()
-        .navigationTitle("Acknowledgements")
-        .macBackNavigation()
-        .navigationBarTitleDisplayMode(.inline)
+        .settingsPage("Acknowledgements")
         .accessibilityIdentifier("acknowledgements.list")
     }
 }

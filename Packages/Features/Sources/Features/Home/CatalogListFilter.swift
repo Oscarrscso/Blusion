@@ -111,7 +111,7 @@ public struct CatalogListFilter: Equatable, Sendable {
 public enum CatalogListFiltering {
     public static func matches(_ item: MetaPreview, _ filter: CatalogListFilter) -> Bool {
         if let type = filter.type, item.type.lowercased() != type { return false }
-        if let genre = filter.genre?.lowercased(), !item.genres.contains(where: { $0.lowercased() == genre }) { return false }
+        if let genre = filter.genre, !MediaGenres.contains(genre, in: item.genres) { return false }
         if filter.minimumYear != nil || filter.maximumYear != nil {
             guard let year = LibraryFiltering.year(from: item.releaseInfo) else { return false }
             if let low = filter.minimumYear, year < low { return false }
@@ -148,7 +148,13 @@ public enum CatalogListFiltering {
                 return left == right ? $0.offset < $1.offset : left < right
             }
         }
-        return ordered.map(\.element)
+        guard let genre = filter.genre else { return ordered.map(\.element) }
+        // A title shown for a genre leads with it on its card and its page.
+        return ordered.map { entry -> MetaPreview in
+            var item = entry.element
+            item.genres = MediaGenres.leading([genre], in: item.genres)
+            return item
+        }
     }
 
     /// Fresh shuffle ranks for `items`, numbered from `start`.

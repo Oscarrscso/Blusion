@@ -181,6 +181,32 @@ public final class SettingsViewModel {
         await update { $0.usesHeroPosters = value }
     }
 
+    /// Whether the poster artwork toggles shown on Appearance → Cards are at their defaults.
+    public var isPosterArtworkDefault: Bool {
+        let defaults = PlaybackSettings()
+        return settings.usesHeroPosters == defaults.usesHeroPosters
+            && settings.showsPosterRatings == defaults.showsPosterRatings
+            && settings.showsBestDiscOnPosters == defaults.showsBestDiscOnPosters
+            && settings.posterMarkPlacement == defaults.posterMarkPlacement
+            && settings.showsColouredRatingLogos == defaults.showsColouredRatingLogos
+    }
+
+    /// Restores the poster artwork toggles shown on Appearance → Cards to their defaults.
+    public func restorePosterArtworkDefaults() async {
+        let defaults = PlaybackSettings()
+        await update {
+            $0.usesHeroPosters = defaults.usesHeroPosters
+            $0.showsPosterRatings = defaults.showsPosterRatings
+            $0.showsBestDiscOnPosters = defaults.showsBestDiscOnPosters
+            $0.posterMarkPlacement = defaults.posterMarkPlacement
+            $0.showsColouredRatingLogos = defaults.showsColouredRatingLogos
+        }
+        services.posterRatings.isEnabled = settings.showsPosterRatings
+        services.posterRatings.showsColouredLogos = settings.showsColouredRatingLogos
+        services.posterRatings.showsBestDisc = settings.showsBestDiscOnPosters
+        services.posterRatings.markPlacement = settings.posterMarkPlacement
+    }
+
     public func refreshRatings() async {
         await services.posterRatings.refresh()
         lastMessage = "Ratings will refresh as you browse."

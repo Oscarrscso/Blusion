@@ -97,6 +97,8 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     /// A card's title in capitals.
     public var uppercaseCaptions = false
     public var outline: Outline = .standard
+    /// Buttons take the cards' hairline (Outline's strength, or Default when cards have none).
+    public var outlinesButtons = false
     public var artworkTone: ArtworkTone = .natural
     public var progressColour: ProgressColour = .white
     public var progressThickness: ProgressThickness = .thin
@@ -111,8 +113,10 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
 
     /// Seconds between the spotlight turning its page by itself; zero never (`heroAutoAdvanceOptions`).
     public var heroAutoAdvance = 0
-    /// The dots under the spotlight that show which page it is on.
+    /// Retained for saved-look compatibility; showcase dots are always visible.
     public var showsPageDots = true
+    /// Maximum titles shown in Continue Watching, after filtering by kind.
+    public var continueWatchingLimit = 12
 
     // MARK: - Title pages
 
@@ -123,14 +127,39 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     public var spoilerTitles = false
     /// The synopsis opens unfolded.
     public var expandsSynopsis = false
-    /// The title page's sections below the episodes.
+    /// The title page's sections below Play, synopsis and ratings.
     public var showsReviews = true
     public var showsCast = true
     public var showsInformation = true
+    public var showsFranchise = true
     public var showsRelated = true
     /// Where the title can be watched in the viewer's region, from TMDb. Off until turned on, as it asks TMDb for each title.
     public var showsWatchAnywhere = false
     public var sectionOrder: SectionOrder = .reviewsFirst
+    /// Empty keeps the earlier Reviews First / Cast First choice, including existing saved looks and presets.
+    public var titleSectionOrder: [TitleSection] = []
+
+    public var orderedTitleSections: [TitleSection] {
+        let saved = titleSectionOrder.isEmpty && sectionOrder == .castFirst
+            ? [.episodes, .cast, .reviews, .information, .franchise, .related, .watchAnywhere] : titleSectionOrder
+        var order: [TitleSection] = []
+        for section in saved + TitleSection.allCases where !order.contains(section) {
+            order.append(section)
+        }
+        return order
+    }
+
+    public func showsTitleSection(_ section: TitleSection) -> Bool {
+        switch section {
+        case .episodes: true
+        case .reviews: showsReviews
+        case .cast: showsCast
+        case .information: showsInformation
+        case .franchise: showsFranchise
+        case .related: showsRelated
+        case .watchAnywhere: showsWatchAnywhere
+        }
+    }
 
     // MARK: - Navigation and motion
 
@@ -191,6 +220,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         showsCaptionDetails = look.showsCaptionDetails
         uppercaseCaptions = look.uppercaseCaptions
         outline = look.outline
+        outlinesButtons = look.outlinesButtons
         artworkTone = look.artworkTone
         progressColour = look.progressColour
         progressThickness = look.progressThickness
@@ -200,6 +230,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         showsPageDots = look.showsPageDots
         expandsSynopsis = look.expandsSynopsis
         sectionOrder = look.sectionOrder
+        titleSectionOrder = look.titleSectionOrder
         zoomTransitions = look.zoomTransitions
         phoneTabTitles = look.phoneTabTitles
         minimisesTabBar = look.minimisesTabBar
@@ -275,6 +306,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         // The outline was a switch; off reads as Off.
         let legacyOutline: Outline? = (try? container.decode(Bool.self, forKey: .legacyArtworkOutline)).map { $0 ? .standard : .off }
         outline = read(.outline, legacyOutline ?? outline)
+        outlinesButtons = read(.outlinesButtons, outlinesButtons)
         artworkTone = read(.artworkTone, artworkTone)
         progressColour = read(.progressColour, progressColour)
         progressThickness = read(.progressThickness, progressThickness)
@@ -284,6 +316,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         let advance = read(.heroAutoAdvance, heroAutoAdvance)
         heroAutoAdvance = Self.heroAutoAdvanceOptions.contains(advance) ? advance : 0
         showsPageDots = read(.showsPageDots, showsPageDots)
+        continueWatchingLimit = min(100, max(1, read(.continueWatchingLimit, continueWatchingLimit)))
 
         hidesSpoilers = read(.hidesSpoilers, hidesSpoilers)
         spoilerStills = read(.spoilerStills, spoilerStills)
@@ -293,9 +326,11 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         showsReviews = read(.showsReviews, showsReviews)
         showsCast = read(.showsCast, showsCast)
         showsInformation = read(.showsInformation, showsInformation)
+        showsFranchise = read(.showsFranchise, showsFranchise)
         showsWatchAnywhere = read(.showsWatchAnywhere, showsWatchAnywhere)
         showsRelated = read(.showsRelated, showsRelated)
         sectionOrder = read(.sectionOrder, sectionOrder)
+        titleSectionOrder = read(.titleSectionOrder, [String]()).compactMap(TitleSection.init(rawValue:))
 
         startTab = read(.startTab, startTab)
         zoomTransitions = read(.zoomTransitions, zoomTransitions)
@@ -350,6 +385,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(showsCaptionDetails, forKey: .showsCaptionDetails)
         try container.encode(uppercaseCaptions, forKey: .uppercaseCaptions)
         try container.encode(outline, forKey: .outline)
+        try container.encode(outlinesButtons, forKey: .outlinesButtons)
         try container.encode(artworkTone, forKey: .artworkTone)
         try container.encode(progressColour, forKey: .progressColour)
         try container.encode(progressThickness, forKey: .progressThickness)
@@ -358,6 +394,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
 
         try container.encode(heroAutoAdvance, forKey: .heroAutoAdvance)
         try container.encode(showsPageDots, forKey: .showsPageDots)
+        try container.encode(continueWatchingLimit, forKey: .continueWatchingLimit)
 
         try container.encode(hidesSpoilers, forKey: .hidesSpoilers)
         try container.encode(spoilerStills, forKey: .spoilerStills)
@@ -367,9 +404,11 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(showsReviews, forKey: .showsReviews)
         try container.encode(showsCast, forKey: .showsCast)
         try container.encode(showsInformation, forKey: .showsInformation)
+        try container.encode(showsFranchise, forKey: .showsFranchise)
         try container.encode(showsRelated, forKey: .showsRelated)
         try container.encode(showsWatchAnywhere, forKey: .showsWatchAnywhere)
         try container.encode(sectionOrder, forKey: .sectionOrder)
+        try container.encode(titleSectionOrder, forKey: .titleSectionOrder)
 
         try container.encode(startTab, forKey: .startTab)
         try container.encode(zoomTransitions, forKey: .zoomTransitions)
@@ -388,12 +427,12 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         case cornerOverrides, includesCircularButtons
         case shelfSpacing, sideMargin, showsShelfDividers, shelfDividerThickness, shelfDividerOpacity, shelfDividerFullWidth
         case cardSize, cornerScale, spacing, phoneGridColumns, showsPosterTitles, captionLines, showsCaptionDetails, uppercaseCaptions,
-             outline, artworkTone, progressColour, progressThickness, showsTimeLeft
+             outline, outlinesButtons, artworkTone, progressColour, progressThickness, showsTimeLeft
         case phoneLandscapeGridColumns
         case layout
-        case heroAutoAdvance, showsPageDots
+        case heroAutoAdvance, showsPageDots, continueWatchingLimit
         case hidesSpoilers, spoilerStills, spoilerSynopses, spoilerTitles, expandsSynopsis, showsReviews, showsCast, showsInformation,
-             showsRelated, showsWatchAnywhere, sectionOrder
+             showsFranchise, showsRelated, showsWatchAnywhere, sectionOrder, titleSectionOrder
         case startTab, zoomTransitions, animationSpeed, phoneTabTitles, minimisesTabBar, showsContinueBar
         case hover
         /// The fixed steps saved before the sliders, read once and never written.
@@ -426,15 +465,18 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             && lhs.cornerOverrides == rhs.cornerOverrides && lhs.includesCircularButtons == rhs.includesCircularButtons
         let captions: Bool = lhs.showsPosterTitles == rhs.showsPosterTitles && lhs.captionLines == rhs.captionLines
             && lhs.showsCaptionDetails == rhs.showsCaptionDetails && lhs.uppercaseCaptions == rhs.uppercaseCaptions
-        let artwork: Bool = lhs.outline == rhs.outline && lhs.artworkTone == rhs.artworkTone
+        let artwork: Bool = lhs.outline == rhs.outline && lhs.outlinesButtons == rhs.outlinesButtons && lhs.artworkTone == rhs.artworkTone
         let progress: Bool = lhs.progressColour == rhs.progressColour && lhs.progressThickness == rhs.progressThickness
             && lhs.showsTimeLeft == rhs.showsTimeLeft
         let home: Bool = lhs.heroAutoAdvance == rhs.heroAutoAdvance && lhs.showsPageDots == rhs.showsPageDots
+            && lhs.continueWatchingLimit == rhs.continueWatchingLimit
         let spoilers: Bool = lhs.hidesSpoilers == rhs.hidesSpoilers && lhs.spoilerStills == rhs.spoilerStills
             && lhs.spoilerSynopses == rhs.spoilerSynopses && lhs.spoilerTitles == rhs.spoilerTitles
         let sections: Bool = lhs.expandsSynopsis == rhs.expandsSynopsis && lhs.showsReviews == rhs.showsReviews
-            && lhs.showsCast == rhs.showsCast && lhs.showsInformation == rhs.showsInformation && lhs.showsRelated == rhs.showsRelated
+            && lhs.showsCast == rhs.showsCast && lhs.showsInformation == rhs.showsInformation
+            && lhs.showsFranchise == rhs.showsFranchise && lhs.showsRelated == rhs.showsRelated
             && lhs.showsWatchAnywhere == rhs.showsWatchAnywhere && lhs.sectionOrder == rhs.sectionOrder
+            && lhs.titleSectionOrder == rhs.titleSectionOrder
         let navigation: Bool = lhs.startTab == rhs.startTab && lhs.zoomTransitions == rhs.zoomTransitions
             && lhs.animationSpeed == rhs.animationSpeed
         let tabs: Bool = lhs.phoneTabTitles == rhs.phoneTabTitles && lhs.minimisesTabBar == rhs.minimisesTabBar
@@ -518,6 +560,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             result.showsCaptionDetails = defaults.showsCaptionDetails
             result.uppercaseCaptions = defaults.uppercaseCaptions
             result.outline = defaults.outline
+            result.outlinesButtons = defaults.outlinesButtons
             result.artworkTone = defaults.artworkTone
             result.progressColour = defaults.progressColour
             result.progressThickness = defaults.progressThickness
@@ -529,6 +572,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         case .home:
             result.heroAutoAdvance = defaults.heroAutoAdvance
             result.showsPageDots = defaults.showsPageDots
+            result.continueWatchingLimit = defaults.continueWatchingLimit
         case .titlePages:
             result.hidesSpoilers = defaults.hidesSpoilers
             result.spoilerStills = defaults.spoilerStills
@@ -538,8 +582,11 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             result.showsReviews = defaults.showsReviews
             result.showsCast = defaults.showsCast
             result.showsInformation = defaults.showsInformation
+            result.showsFranchise = defaults.showsFranchise
             result.showsRelated = defaults.showsRelated
+            result.showsWatchAnywhere = defaults.showsWatchAnywhere
             result.sectionOrder = defaults.sectionOrder
+            result.titleSectionOrder = defaults.titleSectionOrder
         case .motion:
             result.startTab = defaults.startTab
             result.zoomTransitions = defaults.zoomTransitions

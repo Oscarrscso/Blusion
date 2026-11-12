@@ -67,7 +67,7 @@ struct PlayerOptionsPanel: View {
         VStack(spacing: 0) {
             HStack {
                 Text((tab ?? .subtitles).title)
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
@@ -164,7 +164,7 @@ struct PlayerOptionsPanel: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 if let status = model.subtitleStatus {
-                    Text(status).font(.footnote).foregroundStyle(.white.opacity(0.6)).padding(.horizontal, 4)
+                    Text(status).font(Theme.Typography.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
                 }
                 PanelGroup {
                     PanelOptionRow(title: "Off", symbol: "captions.bubble", selected: model.subtitleChoice == .off) { pickSubtitle(.off) }
@@ -279,7 +279,7 @@ struct PlayerOptionsPanel: View {
                     }
                 }
             } else {
-                Text("No alternate audio tracks").font(.subheadline).foregroundStyle(.secondary)
+                Text("No alternate audio tracks").font(Theme.Typography.medium).foregroundStyle(.secondary)
             }
             if model.capabilities.contains(.externalAudio) {
                 PanelButton("Add File", symbol: "doc.badge.plus") { closeThen(actions.openAudioFile) }
@@ -356,7 +356,7 @@ struct PlayerOptionsPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             Button { Haptics.play(.playerControls); videoMenu = nil } label: {
                 Label(PlayerPanelTab.picture.title, systemImage: "chevron.backward")
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Typography.mediumStrong)
                     .padding(.horizontal, 4)
                     .frame(minHeight: 36)
                     .contentShape(.rect)
@@ -434,7 +434,7 @@ struct PlayerOptionsPanel: View {
     @ViewBuilder
     private var chapters: some View {
         if model.chapters.isEmpty {
-            Text("This video has no chapter markers.").font(.subheadline).foregroundStyle(.secondary)
+            Text("This video has no chapter markers.").font(Theme.Typography.medium).foregroundStyle(.secondary)
         } else {
             let current = model.currentChapter
             PanelGroup {
@@ -471,11 +471,11 @@ struct PlayerOptionsPanel: View {
                     infoSection("Audio", rows: audioRows(stats))
                     infoSection("Playback", rows: Self.playbackRows(stats))
                     ForEach(stats.notes, id: \.self) { note in
-                        Text(note).font(.footnote).foregroundStyle(.white.opacity(0.6)).padding(.horizontal, 4)
+                        Text(note).font(Theme.Typography.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
-                    Text("Nothing is playing yet.").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Nothing is playing yet.").font(Theme.Typography.medium).foregroundStyle(.secondary)
                 }
             }
         }
@@ -552,7 +552,7 @@ private struct PlayerInfoMedia: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(infoModel.title)
-                .font(.headline)
+                .font(Theme.Typography.headline)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("player.info.title")
@@ -633,7 +633,7 @@ private struct PanelSection<Content: View>: View {
                 if let symbol {
                     Image(systemName: symbol)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Theme.dimmerText)
                 }
                 Text(title)
                     .font(.headline.weight(.semibold))
@@ -650,7 +650,7 @@ private struct PanelRowTitle: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.6)).padding(.horizontal, 4)
+        Text(text).font(Theme.Typography.smallStrong).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
     }
 }
 
@@ -686,10 +686,10 @@ private struct PanelInfoRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label)
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Theme.faintText)
                 .frame(width: 104, alignment: .leading)
             Text(value)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -719,7 +719,7 @@ private struct PanelOptionRow: View {
             HStack(alignment: .center, spacing: 12) {
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.subheadline)
+                        .font(Theme.Typography.medium)
                         .foregroundStyle(.white.opacity(0.56))
                         .frame(width: 18)
                 }
@@ -730,7 +730,7 @@ private struct PanelOptionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -745,12 +745,12 @@ private struct PanelOptionRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let detail {
                     Text(detail)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(Theme.Typography.caption.monospacedDigit())
+                        .foregroundStyle(Theme.faintText)
                         .fixedSize()
                 }
                 Image(systemName: "checkmark")
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Typography.mediumStrong)
                     .frame(width: 18)
                     .opacity(selected ? 1 : 0)
                     .accessibilityHidden(true)
@@ -776,14 +776,14 @@ private struct PanelMenuRow: View {
         Button { Haptics.play(.playerControls); action() } label: {
             HStack(spacing: 12) {
                 Text(title)
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(value)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(Theme.Typography.medium)
+                    .foregroundStyle(Theme.faintText)
                     .lineLimit(1)
                 Image(systemName: "chevron.forward")
-                    .font(.footnote.weight(.semibold))
+                    .font(Theme.Typography.smallStrong)
                     .foregroundStyle(.white.opacity(0.45))
                     .accessibilityHidden(true)
             }
@@ -817,7 +817,7 @@ private struct PanelChips<Value: Hashable>: View {
                             if !selected { Haptics.play(.playerOptions) }
                             choose(option)
                         } label: {
-                            Text(label(option)).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(label(option)).font(Theme.Typography.mediumStrong).lineLimit(1)
                                 .padding(.horizontal, 14).frame(minHeight: 36)
                                 .foregroundStyle(.white)
                                 .background(.white.opacity(selected ? 0.20 : 0.08), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -850,9 +850,9 @@ private struct PanelSlider: View {
         let shown = dragged ?? value
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title).font(.body.weight(.semibold))
+                Text(title).font(Theme.Typography.largeStrong)
                 Spacer()
-                Text(label(shown)).font(.subheadline.weight(.semibold).monospacedDigit()).foregroundStyle(.white.opacity(0.7))
+                Text(label(shown)).font(Theme.Typography.mediumStrong.monospacedDigit()).foregroundStyle(Theme.dimmerText)
             }
             CornerSlider(value: Binding(get: { shown }, set: { newValue in
                 dragged = newValue
@@ -883,7 +883,7 @@ private struct PanelStepper: View {
 
     var body: some View {
         HStack {
-            Text(title).font(.body.weight(.semibold))
+            Text(title).font(Theme.Typography.largeStrong)
             Spacer()
             HStack(spacing: 0) {
                 stepButton("minus", -step, label: "Earlier")
@@ -891,7 +891,7 @@ private struct PanelStepper: View {
                     if value != 0 { Haptics.play(.playerOptions) }
                     reset()
                 } label: {
-                    Text("\(String(format: "%+.\(digits)f", value)) s").font(.subheadline.weight(.semibold).monospacedDigit())
+                    Text("\(String(format: "%+.\(digits)f", value)) s").font(Theme.Typography.mediumStrong.monospacedDigit())
                         .frame(minWidth: 72, minHeight: 40)
                         .contentShape(.rect)
                 }
@@ -927,7 +927,7 @@ private struct PanelToggle: View {
             if value != isOn { Haptics.play(.playerOptions) }
             set(value)
         }))
-            .font(.body.weight(.semibold))
+            .font(Theme.Typography.largeStrong)
             .tint(.green)
             .padding(.horizontal, 16).frame(minHeight: 52)
             .background(.white.opacity(0.08), in: .rect(cornerRadius: 18 * metrics.cornerScale(for: .playerControls)))
@@ -948,7 +948,7 @@ private struct PanelButton: View {
 
     var body: some View {
         Button { Haptics.play(.playerControls); action() } label: {
-            Label(title, systemImage: symbol).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Label(title, systemImage: symbol).font(Theme.Typography.mediumStrong).lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(.white.opacity(0.1), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                 .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))

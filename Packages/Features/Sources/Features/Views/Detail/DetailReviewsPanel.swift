@@ -35,6 +35,7 @@ struct DetailRatings: View {
 /// on screen until the new one has loaded.
 struct DetailReviewsPanel: View {
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.appAppearance) private var appearance
     let reviews: DetailViewModel.OpenedReviews
     /// The site kept on screen while `reviews` loads behind it. Nil when `reviews` is the one on screen, or is the first to open.
     var shown: DetailViewModel.OpenedReviews?
@@ -87,12 +88,12 @@ struct DetailReviewsPanel: View {
             HStack(spacing: 8) {
                 ReviewSiteIcon(site: visible.site, size: 14, keepsColour: true)
                 Text(visible.site.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Typography.mediumStrong)
                     .foregroundStyle(.white)
                 if visible.isSearch && !ReviewPageReader.supports(visible.site) {
                     Text("Search")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.faintText)
                 }
                 Spacer(minLength: 0)
                 Button {
@@ -118,7 +119,7 @@ struct DetailReviewsPanel: View {
                 // reports its load.
                 ForEach(pages, id: \.site) { page in
                     let isVisible = page.site == visible.site
-                    ReviewWebView(site: page.site, url: page.url, item: item, onLoaded: page.site == reviews.site ? onLoaded : {})
+                    ReviewWebView(site: page.site, url: page.url, item: item, background: appearance.pageBackgroundRGB, onLoaded: page.site == reviews.site ? onLoaded : {})
                         .opacity(isVisible && !showsSkeleton ? 1 : 0)
                         .allowsHitTesting(isVisible && !showsSkeleton)
                         .accessibilityHidden(!isVisible || showsSkeleton)
@@ -136,7 +137,7 @@ struct DetailReviewsPanel: View {
                     }
                     .padding(16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .background(Theme.surface)
+                    .background(appearance.pageBackground)
                     .clipped()
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Loading reviews")
@@ -145,8 +146,10 @@ struct DetailReviewsPanel: View {
             }
             .accessibilityIdentifier("detail.reviewsWeb")
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.cornerScale(for: .reviews), style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.cornerScale(for: .reviews), style: .continuous))
+        .background(appearance.pageBackground)
+        // The hairline is drawn after the clip, so its corners are not cut thinner.
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .reviews), style: .continuous))
+        .cardSurface(cornerRadius: Theme.Radius.card, group: .reviews)
         .frame(maxWidth: .infinity)
         .detailLoadingTransition(showsSkeleton)
         .id(Self.scrollID)
@@ -258,22 +261,26 @@ extension ReviewPageRules {
       var isRottenTomatoes = /(^|\.)rottentomatoes\.com$/.test(location.hostname);
       var isMetacritic = /(^|\.)metacritic\.com$/.test(location.hostname);
       var isTMDb = /(^|\.)themoviedb\.org$/.test(location.hostname);
+      var isMyAnimeList = /(^|\.)myanimelist\.net$/.test(location.hostname);
       // Rotten Tomatoes' and Metacritic's search and title pages lead on to their reviews: they wait for that page rather than open early
       // themselves.
       var leadsOn = (isRottenTomatoes && !/\/reviews(\/|$)/.test(location.pathname))
-        || (isMetacritic && !/\/(user|critic)-reviews(\/|$)/.test(location.pathname));
+        || (isMetacritic && !/\/(user|critic)-reviews(\/|$)/.test(location.pathname))
+        || (isMyAnimeList && !/\/reviews(\/|$)/.test(location.pathname));
 
       // The first review card, once it is laid out with its text: on IMDb the card that holds the first review date, on Rotten Tomatoes
       // its first review card, on Metacritic the card around its first user review's footer, on TMDB its first review card. Those sites'
       // pages only.
       function firstCard() {
-        if (!(isIMDb || isRottenTomatoes || isMetacritic || isTMDb) || !document.body || !stylesLoaded()) return null;
+        if (!(isIMDb || isRottenTomatoes || isMetacritic || isTMDb || isMyAnimeList) || !document.body || !stylesLoaded()) return null;
         var card = null;
         if (isIMDb) {
           var date = document.querySelector('.review-date');
           card = date && date.closest('.ipc-list-card, article');
         } else if (isTMDb) {
           card = document.querySelector('#review-card-list [data-object-id]');
+        } else if (isMyAnimeList) {
+          card = leadsOn ? null : document.querySelector('.review-element');
         } else if (isMetacritic && !leadsOn) {
           var footer = document.querySelector('.review-footer--user');
           card = footer && footer.closest('.c-reviews-container > *');
@@ -395,16 +402,19 @@ struct ReviewWebView: UIViewRepresentable {
     let site: ReviewSite
     let url: URL
     let item: MetaPreview
+    /// The app's page background, which the site's page is drawn on.
+    let background: AppearancePreferences.RGB
     var onLoaded: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     /// A web view set up for a site's page: its scripts, its look, and `handler` for the page's "painted" message. Nothing is loaded yet.
-    static func configuredWebView(site: ReviewSite, url: URL, item: MetaPreview, handler: WKScriptMessageHandler) -> WKWebView {
+    static func configuredWebView(site: ReviewSite, url: URL, item: MetaPreview, background: AppearancePreferences.RGB,
+                                  handler: WKScriptMessageHandler) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site, item: item),
+        configuration.userContentController.addUserScript(WKUserScript(source: ReviewPageRules.script(for: site, item: item, background: background),
                                                                        injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        if let dark = ReviewPageRules.darkModeScript(for: site) {
+        if let dark = ReviewPageRules.darkModeScript(for: site, background: background) {
             configuration.userContentController.addUserScript(WKUserScript(source: dark, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         if let layout = ReviewPageRules.layoutScript(for: site) {
@@ -426,9 +436,13 @@ struct ReviewWebView: UIViewRepresentable {
         configuration.userContentController.add(handler, name: "painted")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.allowsBackForwardNavigationGestures = true
-        // IMDb's, Rotten Tomatoes', TMDB's and Metacritic's reviews are shown in the dark, whatever the device's setting; Letterboxd keeps the
+        // IMDb's, Rotten Tomatoes', TMDB's, Metacritic's and MyAnimeList's reviews are shown in the dark, whatever the device's setting; Letterboxd keeps the
         // device's look.
         view.overrideUserInterfaceStyle = ReviewPageRules.isShownDark(site) ? .dark : .unspecified
+        view.isOpaque = false
+        view.backgroundColor = background.uiColour
+        view.scrollView.backgroundColor = background.uiColour
+        view.underPageBackgroundColor = background.uiColour
         return view
     }
 
@@ -457,7 +471,7 @@ struct ReviewWebView: UIViewRepresentable {
             }
             return view
         }
-        let view = Self.configuredWebView(site: site, url: url, item: item, handler: coordinator)
+        let view = Self.configuredWebView(site: site, url: url, item: item, background: background, handler: coordinator)
         view.navigationDelegate = coordinator
         coordinator.requested = url
         ReviewPageRules.attach(to: view) {
@@ -581,11 +595,11 @@ final class ReviewPreloader {
 
     /// Starts loading `url` for `site`, unless it is already the page loaded. The page is laid out at about the panel's size, so it is
     /// drawn as it will be shown.
-    func preload(site: ReviewSite, url: URL, item: MetaPreview, width: CGFloat) {
+    func preload(site: ReviewSite, url: URL, item: MetaPreview, background: AppearancePreferences.RGB, width: CGFloat) {
         if let page, page.site == site, page.url == url { return }
         discard()
         let relay = ReviewPaintRelay()
-        let view = ReviewWebView.configuredWebView(site: site, url: url, item: item, handler: relay)
+        let view = ReviewWebView.configuredWebView(site: site, url: url, item: item, background: background, handler: relay)
         view.frame = CGRect(x: 0, y: 0, width: max(320, width), height: DetailReviewsPanel.preloadHeight)
         let page = Page(site: site, url: url, view: view, relay: relay)
         view.navigationDelegate = page

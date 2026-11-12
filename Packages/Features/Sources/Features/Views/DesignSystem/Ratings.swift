@@ -85,8 +85,7 @@ struct PosterRatingsOverlay: View {
     var body: some View {
         if let store, store.isEnabled || store.showsBestDisc && showsMark {
             let ratings = store.ratings(for: item)
-            let sites: [ReviewSite] = !store.isEnabled ? []
-                : isLandscape ? [ReviewSite.imdb, .letterboxd].filter { ratings.shortText(for: $0) != nil } : ratings.posterSites
+            let sites: [ReviewSite] = store.isEnabled ? ratings.posterSites : []
             let mark = store.showsBestDisc && showsMark ? ratings.mark : nil
             let ratingsCorner: Alignment = isLandscape ? .bottomTrailing : .bottomLeading
             let markCorner = Self.corner(of: store.markPlacement) ?? ratingsCorner
@@ -288,6 +287,7 @@ struct ReviewSiteIcon: View {
         case .rottenTomatoes: "ReviewRottenTomatoes"
         case .metacritic: "ReviewMetacritic"
         case .tmdb: "ReviewTMDB"
+        case .myAnimeList: "ReviewMyAnimeList"
         }
     }
 }
@@ -325,7 +325,7 @@ struct RatingButtonsRow: View {
                 buttons(ratings: ratings)
                 if let issue = store.reviewServiceIssue {
                     Text(issue)
-                        .font(.caption2)
+                        .font(Theme.Typography.micro)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("detail.reviews.issue")
                 }
@@ -342,9 +342,12 @@ struct RatingButtonsRow: View {
     private func buttons(ratings: TitleRatings?) -> some View {
         // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed. They sit
         // at the far right, after the other sites.
-        // Rotten Tomatoes and Metacritic are for films only: a show has no button for either.
+        // Rotten Tomatoes and Metacritic are for films only: a show has no button for either. MyAnimeList always has one on anime, and only
+        // there.
+        let isAnime = ratings?.isAnime ?? ReviewSite.isAnime(item)
         let shown = ReviewSite.allCases.filter { site in
             if ReviewPageReader.supports(site) { return item.type == "movie" }
+            if site == .myAnimeList { return isAnime }
             return site == .imdb || ratings?.shortText(for: site) != nil
         }
         let sites = shown.filter { !ReviewPageReader.supports($0) } + shown.filter { ReviewPageReader.supports($0) }
@@ -357,18 +360,18 @@ struct RatingButtonsRow: View {
             let inset = min(10, max(2, (pillWidth - 54) / 2))
             HStack(spacing: gap) {
                 ForEach(sites) { site in
-                    if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL) {
+                    if let url = site.url(for: item, tmdbURL: ratings?.tmdbURL, myAnimeListURL: ratings?.myAnimeListURL) {
                         if site != sites.first {
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.4))
                                 .frame(width: 1, height: 20)
                                 .accessibilityHidden(true)
                         }
-                        let isSearch = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL)
+                        let isSearch = site.isSearch(for: item, tmdbURL: ratings?.tmdbURL, myAnimeListURL: ratings?.myAnimeListURL)
                         RatingButton(site: site, score: ratings?.shortText(for: site), isSearch: isSearch, title: item.name,
                                      isOpen: site == openSite, isLoading: isLoading && site == openSite,
                                      horizontalInset: inset, showsLinkIcon: showsLinkIcon) {
-                            onOpen(site, site.reviewsURL(for: item, tmdbURL: ratings?.tmdbURL) ?? url, isSearch)
+                            onOpen(site, site.reviewsURL(for: item, tmdbURL: ratings?.tmdbURL, myAnimeListURL: ratings?.myAnimeListURL) ?? url, isSearch)
                         }
                     }
                 }
@@ -397,6 +400,7 @@ struct RatingButton: View {
     let onOpen: () -> Void
 
     var body: some View {
+        let shape = ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons))
         Button(action: onOpen) {
             HStack(spacing: 5) {
                 ReviewSiteIcon(site: site, size: 15)
@@ -412,19 +416,20 @@ struct RatingButton: View {
                 // While the page loads, the rating shows a spinner in place of its chevron.
                 if isLoading {
                     Spinner().controlSize(.mini)
-                } else if showsLinkIcon || ((site == .imdb || ReviewPageReader.supports(site)) && score == nil) {
+                } else if showsLinkIcon || ((site == .imdb || site == .myAnimeList || ReviewPageReader.supports(site)) && score == nil) {
                     // After the score, a little greyed, so it reads as a control rather than as part of the rating.
                     Image(systemName: isOpen ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(Theme.faintText)
                         .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, horizontalInset)
             .frame(maxWidth: .infinity)
             .frame(height: 28)
-            .background(isOpen ? Theme.surfaceStrong : Theme.surface, in: ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
-            .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .actionButtons)))
+            .background(isOpen ? Theme.surfaceStrong : Theme.surface, in: shape)
+            .buttonOutline(shape)
+            .contentShape(shape)
             .pointerInteraction(cornerRadius: 999 * metrics.cornerScale(for: .actionButtons))
             .pointerFeedback()
         }

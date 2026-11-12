@@ -41,6 +41,16 @@ struct CatalogListFilterTests {
         #expect(filter.isFiltering)
     }
 
+    @Test func aTitleShownForAGenreLeadsWithIt() {
+        var heat = preview("e", "movie", name: "Heat")
+        heat.genres = ["Action", "Crime", "Drama"]
+        let shown = CatalogListFiltering.apply(CatalogListFilter(genre: "drama"), to: [heat])
+        #expect(shown.map(\.genres) == [["Drama", "Action", "Crime"]], "the card shows a title's first genre")
+        #expect(CatalogListFiltering.apply(CatalogListFilter(), to: [heat]).map(\.genres) == [["Action", "Crime", "Drama"]])
+        #expect(MediaGenres.leading(["Adventure"], in: ["Drama", "Action & Adventure"]) == ["Action & Adventure", "Drama"])
+        #expect(MediaGenres.leading(["Horror"], in: ["Drama", "Crime"]) == ["Drama", "Crime"], "a genre the title does not list changes nothing")
+    }
+
     @Test func titleSortsAlphabetically() {
         #expect(CatalogListFiltering.apply(CatalogListFilter(sort: .title), to: items).map(\.id) == ["b", "a", "c", "d"])
     }

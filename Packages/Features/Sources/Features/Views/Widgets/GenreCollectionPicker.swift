@@ -32,7 +32,7 @@ struct GenreCollectionPicker: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(choice.title)
-                            Text(choice.addonName).font(.caption).foregroundStyle(.secondary)
+                            Text(choice.addonName).font(Theme.Typography.caption).foregroundStyle(.secondary)
                         }
                     }
                     .accessibilityIdentifier("genreCollection.catalog.\(choice.id)")
@@ -89,7 +89,7 @@ private struct GenreSelection: View {
                             Text(genre).foregroundStyle(.primary)
                             Spacer(minLength: 0)
                             Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold))
+                                .font(Theme.Typography.largeStrong)
                                 .foregroundStyle(.tint)
                                 .opacity(selected.contains(genre) ? 1 : 0)
                         }

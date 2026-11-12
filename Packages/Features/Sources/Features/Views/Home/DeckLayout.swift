@@ -106,7 +106,7 @@ struct DeckLayout: View {
                     button("chevron.backward", label: "Previous title", action: bringBack)
                     button("chevron.forward", label: "Next title") { throwTop(towards: -1) }
                     Text("\(position) of \(items.count)")
-                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .font(Theme.Typography.captionStrong.monospacedDigit())
                         .foregroundStyle(Theme.metaText)
                         .padding(.leading, Theme.Spacing.xs)
                         .accessibilityHidden(true)
@@ -118,7 +118,7 @@ struct DeckLayout: View {
     private func button(_ systemName: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .foregroundStyle(.white.opacity(0.8))
         }
         .buttonStyle(FixedGlassButtonStyle(size: 36))

@@ -76,7 +76,7 @@ struct DownloadCard: View {
         NavigationLink(value: titlePreview) {
             ArtworkImage(url: DownloadArtwork.poster(for: item.request), maxPixelSize: pixelSize, fallbackURL: picture.url)
                 .frame(width: thumbnailWidth, height: thumbnailWidth / CardAspect.poster.ratio)
-                .mediaArtwork(cornerRadius: Theme.Radius.small)
+                .mediaArtwork(cornerRadius: Theme.Radius.poster)
         }
         .buttonStyle(.hoverPlain)
         .accessibilityLabel("Open \(titlePreview.name)")

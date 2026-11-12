@@ -58,33 +58,50 @@ private struct AppearancePreviewContent: View {
             BrowseFilterBar(kinds: .init(titles: ["All", "Movies", "Series"], selection: .constant(1),
                                         identifier: "settings.appearance.preview.type"),
                             chips: [], identifier: "settings.appearance.preview.filters", clearAll: {}) {
-                FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down",
-                                minHeight: BrowseFilterBar<EmptyView>.menuHeight)
-                FilterMenuLabel("Genre", systemImage: "tag",
-                                minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+                Button {} label: {
+                    FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down",
+                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+                }
+                Button {} label: {
+                    FilterMenuLabel("Genre", systemImage: "tag",
+                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+                }
             }
-            .allowsHitTesting(false)
+            .buttonStyle(.plain)
             .accessibilityHidden(true)
-            heading("Continue Watching")
-            shelf {
-                ForEach(0..<3, id: \.self) { continueCard($0) }
-            }
-            .accessibilityHidden(true)
-            heading("Top Picks")
-                .padding(.top, metrics.controlSpacing)
-            shelf {
-                ForEach(0..<4, id: \.self) { poster($0) }
+            VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                    heading("Continue Watching")
+                    shelf {
+                        ForEach(0..<3, id: \.self) { index in
+                            Button {} label: { continueCard(index) }
+                                .buttonStyle(PressableCardStyle.poster)
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
+                .modifier(ShelfDivider(metrics: metrics, isShown: true))
+                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                    heading("Top Picks")
+                    shelf {
+                        ForEach(0..<4, id: \.self) { index in
+                            Button {} label: { poster(index) }
+                                .buttonStyle(PressableCardStyle.poster)
+                        }
+                    }
+                    .scrollClipDisabled()
+                }
             }
             .accessibilityHidden(true)
             Text(Samples.synopsis)
                 .font(Theme.Typography.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.horizontal, metrics.pageMargin)
                 .padding(.top, Theme.Spacing.xs)
             actionButtons
             accentControls
-                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.horizontal, metrics.pageMargin)
                 .padding(.top, Theme.Spacing.xs)
         }
     }
@@ -94,13 +111,13 @@ private struct AppearancePreviewContent: View {
             .headingStyle()
             .foregroundStyle(.primary)
             .lineLimit(1)
-            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.horizontal, metrics.pageMargin)
     }
 
     private func shelf<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: metrics.cardSpacing) { content() }
-                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.horizontal, metrics.pageMargin)
         }
         .scrollIndicators(.hidden)
     }
@@ -115,18 +132,18 @@ private struct AppearancePreviewContent: View {
         MediaCard(item: Samples.items[index % Samples.items.count])
     }
 
-    /// The accent where the app uses it: a prominent button, a switch and a link. Shown, not used.
+    /// The accent where the app uses it: a prominent button, a switch and a link.
     private var accentControls: some View {
         HStack(spacing: Theme.Spacing.m) {
             Button {} label: { Label("Add", systemImage: "plus") }
                 .finishedProminentButtonStyle(appearance.buttonFinish)
             Toggle("Switch", isOn: .constant(true))
                 .labelsHidden()
-            Text("See All")
+            Button("See All") {}
+                .buttonStyle(.hoverPlain)
                 .foregroundStyle(.tint)
             Spacer(minLength: 0)
         }
-        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
@@ -140,25 +157,29 @@ private struct AppearancePreviewContent: View {
                 CircleActionButton(title: "Trailer", systemImage: "play.rectangle", exactSize: true) {}
             }
         }
-        .allowsHitTesting(false)
-        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.horizontal, metrics.pageMargin)
     }
 
     private var corners: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             actionButtons
-            shelf { ForEach(0..<3, id: \.self) { poster($0) } }
-            BrowseFilterBar(kinds: nil, chips: [], identifier: "settings.appearance.preview.cornerFilters", clearAll: {}) {
-                FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down")
-                FilterMenuLabel("Genre", systemImage: "tag")
+            shelf {
+                ForEach(0..<3, id: \.self) { index in
+                    Button {} label: { poster(index) }
+                        .buttonStyle(PressableCardStyle.poster)
+                }
             }
-            .allowsHitTesting(false)
+            .scrollClipDisabled()
+            BrowseFilterBar(kinds: nil, chips: [], identifier: "settings.appearance.preview.cornerFilters", clearAll: {}) {
+                Button {} label: { FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down") }
+                Button {} label: { FilterMenuLabel("Genre", systemImage: "tag") }
+            }
+            .buttonStyle(.plain)
             if let review = Samples.review {
                 shelf {
                     ReviewCard(review: review, isExpanded: false, foldedWidth: metrics.reviewCardWidth,
                                expandedWidth: metrics.reviewCardWidth, onToggle: {})
                 }
-                .allowsHitTesting(false)
             }
             HStack {
                 Label("Auto Pick", systemImage: "sparkles")
@@ -167,7 +188,7 @@ private struct AppearancePreviewContent: View {
             }
             .padding()
             .glassCardSurface()
-            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.horizontal, metrics.pageMargin)
             HStack {
                 Button {} label: { Image(systemName: "backward.end.fill") }
                     .glassCircleButton(group: .playerControls)
@@ -180,8 +201,7 @@ private struct AppearancePreviewContent: View {
             }
             .padding()
             .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24 * metrics.cornerScale(for: .playerControls)))
-            .padding(.horizontal, Theme.Spacing.l)
-            .allowsHitTesting(false)
+            .padding(.horizontal, metrics.pageMargin)
             VStack(spacing: 4) {
                 Toggle("Ratings on posters", isOn: .constant(ratingsStore?.isEnabled ?? false))
                     .padding()
@@ -194,8 +214,7 @@ private struct AppearancePreviewContent: View {
                 .padding()
                 .background(SettingsRowBackground())
             }
-            .padding(.horizontal, Theme.Spacing.l)
-            .allowsHitTesting(false)
+            .padding(.horizontal, metrics.pageMargin)
         }
     }
 
@@ -207,7 +226,7 @@ private struct AppearancePreviewContent: View {
     private var hover: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             HoverSegmentsPreview()
-                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.horizontal, metrics.pageMargin)
             heading("Top Picks")
                 .padding(.top, metrics.controlSpacing)
             shelf {
@@ -230,7 +249,7 @@ private struct AppearancePreviewContent: View {
                     CircleActionButton(title: "Trailer", systemImage: "play.rectangle", exactSize: true) {}
                 }
             }
-            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.horizontal, metrics.pageMargin)
             .padding(.top, Theme.Spacing.xs)
             .accessibilityHidden(true)
             HStack(spacing: metrics.controlSpacing) {
@@ -246,7 +265,7 @@ private struct AppearancePreviewContent: View {
                     .foregroundStyle(.tint)
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.horizontal, metrics.pageMargin)
             .accessibilityHidden(true)
         }
     }
@@ -257,9 +276,27 @@ private struct AppearancePreviewContent: View {
         VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
             SpotlightPreview()
             VStack(alignment: .leading, spacing: metrics.headerSpacing) {
+                heading("Continue Watching")
+                shelf {
+                    ForEach(0..<3, id: \.self) { index in
+                        Button {} label: { continueCard(index) }
+                            .buttonStyle(PressableCardStyle.poster)
+                    }
+                }
+                .scrollClipDisabled()
+                .accessibilityHidden(true)
+            }
+            .modifier(ShelfDivider(metrics: metrics, isShown: true))
+            VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                 heading("Top Picks")
-                shelf { ForEach(0..<4, id: \.self) { poster($0) } }
-                    .accessibilityHidden(true)
+                shelf {
+                    ForEach(0..<4, id: \.self) { index in
+                        Button {} label: { poster(index) }
+                            .buttonStyle(PressableCardStyle.poster)
+                    }
+                }
+                .scrollClipDisabled()
+                .accessibilityHidden(true)
             }
         }
         // The spotlight runs to the preview's top edge, as it runs to the screen's on Home.
@@ -275,32 +312,22 @@ private struct AppearancePreviewContent: View {
                 .font(Theme.Typography.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(appearance.expandsSynopsis ? nil : 2)
-                .padding(.horizontal, Theme.Spacing.l)
-            heading("Season 1")
-            EpisodePreview(watched: true)
-            EpisodePreview(watched: false)
-            FlowLayout(spacing: Theme.Spacing.s) {
-                ForEach(sectionsInOrder, id: \.self) { name in
-                    Text(name)
-                        .font(.caption.weight(.semibold))
+                .padding(.horizontal, metrics.pageMargin)
+            ForEach(appearance.orderedTitleSections.filter(appearance.showsTitleSection)) { section in
+                if section == .episodes {
+                    heading("Season 1")
+                    EpisodePreview(watched: true)
+                    EpisodePreview(watched: false)
+                } else {
+                    Text(section.label)
+                        .font(Theme.Typography.captionStrong)
                         .padding(.horizontal, Theme.Spacing.m)
                         .padding(.vertical, Theme.Spacing.xs + 2)
                         .background(Theme.surface, in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
+                        .padding(.horizontal, metrics.pageMargin)
                 }
             }
-            .padding(.horizontal, Theme.Spacing.l)
-            .accessibilityElement(children: .combine)
         }
-    }
-
-    /// The title page's sections below the episodes, as Appearance orders and shows them.
-    private var sectionsInOrder: [String] {
-        let reviews = appearance.showsReviews ? ["Reviews"] : []
-        let credits = appearance.showsCast ? ["Cast & Crew"] : []
-        let information = appearance.showsInformation ? ["Information"] : []
-        let middle = appearance.sectionOrder == .reviewsFirst ? reviews + credits : credits + reviews
-        return ["Episodes"] + middle + information + (appearance.showsRelated ? ["More Like This"] : [])
-            + (appearance.showsWatchAnywhere ? ["Watch Anywhere"] : [])
     }
 }
 
@@ -337,7 +364,6 @@ private struct SampleArtwork: View {
 
 /// Home's spotlight in miniature, at Appearance's height, with its page dots and, when Appearance turns its pages, turning them.
 private struct SpotlightPreview: View {
-    @Environment(\.layoutMetrics) private var metrics
     @Environment(\.appAppearance) private var appearance
     @State private var page = 0
 
@@ -351,18 +377,10 @@ private struct SpotlightPreview: View {
         .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: 190)
         .overlay { BottomFade(length: 0.45) }
+        .padding(.bottom, ShowcasePageControl.height)
         .overlay(alignment: .bottom) {
-            if appearance.showsPageDots {
-                HStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { index in
-                        ScaledCapsule(scale: metrics.cornerScale(for: .filters))
-                            .fill(.white.opacity(index == page ? 0.95 : 0.35))
-                            .frame(width: index == page ? 16 : 6, height: 6)
-                    }
-                }
-                .animation(.snappy(duration: 0.25), value: page)
-                .padding(.bottom, Theme.Spacing.m)
-            }
+            ShowcasePageControl(count: 3, currentPage: page)
+                .frame(height: ShowcasePageControl.height)
         }
         .task(id: PageTurn(seconds: appearance.heroAutoAdvance, page: page)) {
             let seconds = appearance.heroAutoAdvance
@@ -384,6 +402,7 @@ private struct SpotlightPreview: View {
 private struct EpisodePreview: View {
     let watched: Bool
     @Environment(\.appAppearance) private var appearance
+    @Environment(\.layoutMetrics) private var metrics
 
     private var hides: Bool { appearance.hidesSpoilers && !watched }
 
@@ -394,31 +413,33 @@ private struct EpisodePreview: View {
                 .frame(width: 128, height: 72)
                 .overlay(alignment: .bottomTrailing) {
                     if watched {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption)
+                        Image(systemName: "checkmark")
+                            .font(.caption2.weight(.bold))
                             .foregroundStyle(.white)
+                            .padding(5)
+                            .background(.black.opacity(0.65), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
                             .padding(Theme.Spacing.xs)
                     }
                 }
-                .mediaArtwork(cornerRadius: Theme.Radius.small)
+                .mediaArtwork(cornerRadius: Theme.Radius.card)
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(watched ? "EPISODE 3" : "EPISODE 4")
                     .font(Theme.Typography.eyebrow)
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(Theme.dimText)
                 Text(watched ? "Low Tide" : "The Boat That Answered")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.white)
                     .redacted(reason: hides && appearance.spoilerTitles ? .placeholder : [])
                 Text(watched ? "The keeper logs the signal for the third night running." :
                         "Mara reaches the boat and finds who has been answering her.")
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(2)
                     .redacted(reason: hides && appearance.spoilerSynopses ? .placeholder : [])
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.horizontal, metrics.pageMargin)
         .accessibilityHidden(true)
     }
 }
@@ -426,6 +447,7 @@ private struct EpisodePreview: View {
 /// The navigation control's segments, lit under the pointer as the Mac's navigation control lights them (`MacPageNavigation`), with
 /// the second drawn lit as well.
 private struct HoverSegmentsPreview: View {
+    @Environment(\.layoutMetrics) private var metrics
     @Environment(\.appAppearance.hover) private var hover
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection = 0
@@ -437,11 +459,9 @@ private struct HoverSegmentsPreview: View {
     var body: some View {
         GeometryReader { geometry in
             let segmentWidth = geometry.size.width / CGFloat(Self.titles.count)
-            Picker("Navigation", selection: $selection) {
-                ForEach(Self.titles.indices, id: \.self) { Text(Self.titles[$0]).tag($0) }
+            CornerSegmentedPicker("Navigation", options: Array(Self.titles.indices), selection: $selection) {
+                Self.titles[$0]
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 ZStack {
@@ -471,9 +491,11 @@ private struct HoverSegmentsPreview: View {
     }
 
     private func light(at segment: Int, width: CGFloat, height: CGFloat) -> some View {
-        Capsule()
+        ScaledCapsule(scale: metrics.cornerScale(for: .filters))
             .fill(.white.opacity(hover.segmentFillOpacity))
-            .overlay { Capsule().strokeBorder(.white.opacity(hover.segmentRimOpacity), lineWidth: 1) }
+            .overlay { ScaledCapsule(scale: metrics.cornerScale(for: .filters)).strokeBorder(.white.opacity(hover.segmentRimOpacity), lineWidth: 1) }
+            .brightness(hover.buttonBrightness)
+            .scaleEffect(reduceMotion ? 1 : hover.buttonScale)
             .frame(width: max(0, width - 4), height: Self.height - 4)
             .position(x: width * (CGFloat(segment) + 0.5), y: height / 2)
     }
@@ -499,10 +521,10 @@ private struct MotionPreview: View {
             } label: {
                 Label("Play Animation", systemImage: "play.fill")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PointingHandButtonStyle(style: .bordered))
             .accessibilityIdentifier("settings.appearance.playAnimation")
         }
-        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.horizontal, metrics.pageMargin)
     }
 }
 #endif

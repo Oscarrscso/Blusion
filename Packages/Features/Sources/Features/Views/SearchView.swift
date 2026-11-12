@@ -5,7 +5,6 @@ import UIKit
 
 struct SearchView: View {
     @State private var model: SearchViewModel
-    @State private var selectedType = "all"
     @State private var isSearchPresented = false
     @FocusState private var isSearchFocused: Bool
     @Environment(AppRouter.self) private var router
@@ -27,8 +26,7 @@ struct SearchView: View {
     var body: some View {
         Group {
             if appearance.showsEditorialPages {
-                EditorialSearchPage(model: model, services: services, results: resultItems, isLoading: isLoadingResults,
-                                    selectedType: $selectedType)
+                EditorialSearchPage(model: model, services: services, results: resultItems, isLoading: isLoadingResults)
             } else {
                 // One side margin for everything on the page, in line with Back and the large title (see `LayoutMetrics.gridPage`).
                 standardPage
@@ -62,27 +60,25 @@ struct SearchView: View {
         @Bindable var model = model
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                    #if targetEnvironment(macCatalyst)
-                    TextField("Shows, Movies, and More", text: $model.query)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($isSearchFocused)
-                        .submitLabel(.search)
-                        .onSubmit { Task { await model.submit() } }
-                        .padding(.horizontal, metrics.gridPageMargin)
-                    #endif
-                    TonightControls(model: model) { selectedType = "all"; isSearchFocused = false }
-                        .padding(.horizontal, metrics.gridPageMargin)
-                    if model.isOffline {
-                        OfflineBanner()
-                    } else if !model.failures.isEmpty {
-                        WrappingStack { ForEach(model.failures) { ErrorChip(text: $0.text) } }
+                // Spaced as Discover is: the row above the filters stands where Discover's title does, and the filters and grid follow
+                // at the filter bar's own gaps.
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                        #if targetEnvironment(macCatalyst)
+                        TextField("Shows, Movies, and More", text: $model.query)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($isSearchFocused)
+                            .submitLabel(.search)
+                            .onSubmit { Task { await model.submit() } }
                             .padding(.horizontal, metrics.gridPageMargin)
-                            .accessibilityIdentifier("search.failures")
-                        Button("Retry Search") { Task { await model.submit() } }
-                            .buttonStyle(.bordered)
+                        #endif
+                        PickControls(model: model) { isSearchFocused = false }
                             .padding(.horizontal, metrics.gridPageMargin)
+                        if model.isOffline {
+                            OfflineBanner()
+                        }
                     }
+                    .padding(.bottom, Theme.Spacing.m)
                     if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         if model.showsNoSearchableAddons {
                             EmptyStateView("No addon can search", systemImage: "magnifyingglass",
@@ -95,25 +91,34 @@ struct SearchView: View {
                         results
                     }
                 }
-                .padding(.vertical, Theme.Spacing.l)
+                #if targetEnvironment(macCatalyst)
+                .padding(.top, Theme.Spacing.l)
+                #else
+                // The navigation bar's search field already stands clear of the page, so the first row needs less above it.
+                .padding(.top, Theme.Spacing.s)
+                #endif
+                .padding(.bottom, Theme.Spacing.l)
                 .id(Self.topID)
             }
             .scrollIndicators(.visible, axes: .vertical)
             .scrollIndicatorsFlash(onAppear: true)
-            // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results.
+            // Any scroll of the page puts the keyboard away, so a swipe down clears the view of the results. The search stays active:
+            // ending it would empty the field and take the results with it.
             .trackLandscapeTabScroll()
             .scrollDismissesKeyboard(.immediately)
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { isSearchFocused = false }
+            }
             .screenBackground()
             .navigationTitle(isPhoneInLandscape ? "" : "Search")
             .macRootNavigation()
             .pageTabBar(hidden: isPhoneInLandscape)
             #if !targetEnvironment(macCatalyst)
             .searchable(text: $model.query, isPresented: $isSearchPresented,
-                        placement: .navigationBarDrawer(displayMode: .always), prompt: "Shows, Movies, and More")
+                        placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Shows, Movies, and More")
             .searchFocused($isSearchFocused)
             #endif
-            // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up. The field
-            // stays where it is, under the title.
+            // Every arrival on Search, and every tap on its button, puts the cursor in the field and brings the keyboard up.
             .onChange(of: router.searchFocusRevision, initial: true) { focusField() }
             // Search's active toolbar must leave with its root page, rather than follow a pushed destination.
             .onChange(of: router.searchPath.count) { _, count in
@@ -126,7 +131,7 @@ struct SearchView: View {
             .accessibilityIdentifier("search.results")
             // A tap on Search's tab item goes back to its first page, and scrolls it to the top.
             .onChange(of: router.tabTapRevisions[.search, default: 0]) { _, _ in
-                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+                withAnimation(Theme.Motion.snap) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
     }
@@ -234,61 +239,94 @@ struct SearchView: View {
     }
 
     private var resultItems: [MetaPreview] {
-        model.results(type: selectedType)
+        model.results(in: model.scope)
     }
 
     private var isLoadingResults: Bool {
-        selectedType == "ai"
-            ? model.aiPhase == .searching
-            : model.phase == .searching || model.aiPhase == .searching
+        model.phase == .searching || model.aiPhase == .searching || model.isResolvingGenres
     }
 
+    /// The scope selector and the menus in Discover's filter bar, then the grid at the bar's own gap, as on Discover.
     private var results: some View {
-        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-            Picker("Results", selection: $selectedType) {
-                Text("All").tag("all")
-                Text("Movies").tag("movie")
-                Text("Series").tag("series")
-                if model.aiAvailable { Text("AI").tag("ai") }
-            }
-            .pickerStyle(.segmented)
-            .navigationAlignedWidth(margin: metrics.gridPageMargin)
-            .accessibilityIdentifier("search.filters")
-
+        VStack(alignment: .leading, spacing: 0) {
             SearchRefinements(model: model)
-                .padding(.horizontal, metrics.gridPageMargin)
+            VStack(alignment: .leading, spacing: metrics.shelfSpacing) { resultsContent }
+        }
+    }
 
-            if !resultItems.isEmpty {
-                MediaGrid(items: resultItems, fillsWidth: true)
-            } else if isLoadingResults {
-                MediaGridPlaceholder(aspect: .poster, fillsWidth: true)
-            } else if model.filter.isActive, model.hasResults {
-                EmptyStateView("No matches for these filters", systemImage: "line.3.horizontal.decrease",
-                               actionTitle: "Clear Filters", action: { model.clearFilters() })
-            } else if !model.isOffline, model.failures.isEmpty || selectedType == "ai" {
-                EmptyStateView("No results", systemImage: "magnifyingglass")
-                    .accessibilityIdentifier("search.empty")
+    @ViewBuilder
+    private var resultsContent: some View {
+        if let correction = model.correction {
+            Button("Did you mean \(correction)?") {
+                Haptics.play(.buttons)
+                Task { await model.applyCorrection() }
             }
+            .buttonStyle(PointingHandButtonStyle(style: .bordered))
+            .padding(.horizontal, metrics.gridPageMargin)
+            .accessibilityIdentifier("search.correction")
+        }
 
-            if isLoadingResults {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel("Searching")
-                    .accessibilityIdentifier("search.loading")
+        if model.scope == .people {
+            people
+        } else {
+            titles
+            if model.scope == .all, !model.people.isEmpty {
+                SearchPeopleRow(people: model.people, margin: metrics.gridPageMargin)
             }
+        }
 
-            if selectedType == "all" || selectedType == "ai",
-               model.aiPhase == .done, let issue = model.aiIssue {
-                HStack {
-                    Text(LocalizedStringKey(issue.text))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Retry") { model.retryAI() }
-                }
-                .padding(.horizontal, metrics.gridPageMargin)
-                .accessibilityIdentifier("search.ai.retry")
+        // The placeholder grid stands for the first results on its own, as on Discover.
+        if isLoadingResults, model.scope == .people || !resultItems.isEmpty {
+            Spinner()
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("Searching")
+                .accessibilityIdentifier("search.loading")
+        }
+
+        // A plain title search with no TMDb token is answered by the addons alone, and says nothing about it.
+        if model.isDiscovery, model.scope != .people, model.aiPhase == .done, let issue = model.aiIssue {
+            HStack {
+                Text(LocalizedStringKey(issue.text))
+                    .font(Theme.Typography.small)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Retry") { model.retryAI() }
             }
+            .padding(.horizontal, metrics.gridPageMargin)
+            .accessibilityIdentifier("search.ai.retry")
+        }
+    }
+
+    @ViewBuilder
+    private var titles: some View {
+        if !resultItems.isEmpty {
+            MediaGrid(items: resultItems, fillsWidth: true)
+        } else if isLoadingResults {
+            MediaGridPlaceholder(aspect: .poster, fillsWidth: true)
+        } else if model.filter.isActive, model.hasResults {
+            EmptyStateView("No matches for these filters", systemImage: "line.3.horizontal.decrease",
+                           actionTitle: "Clear Filters", action: { model.clearFilters() })
+        } else if !model.isOffline, model.scope != .all || model.people.isEmpty {
+            EmptyStateView("No results", systemImage: "magnifyingglass",
+                           actionTitle: model.failures.isEmpty ? nil : "Retry Search",
+                           action: { Task { await model.submit() } })
+                .accessibilityIdentifier("search.empty")
+        }
+    }
+
+    /// The People results: portrait cards in a grid, each opening the person's page.
+    @ViewBuilder
+    private var people: some View {
+        if !model.people.isEmpty {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: SearchPeopleRow.cardWidth), spacing: metrics.cardSpacing, alignment: .top)],
+                      alignment: .leading, spacing: metrics.shelfSpacing) {
+                ForEach(model.people) { PersonCardLink(person: $0, width: SearchPeopleRow.cardWidth) }
+            }
+            .padding(.horizontal, metrics.gridPageMargin)
+            .accessibilityIdentifier("search.people.grid")
+        } else if !isLoadingResults, !model.isOffline {
+            EmptyStateView("No results", systemImage: "person")
+                .accessibilityIdentifier("search.empty")
         }
     }
 

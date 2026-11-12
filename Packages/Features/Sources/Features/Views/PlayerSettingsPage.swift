@@ -32,10 +32,12 @@ struct PlayerSettingsPage: View {
                 })) {
                     ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.subtitleLanguage")
                 Picker("Show", selection: binding(\.subtitleMode)) {
                     ForEach(SubtitleMode.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.subtitleMode")
                 Toggle("Prefer SDH", isOn: binding(\.prefersSDH))
                     .accessibilityIdentifier("settings.player.sdh")
@@ -58,9 +60,11 @@ struct PlayerSettingsPage: View {
                 Picker("Colour", selection: binding(\.subtitleStyle.colour)) {
                     ForEach(SubtitleColour.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+                .buttonCursor()
                 Picker("Background", selection: binding(\.subtitleStyle.background)) {
                     ForEach(SubtitleBackground.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
+                .buttonCursor()
                 LabeledContent("Position") {
                     CornerSlider(value: Binding(get: { player.subtitleStyle.bottomMargin }, set: { value in
                         Task { await model.updatePlayer { $0.subtitleStyle.bottomMargin = value } }
@@ -73,6 +77,7 @@ struct PlayerSettingsPage: View {
                 Toggle("Apply to styled (ASS) subtitles", isOn: binding(\.subtitleStyle.overridesFileStyles))
                 Stepper("HDR brightness: \(player.subtitleStyle.hdrPeakNits) nits", value: binding(\.subtitleStyle.hdrPeakNits),
                         in: SubtitleStyle.hdrPeakRange, step: 20)
+                    .buttonCursor()
                     .accessibilityIdentifier("settings.player.subtitleHDR")
             }
 
@@ -84,6 +89,7 @@ struct PlayerSettingsPage: View {
                 })) {
                     ForEach(SettingsViewModel.audioLanguageOptions) { Text($0.label).tag($0.value) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.audioLanguage")
             }
 
@@ -93,10 +99,12 @@ struct PlayerSettingsPage: View {
                 Picker("Skip back", selection: binding(\.skipBackSeconds)) {
                     ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.skipBack")
                 Picker("Skip forward", selection: binding(\.skipForwardSeconds)) {
                     ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.skipForward")
                 Toggle("Double-tap to skip", isOn: binding(\.doubleTapSkips))
                     .accessibilityIdentifier("settings.player.doubleTapSkips")
@@ -105,10 +113,12 @@ struct PlayerSettingsPage: View {
                         Text(seconds == 0 ? "Never" : "After \(Self.secondsLabel(seconds))").tag(seconds)
                     }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.hideControls")
                 Picker("Starting speed", selection: binding(\.playbackSpeed)) {
                     ForEach(PlayerPreferences.playbackSpeedOptions, id: \.self) { Text(Self.speedLabel($0)).tag($0) }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.player.speed")
                 Toggle("Skip Intro & Credits buttons", isOn: binding(\.showsSkipButtons))
                 Toggle("Skip intros automatically", isOn: binding(\.skipsIntrosAutomatically))
@@ -138,11 +148,12 @@ struct PlayerSettingsPage: View {
             })) {
                 ForEach(PlayerPreference.allCases) { Text($0.title).tag($0) }
             }
+            .buttonCursor()
             .accessibilityIdentifier("settings.player")
             if model.settings.playerPreference.externalPlayer != nil && !infuseInstalled {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Infuse isn’t installed on this device.").font(.footnote).foregroundStyle(.secondary)
-                    if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url) }
+                    Text("Infuse isn’t installed on this device.").font(Theme.Typography.small).foregroundStyle(.secondary)
+                    if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url).buttonCursor() }
                 }
                 .accessibilityIdentifier("settings.player.missing")
             }
@@ -157,6 +168,7 @@ struct PlayerSettingsPage: View {
                         Text("AetherEngine").tag(AdvancedEngine.aether)
                         Text("mpv").tag(AdvancedEngine.mpv)
                     }
+                    .buttonCursor()
                     .accessibilityIdentifier("settings.fallbackEngine")
                     if player.advancedEngine == .aether {
                         Toggle("Compose Dolby Vision FEL", isOn: binding(\.composesDolbyVisionFEL))
@@ -193,12 +205,14 @@ struct PlayerSettingsPage: View {
             })) {
                 ForEach(VideoZoomMode.available) { Text($0.label).tag($0) }
             }
+            .buttonCursor()
             .accessibilityIdentifier("settings.player.zoomMode")
             Toggle("Dolby Vision", isOn: binding(\.processing.dolbyVision))
                 .accessibilityIdentifier("settings.player.dolbyVision")
             Picker("HDR", selection: binding(\.processing.hdrOutput)) {
                 ForEach(HDROutputMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
+            .buttonCursor()
             // Full range on every engine; mpv's in-player slider sets how far it lifts HDR (AVPlayer and AetherEngine have no levels).
             Toggle("Full HDR brightness", isOn: Binding(get: { player.processing.hdrBrightness > 0 }, set: { on in
                 Haptics.play(.choices)
@@ -208,13 +222,16 @@ struct PlayerSettingsPage: View {
             Picker("Tone mapping", selection: binding(\.processing.toneMapping)) {
                 ForEach(ToneMappingCurve.allCases, id: \.self) { Text($0.label).tag($0) }
             }
+            .buttonCursor()
             Picker("Deinterlacing", selection: binding(\.processing.deinterlace)) {
                 ForEach(DeinterlaceMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
+            .buttonCursor()
             Toggle("Ambient mode", isOn: binding(\.ambientMode))
             Picker("Upscaling", selection: binding(\.processing.upscaling)) {
                 ForEach(UpscalingMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
+            .buttonCursor()
             .accessibilityIdentifier("settings.player.upscaling")
             if player.processing.upscaling == .ai {
                 LabeledContent(Self.deviceName) {
@@ -232,7 +249,7 @@ struct PlayerSettingsPage: View {
                         }
                     }
                     Text(lastReport.isEmpty ? "Nothing played with AI upscaling yet." : lastReport)
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(lastReport.hasPrefix("Ran") ? Color.green : Color.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -276,7 +293,7 @@ private struct OpenSubtitlesSettingsPage: View {
                 Button("Save") { Task { await model.commitOpenSubtitles() } }
                     .accessibilityIdentifier("settings.opensubtitles.save")
                 if let message = model.lastMessage {
-                    Text(message).font(.footnote).foregroundStyle(.secondary)
+                    Text(message).font(Theme.Typography.small).foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.opensubtitles.message")
                 }
             }

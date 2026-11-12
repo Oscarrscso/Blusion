@@ -5,6 +5,7 @@ import StremioKit
 
 /// One navigation view for every Mac page, moved with the active page's scroll offset.
 struct MacPageNavigation: View {
+    @Environment(\.layoutMetrics) private var metrics
     static let height: CGFloat = 64
     static let controlHeight: CGFloat = 32
     /// The control's widest, and its distance from the window's edges.
@@ -21,24 +22,25 @@ struct MacPageNavigation: View {
         #if targetEnvironment(macCatalyst)
         GeometryReader { geometry in
             let segmentWidth = geometry.size.width / CGFloat(LaunchRoute.Tab.allCases.count)
-            Picker("Navigation", selection: Binding(get: { router.tab }, set: { router.tapTab($0) })) {
-                Text("Home").tag(LaunchRoute.Tab.home)
-                Text("Discover").tag(LaunchRoute.Tab.discover)
-                Text("Library").tag(LaunchRoute.Tab.library)
-                Text("Settings").tag(LaunchRoute.Tab.settings)
-                Text("Widgets").tag(LaunchRoute.Tab.widgets)
-                Text("Search").tag(LaunchRoute.Tab.search)
+            CornerSegmentedPicker("Navigation", options: [.home, .discover, .library, .settings, .widgets, .search],
+                                  selection: Binding(get: { router.tab }, set: { router.tapTab($0) })) { tab in
+                switch tab {
+                case .home: "Home"
+                case .discover: "Discover"
+                case .library: "Library"
+                case .settings: "Settings"
+                case .widgets: "Widgets"
+                case .search: "Search"
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .controlSize(.regular)
-            .font(.body)
+            .font(Theme.Typography.large)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 if let hoveredSegment {
-                    Capsule()
+                    ScaledCapsule(scale: metrics.cornerScale(for: .filters))
                         .fill(.white.opacity(hover.segmentFillOpacity))
-                        .overlay { Capsule().strokeBorder(.white.opacity(hover.segmentRimOpacity), lineWidth: 1) }
+                        .overlay { ScaledCapsule(scale: metrics.cornerScale(for: .filters)).strokeBorder(.white.opacity(hover.segmentRimOpacity), lineWidth: 1) }
                         .frame(width: max(0, segmentWidth - 4), height: Self.controlHeight - 4)
                         .position(x: segmentWidth * (CGFloat(hoveredSegment) + 0.5), y: geometry.size.height / 2)
                         .allowsHitTesting(false)
@@ -173,7 +175,7 @@ struct MacPageNavigationOverlay: View {
             // Slides up out of the window, or fades with Reduce Motion.
             .offset(y: scroll.isHidden && !reduceMotion ? -MacPageNavigation.height : 0)
             .opacity(scroll.isHidden && reduceMotion ? 0 : 1)
-            .animation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.3), value: scroll.isHidden)
+            .animation(reduceMotion ? Theme.Motion.fade : Theme.Motion.standard, value: scroll.isHidden)
             .frame(height: MacPageNavigation.height, alignment: .top)
             .clipped()
             .allowsHitTesting(!scroll.isHidden)

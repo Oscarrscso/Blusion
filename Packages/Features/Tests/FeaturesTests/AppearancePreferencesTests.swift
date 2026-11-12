@@ -19,6 +19,7 @@ import Testing
         #expect(appearance.outline == .standard && appearance.artworkTone == .natural)
         #expect(appearance.headingFont == .matchText && appearance.headingWeight == .bold && appearance.headingSize == .standard)
         #expect(appearance.heroAutoAdvance == 0 && appearance.showsPageDots)
+        #expect(appearance.showsFranchise && appearance.showsTitleSection(.franchise))
         #expect(appearance.animationSpeed == .standard)
         #expect(appearance.startTab.tab == .home)
         #expect(appearance.backgroundRGB == AppearancePreferences.Background.graphite.rgb)
@@ -51,6 +52,7 @@ import Testing
         appearance.progressColour = .accent
         appearance.heroAutoAdvance = 12
         appearance.spoilerTitles = true
+        appearance.showsFranchise = false
         appearance.sectionOrder = .castFirst
         appearance.animationSpeed = .off
         appearance.startTab = .library
@@ -58,6 +60,7 @@ import Testing
         let restored = try #require(AppearancePreferences(rawValue: appearance.rawValue))
         #expect(restored == appearance)
         #expect(!restored.isDefault)
+        #expect(!restored.showsFranchise && !restored.showsTitleSection(.franchise))
         #expect(restored.accentRGB == appearance.customAccent)
         #expect(restored.backgroundRGB == appearance.customBackground)
     }
@@ -178,10 +181,14 @@ import Testing
         appearance.accent = .red
         appearance.cardScale = 1.5
         appearance.hidesSpoilers = true
+        appearance.showsFranchise = false
+        appearance.showsWatchAnywhere = true
         let restored = appearance.restoringDefaults(of: .cards)
         #expect(restored.cardScale == 1)
-        #expect(restored.accent == .red && restored.hidesSpoilers)
+        #expect(restored.accent == .red && restored.hidesSpoilers && !restored.showsFranchise && restored.showsWatchAnywhere)
         #expect(restored.isDefault(.cards) && !restored.isDefault(.colour) && !restored.isDefault(.titlePages))
+        let restoredTitlePages = restored.restoringDefaults(of: .titlePages)
+        #expect(restoredTitlePages.isDefault(.titlePages) && restoredTitlePages.showsFranchise && !restoredTitlePages.showsWatchAnywhere)
         for section in AppearancePreferences.Section.allCases {
             #expect(AppearancePreferences().isDefault(section))
         }

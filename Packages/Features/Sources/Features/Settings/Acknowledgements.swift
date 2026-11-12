@@ -31,7 +31,7 @@ public struct Acknowledgement: Sendable, Equatable, Identifiable {
                             detail: "Subtitles you search for in the player come from OpenSubtitles.com, through your own API key.",
                             sourceURL: URL(string: "https://www.opensubtitles.com")),
             Acknowledgement(name: "Review site icons", license: "Respective service trademarks",
-                            detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic and TMDB marks identify links to their services. "
+                            detail: "IMDb, Letterboxd, Rotten Tomatoes, Metacritic, TMDB and MyAnimeList marks identify links to their services. "
                                 + "Blusion is not affiliated with them."),
         ]
         if fallbackEngineLinked {

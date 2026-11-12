@@ -13,6 +13,8 @@ final class ArtworkPrefetcher {
     struct Request: Hashable, Sendable {
         let url: URL
         let maxPixelSize: CGFloat
+        /// The picture the card shows, at the same size, when `url` does not load. It is loaded then, so the card finds it ready too.
+        var fallback: URL? = nil
     }
 
     private var wanted: Set<Request> = []
@@ -34,7 +36,10 @@ final class ArtworkPrefetcher {
                 continue
             }
             tasks[request] = Task { [weak self] in
-                let image = try? await ImagePipeline.shared.image(for: request.url, maxPixelSize: request.maxPixelSize, priority: .low)
+                var image = try? await ImagePipeline.shared.image(for: request.url, maxPixelSize: request.maxPixelSize, priority: .low)
+                if image == nil, !Task.isCancelled, let fallback = request.fallback, fallback != request.url {
+                    image = try? await ImagePipeline.shared.image(for: fallback, maxPixelSize: request.maxPixelSize, priority: .low)
+                }
                 guard !Task.isCancelled else { return }
                 self?.finish(request, image: image)
             }

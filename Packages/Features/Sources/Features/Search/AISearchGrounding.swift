@@ -46,8 +46,9 @@ enum AISearchGrounding {
         let companies = reading.companies.filter { company in
             contains(text, company) || distinctiveWords(company).contains { words(text).contains($0) }
         }
-        // The words that are left once named titles, people and studios are taken out are the search's own requirements.
-        let named = (titlesFromWords ? [] : titles) + references + people.map(\.name) + companies
+        // The words that are left once named titles, people, studios and services are taken out are the search's own requirements.
+        let services = providers(in: text)
+        let named = (titlesFromWords ? [] : titles) + references + people.map(\.name) + companies + services.map { $0.phrase }
         let rest = remove(named, from: text)
         var filters = DescribedSearch.reading(rest)
         let restWords = words(rest)
@@ -71,6 +72,11 @@ enum AISearchGrounding {
                                 unwatchedOnly: unwatchedCues.contains { normalized(text).contains($0) },
                                 requiresSemanticRanking: subjective || !filters.moods.isEmpty)
         plan.trustsTopicMatches = !subjective
+        plan.watchedOnly = !plan.unwatchedOnly && watchedCues.contains { (" " + normalized(text) + " ").contains(" \($0) ") }
+        // Only a discover search can check a service: a person's credits and a title's recommendations carry no availability.
+        if people.isEmpty, references.isEmpty {
+            for service in services where !plan.providers.contains(service.provider) { plan.providers.append(service.provider) }
+        }
         plan.judgement = judged
         plan.titlesFromWords = titlesFromWords
         // Words that do not read as a title keep only a film of that very name, or its sequels ("Scary Movie 3").
@@ -162,6 +168,76 @@ enum AISearchGrounding {
         guard word.hasSuffix("s"), let number = Int(word.dropLast()) else { return false }
         return [2, 4].contains(word.count - 1) && number % 10 == 0
     }
+
+    // MARK: Services and people
+
+    /// The streaming services the words name, with the words that named each. "Disney", "Max", "Prime", "Paramount" and "Peacock"
+    /// are ordinary words and studios, so they name a service only after "on" ("comedies on Disney+").
+    static func providers(in text: String) -> [(phrase: String, provider: StreamProvider)] {
+        let padded = " " + normalized(text) + " "
+        let names: [(String, StreamProvider, needsOn: Bool)] = [
+            ("netflix", .netflix, false), ("prime video", .primeVideo, false), ("amazon prime", .primeVideo, false),
+            ("apple tv plus", .appleTV, false), ("apple tv", .appleTV, false), ("disney plus", .disneyPlus, false),
+            ("hbo max", .hboMax, false), ("hulu", .hulu, false), ("paramount plus", .paramountPlus, false),
+            ("crunchyroll", .crunchyroll, false), ("disney", .disneyPlus, true), ("max", .hboMax, true), ("prime", .primeVideo, true),
+            ("paramount", .paramountPlus, true), ("peacock", .peacock, true),
+        ]
+        var found: [(phrase: String, provider: StreamProvider)] = []
+        for (name, provider, needsOn) in names where !found.contains(where: { $0.provider == provider }) {
+            if padded.contains(" on \(name) ") {
+                found.append(("on " + name, provider))
+            } else if !needsOn, padded.contains(" \(name) ") {
+                found.append((name, provider))
+            }
+        }
+        return found
+    }
+
+    /// Words that could be a person's name, to be checked against TMDb's people: a run of two to four words that state no fact
+    /// ("tom hanks" in "Tom Hanks films from the 90s"), three runs at most. `role` is what the words beside it say ("directed by",
+    /// "starring"); nil leaves it to what the person is known for. A run after "as" is the part the person before it plays.
+    struct PersonPhrase: Sendable, Equatable {
+        var phrase: String
+        var role: AISearchPlan.Person.Role?
+        var character: String?
+    }
+
+    static func personPhrases(in text: String) -> [PersonPhrase] {
+        var found: [PersonPhrase] = []
+        var run: [String] = []
+        var pending: AISearchPlan.Person.Role?
+        var isCharacter = false
+        // A closing filler word ends the last run.
+        for word in normalized(text).split(separator: " ").map(String.init) + ["the"] {
+            let cue = roleCues[word]
+            let startsCharacter = ["as", "playing", "plays"].contains(word)
+            let isBoundary = cue != nil || startsCharacter || factWords.contains(word) || TMDbDiscoverQuery.genreWords.contains(word)
+                || subjectiveWords.contains(word) || languages[word] != nil || genreHints[word] != nil || Int(word) != nil
+                || isYearOrDecade(word)
+            guard isBoundary else { run.append(word); continue }
+            var usedCue = false
+            if isCharacter, (1...4).contains(run.count), !found.isEmpty {
+                found[found.count - 1].character = run.joined(separator: " ")
+            } else if !isCharacter, (2...4).contains(run.count), found.count < 3 {
+                // "Christopher Nolan directed films": the cue right after the name is its role.
+                usedCue = pending == nil && cue != nil
+                found.append(PersonPhrase(phrase: run.joined(separator: " "), role: pending ?? cue))
+                pending = nil
+            }
+            if !run.isEmpty { isCharacter = false }
+            run = []
+            if startsCharacter { isCharacter = true }
+            if let cue, !usedCue { pending = cue }
+        }
+        return found
+    }
+
+    private static let roleCues: [String: AISearchPlan.Person.Role] = [
+        "directed": .director, "director": .director, "directors": .director, "directing": .director, "directs": .director,
+        "written": .writer, "writer": .writer, "wrote": .writer, "screenplay": .writer,
+        "starring": .cast, "featuring": .cast, "actor": .cast, "actress": .cast, "acted": .cast,
+        "created": .creator, "creator": .creator,
+    ]
 
     // MARK: Names
 
@@ -276,6 +352,10 @@ enum AISearchGrounding {
         "except", "excluding", "s", "pre", "post", "era", "decade", "year", "years", "old", "older", "new", "newer", "around",
         "watch", "watching", "tonight", "today", "night", "evening", "weekend", "together", "want", "need", "looking", "suggest",
         "something", "anything", "stuff", "things", "like", "similar", "his", "her", "their", "our", "your", "we", "us",
+        // Who made it and whether it was seen are facts the credits and the history hold, never a story topic.
+        "directed", "director", "directors", "directing", "directs", "written", "writer", "wrote", "screenplay", "starring",
+        "featuring", "actor", "actress", "acted", "created", "creator", "seen", "watched", "unwatched", "havent", "ive",
+        "rewatch", "streaming",
     ])
 
     // MARK: Words
@@ -293,6 +373,8 @@ enum AISearchGrounding {
     ]
     private static let unwatchedCues = ["havent seen", "haven t seen", "not seen", "unwatched", "not watched", "havent watched",
                                         "haven t watched", "new to me"]
+    private static let watchedCues = ["ive seen", "i ve seen", "i have seen", "ive watched", "i ve watched", "i have watched",
+                                      "already seen", "already watched", "rewatch", "watch again"]
     private static let languages: [String: String] = [
         "japanese": "ja", "korean": "ko", "french": "fr", "spanish": "es", "mexican": "es", "italian": "it", "german": "de",
         "chinese": "zh", "mandarin": "zh", "cantonese": "cn", "hindi": "hi", "bollywood": "hi", "swedish": "sv", "danish": "da",

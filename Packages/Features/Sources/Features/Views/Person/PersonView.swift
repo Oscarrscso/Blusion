@@ -41,12 +41,17 @@ struct PersonView: View {
                 synopsis
                     .padding(.horizontal, margin)
                     .padding(.top, model.photoStrip.isEmpty ? Theme.Spacing.m : Theme.Spacing.xl)
-                if !model.knownFor.isEmpty {
-                    knownFor.padding(.top, Theme.Spacing.xxl)
+                    .padding(.bottom, metrics.titleRatingsGap)
+                TitleSectionLine(contentMargin: margin)
+                    .padding(.bottom, metrics.titleRatingsGap)
+                // The title page's sections: a faint line between each two, the same gap on both sides of it.
+                TitleSections(contentMargin: margin) {
+                    if !model.knownFor.isEmpty {
+                        knownFor
+                    }
+                    credits
+                        .padding(.horizontal, margin)
                 }
-                credits
-                    .padding(.horizontal, margin)
-                    .padding(.top, Theme.Spacing.xxl)
             }
             .padding(.bottom, Theme.Spacing.xxl)
         }
@@ -56,8 +61,6 @@ struct PersonView: View {
         .contentMargins(.top, isPhoneInLandscape ? LandscapeTabBarState.backClearance : 0, for: .scrollContent)
         .trackLandscapeTabScroll()
         .screenBackground()
-        // The name is the page's own heading, so the bar carries no title, and no soft fade darkens the top of the page.
-        .scrollEdgeEffectHidden(true, for: .top)
         .pageNavigationBar(hidden: isPhoneInLandscape)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
@@ -77,7 +80,7 @@ struct PersonView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("person.name")
             if let line = summaryLine {
-                Text(line).font(Theme.Typography.metaLine).foregroundStyle(.secondary)
+                Text(line).font(Theme.Typography.metaLine).foregroundStyle(Theme.metaText)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
@@ -92,7 +95,7 @@ struct PersonView: View {
             }
             if let reason = model.unavailableReason {
                 Text(reason)
-                    .font(.footnote)
+                    .font(Theme.Typography.small)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(leading ? .leading : .center)
                     .accessibilityIdentifier("person.unavailable")
@@ -193,7 +196,7 @@ struct PersonView: View {
                     .padding(.vertical, Theme.Spacing.l)
             } else if model.sections.isEmpty {
                 Text(model.credits.isEmpty ? "No credits yet." : "No credits match these filters.")
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, Theme.Spacing.s)
                     .accessibilityIdentifier("person.noCredits")
@@ -205,7 +208,7 @@ struct PersonView: View {
                 ForEach(model.sections) { section in
                     VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                         Text(section.year.map(String.init) ?? "Unknown Date")
-                            .font(.title3.bold())
+                            .subheadingStyle()
                             .accessibilityAddTraits(.isHeader)
                             .accessibilityIdentifier("person.year.\(section.id)")
                         // A year's credits are one column on a phone, and as many columns as fit on a Mac, where one row across the
@@ -237,7 +240,7 @@ struct PersonView: View {
     /// Two compact menus side by side: the kind of title, and the role. Each shows what it is set to.
     private var filters: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Menu {
+            FilterMenu {
                 Picker("Titles", selection: $model.mediaFilter) {
                     ForEach(PersonMediaFilter.allCases) { Text($0.title).tag($0) }
                 }
@@ -245,7 +248,7 @@ struct PersonView: View {
                 FilterMenuLabel(model.mediaFilter.title, systemImage: "film", isActive: model.mediaFilter != .all)
             }
             .accessibilityIdentifier("person.mediaFilter")
-            Menu {
+            FilterMenu {
                 Picker("Roles", selection: $model.roleFilter) {
                     Text("All Roles").tag(CreditCategory?.none)
                     ForEach(model.availableRoles, id: \.self) { Text($0.title).tag(CreditCategory?.some($0)) }
@@ -296,7 +299,7 @@ private struct CreditRow: View {
                     .mediaArtwork(cornerRadius: Theme.Radius.poster)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(credit.title.isEmpty ? "Untitled" : credit.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.Typography.mediumStrong)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                     Text(kindLine)
@@ -304,14 +307,14 @@ private struct CreditRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Text(credit.roleText)
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     footer
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .font(Theme.Typography.smallStrong)
                     .foregroundStyle(.tertiary)
             }
             .padding(Theme.Spacing.m)
@@ -337,7 +340,7 @@ private struct CreditRow: View {
             Badge("Unreleased", style: .neutral)
         } else if let average = credit.voteAverage {
             Label(ScoreText.wholeScore(average), systemImage: "star.fill")
-                .font(.caption.weight(.semibold))
+                .font(Theme.Typography.captionStrong)
                 .foregroundStyle(.secondary)
         }
     }

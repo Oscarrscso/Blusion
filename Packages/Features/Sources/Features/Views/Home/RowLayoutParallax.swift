@@ -94,7 +94,7 @@ private struct ParallaxCard: View {
             if let synopsis {
                 Text(synopsis)
                     .font(Theme.Typography.metaLine)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(Theme.dimmerText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
             }

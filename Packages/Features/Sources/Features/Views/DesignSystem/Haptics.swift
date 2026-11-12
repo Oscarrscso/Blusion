@@ -257,7 +257,7 @@ struct ShelfScroll<Content: View>: View {
             // The shelf rests at minus its leading margin, so a page back stops there rather than cutting the margin off the first card.
             let metrics = shelfTracking.metrics
             let target = max(-margin, metrics.offset + step * metrics.viewWidth * 0.8)
-            withAnimation(.snappy(duration: 0.35)) { shelfPosition.scrollTo(x: target) }
+            withAnimation(Theme.Motion.snap) { shelfPosition.scrollTo(x: target) }
         } label: {
             Image(systemName: systemName)
                 .font(.headline.weight(.semibold))

@@ -56,15 +56,24 @@ struct CatalogListView: View {
     /// Landscape iPhone and Mac categories need an in-page heading because their navigation bar is hidden.
     @ViewBuilder
     private var serviceHeading: some View {
+        #if targetEnvironment(macCatalyst)
+        // A list with nothing to filter: the heading as the filter bar draws it on the grid (`barHeading`).
+        if let barHeading {
+            HStack(spacing: Theme.Spacing.m) {
+                barHeadingMark
+                barHeading.headingStyle().lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.bottom, metrics.headerSpacing)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+        }
+        #else
         if let provider, !isPhoneInLandscape {
             ServiceHeading(provider: provider)
         }
-        #if targetEnvironment(macCatalyst)
-        let showsCategoryHeading = provider == nil
-        #else
-        let showsCategoryHeading = isPhoneInLandscape
-        #endif
-        if showsCategoryHeading {
+        if isPhoneInLandscape {
             Text(request.title)
                 .headingStyle()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,6 +81,7 @@ struct CatalogListView: View {
                 .padding(.bottom, metrics.headerSpacing)
                 .accessibilityAddTraits(.isHeader)
         }
+        #endif
     }
 
     private var scrollPage: some View {
@@ -96,7 +106,7 @@ struct CatalogListView: View {
     /// `MacGridPage`).
     private var macPage: some View {
         var parts: [MacGridPage.Part] = []
-        parts.append(.full(id: "heading", view: AnyView(serviceHeading)))
+        // The heading, a service's logo included, is drawn by the filter bar in the menus' row (`barHeading`), as on every grid page.
         parts.append(.full(id: "filters", view: AnyView(filters)))
         let presentation = request.presentation
         if model.items.isEmpty {
@@ -132,6 +142,25 @@ struct CatalogListView: View {
     /// True while the list loads its titles.
     private var isLoading: Bool { model.state == .loading || model.state == .loadingMore }
     #endif
+
+    /// The heading the Mac's filter bar draws beside its menus: the category's name, or a service's name after its logo
+    /// (`barHeadingMark`). iPhone pages have the navigation's title, or a service's own heading.
+    private var barHeading: Text? {
+        #if targetEnvironment(macCatalyst)
+        Text(provider?.name ?? request.title)
+        #else
+        nil
+        #endif
+    }
+
+    private var barHeadingMark: AnyView? {
+        #if targetEnvironment(macCatalyst)
+        // The name beside it is read already.
+        provider.map { AnyView(StreamProviderBox(provider: $0).accessibilityHidden(true)) }
+        #else
+        nil
+        #endif
+    }
 
     private var noMatches: some View {
         EmptyStateLayout(title: "No titles match", systemImage: "line.3.horizontal.decrease.circle",
@@ -201,8 +230,9 @@ struct CatalogListView: View {
             model.filter.type == "movie" ? 1 : model.filter.type == "series" ? 2 : 0
         } set: { index in
             model.filter.type = index == 1 ? "movie" : index == 2 ? "series" : nil
-        }, identifier: "catalogList.filter.type") : nil, chips: chips, identifier: "catalogList", clearAll: { model.filter.clearFilters() }) {
-            Menu {
+        }, identifier: "catalogList.filter.type") : nil, chips: chips, identifier: "catalogList", clearAll: { model.filter.clearFilters() },
+        heading: barHeading, headingMark: barHeadingMark) {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 Picker("Genre", selection: $model.filter.genre) {
                     Text("Any").tag(String?.none)
                     ForEach(genres, id: \.self) { Text($0).tag(String?.some($0)) }
@@ -212,20 +242,20 @@ struct CatalogListView: View {
             }
             .disabled(genres.isEmpty)
             .accessibilityIdentifier("catalogList.filter.genre")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 ReleaseYearOptions(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear,
                                    identifier: "catalogList.filter.year")
             } label: {
                 menuLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
             }
             .accessibilityIdentifier("catalogList.filter.year")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 RatingPicker(threshold: $model.filter.minimumRating)
             } label: {
                 menuLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil)
             }
             .accessibilityIdentifier("catalogList.filter.rating")
-            Menu {
+            FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                 Picker("Sort by", selection: $model.filter.sort) {
                     ForEach(CatalogListSort.allCases.filter { $0 != .shuffle }) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                 }
@@ -278,7 +308,7 @@ private struct ServiceHeading: View {
         HStack(spacing: Theme.Spacing.m) {
             StreamProviderBox(provider: provider)
             Text(provider.name)
-                .font(.largeTitle.bold())
+                .font(Theme.Typography.largeTitle)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }

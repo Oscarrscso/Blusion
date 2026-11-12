@@ -233,7 +233,7 @@ struct EditorialTitleHero: View {
                 }
                 .frame(width: 48, height: 48)
                 .contentShape(Circle())
-                .animation(.smooth(duration: 0.25), value: isLoadingStreams)
+                .animation(Theme.Motion.quick, value: isLoadingStreams)
             }
             .buttonStyle(.hoverPlain)
             .contextMenu {
@@ -351,7 +351,7 @@ struct EditorialTitleHero: View {
             .background { Capsule().fill(isOn ? Color.white : .black) }
             .overlay { Capsule().strokeBorder(.white.opacity(0.9), lineWidth: 1) }
             .contentShape(Capsule())
-            .animation(.smooth(duration: 0.25), value: isOn)
+            .animation(Theme.Motion.quick, value: isOn)
         }
         .buttonStyle(.hoverPlain)
         .accessibilityLabel(title)

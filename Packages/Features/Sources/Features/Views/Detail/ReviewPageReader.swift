@@ -10,10 +10,11 @@ enum ReviewPageReader {
     /// are shown, and the reader only takes a search to the title's audience or user reviews.
     static func reads(_ site: ReviewSite) -> Bool { false }
 
-    static func script(for site: ReviewSite, item: MetaPreview) -> String {
+    static func script(for site: ReviewSite, item: MetaPreview,
+                       background: AppearancePreferences.RGB = .init(red: 0, green: 0, blue: 0)) -> String {
         guard supports(site) else { return "" }
         var options: [String: Any] = ["site": site.rawValue, "title": item.name, "kind": item.type == "movie" ? "movie" : "tv",
-                                      "reads": reads(site)]
+                                      "reads": reads(site), "ground": ReviewPageRules.cssColour(background)]
         if let year = item.releaseInfo.flatMap({ Int($0.prefix(4)) }) { options["year"] = year }
         guard let data = try? JSONSerialization.data(withJSONObject: options, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return "" }
@@ -233,12 +234,12 @@ enum ReviewPageReader {
             :host { all:initial; position:fixed; inset:0; z-index:2147483647; color-scheme:dark; }
             :host([data-mode=website]) { inset:8px 8px auto auto; }
             * { box-sizing:border-box; } [hidden] { display:none !important; }
-            .reader { height:100%; overflow-y:auto; background:#242424; color:#fff; font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; }
-            nav { position:sticky; top:0; z-index:1; display:flex; justify-content:flex-end; padding:8px; background:#242424; }
-            button, a { font:inherit; color:#fff; } button { border:0; border-radius:16px; padding:6px 12px; background:#3a3a3a; cursor:pointer; }
+            .reader { height:100%; overflow-y:auto; background:${options.ground}; color:#fff; font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; }
+            nav { position:sticky; top:0; z-index:1; display:flex; justify-content:flex-end; padding:8px; background:${options.ground}; }
+            button, a { font:inherit; color:#fff; } button { border:0; border-radius:16px; padding:6px 12px; background:rgba(255,255,255,.1); cursor:pointer; }
             button:focus-visible, a:focus-visible, summary:focus-visible { outline:2px solid white; outline-offset:3px; }
             section { padding:0 14px 14px; } h2 { font-size:16px; margin:4px 0 12px; }
-            article { padding:14px; margin:0 0 10px; background:#303030; border-radius:10px; overflow-wrap:anywhere; }
+            article { padding:14px; margin:0 0 10px; background:rgba(255,255,255,.06); border-radius:10px; overflow-wrap:anywhere; }
             header { display:flex; gap:12px; justify-content:space-between; } strong { font-weight:600; } .score { white-space:nowrap; }
             .meta { opacity:.65; font-size:12px; margin:3px 0 8px; } p { margin:8px 0 0; white-space:pre-wrap; }
             summary { cursor:pointer; white-space:pre-wrap; } .expanded { display:none; }

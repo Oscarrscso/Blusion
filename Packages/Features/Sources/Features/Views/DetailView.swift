@@ -212,7 +212,7 @@ struct DetailView: View {
                                 .id(streams.pickerID)
                                 #if targetEnvironment(macCatalyst)
                                 // The picker's rows are inset by its own margin, so the picker starts that much short of the page's margin.
-                                .padding(.horizontal, max(0, contentMargin - Theme.Spacing.l))
+                                .padding(.horizontal, max(0, contentMargin - metrics.contentMargin))
                                 #endif
                                 // Under the meta line the streams start one Play-button step down, where Play sits. Mac's meta line sits
                                 // apart from its Play button, so Mac keeps its own gap.
@@ -234,47 +234,52 @@ struct DetailView: View {
                                     .padding(.top, isLandscape
                                         ? metrics.titleRatingsGap - TitleHero.landscapeContentBottomInset
                                         : metrics.titleRatingsGap)
-                                // Section order moves only Cast & Crew; Information stays below both sections.
-                                let credits = appearance.showsCast
-                                    ? DetailCredits(model: model, contentMargin: contentMargin, pageWidth: geometry.size.width) : nil
                                 // Each section below has a faint line above it, as far from it as the one under the ratings.
                                 TitleSections(contentMargin: contentMargin) {
-                                    if model.isSeries {
-                                        DetailEpisodes(model: model, pageWidth: geometry.size.width, pageHeight: geometry.size.height,
-                                                       contentMargin: contentMargin,
-                                                       isHoldingEpisode: $isHoldingEpisode, play: { showStreams($0, from: $1) },
-                                                       playAtQuality: { showStreams($0, from: .episode, mode: .quality($1)) },
-                                                       loadingRequest: streams.loadingRequest, loadingTrigger: loadingTrigger,
-                                                       unavailableStreams: unavailableStreams)
-                                    }
-                                    if appearance.sectionOrder == .castFirst, let credits { credits }
-                                    if appearance.showsReviews && (model.isLoadingReviews || !model.reviews.isEmpty) {
-                                        DetailReviews(reviews: model.reviews, isLoading: model.isLoadingReviews && model.reviews.isEmpty,
-                                                      consensus: model.reviewConsensus,
-                                                      isSummarizing: model.isSummarizingReviews, reviewedCount: model.reviewedCount,
-                                                      summaryError: model.reviewSummaryError,
-                                                      onRequestSummary: { await model.loadReviewConsensus() },
-                                                      playColourHex: model.playColourHex,
-                                                      width: geometry.size.width,
-                                                      contentMargin: contentMargin)
-                                            // A changed review corpus resets the panel and cancels its in-flight AI task.
-                                            .id(ReviewConsensusReader.key(for: model.reviews))
-                                    }
-                                    if appearance.sectionOrder == .reviewsFirst, let credits { credits }
-                                    if appearance.showsInformation {
-                                        DetailInformation(model: model)
-                                            .frame(maxWidth: metrics.readableWidth, alignment: .leading)
-                                            .padding(.horizontal, contentMargin)
-                                    }
-                                    if let franchise = model.franchise {
-                                        titleShelf(franchise.name, titles: franchise.parts, isLoading: false, identifier: "detail.franchise")
-                                    }
-                                    if appearance.showsRelated && (model.isLoadingRelated || !model.relatedTitles.isEmpty) {
-                                        titleShelf("More Like This", titles: model.relatedTitles,
-                                                   isLoading: model.isLoadingRelated && model.relatedTitles.isEmpty, identifier: "detail.related")
-                                    }
-                                    if appearance.showsWatchAnywhere, let watch = model.titleWatch, !watch.isEmpty {
-                                        DetailWatchAnywhere(watch: watch, contentMargin: contentMargin)
+                                    ForEach(appearance.orderedTitleSections.filter(appearance.showsTitleSection)) { section in
+                                        switch section {
+                                        case .episodes:
+                                            if model.isSeries {
+                                                DetailEpisodes(model: model, pageWidth: geometry.size.width, pageHeight: geometry.size.height,
+                                                               contentMargin: contentMargin,
+                                                               isHoldingEpisode: $isHoldingEpisode, play: { showStreams($0, from: $1) },
+                                                               playAtQuality: { showStreams($0, from: .episode, mode: .quality($1)) },
+                                                               loadingRequest: streams.loadingRequest, loadingTrigger: loadingTrigger,
+                                                               unavailableStreams: unavailableStreams)
+                                            }
+                                        case .reviews:
+                                            if model.isLoadingReviews || !model.reviews.isEmpty {
+                                                DetailReviews(reviews: model.reviews, isLoading: model.isLoadingReviews && model.reviews.isEmpty,
+                                                              consensus: model.reviewConsensus,
+                                                              isSummarizing: model.isSummarizingReviews, reviewedCount: model.reviewedCount,
+                                                              summaryError: model.reviewSummaryError,
+                                                              onRequestSummary: { await model.loadReviewConsensus() },
+                                                              playColourHex: model.playColourHex,
+                                                              width: geometry.size.width,
+                                                              contentMargin: contentMargin)
+                                                    // A changed review corpus resets the panel and cancels its in-flight AI task.
+                                                    .id(ReviewConsensusReader.key(for: model.reviews))
+                                            }
+                                        case .cast:
+                                            DetailCredits(model: model, contentMargin: contentMargin, pageWidth: geometry.size.width)
+                                        case .information:
+                                            DetailInformation(model: model)
+                                                .frame(maxWidth: metrics.readableWidth, alignment: .leading)
+                                                .padding(.horizontal, contentMargin)
+                                        case .franchise:
+                                            if let franchise = model.franchise {
+                                                titleShelf(franchise.name, titles: franchise.parts, isLoading: false, identifier: "detail.franchise")
+                                            }
+                                        case .related:
+                                            if model.isLoadingRelated || !model.relatedTitles.isEmpty {
+                                                titleShelf("More Like This", titles: model.relatedTitles,
+                                                           isLoading: model.isLoadingRelated && model.relatedTitles.isEmpty, identifier: "detail.related")
+                                            }
+                                        case .watchAnywhere:
+                                            if let watch = model.titleWatch, !watch.isEmpty {
+                                                DetailWatchAnywhere(watch: watch, contentMargin: contentMargin)
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.top, isLandscape ? Theme.Spacing.s : metrics.titleRatingsGap)
@@ -290,12 +295,12 @@ struct DetailView: View {
                     // A movie's franchise arrives after its facts: the shelf fades in and the content below moves down with it.
                     .detailLoadingTransition(model.franchise == nil)
                     // The panel's appearance and disappearance moves the content below it, rather than jumping.
-                    .animation(.snappy(duration: 0.35), value: model.trailer.showsPanel)
+                    .animation(Theme.Motion.snap, value: model.trailer.showsPanel)
                     // The reviews' consensus line arrives seconds after them: it fades in and the content below moves down with it.
                     .animation(.smooth(duration: 0.35), value: model.reviewConsensus)
                     // The system draws the held episode and its menu above the page, so they stay sharp.
                     .blur(radius: isHoldingEpisode ? Self.heldBlur : 0)
-                    .animation(.easeOut(duration: 0.2), value: isHoldingEpisode)
+                    .animation(Theme.Motion.fade, value: isHoldingEpisode)
                 }
                 .scrollIndicators(.visible, axes: .vertical)
                 .scrollIndicatorsFlash(onAppear: true)
@@ -329,7 +334,7 @@ struct DetailView: View {
                     guard shows else { return }
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
-                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailTrailerPanel.scrollID) }
+                        withAnimation(Theme.Motion.snap) { proxy.scrollTo(DetailTrailerPanel.scrollID) }
                     }
                 }
                 // Reviews opened from a rating appear under the ratings, which may be below the fold. The page moves to them only once they have
@@ -338,7 +343,7 @@ struct DetailView: View {
                     guard !loading, model.openedReviews != nil else { return }
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
-                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(DetailReviewsPanel.scrollID, anchor: .center) }
+                        withAnimation(Theme.Motion.snap) { proxy.scrollTo(DetailReviewsPanel.scrollID, anchor: .center) }
                     }
                 }
                 // Once the streams are ready they take the details' place, so the page moves down to bring the stream list into view.
@@ -347,7 +352,7 @@ struct DetailView: View {
                     guard ready else { return }
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(50))
-                        withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.streamsScrollID, anchor: UnitPoint(x: 0.5, y: 0.15)) }
+                        withAnimation(Theme.Motion.snap) { proxy.scrollTo(Self.streamsScrollID, anchor: UnitPoint(x: 0.5, y: 0.15)) }
                     }
                 }
             }
@@ -377,7 +382,7 @@ struct DetailView: View {
         // The picture runs to the top of the screen in both orientations; the back button floats over it.
         .ignoresSafeArea(.container, edges: .top)
         #endif
-        .scrollEdgeEffectHidden(true, for: .top)
+        .modifier(HeroScrollEdgeModifier(scroll: heroScroll))
         .pageTopBar(hidden: true)
         // Phone landscape uses the shared corner Back (RootTabView), the same size and place as on See All and category pages. The
         // editorial page sets its own BACK over its picture.
@@ -524,7 +529,7 @@ struct DetailView: View {
     /// Loads IMDb's reviews in the background, once the hero has settled and while the reviews are not already open.
     private func preloadReviews() {
         guard model.hasSettledHero, model.openedReviews == nil, let url = imdbReviewsURL else { return }
-        ReviewPreloader.shared.preload(site: .imdb, url: url, item: model.detail.preview,
+        ReviewPreloader.shared.preload(site: .imdb, url: url, item: model.detail.preview, background: appearance.pageBackgroundRGB,
                                        width: max(0, (layoutWidth > 0 ? layoutWidth : 390) - contentMargin * 2))
     }
 

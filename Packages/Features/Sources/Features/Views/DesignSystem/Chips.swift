@@ -49,7 +49,7 @@ struct GlassChip: View {
     private var button: some View {
         Button(action: action) {
             label
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .lineLimit(fillsWidth ? 1 : nil)
                 .minimumScaleFactor(0.8)
                 // Flat draws no fill, so the selected chip reads bright and the rest grey.
@@ -191,7 +191,7 @@ struct RatingBadge: View {
                 .font(.system(size: 9, weight: .bold))
             Text(ScoreText.wholeScore(rating))
         }
-        .font(.caption.weight(.semibold))
+        .font(Theme.Typography.captionStrong)
         .monospacedDigit()
         .foregroundStyle(.white)
         .accessibilityElement(children: .ignore)

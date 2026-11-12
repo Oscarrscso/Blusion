@@ -50,7 +50,7 @@ public struct MetaPreview: Sendable, Equatable, Hashable, Codable, Identifiable 
         self.description = description
         self.releaseInfo = releaseInfo
         self.imdbRating = imdbRating
-        self.genres = genres
+        self.genres = MediaGenres.normalised(genres)
         self.runtime = runtime
     }
 

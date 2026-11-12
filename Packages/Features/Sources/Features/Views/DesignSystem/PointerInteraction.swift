@@ -1,5 +1,39 @@
 #if canImport(UIKit)
 import SwiftUI
+#if targetEnvironment(macCatalyst)
+import AppKit
+#endif
+
+/// Adds the Mac cursor while keeping the chosen native button appearance and behaviour.
+struct PointingHandButtonStyle<Style: PrimitiveButtonStyle>: PrimitiveButtonStyle {
+    let style: Style
+
+    func makeBody(configuration: Configuration) -> some View {
+        Button(role: configuration.role, action: configuration.trigger) {
+            configuration.label
+        }
+        .buttonStyle(style)
+        .buttonCursor()
+    }
+}
+
+/// Menus can render their native trigger without consulting a custom button style.
+struct PointingHandMenuStyle: MenuStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Menu(configuration)
+            .menuStyle(.automatic)
+            .buttonCursor()
+    }
+}
+
+/// Native checkboxes and switches also bypass the button style.
+struct PointingHandToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration)
+            .toggleStyle(.automatic)
+            .buttonCursor()
+    }
+}
 
 /// Keep plain buttons' native press behaviour and give their labels visible Mac hover feedback.
 struct HoverPlainButtonStyle: PrimitiveButtonStyle {
@@ -22,6 +56,48 @@ extension EnvironmentValues {
 }
 
 #if targetEnvironment(macCatalyst)
+private struct ButtonCursorModifier: ViewModifier {
+    let isActive: Bool
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hasCursor = false
+    @State private var isHovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .onContinuousHover { phase in
+                switch phase {
+                case .active:
+                    isHovering = true
+                    updateCursor(isActive && isEnabled)
+                case .ended:
+                    isHovering = false
+                    updateCursor(false)
+                }
+            }
+            .onChange(of: isActive && isEnabled) { _, active in
+                updateCursor(active && isHovering)
+            }
+            .onDisappear {
+                isHovering = false
+                updateCursor(false)
+            }
+    }
+
+    private func updateCursor(_ active: Bool) {
+        if active {
+            if !hasCursor {
+                NSCursor.pointingHand.push()
+                hasCursor = true
+            } else {
+                NSCursor.pointingHand.set()
+            }
+        } else if hasCursor {
+            NSCursor.pop()
+            hasCursor = false
+        }
+    }
+}
+
 private struct ButtonHoverModifier: ViewModifier {
     let isActive: Bool
     @Environment(\.isEnabled) private var isEnabled
@@ -35,9 +111,10 @@ private struct ButtonHoverModifier: ViewModifier {
         return content
             .brightness(lit ? hover.buttonBrightness : 0)
             .scaleEffect(lit && !reduceMotion ? hover.buttonScale : 1)
-            .animation(hover.animation(0.12, reduceMotion: reduceMotion), value: isHovering)
+            .animation(hover.animation(0.12, reduceMotion: reduceMotion), value: lit)
             .hoverEffect(.highlight, isEnabled: isActive && isEnabled && hover.usesSystemHighlight)
             .onHover { isHovering = $0 }
+            .buttonCursor(isActive)
     }
 }
 
@@ -63,7 +140,9 @@ private struct GlassHoverModifier<S: InsettableShape>: ViewModifier {
             .brightness(lit ? hover.buttonBrightness : 0)
             .scaleEffect(lit && !reduceMotion ? hover.buttonScale : 1)
             .animation(hover.animation(0.12, reduceMotion: reduceMotion), value: lit)
+            .hoverEffect(.highlight, isEnabled: isEnabled && hover.usesSystemHighlight)
             .onHover { isHovering = $0 }
+            .buttonCursor()
     }
 }
 #endif
@@ -110,13 +189,14 @@ private struct PointerInteractionModifier: ViewModifier {
             }
             .shadow(color: .black.opacity(casts ? 0.25 : 0), radius: casts ? 12 : 0, y: casts ? 6 : 0)
             .scaleEffect(liftScale(hovering: hovering))
-            .animation(hover.animation(0.15, reduceMotion: reduceMotion), value: isHovering)
+            .animation(hover.animation(0.15, reduceMotion: reduceMotion), value: hovering)
             .hoverEffect(.highlight, isEnabled: isEnabled && systemHighlight && hover.usesSystemHighlight)
             .onHover { isHovering = isEnabled && $0 }
             .onContinuousHover { phase in
                 guard tracksPointer, case .active(let location) = phase else { return }
                 pointer.location = location
             }
+            .buttonCursor()
     }
 
     /// Where the glow sits on a card drawn lit without the pointer (`showsHover`): up and to the left, where a pointer comes in.
@@ -165,6 +245,16 @@ private struct PointerGlow: View {
 }
 
 extension View {
+    /// Uses the system pointing hand for enabled Mac controls, restoring the previous cursor on exit.
+    @ViewBuilder
+    func buttonCursor(_ isActive: Bool = true) -> some View {
+        #if targetEnvironment(macCatalyst)
+        modifier(ButtonCursorModifier(isActive: isActive))
+        #else
+        self
+        #endif
+    }
+
     /// Hero artwork gets the same quiet Mac highlight, without lifting or casting a shadow.
     @ViewBuilder
     func heroPointerHighlight(cornerRadius: CGFloat = 0) -> some View {

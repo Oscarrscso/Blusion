@@ -14,17 +14,16 @@ struct WidgetImportView: View {
 
     var body: some View {
         Form {
-            Picker("Import from", selection: $fromURL) {
-                Text("Paste JSON").tag(false)
-                Text("From URL").tag(true)
+            CornerSegmentedPicker("Import from", options: [false, true], selection: $fromURL) {
+                $0 ? "From URL" : "Paste JSON"
             }
-            .pickerStyle(.segmented)
             Picker("Import mode", selection: $mode) {
                 Text("Add to My Widgets").tag(WidgetsManagerViewModel.ImportMode.append)
                 Text("Replace My Widgets").tag(WidgetsManagerViewModel.ImportMode.replace)
             }
+            .buttonCursor()
             if let message = model.message, model.messageIsError {
-                Text(message).font(.footnote).foregroundStyle(.orange)
+                Text(message).font(Theme.Typography.small).foregroundStyle(.orange)
             }
             if fromURL {
                 TextField("https://example.com/widgets.json", text: $text)

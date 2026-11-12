@@ -136,7 +136,7 @@ struct DetailEpisodes: View {
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
     private var seasonMenu: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.secondaryControlHeight / 2 * metrics.cornerScale(for: .actionButtons), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Self.secondaryControlHeight / 2 * metrics.circularButtonScale(for: .actionButtons), style: .continuous)
         return Menu {
             ForEach(model.seasons, id: \.self) { season in
                 Button(season == 0 ? "Specials" : "Season \(season)") {
@@ -159,7 +159,7 @@ struct DetailEpisodes: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(.subheadline.weight(.semibold))
+                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.mediumStrong)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
@@ -171,7 +171,7 @@ struct DetailEpisodes: View {
             .glassHover(shape)
         }
         .buttonStyle(.plain)
-        .buttonBorderShape(.roundedRectangle(radius: Self.secondaryControlHeight / 2 * metrics.cornerScale(for: .actionButtons)))
+        .buttonBorderShape(.roundedRectangle(radius: Self.secondaryControlHeight / 2 * metrics.circularButtonScale(for: .actionButtons)))
         .frame(height: Self.secondaryControlHeight)
         .accessibilityIdentifier("detail.seasonPicker")
     }
@@ -197,7 +197,7 @@ struct DetailEpisodes: View {
             .frame(maxWidth: .infinity, minHeight: Self.secondaryControlHeight, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.2)) { showsShuffleNext.toggle() }
+                withAnimation(Theme.Motion.toggle) { showsShuffleNext.toggle() }
             }
             .pointerFeedback()
             .accessibilityElement(children: .ignore)
@@ -225,7 +225,7 @@ struct DetailEpisodes: View {
             }
         } label: {
             Image(systemName: "shuffle")
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .opacity(isShuffling ? 0 : 1)
                 .overlay {
                     if isShuffling {
@@ -236,7 +236,7 @@ struct DetailEpisodes: View {
                 }
                 .animation(.smooth(duration: 0.2), value: isShuffling)
                 // The same grey as the trailer's symbol beside the title's other buttons.
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Theme.faintText)
         }
         .modifier(SeasonRowCircle())
         .disabled(!model.canShuffle)
@@ -257,8 +257,8 @@ struct DetailEpisodes: View {
             Task { await model.setMatchesEpisodeWidthToText(!isWide) }
         } label: {
             Image(systemName: isWide ? "rectangle" : "rectangle.split.3x1")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.6))
+                .font(Theme.Typography.mediumStrong)
+                .foregroundStyle(Theme.faintText)
                 .contentTransition(.symbolEffect(.replace))
         }
         .modifier(SeasonRowCircle())
@@ -301,7 +301,7 @@ struct DetailEpisodes: View {
             .overlay(alignment: .topLeading) {
                 if hasNoStreams {
                     Text("No streams")
-                        .font(.caption).foregroundStyle(.white)
+                        .font(Theme.Typography.caption).foregroundStyle(.white)
                         .padding(Theme.Spacing.s)
                         .background(.black.opacity(0.5), in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
                         .padding(Theme.Spacing.s)
@@ -492,7 +492,7 @@ struct DetailEpisodes: View {
                 if let item = model.downloadManager?.item(for: model.request(for: video)), item.state != .complete {
                     DownloadProgressGlyph(item: item)
                         .frame(width: 44, height: 44)
-                        .background(Theme.surfaceStrong, in: Circle())
+                        .background(Theme.surfaceStrong, in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
                         .padding(8)
                         .allowsHitTesting(false)
                 }
@@ -595,10 +595,10 @@ private struct EpisodeRow: View {
                 if watched { checkmark }
                 if isDownloaded {
                     Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption.weight(.semibold))
+                        .font(Theme.Typography.captionStrong)
                         .foregroundStyle(.white)
                         .frame(width: 20, height: 20)
-                        .background(.black.opacity(0.6), in: Circle())
+                        .background(.black.opacity(0.6), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
                         .padding(Theme.Spacing.xs)
                         .accessibilityLabel("Downloaded")
                 }
@@ -616,7 +616,7 @@ private struct EpisodeRow: View {
                 .accessibilityLabel("Loading streams")
             }
         }
-        .animation(.smooth(duration: 0.25), value: isLoadingStreams)
+        .animation(Theme.Motion.quick, value: isLoadingStreams)
         .mediaArtwork(cornerRadius: stillRadius)
     }
 
@@ -654,7 +654,7 @@ private struct EpisodeRow: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             if let episode = video.episode {
-                Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(.white.opacity(0.75))
+                Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(Theme.dimText)
                     #if targetEnvironment(macCatalyst)
                     .padding(.top, isShortWidth ? 0 : -Theme.Spacing.xs)
                     #endif
@@ -687,7 +687,7 @@ private struct EpisodeRow: View {
                 #if targetEnvironment(macCatalyst)
                 .font(isShortWidth ? .caption : .body)
                 #else
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 #endif
                 .foregroundStyle(.white.opacity(0.85))
                 .redacted(reason: hidesSynopsis ? .placeholder : [])
@@ -709,7 +709,7 @@ private struct EpisodeRow: View {
             .font(.caption2.weight(.bold))
             .foregroundStyle(.white)
             .frame(width: 20, height: 20)
-            .background(.black.opacity(0.6), in: Circle())
+            .background(.black.opacity(0.6), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
             .padding(Theme.Spacing.xs)
             .accessibilityHidden(true)
     }
@@ -730,10 +730,10 @@ private struct EpisodeRow: View {
                     // The bar takes the width the row has to spare, so the score it leads into sits at the text's trailing margin.
                     HStack(spacing: 4) {
                         Image(systemName: "play.fill").font(.system(size: 7, weight: .semibold))
-                        ScaledCapsule(scale: metrics.cornerScale(for: .filters))
+                        ScaledCapsule(scale: metrics.cornerScale(for: .artwork))
                             .fill(.white.opacity(0.3))
                             .overlay(alignment: .leading) {
-                                ScaledCapsule(scale: metrics.cornerScale(for: .filters)).fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
+                                ScaledCapsule(scale: metrics.cornerScale(for: .artwork)).fill(.white).scaleEffect(x: fraction, y: 1, anchor: .leading)
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 2)
@@ -754,8 +754,8 @@ private struct EpisodeRow: View {
                     if !score.isIMDb, video.ratingSource == .tmdb { Text("TMDb") }
                 }
             }
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.75))
+            .font(Theme.Typography.micro)
+            .foregroundStyle(Theme.dimText)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .accessibilityElement(children: .ignore)
@@ -768,4 +768,3 @@ private struct EpisodeRow: View {
     }
 }
 #endif
-

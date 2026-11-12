@@ -48,7 +48,7 @@ private struct QualityBadgeChrome: ViewModifier {
     func body(content: Content) -> some View {
         let shape = ScaledCapsule(scale: metrics.cornerScale(for: .filters))
         content
-            .font(.caption2.weight(.semibold))
+            .font(Theme.Typography.microStrong)
             .foregroundStyle(tint.opacity(0.92))
             .lineLimit(1)
             .padding(.horizontal, 7)

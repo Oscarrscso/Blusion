@@ -162,6 +162,14 @@ struct FlowLayoutRow: View {
             // A tap or a chevron moves the row without a gesture: it is put back once that move has had time to finish.
             if !motion.isMoving { recentre(after: .milliseconds(600)) }
         }
+        // `init` seeds the middle poster only the first time the row is made, often before its titles have loaded: without this the
+        // scroll view rests on a poster other than the one marked as in the middle, and its first tap only brings it to the middle.
+        .onChange(of: items, initial: true) {
+            guard position(of: centredID) == nil, let first = items.first else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { centredID = Self.entryID(copy: middleCopy, item: first) }
+        }
         #if targetEnvironment(macCatalyst)
         .onHover { isHovering = $0 }
         #endif
@@ -211,7 +219,7 @@ struct FlowLayoutRow: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.m) {
                 Text(name)
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .layoutPriority(1)
@@ -221,7 +229,7 @@ struct FlowLayoutRow: View {
                     .lineLimit(1, reservesSpace: true)
             }
             Text(synopsis)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .foregroundStyle(.secondary)
                 .lineLimit(2, reservesSpace: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

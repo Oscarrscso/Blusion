@@ -73,7 +73,7 @@ struct PlayerEpisodePicker: View {
                 seasonMenu
             } else {
                 Text("Episodes")
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -101,7 +101,7 @@ struct PlayerEpisodePicker: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
         } else if let failure = model.failure {
-            Text(failure).font(.subheadline).foregroundStyle(.white.opacity(0.7))
+            Text(failure).font(Theme.Typography.medium).foregroundStyle(Theme.dimmerText)
                 .padding(.horizontal, 4)
         } else {
             LazyVStack(spacing: 0) {
@@ -125,11 +125,11 @@ struct PlayerEpisodePicker: View {
         } label: {
             HStack(spacing: 6) {
                 Text(model.selectedSeason.map(PlayerEpisodePickerModel.seasonName) ?? "Season")
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(Theme.Typography.captionStrong)
+                    .foregroundStyle(Theme.faintText)
             }
             .contentShape(.rect)
         }
@@ -163,15 +163,15 @@ struct PlayerEpisodePicker: View {
                         }
                     }
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                    Text(video.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                    .foregroundStyle(Theme.faintText)
+                    Text(video.title).font(Theme.Typography.mediumStrong).lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 8)
                 if isPreparing {
                     Spinner().controlSize(.small)
                 } else if isCurrent {
-                    Image(systemName: "checkmark").font(.body.weight(.semibold))
+                    Image(systemName: "checkmark").font(Theme.Typography.largeStrong)
                         .accessibilityHidden(true)
                 }
             }

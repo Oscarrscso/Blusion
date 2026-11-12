@@ -17,6 +17,11 @@ public final class TitleRatings: Identifiable {
     public internal(set) var metacritic: Double?
     public internal(set) var tmdb: Double?
     public internal(set) var tmdbURL: URL?
+    /// MyAnimeList's score out of 10, and the title's page there, for anime only.
+    public internal(set) var myAnimeList: Double?
+    public internal(set) var myAnimeListURL: URL?
+    /// Whether the title is anime: as the addon marks it (`ReviewSite.isAnime`), or as TMDb says.
+    public internal(set) var isAnime: Bool
     /// The film's best disc by Best Blurays, for the poster's disc mark. Nil until the site has answered, and when it names none.
     public internal(set) var bestDisc: BestDiscFormat?
     /// The first service the title streams on in the viewer's region, the mark shown when there is no disc. From TMDb.
@@ -26,10 +31,11 @@ public final class TitleRatings: Identifiable {
     @ObservationIgnored var catalogIMDb: Double?
     @ObservationIgnored var datasetIMDb: Double?
 
-    nonisolated init(id: String, imdb: Double? = nil, letterboxd: Double? = nil) {
+    nonisolated init(id: String, imdb: Double? = nil, letterboxd: Double? = nil, isAnime: Bool = false) {
         self.id = id
         self._imdb = imdb
         self._letterboxd = letterboxd
+        self._isAnime = isAnime
         self.catalogIMDb = imdb
     }
 
@@ -47,9 +53,16 @@ public final class TitleRatings: Identifiable {
     /// ("8.6" is 86, "4.2" is 84). Rotten Tomatoes and Metacritic already are.
     public var imdbText: String? { imdb.map { String(Int(($0 * 10).rounded())) } }
     public var letterboxdText: String? { letterboxd.map { String(Int(($0 * 20).rounded())) } }
-    /// Prefer IMDb and Letterboxd, then fill either missing score from the other available sites.
+    /// The sites a poster prefers: Letterboxd and MyAnimeList for anime (IMDb standing in for Letterboxd, which has films only), else IMDb
+    /// and Letterboxd.
+    public var preferredPosterSites: [ReviewSite] {
+        isAnime || myAnimeList != nil ? [.letterboxd, .myAnimeList, .imdb] : [.imdb, .letterboxd]
+    }
+    /// The preferred sites, then fill either missing score from the other available sites.
     public var posterSites: [ReviewSite] {
-        Array(ReviewSite.allCases.filter { shortText(for: $0) != nil }.prefix(2))
+        let preferred = preferredPosterSites
+        let order = preferred + ReviewSite.allCases.filter { !preferred.contains($0) }
+        return Array(order.filter { shortText(for: $0) != nil }.prefix(2))
     }
     public var isEmpty: Bool { posterSites.isEmpty }
 
@@ -61,6 +74,7 @@ public final class TitleRatings: Identifiable {
         case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f", $0) }
         case .metacritic: metacritic.map { String(format: "%.0f", $0) }
         case .tmdb: tmdb.map { String(Int(($0 * 10).rounded())) }
+        case .myAnimeList: myAnimeList.map { String(Int(($0 * 10).rounded())) }
         }
     }
 
@@ -72,6 +86,7 @@ public final class TitleRatings: Identifiable {
         case .rottenTomatoes: rottenTomatoes
         case .metacritic: metacritic
         case .tmdb: tmdb.map { $0 * 10 }
+        case .myAnimeList: myAnimeList.map { $0 * 10 }
         }
     }
 
@@ -95,6 +110,7 @@ public final class TitleRatings: Identifiable {
         case .rottenTomatoes: rottenTomatoes.map { String(format: "%.0f%%", $0) }
         case .metacritic: metacritic.map { String(format: "%.0f/100", $0) }
         case .tmdb: tmdb.map { "\(Int(($0 * 10).rounded()))/100" }
+        case .myAnimeList: myAnimeList.map { "\(Int(($0 * 10).rounded()))/100" }
         }
     }
 }
@@ -157,6 +173,7 @@ public final class PosterRatingsStore {
     @ObservationIgnored private var omdbPausedUntil: Date?
     @ObservationIgnored private var isClearing = false
     @ObservationIgnored private let letterboxd: LetterboxdRatings?
+    @ObservationIgnored private let myAnimeList: MyAnimeListRatings?
     @ObservationIgnored private var omdb: OMDbRatings?
     @ObservationIgnored private var tmdb: TMDbRatings?
     @ObservationIgnored private let bestBlurays: BestBluraysClient?
@@ -175,8 +192,10 @@ public final class PosterRatingsStore {
     public nonisolated init(isEnabled: Bool = true, letterboxd: LetterboxdRatings? = nil, cache: (any RatingsCache)? = nil,
                             maxConcurrentLookups: Int = 3, now: @escaping @Sendable () -> Date = { Date() },
                             omdb: OMDbRatings? = nil, tmdb: TMDbRatings? = nil, dataset: (any IMDbDataset)? = nil,
-                            bestBlurays: BestBluraysClient? = nil, marks: TitleMarksCache? = nil, logger: AddonLogger = .silent) {
+                            bestBlurays: BestBluraysClient? = nil, marks: TitleMarksCache? = nil, myAnimeList: MyAnimeListRatings? = nil,
+                            logger: AddonLogger = .silent) {
         self._isEnabled = isEnabled
+        self.myAnimeList = myAnimeList
         self.dataset = dataset
         self.letterboxd = letterboxd
         self.bestBlurays = bestBlurays
@@ -208,8 +227,12 @@ public final class PosterRatingsStore {
                 if known.imdb != shown { Task { known.imdb = known.datasetIMDb ?? known.catalogIMDb } }
             }
         } else {
-            entry = TitleRatings(id: item.identity, imdb: item.imdbRating)
+            entry = TitleRatings(id: item.identity, imdb: item.imdbRating, isAnime: ReviewSite.isAnime(item))
             entries[item.identity] = entry
+        }
+        // MyAnimeList searches by name, so anime listed under its own databases' ids (Kitsu's, say) is looked up too.
+        if !isClearing, myAnimeList != nil, entry.isAnime, isEnabled || includeReviews, source == nil {
+            enqueue(item, provider: .myAnimeList, includeReviews: includeReviews)
         }
         let wantsMarks = (showsBestDisc || includeMarks) && source == nil
         let wantsDisc = wantsMarks && bestBlurays != nil && item.type == "movie"
@@ -369,6 +392,8 @@ public final class PosterRatingsStore {
             entry.metacritic = nil
             entry.tmdb = nil
             entry.tmdbURL = nil
+            entry.myAnimeList = nil
+            entry.myAnimeListURL = nil
             entry.bestDisc = nil
             entry.streamer = nil
             entry.discChecked = false
@@ -457,6 +482,9 @@ public final class PosterRatingsStore {
                         guard let tmdb else { return }
                         answer = CachedRating(rating: nil, fetchedAt: now(),
                                               reviews: try await tmdb.ratings(imdbID: lookup.item.id, type: lookup.item.type))
+                    case .myAnimeList:
+                        guard let myAnimeList else { return }
+                        answer = CachedRating(rating: nil, fetchedAt: now(), reviews: try await myAnimeList.ratings(for: lookup.item))
                     case .omdb:
                         // The allowance and any refusal are checked here, off the view's redraw path.
                         guard let omdb, !isOMDbPaused, omdb.usage.today() < OMDbUsage.dailyLimit else { return }
@@ -488,6 +516,8 @@ public final class PosterRatingsStore {
         switch lookup.provider {
         case .bestBlurays: (showsBestDisc || lookup.includeReviews) && !tasks.keys.contains { $0.hasPrefix("\(Provider.bestBlurays.rawValue):") }
         case .streaming: showsBestDisc || lookup.includeReviews
+        // MyAnimeList is asked about one title at a time, as its search box would be.
+        case .myAnimeList: (isEnabled || lookup.includeReviews) && !tasks.keys.contains { $0.hasPrefix("\(Provider.myAnimeList.rawValue):") }
         case .letterboxd, .tmdb, .omdb: isEnabled || lookup.includeReviews
         }
     }
@@ -532,7 +562,7 @@ public final class PosterRatingsStore {
             let watch = try await tmdb.titleWatch(imdbID: item.id, type: item.type, region: marks.region)
             guard !Task.isCancelled else { return nil }
             await marks.storeStreamer(watch.streaming.first, for: item.id, checkedAt: now())
-        case .letterboxd, .tmdb, .omdb:
+        case .letterboxd, .tmdb, .omdb, .myAnimeList:
             return nil
         }
         return await readMark(lookup)
@@ -833,7 +863,9 @@ public final class PosterRatingsStore {
         let hasScore: Bool
         switch provider {
         case .letterboxd: hasScore = cached.rating != nil
-        case .tmdb: hasScore = cached.reviews?.tmdb != nil
+        // An answer kept before TMDb was asked whether the title is anime is asked again.
+        case .tmdb: hasScore = cached.reviews?.tmdb != nil && cached.reviews?.isAnime != nil
+        case .myAnimeList: hasScore = cached.reviews?.myAnimeList != nil
         case .omdb: hasScore = cached.reviews?.rottenTomatoes != nil || cached.reviews?.metacritic != nil
         // Marks are kept in the mark store, with their own lifetimes (see `readMark`).
         case .bestBlurays, .streaming: hasScore = false
@@ -850,6 +882,11 @@ public final class PosterRatingsStore {
         case .tmdb:
             if let rating = cached.reviews?.tmdb, entry.tmdb != rating { entry.tmdb = rating }
             if let url = cached.reviews?.tmdbURL, entry.tmdbURL != url { entry.tmdbURL = url }
+            // TMDb names Japanese animation listed under an IMDb id as anime: its MyAnimeList score is looked up next.
+            if cached.reviews?.isAnime == true, !entry.isAnime {
+                entry.isAnime = true
+                if myAnimeList != nil { enqueue(lookup.item, provider: .myAnimeList, includeReviews: lookup.includeReviews) }
+            }
             // The answer names the title's TMDb id, also when it was read from the cache: its page then asks only for its artwork.
             if let tmdb, let reviews = cached.reviews {
                 let item = lookup.item
@@ -859,13 +896,16 @@ public final class PosterRatingsStore {
             // Only scores OMDb gave are set: a title it has none for keeps whatever the other providers said.
             if let score = cached.reviews?.rottenTomatoes, entry.rottenTomatoes != score { entry.rottenTomatoes = score }
             if let score = cached.reviews?.metacritic, entry.metacritic != score { entry.metacritic = score }
+        case .myAnimeList:
+            if let score = cached.reviews?.myAnimeList, entry.myAnimeList != score { entry.myAnimeList = score }
+            if let url = cached.reviews?.myAnimeListURL, entry.myAnimeListURL != url { entry.myAnimeListURL = url }
         case .bestBlurays, .streaming:
             break
         }
     }
 
     private enum Provider: String {
-        case letterboxd, tmdb, omdb, bestBlurays, streaming
+        case letterboxd, tmdb, omdb, bestBlurays, streaming, myAnimeList
 
         var isMark: Bool { self == .bestBlurays || self == .streaming }
     }
@@ -881,6 +921,7 @@ public final class PosterRatingsStore {
             case .letterboxd: item.id
             case .tmdb: "tmdb:\(item.identity)"
             case .omdb: "omdb:\(item.identity)"
+            case .myAnimeList: "mal:\(item.identity)"
             case .bestBlurays: "bestblurays:\(item.id)"
             case .streaming: "streaming:\(item.id)"
             }

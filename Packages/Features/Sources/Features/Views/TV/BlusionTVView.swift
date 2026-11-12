@@ -26,11 +26,7 @@ struct BlusionTVView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, Theme.Spacing.xxl)
             } else if model.allChannels.isEmpty {
-                ContentUnavailableView {
-                    Label("No Channels", systemImage: "tv")
-                } actions: {
-                    Button("New Channel") { editing = TVChannel() }.buttonStyle(.borderedProminent)
-                }
+                EmptyStateView("No channels", systemImage: "tv", actionTitle: "New Channel") { editing = TVChannel() }
                 .padding(.top, Theme.Spacing.xxl)
             } else {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -87,6 +83,7 @@ struct BlusionTVView: View {
                     Image(systemName: "ellipsis")
                 }
                 .menuStyle(.button)
+                .buttonCursor()
                 .glassCircleButton(.small)
                 .accessibilityLabel("\(channel.name) options")
             }
@@ -132,7 +129,7 @@ struct BlusionTVView: View {
             }
         } else if let issue = model.issues[channel.id] {
             HStack {
-                Text(issue).font(.subheadline).foregroundStyle(.secondary)
+                Text(issue).font(Theme.Typography.medium).foregroundStyle(.secondary)
                 Spacer(minLength: Theme.Spacing.s)
                 Button("Retry") { refresh(channel) }.buttonStyle(.hoverGlass)
             }
@@ -178,7 +175,7 @@ struct TVProgrammeCard: View {
             ProgressCard(title: programme.show.name, subtitle: programme.episodeLabel, episodeName: episodeName,
                          artwork: programme.artwork, logo: programme.logo, fraction: fraction, duration: programme.duration)
                 .overlay { if isTuning { TuningVeil() } }
-                .animation(.smooth(duration: 0.25), value: isTuning)
+                .animation(Theme.Motion.quick, value: isTuning)
                 .padding(.bottom, Theme.Spacing.xs)
             TVCardCaption(caption: caption, detail: detail)
         }
@@ -219,11 +216,11 @@ struct TVCardCaption: View {
 
     var body: some View {
         Text(caption.isEmpty ? " " : caption)
-            .font(.subheadline.weight(.semibold))
+            .font(Theme.Typography.mediumStrong)
             .foregroundStyle(.primary)
             .lineLimit(1)
         Text(detail.isEmpty ? " " : detail)
-            .font(.caption)
+            .font(Theme.Typography.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
     }
@@ -296,6 +293,7 @@ struct TVChannelSheets: ViewModifier {
 }
 
 struct TVChannelEditor: View {
+    @Environment(\.layoutMetrics) private var metrics
     @State var channel: TVChannel
     let isNew: Bool
     let services: AppServices
@@ -311,13 +309,14 @@ struct TVChannelEditor: View {
                     Picker("Order", selection: $channel.order) {
                         ForEach(TVChannel.Order.allCases) { Text($0.title).tag($0) }
                     }
+                    .buttonCursor()
                 }
                 Section("Shows") {
                     ForEach(channel.shows, id: \.identity) { show in
                         HStack(spacing: Theme.Spacing.m) {
                             ArtworkImage(url: show.poster, title: show.name)
                                 .frame(width: 32, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 4 * metrics.cornerScale(for: .artwork), style: .continuous))
                             Text(show.name)
                         }
                     }
@@ -332,7 +331,7 @@ struct TVChannelEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) { EditButton() }
+                ToolbarItem(placement: .primaryAction) { EditButton().buttonCursor() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save(channel); dismiss() }
                         .disabled(channel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || channel.shows.isEmpty)
@@ -351,7 +350,7 @@ private struct TVShowPicker: View {
     init(shows: Binding<[MetaPreview]>, services: AppServices) {
         _shows = shows
         self.services = services
-        _search = State(initialValue: SearchViewModel(services: services, usesLivePicker: false, includesAISearch: false))
+        _search = State(initialValue: SearchViewModel(services: services, includesAISearch: false))
     }
 
     private var isSearching: Bool { !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -359,7 +358,7 @@ private struct TVShowPicker: View {
     var body: some View {
         @Bindable var search = search
         List {
-            let items = isSearching ? search.results(type: "series") : saved
+            let items = isSearching ? search.results(in: .series) : saved
             ForEach(items, id: \.identity) { show in
                 Button {
                     if let index = shows.firstIndex(where: { $0.identity == show.identity }) {
@@ -373,7 +372,7 @@ private struct TVShowPicker: View {
                         ArtworkImage(url: show.poster, title: show.name).frame(width: 40, height: 60).clipped()
                         VStack(alignment: .leading) {
                             Text(show.name).foregroundStyle(.primary)
-                            if let year = show.releaseInfo { Text(year).font(.caption).foregroundStyle(.secondary) }
+                            if let year = show.releaseInfo { Text(year).font(Theme.Typography.caption).foregroundStyle(.secondary) }
                         }
                         Spacer()
                         Image(systemName: shows.contains(where: { $0.identity == show.identity }) ? "checkmark.circle.fill" : "plus.circle")
@@ -385,12 +384,12 @@ private struct TVShowPicker: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(shows.contains(where: { $0.identity == show.identity }) ? "Remove" : "Add") \(show.name)")
             }
-            if search.phase == .searching { ProgressView() }
+            if search.phase == .searching { Spinner().frame(maxWidth: .infinity) }
             if items.isEmpty, search.phase != .searching {
                 if isSearching {
-                    ContentUnavailableView("No Shows Found", systemImage: "magnifyingglass")
+                    EmptyStateView("No shows found", systemImage: "magnifyingglass")
                 } else {
-                    ContentUnavailableView("Search for Shows", systemImage: "magnifyingglass")
+                    EmptyStateView("Search for shows", systemImage: "magnifyingglass")
                 }
             }
             if !search.failures.isEmpty {

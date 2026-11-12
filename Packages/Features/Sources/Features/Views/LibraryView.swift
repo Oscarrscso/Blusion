@@ -62,6 +62,7 @@ struct LibraryView: View {
     #if targetEnvironment(macCatalyst)
     /// The Mac's page: the filters and the Saved and Watched grids in one UIKit scroll (see `MacGridPage`), so a long library scrolls smoothly.
     private var macPage: some View {
+        // The heading is drawn by the filter bar, in the menus' row.
         var parts: [MacGridPage.Part] = [.full(id: "filters", view: AnyView(filters))]
         if model.showsDownloads {
             parts.append(.full(id: "downloads", view: AnyView(
@@ -101,6 +102,7 @@ struct LibraryView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
+                    heading
                     filters
                     VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
                         if model.showsDownloads {
@@ -123,22 +125,43 @@ struct LibraryView: View {
             .trackLandscapeTabScroll()
             .screenBackground()
             .browsePageTopMargin()
-            .navigationTitle("")
+            .navigationTitle(isPhoneInLandscape ? "" : "Library")
             .macRootNavigation()
             .pageTabBar(hidden: isPhoneInLandscape)
             #if !targetEnvironment(macCatalyst)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: .title)
+            // The page draws its own title, as on the Mac, so the gaps above and below it match.
+            .toolbar(.hidden, for: .navigationBar)
             #endif
             // A tap on Library's tab item goes back to its first page, and scrolls it to the top.
             .onChange(of: router.tabTapRevisions[.library, default: 0]) { _, _ in
-                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+                withAnimation(Theme.Motion.snap) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
     }
 
     /// `isPhoneLandscape` is also true on an iPad turned sideways, so the device is checked as well.
     private var isPhoneInLandscape: Bool { isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone }
+
+    @ViewBuilder
+    private var heading: some View {
+        #if targetEnvironment(macCatalyst)
+        Text("Library")
+            .headingStyle()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, metrics.pageMargin)
+            .padding(.bottom, metrics.headerSpacing)
+            .accessibilityAddTraits(.isHeader)
+        #else
+        // The same large title as the category pages, without the empty navigation bar row above it.
+        Text("Library")
+            // The navigation bar's large title: a fixed 34pt bold at its 16pt inset, as on the category pages.
+            .font(.system(size: 34, weight: .bold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, isPhoneInLandscape ? metrics.pageMargin : Theme.Spacing.l)
+            .padding(.bottom, isPhoneInLandscape ? Theme.Spacing.l : Theme.Spacing.m)
+            .accessibilityAddTraits(.isHeader)
+        #endif
+    }
 
     /// The type selector: All, Movies, Series and Downloads. Then the menus and chips of the page in view. The Library shows its Genre, Year,
     /// Rating and Sort; Downloads shows Type, Status, Year and Sort. Each page keeps its own selection, so switching never changes the
@@ -155,9 +178,9 @@ struct LibraryView: View {
             // Picking Downloads leaves the Library's type choice as it was, so returning to the Library restores it.
             if index <= kinds.count { model.filter.kinds = index > 0 ? [kinds[index - 1]] : [] }
         }, identifier: "library.filter.kind", symbols: ["square.grid.2x2", "film", "tv", "arrow.down.circle"]), chips: filterChips,
-        identifier: "library", clearAll: { model.clearFilters() }) {
+        identifier: "library", clearAll: { model.clearFilters() }, heading: Text("Library")) {
             if model.showsDownloads {
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     Picker("Type", selection: $model.downloadFilter.kind) {
                         Text("Any").tag(LibraryKind?.none)
                         ForEach(kinds) { Text($0.title).tag(LibraryKind?.some($0)) }
@@ -167,7 +190,7 @@ struct LibraryView: View {
                                 isActive: model.downloadFilter.kind != nil)
                 }
                 .accessibilityIdentifier("library.downloads.filter.kind")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     Picker("Status", selection: $model.downloadFilter.status) {
                         ForEach(DownloadStatusFilter.allCases) { Text($0.title).tag($0) }
                     }
@@ -176,7 +199,7 @@ struct LibraryView: View {
                     filterLabel(status == .all ? "Status" : status.title, systemImage: "arrow.down.circle", isActive: status != .all)
                 }
                 .accessibilityIdentifier("library.downloads.filter.status")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     ReleaseYearOptions(minimumYear: $model.downloadFilter.minimumYear, maximumYear: $model.downloadFilter.maximumYear,
                                        identifier: "library.downloads.filter.year")
                 } label: {
@@ -184,7 +207,7 @@ struct LibraryView: View {
                                 isActive: model.downloadFilter.minimumYear != nil || model.downloadFilter.maximumYear != nil)
                 }
                 .accessibilityIdentifier("library.downloads.filter.year")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     Picker("Sort by", selection: $model.downloadFilter.sort) {
                         ForEach(DownloadSort.allCases) { Text($0.title).tag($0) }
                     }
@@ -196,7 +219,7 @@ struct LibraryView: View {
                 .accessibilityIdentifier("library.downloads.sort")
             } else {
                 let genres = model.availableGenres
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     Picker("Genre", selection: Binding<String?> { model.filter.genres.first } set: { genre in model.filter.genres = genre.map { [$0] } ?? [] }) {
                         Text("Any").tag(String?.none)
                         ForEach(genres, id: \.self) { Text($0).tag(String?.some($0)) }
@@ -206,20 +229,20 @@ struct LibraryView: View {
                 }
                 .disabled(genres.isEmpty)
                 .accessibilityIdentifier("library.filter.genre")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     ReleaseYearOptions(minimumYear: $model.filter.minimumYear, maximumYear: $model.filter.maximumYear,
                                        identifier: "library.filter.year")
                 } label: {
                     filterLabel("Year", systemImage: "calendar", isActive: model.filter.minimumYear != nil || model.filter.maximumYear != nil)
                 }
                 .accessibilityIdentifier("library.filter.year")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     RatingPicker(threshold: $model.filter.minimumRating)
                 } label: {
                     filterLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil)
                 }
                 .accessibilityIdentifier("library.filter.rating")
-                Menu {
+                FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
                     Picker("Sort by", selection: $model.filter.sort) {
                         ForEach(LibrarySort.allCases) { Text($0.title).tag($0) }
                     }

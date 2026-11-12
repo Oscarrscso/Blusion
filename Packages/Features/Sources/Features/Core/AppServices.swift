@@ -92,7 +92,7 @@ public struct AppServices: Sendable {
         self.library = SyncedLibraryStore(base: plainLibrary, sync: traktSync)
         self.traktSync = traktSync
         self.widgetContent = widgetContent ?? WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt,
-                                                                   account: traktAccount)
+                                                                   account: traktAccount, browse: self.browse)
         self.posterRatings = posterRatings ?? PosterRatingsStore()
         self.heroMeta = heroMeta ?? HeroMetaStore(browse: self.browse, client: client)
         self.bestBlurays = bestBlurays ?? BestBluraysClient(client: client)

@@ -23,7 +23,7 @@ struct DesignGalleryView: View {
                 if shows("states") { states }
                 if let section, !Self.sectionNames.contains(section.lowercased()) {
                     Text("No gallery section named \"\(section)\". Sections: \(Self.sectionNames.joined(separator: ", ")).")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                 }
@@ -277,7 +277,7 @@ struct DesignGalleryView: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(Theme.Typography.captionStrong)
             .foregroundStyle(.secondary)
             .padding(.horizontal, metrics.pageMargin)
             .accessibilityAddTraits(.isHeader)
@@ -285,7 +285,7 @@ struct DesignGalleryView: View {
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.caption2)
+            .font(Theme.Typography.micro)
             .foregroundStyle(.secondary)
             .padding(.horizontal, metrics.pageMargin)
     }

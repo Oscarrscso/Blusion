@@ -72,6 +72,11 @@ extension AppearancePreferences {
         background == .black ? Theme.background : backgroundRGB.colour
     }
 
+    /// `pageBackground` as sRGB, for pages drawn outside SwiftUI (the reviews' web pages).
+    var pageBackgroundRGB: AppearancePreferences.RGB {
+        background == .black ? AppearancePreferences.RGB(red: 0, green: 0, blue: 0) : backgroundRGB
+    }
+
     /// A background's colour, for its menu and the preview.
     func backgroundSwatch(_ background: Background) -> AppearancePreferences.RGB {
         var look = self
@@ -135,12 +140,17 @@ extension AppearancePreferences {
     var headingTracking: CGFloat { CGFloat((headingSpacing.spacing ?? letterSpacing).points) }
 
     /// The font of shelf and section headings. The default is the app's own, `Theme.Typography.shelfTitle`: Title 2, bold.
-    var headingTypeface: Font {
+    var headingTypeface: Font { headingTypeface(isSubheading: false) }
+
+    /// A heading inside a section (a year of credits, a group of rows): the heading's own font, one size down.
+    var subheadingTypeface: Font { headingTypeface(isSubheading: true) }
+
+    private func headingTypeface(isSubheading: Bool) -> Font {
         let style: Font.TextStyle = switch headingSize {
-        case .small: .title3
-        case .standard: .title2
-        case .large: .title
-        case .huge: .largeTitle
+        case .small: isSubheading ? .headline : .title3
+        case .standard: isSubheading ? .title3 : .title2
+        case .large: isSubheading ? .title2 : .title
+        case .huge: isSubheading ? .title : .largeTitle
         }
         let weight: Font.Weight = switch headingWeight {
         case .regular: .regular
@@ -189,6 +199,11 @@ extension View {
         modifier(HeadingStyleModifier())
     }
 
+    /// A heading inside a section, in the same style one size down.
+    func subheadingStyle() -> some View {
+        modifier(HeadingStyleModifier(isSubheading: true))
+    }
+
     /// Posters, cards and stills in Appearance's artwork tone. Natural changes nothing.
     func artworkTone(_ tone: AppearancePreferences.ArtworkTone) -> some View {
         modifier(ArtworkToneModifier(tone: tone))
@@ -232,12 +247,13 @@ private struct AppearanceLookModifier: ViewModifier {
 }
 
 private struct HeadingStyleModifier: ViewModifier {
+    var isSubheading = false
     @Environment(\.appAppearance) private var appearance
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let styled = content
-            .font(appearance.headingTypeface)
+            .font(isSubheading ? appearance.subheadingTypeface : appearance.headingTypeface)
             .fontWidth(appearance.headingFontWidth)
             .tracking(appearance.headingTracking)
             .textCase(appearance.uppercaseHeadings ? .uppercase : nil)

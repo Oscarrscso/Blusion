@@ -49,13 +49,13 @@ struct SettingsSubpageLink<Label: View, Destination: View>: View {
             let isOpen = sidePage.openID == id
             Button {
                 Haptics.play(.buttons)
-                withAnimation(.smooth(duration: 0.25)) { sidePage.toggle(id) { AnyView(destination()) } }
+                withAnimation(Theme.Motion.quick) { sidePage.toggle(id) { AnyView(destination()) } }
             } label: {
                 HStack {
                     label()
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.forward")
-                        .font(.footnote.weight(.semibold))
+                        .font(Theme.Typography.smallStrong)
                         .foregroundStyle(.tertiary)
                         .accessibilityHidden(true)
                 }
@@ -108,7 +108,7 @@ struct SettingsDetailColumns<Page: View>: View {
 
     private var closeButton: some View {
         Button("Close", systemImage: "xmark") {
-            withAnimation(.smooth(duration: 0.25)) { sidePage.close() }
+            withAnimation(Theme.Motion.quick) { sidePage.close() }
         }
         .labelStyle(.iconOnly)
         .fontWeight(.semibold)

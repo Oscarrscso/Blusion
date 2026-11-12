@@ -3,7 +3,7 @@ import StremioKit
 
 /// How a single-source widget looks on Home. One choice in the editor instead of a kind of widget to add for each.
 public enum WidgetStyle: String, CaseIterable, Identifiable, Sendable {
-    case row = "Row", spotlight = "Spotlight", banner = "Carousel"
+    case row = "Row", spotlight = "Showcase", banner = "Carousel"
     /// Rows drawn in one of Blusion's own layouts (`RowLayout`).
     case mosaic = "Mosaic", flow = "iPod", wall = "Wall", parallax = "Parallax", spines = "Spines"
     case slots = "Slots", deck = "Deck", snapshots = "Snapshots", videoStore = "Video Store"

@@ -52,7 +52,7 @@ enum TitleHero {
     /// lines of the synopsis under it. Each view that lays the page out scales it with Dynamic Type (`@ScaledMetric`), so larger text gets a
     /// taller band and stays clear of the page dots. The line starts `portraitDrop` below the picture's edge, so its text sits in what is
     /// left of the band.
-    static let captionBelow: CGFloat = 114
+    static let captionBelow: CGFloat = 90
     /// The scale a hero starts from before it settles at rest (see `heroSettle`): a little larger. The title page starts there when it opens
     /// from the spotlight, and the spotlight when a title closes back to it. Never smaller than rest: a hero that started smaller showed the
     /// black page round its picture until it had settled.

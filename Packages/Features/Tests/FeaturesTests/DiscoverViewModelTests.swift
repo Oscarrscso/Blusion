@@ -166,7 +166,7 @@ import StremioKitTestSupport
             catalog("genres", ["Thriller", "Action", "Top Rated", "Sci-Fi", "Comedy"]),
             catalog("more", ["action", "Drama", "Film-Noir"]),
         ])
-        #expect(genres == ["Action", "Comedy", "Drama", "Film-Noir", "Sci-Fi", "Thriller"])
+        #expect(genres == ["Action", "Comedy", "Drama", "Film-Noir", "Science Fiction", "Thriller"])
     }
 
     @Test func yearSpanLabelWordsTheSpanLikeTheLibraryChips() throws {

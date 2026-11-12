@@ -105,11 +105,11 @@ struct StoreHand: View {
                                 kind.spokenName].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !metadata.isEmpty {
                     Text(metadata)
-                        .font(.subheadline)
+                        .font(Theme.Typography.medium)
                         .foregroundStyle(.secondary)
                 }
                 if isLoadingPrices {
-                    ProgressView().accessibilityLabel("Loading prices")
+                    Spinner().accessibilityLabel("Loading prices")
                 }
                 if let prices {
                     ForEach(TitlePrices.Kind.allCases, id: \.self) { kind in
@@ -118,7 +118,7 @@ struct StoreHand: View {
                                 LabeledContent("\(quality.label) \(kind.label)") {
                                     VStack(alignment: .trailing, spacing: 2) {
                                         Text(offer.priceText).fontWeight(.semibold).monospacedDigit()
-                                        Text(offer.store).font(.caption).foregroundStyle(.secondary)
+                                        Text(offer.store).font(Theme.Typography.caption).foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -130,7 +130,7 @@ struct StoreHand: View {
                 }
                 if let synopsis = details.description, !synopsis.isEmpty {
                     Text(synopsis)
-                        .font(.body)
+                        .font(Theme.Typography.large)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -235,7 +235,7 @@ struct StoreHand: View {
 
     private func arrive() {
         if reduceMotion {
-            withAnimation(.easeOut(duration: 0.2)) { presence = 1 }
+            withAnimation(Theme.Motion.fade) { presence = 1 }
         } else {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { progress = 1 }
         }

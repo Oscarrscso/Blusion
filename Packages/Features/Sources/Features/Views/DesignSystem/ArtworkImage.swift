@@ -247,7 +247,7 @@ struct ArtworkImage: View {
             if contentMode == .fit { appearance.pageBackground } else { Theme.placeholder }
             if !title.isEmpty && (url == nil || hasFinishedLoading) {
                 Text(title)
-                    .font(.caption)
+                    .font(Theme.Typography.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(4)

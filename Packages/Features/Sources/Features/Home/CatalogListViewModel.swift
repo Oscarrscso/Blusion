@@ -61,19 +61,11 @@ public final class CatalogListViewModel {
         }
         return types.isSuperset(of: ["movie", "series"])
     }
-    /// The genres the loaded titles list, each once whatever its case, A to Z, for the Genre menu. Years and orders are left out.
+    /// The Genre menu's choices: the genres the loaded titles' own pages list, one of each, A to Z, with the chosen one always among
+    /// them. Years and orders are left out.
     public var loadedGenres: [String] {
-        var seen = Set<String>()
-        var genres: [String] = []
-        for item in items {
-            for genre in item.genres {
-                let name = genre.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty, !DiscoverViewModel.isYear(name), !DiscoverViewModel.isOrder(name),
-                      seen.insert(name.lowercased()).inserted else { continue }
-                genres.append(name)
-            }
-        }
-        return genres.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        let listed = items.flatMap(\.genres).filter { !DiscoverViewModel.isYear($0) && !DiscoverViewModel.isOrder($0) }
+        return MediaGenres.choices(in: listed + (filter.genre.map { [$0] } ?? []))
     }
     private var shuffleRank: [String: Int] = [:]
     private let defaults: UserDefaults
@@ -84,6 +76,9 @@ public final class CatalogListViewModel {
 
     private let services: AppServices
     private var generation = 0
+    private var genreTask: Task<Void, Never>?
+    /// The loaded titles whose genres are already the ones their pages list.
+    private var genreResolved: Set<String> = []
     /// Raw items received so far: the protocol's `skip` counts what the addon sent, not what is left after de-duplication.
     private var receivedCount = 0
 
@@ -136,6 +131,8 @@ public final class CatalogListViewModel {
 
     /// Loads the first page, or the merged list for several sources. Items already on screen stay until the new ones arrive.
     public func load() async {
+        genreTask?.cancel()
+        genreResolved = []
         generation += 1
         let current = generation
         let sources = request.sources
@@ -150,18 +147,26 @@ public final class CatalogListViewModel {
         }
         do {
             let page: [MetaPreview]
+            let nextSkip: Int
+            let hasMore: Bool
             if sources.count == 1 {
-                page = try await services.widgetContent.items(for: sources[0], limit: CatalogListViewModel.pageSize, skip: 0)
+                let loaded = try await services.widgetContent.page(for: sources[0], limit: CatalogListViewModel.pageSize, skip: 0)
+                page = loaded.items
+                nextSkip = loaded.nextSkip
+                hasMore = loaded.hasMore
             } else {
                 page = try await services.widgetContent.items(for: sources, limit: CatalogListViewModel.mergedLimit)
+                nextSkip = 0
+                hasMore = false
             }
             guard current == generation else { return }
             items = CatalogListViewModel.appending(page, to: [])
             shuffleRank = [:]
             rankNewItems()
             refreshVisible()
-            receivedCount = CatalogListViewModel.advance(0, by: page, source: sources.count == 1 ? sources[0] : nil)
-            canLoadMore = sources.count == 1 && !page.isEmpty
+            receivedCount = nextSkip
+            canLoadMore = hasMore
+            resolveGenres()
             state = .loaded
         } catch {
             guard current == generation else { return }
@@ -176,13 +181,15 @@ public final class CatalogListViewModel {
         let current = generation
         state = .loadingMore
         do {
-            let page = try await services.widgetContent.items(for: source, limit: CatalogListViewModel.pageSize, skip: receivedCount)
+            let page = try await services.widgetContent.page(for: source, limit: CatalogListViewModel.pageSize, skip: receivedCount)
             guard current == generation else { return }
-            receivedCount = CatalogListViewModel.advance(receivedCount, by: page, source: source)
-            items = CatalogListViewModel.appending(page, to: items)
+            receivedCount = page.nextSkip
+            let before = items.count
+            items = CatalogListViewModel.appending(page.items, to: items)
             rankNewItems()
             refreshVisible()
-            canLoadMore = !page.isEmpty
+            canLoadMore = page.hasMore && items.count > before
+            resolveGenres()
             state = .loaded
         } catch {
             guard current == generation else { return }
@@ -191,14 +198,30 @@ public final class CatalogListViewModel {
         }
     }
 
-    /// Where the next page starts. An addon's `skip` counts the items it sent, which is the page's length. A Trakt source is asked by page
-    /// number, and Trakt drops entries it cannot show (no IMDb id), so a short page still used up a whole page of the list.
-    private static func advance(_ received: Int, by page: [MetaPreview], source: WidgetSource?) -> Int {
-        guard let source, source.usesTrakt else { return received + page.count }
-        return received + pageSize
+    /// Gives the loaded titles the genres their own pages list, the same facts as Discover and Detail, so the Genre menu and its filter
+    /// agree with a title's Information.
+    private func resolveGenres() {
+        genreTask?.cancel()
+        let pending = items.filter { !genreResolved.contains($0.identity) }
+        guard !pending.isEmpty else { return }
+        let current = generation
+        genreTask = Task { [weak self] in
+            guard let browse = self?.services.browse else { return }
+            let resolved = await browse.resolvingGenres(in: pending)
+            guard let self, !Task.isCancelled, self.generation == current else { return }
+            let genres = Dictionary(resolved.map { ($0.identity, $0.genres) }, uniquingKeysWith: { first, _ in first })
+            // A title whose page could not be read comes back without genres, and is asked again with the next page.
+            self.genreResolved.formUnion(genres.filter { !$0.value.isEmpty }.keys)
+            self.items = self.items.map { item in
+                var copy = item
+                if let value = genres[item.identity] { copy.genres = value }
+                return copy
+            }
+            self.refreshVisible()
+        }
     }
 
-    /// `page` added after `list`, leaving out any item whose type and id are already in it.
+    /// Keeps each title once across pages.
     private static func appending(_ page: [MetaPreview], to list: [MetaPreview]) -> [MetaPreview] {
         var seen = Set(list.map(\.identity))
         return list + page.filter { seen.insert($0.identity).inserted }

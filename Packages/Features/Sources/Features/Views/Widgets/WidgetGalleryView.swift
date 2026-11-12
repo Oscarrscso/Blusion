@@ -179,6 +179,7 @@ struct WidgetGalleryView: View {
                     Color.clear
                         .contentShape(.rect)
                         .onTapGesture { choose(option) }
+                        .buttonCursor(enabled)
                         .allowsHitTesting(enabled)
                 }
                 .accessibilityHidden(true)

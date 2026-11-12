@@ -7,7 +7,9 @@ public struct AISearchPlan: Sendable, Equatable {
         public enum Role: String, Sendable { case cast, director, writer, creator }
         public var name: String
         public var role: Role
-        public init(name: String, role: Role) { self.name = name; self.role = role }
+        /// The part they must play ("Forrest Gump"), checked against the credit's own character. Nil for any part.
+        public var character: String?
+        public init(name: String, role: Role, character: String? = nil) { self.name = name; self.role = role; self.character = character }
     }
 
     public var filters: DescribedSearch
@@ -19,6 +21,10 @@ public struct AISearchPlan: Sendable, Equatable {
     public var excludedTopics: [String]
     public var requiresSemanticRanking: Bool
     public var unwatchedOnly: Bool
+    /// Only titles the viewing history holds ("comedies I've seen").
+    public var watchedOnly = false
+    /// Streaming services the titles must be on, as TMDb lists them in the device's region. Only discover searches can check this.
+    public var providers: [StreamProvider] = []
     /// The lexical fallback can still find factual matches, but an inference failure must remain retryable.
     var interpretationFailed = false
     /// Set when the words ask for nothing beyond facts and topics: titles TMDb has tagged with every requested topic then need no
@@ -67,6 +73,9 @@ public struct AISearchPlan: Sendable, Equatable {
             query.language = language
             query.excludedKeywords = excluded
             query.companies = companies
+            query.providers = providers.flatMap { provider in
+                provider.tmdbProviderIDs.map { TMDbDiscoverQuery.Named(id: $0, name: provider.name) }
+            }
             if kind == .series {
                 var left = Self.nonFictionTV
                 if filters.kind == nil, query.genres.contains(where: { Self.mergedTVGenres.contains($0.id) }),
@@ -83,6 +92,145 @@ public struct AISearchPlan: Sendable, Equatable {
                                TMDbDiscoverQuery.Named(id: 10767, name: "Talk")]
     /// TV genres that stand for two film genres: Action & Adventure, Sci-Fi & Fantasy.
     static let mergedTVGenres: Set<Int> = [10759, 10765]
+}
+
+// MARK: - Filter chips
+
+/// One requirement a discovery search was read as asking for, shown as a chip that can be changed or removed.
+public struct SearchChip: Identifiable, Hashable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        case kind, years, runtime, score, language, unwatched, watched
+        case genre(String), excludedGenre(String), theme(String), excludedTheme(String)
+        case person(String), similar(String), studio(String), provider(StreamProvider)
+    }
+
+    public let kind: Kind
+    public let title: String
+    public var id: Kind { kind }
+}
+
+/// A value a chip can be changed to, as the plan the search then runs. No model reads anything again.
+public struct SearchChipOption: Identifiable, Sendable {
+    public let title: String
+    public let plan: AISearchPlan
+    public var id: String { title }
+}
+
+extension AISearchPlan {
+    public var chips: [SearchChip] {
+        var chips: [SearchChip] = []
+        func add(_ kind: SearchChip.Kind, _ title: String) { chips.append(SearchChip(kind: kind, title: title)) }
+        if let kind = filters.kind { add(.kind, kind == .movie ? "Movies" : "Series") }
+        for person in people { add(.person(person.name), person.name) }
+        for title in referenceTitles { add(.similar(title), "Like \(title)") }
+        for genre in filters.genres { add(.genre(genre), genre) }
+        for genre in filters.excludedGenres { add(.excludedGenre(genre), "No \(genre)") }
+        if let years = Self.yearsTitle(filters.earliestYear, filters.latestYear) { add(.years, years) }
+        if let longest = filters.maximumRuntime {
+            add(.runtime, "Under \(longest) min")
+        } else if let shortest = filters.minimumRuntime {
+            add(.runtime, "Over \(shortest) min")
+        }
+        if let score = filters.minimumScore { add(.score, Self.scoreTitle(score)) }
+        for mood in filters.moods { add(.theme(mood), mood.capitalized) }
+        for topic in excludedTopics { add(.excludedTheme(topic), "No \(topic)") }
+        if let language { add(.language, Locale.current.localizedString(forLanguageCode: language) ?? language.uppercased()) }
+        for company in companies { add(.studio(company), company) }
+        for provider in providers { add(.provider(provider), provider.name) }
+        if unwatchedOnly { add(.unwatched, "Unwatched") }
+        if watchedOnly { add(.watched, "Watched") }
+        return chips
+    }
+
+    /// The plan without one requirement. With no theme or reference left, nothing is left for a synopsis to show.
+    public func removing(_ chip: SearchChip.Kind) -> AISearchPlan {
+        var plan = self
+        switch chip {
+        case .kind: plan.filters.kind = nil
+        case .years: (plan.filters.earliestYear, plan.filters.latestYear) = (nil, nil)
+        case .runtime: (plan.filters.minimumRuntime, plan.filters.maximumRuntime) = (nil, nil)
+        case .score: plan.filters.minimumScore = nil
+        case .language: plan.language = nil
+        case .unwatched: plan.unwatchedOnly = false
+        case .watched: plan.watchedOnly = false
+        case .genre(let name): plan.filters.genres.removeAll { $0 == name }
+        case .excludedGenre(let name): plan.filters.excludedGenres.removeAll { $0 == name }
+        case .theme(let name): plan.filters.moods.removeAll { $0 == name }
+        case .excludedTheme(let name): plan.excludedTopics.removeAll { $0 == name }
+        case .person(let name): plan.people.removeAll { $0.name == name }
+        case .similar(let title): plan.referenceTitles.removeAll { $0 == title }
+        case .studio(let name): plan.companies.removeAll { $0 == name }
+        case .provider(let provider): plan.providers.removeAll { $0 == provider }
+        }
+        if plan.filters.moods.isEmpty, plan.referenceTitles.isEmpty {
+            plan.requiresSemanticRanking = false
+            plan.judgement = ""
+        }
+        return plan
+    }
+
+    /// What a chip can be changed to. Empty for a chip that can only be removed.
+    public func options(for chip: SearchChip.Kind, now: Date = Date()) -> [SearchChipOption] {
+        func option(_ title: String, _ edit: (inout AISearchPlan) -> Void) -> SearchChipOption {
+            var plan = self
+            edit(&plan)
+            return SearchChipOption(title: title, plan: plan)
+        }
+        switch chip {
+        case .kind:
+            return [option("Movies") { $0.filters.kind = .movie }, option("Series") { $0.filters.kind = .series }]
+        case .years:
+            let decade = Calendar(identifier: .gregorian).component(.year, from: now) / 10 * 10
+            return stride(from: decade, through: 1950, by: -10).map { start in
+                option("\(start)s") { ($0.filters.earliestYear, $0.filters.latestYear) = (start, start + 9) }
+            }
+        case .runtime:
+            return [90, 120, 150, 180].map { (minutes: Int) in
+                option("Under \(minutes) min") { ($0.filters.minimumRuntime, $0.filters.maximumRuntime) = (nil, minutes) }
+            }
+        case .score:
+            return [6.0, 7.0, 7.5, 8.0].map { score in option(Self.scoreTitle(score)) { $0.filters.minimumScore = score } }
+        default:
+            return []
+        }
+    }
+
+    /// "1990s", "1994", "From 2010", "Until 2009" or "1990–2004". Nil without a year.
+    static func yearsTitle(_ earliest: Int?, _ latest: Int?) -> String? {
+        switch (earliest, latest) {
+        case (nil, nil): return nil
+        case (let from?, nil): return "From \(from)"
+        case (nil, let to?): return "Until \(to)"
+        case (let from?, let to?):
+            if from == to { return String(from) }
+            if from % 10 == 0, to == from + 9 { return "\(from)s" }
+            return "\(from)–\(to)"
+        }
+    }
+
+    /// A score given out of 100 is read out of 10, as the query reads it.
+    static func scoreTitle(_ score: Double) -> String {
+        String(format: "TMDb %.1f+", score > 10 ? score / 10 : score)
+    }
+}
+
+// MARK: - Candidates
+
+/// A candidate's number in the list the model was shown (from 1), and why it fits.
+public struct RankedCandidate: Sendable, Equatable {
+    public let number: Int
+    public let reason: String
+
+    public init(number: Int, reason: String) {
+        self.number = number
+        self.reason = reason
+    }
+}
+
+/// Chooses from a numbered list of real candidates, best first.
+public protocol CandidateRanking: Sendable {
+    /// `references` describes the titles the request names, so "like Prisoners" is read as that film, not as a word.
+    func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate]
 }
 
 /// Facts attached only to search candidates; never written into a title's synopsis or saved metadata.
@@ -126,10 +274,13 @@ public struct AISearchUpdate: Sendable {
     public let items: [MetaPreview]
     public let stage: Stage
     public let issue: Issue?
+    /// What the search was read as asking for, once that is known: what the filter chips show.
+    public let plan: AISearchPlan?
 
-    public init(items: [MetaPreview], stage: Stage, issue: Issue? = nil) {
+    public init(items: [MetaPreview], stage: Stage, issue: Issue? = nil, plan: AISearchPlan? = nil) {
         self.items = items
         self.stage = stage
         self.issue = issue
+        self.plan = plan
     }
 }

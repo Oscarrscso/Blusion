@@ -33,6 +33,10 @@ public final class LibraryViewModel {
     /// Where the scores from the rating sites other than IMDb come from. Nil until the view attaches it.
     @ObservationIgnored private var ratings: PosterRatingsStore?
     @ObservationIgnored private var filterTask: Task<Void, Never>?
+    /// The genres each title's own page lists, by the title's identity. Saved titles keep whatever their catalog said when they were
+    /// saved, and a watched title that was never saved has none.
+    @ObservationIgnored private var titleGenres: [String: [String]] = [:]
+    @ObservationIgnored private var genreTask: Task<Void, Never>?
 
     public init(services: AppServices) {
         self.services = services
@@ -76,8 +80,40 @@ public final class LibraryViewModel {
         watchedEntries = all.filter(\.isWatched).map { record in
             LibraryEntry(record: record, saved: savedByID[Self.titleKey(of: record)])
         }
+        applyTitleGenres()
         hasLoaded = true
         applyFilter()
+        resolveGenres()
+    }
+
+    private func applyTitleGenres() {
+        func updated(_ entries: [LibraryEntry]) -> [LibraryEntry] {
+            entries.map { entry in
+                guard let genres = titleGenres[entry.preview.identity], genres != entry.genres else { return entry }
+                var copy = entry
+                copy.genres = genres
+                return copy
+            }
+        }
+        savedEntries = updated(savedEntries)
+        watchedEntries = updated(watchedEntries)
+    }
+
+    /// Looks up the genres of the titles not yet checked, the same facts as a title's Information, then filters again.
+    private func resolveGenres() {
+        genreTask?.cancel()
+        var seen = Set(titleGenres.keys)
+        let pending = (savedEntries + watchedEntries).map(\.preview).filter { seen.insert($0.identity).inserted }
+        guard !pending.isEmpty else { return }
+        genreTask = Task { [weak self] in
+            guard let browse = self?.services.browse else { return }
+            let resolved = await browse.resolvingGenres(in: pending)
+            guard let self, !Task.isCancelled else { return }
+            // A title without genres is asked again on the next load, in case its lookup failed.
+            for item in resolved where !item.genres.isEmpty { self.titleGenres[item.identity] = item.genres }
+            self.applyTitleGenres()
+            self.applyFilter()
+        }
     }
 
     /// In-progress items worth resuming, newest first, one per series (the latest episode).
@@ -160,8 +196,16 @@ public final class LibraryViewModel {
         }
         self.visibleSaved = visibleSaved
         self.visibleWatched = visibleWatched
-        saved = visibleSaved.compactMap(\.item)
-        watched = WatchedCards.cards(from: visibleWatched)
+        // A card carries the genres its title's page lists, the filter's own first, so the card and the page it opens show the genre
+        // the title is there for rather than whatever its catalog said when it was saved.
+        let selected = filter.genres.sorted()
+        func shown(_ entry: LibraryEntry) -> LibraryEntry {
+            var copy = entry
+            copy.item?.genres = MediaGenres.leading(selected, in: entry.genres)
+            return copy
+        }
+        saved = visibleSaved.compactMap { shown($0).item }
+        watched = WatchedCards.cards(from: visibleWatched.map { shown($0) })
     }
 
     /// Every site's score for a title comes from the rating store, which starts a lookup for it if it has none yet. Without a

@@ -14,17 +14,20 @@ struct DetailCredits: View {
     @Environment(\.appAppearance) private var appearance
 
     var body: some View {
-        TitleSections(contentMargin: contentMargin) {
+        Group {
             if !appearance.showsCast {
                 EmptyView()
             } else if let group = model.shownCreditGroup, let people = model.shownCredits, !people.isEmpty {
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
                     // TMDb's cast and crew, one part at a time, with photos. The heading is the part shown and the menu of the others.
-                    CreditGroupMenu(groups: model.creditGroups, shown: group, playColourHex: model.playColourHex) { model.creditGroup = $0 }
-                        .padding(.horizontal, contentMargin)
                     // Smaller than the four-across layout and the shelf's usual cards.
                     let cardWidth = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin, spacing: metrics.cardSpacing,
                                                              maximum: metrics.posterWidth) * 0.8
+                    // As wide as a card under it.
+                    CreditGroupMenu(groups: model.creditGroups, shown: group, playColourHex: model.playColourHex, width: cardWidth) {
+                        model.creditGroup = $0
+                    }
+                    .padding(.horizontal, contentMargin)
                     // Keyed on the width, so the row measures its height again when the cards change size (the phone turned). Each
                     // photo loads as its card scrolls on, behind the rest of the page. A part has a row of its own, so it starts at its
                     // first card.
@@ -36,13 +39,11 @@ struct DetailCredits: View {
                 }
                 .onChange(of: model.creditGroup) { _, _ in Haptics.play(.choices) }
             } else if model.isLoadingCredits {
+                let width = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin,
+                                                     spacing: metrics.cardSpacing, maximum: metrics.posterWidth) * 0.8
                 VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                    DetailSkeletonLine(font: .subheadline.weight(.semibold), width: 48)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
+                    CreditGroupMenuSkeleton(width: width)
                         .padding(.horizontal, contentMargin)
-                    let width = CastCardLayout.cardWidth(pageWidth: pageWidth, margin: contentMargin,
-                                                         spacing: metrics.cardSpacing, maximum: metrics.posterWidth) * 0.8
                     ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing) {
                         ForEach(0..<6, id: \.self) { index in
                             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -77,8 +78,8 @@ struct DetailCredits: View {
                                     Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
                                         .font(.title2.weight(.medium))
                                         .frame(width: metrics.avatarSize, height: metrics.avatarSize)
-                                        .background(Theme.surfaceStrong, in: Circle())
-                                    Text(name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
+                                        .background(Theme.surfaceStrong, in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
+                                    Text(name).font(Theme.Typography.caption).lineLimit(2).multilineTextAlignment(.center)
                                 }
                                 .frame(width: metrics.avatarSize + 12)
                                 .accessibilityElement(children: .ignore)
@@ -100,7 +101,13 @@ private struct CreditGroupMenu: View {
     let groups: [TitleCreditGroup]
     let shown: TitleCreditGroup
     let playColourHex: String?
+    /// The cast cards' width.
+    let width: CGFloat
     let pick: (TitleCreditGroup) -> Void
+
+    /// The control's height and corner radius, before Appearance's corners; its loading skeleton draws the same.
+    static let height: CGFloat = 28
+    static let cornerRadius: CGFloat = 14
 
     @ViewBuilder
     var body: some View {
@@ -128,7 +135,7 @@ private struct CreditGroupMenu: View {
         }
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .buttonBorderShape(.roundedRectangle(radius: 14 * metrics.cornerScale(for: .actionButtons)))
+        .buttonBorderShape(.roundedRectangle(radius: Self.cornerRadius * metrics.circularButtonScale(for: .actionButtons)))
         .frame(maxWidth: .infinity, alignment: .leading)
         // Still the section's heading, so the headings rotor finds it.
         .accessibilityAddTraits(.isHeader)
@@ -139,10 +146,12 @@ private struct CreditGroupMenu: View {
     }
 
     private var groupLabel: some View {
-        let shape = RoundedRectangle(cornerRadius: 14 * metrics.cornerScale(for: .actionButtons), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Self.cornerRadius * metrics.circularButtonScale(for: .actionButtons), style: .continuous)
         return HStack(spacing: 4) {
             Text(shown.title)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             if groups.count > 1 {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
@@ -151,15 +160,31 @@ private struct CreditGroupMenu: View {
             }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .frame(height: 28)
+        .padding(.horizontal, 8)
+        .frame(width: width, height: Self.height)
         // The tint belongs to the glass inside the label, just like Sort and AI, so it travels with the system menu animation.
         .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)), in: shape)
-        .animation(.smooth(duration: 0.3), value: playColourHex)
+        .animation(Theme.Motion.standard, value: playColourHex)
         .contentShape(shape)
         .contentShape(.contextMenuPreview, shape)
         .clipShape(shape)
         .glassHover(shape)
+    }
+}
+
+/// The Cast control while the credits load: the control's own width, height and corners, with a bar centred where its name will be.
+private struct CreditGroupMenuSkeleton: View {
+    @Environment(\.layoutMetrics) private var metrics
+    let width: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: CreditGroupMenu.cornerRadius * metrics.circularButtonScale(for: .actionButtons), style: .continuous)
+            .fill(Theme.placeholder)
+            .frame(width: width, height: CreditGroupMenu.height)
+            .overlay {
+                DetailSkeletonLine(font: Theme.Typography.mediumStrong, width: min(48, max(0, width - 16)))
+            }
+            .accessibilityHidden(true)
     }
 }
 #endif

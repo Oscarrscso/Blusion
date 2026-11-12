@@ -297,43 +297,40 @@ extension TMDbRatings {
         }
     }
 
-    /// Real title matches for an unstructured name such as "Dune". This is distinct from keyword discovery:
-    /// it prevents a single title query from returning a random page of popular films.
-    public func searchTitleItems(_ text: String, kind: TMDbDiscoverQuery.Kind? = nil, limit: Int = 12) async throws -> [MetaPreview] {
+    /// The titles and people one `/search/multi` request finds for a name such as "Dune" or "Tom Hanks", in TMDb's order. Titles carry
+    /// their IMDb identities, so an addon can play them; one without an IMDb id is left out. `limit` bounds the titles (0 asks for
+    /// people only, with no identity lookups) and `peopleLimit` the people. Empty for blank text or without a credential.
+    public func searchMulti(_ text: String, limit: Int = 12, peopleLimit: Int = 6) async throws -> TMDbSearchHits {
         let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty, limit > 0, credential != nil else { return [] }
-        let mediaTypes = kind.map { [$0 == .movie ? "movie" : "tv"] } ?? ["movie", "tv"]
-        var all: [[MetaPreview]] = []
-        for mediaType in mediaTypes {
-            try Task.checkCancellation()
-            let (url, headers) = try request(path: ["search", mediaType],
-                                             query: [URLQueryItem(name: "query", value: term),
-                                                     URLQueryItem(name: "page", value: "1"),
-                                                     URLQueryItem(name: "include_adult", value: "false")])
-            let response = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
-            let page = try TMDbDiscoverEntry.parsePage(response.data)
-            let entries = Array(page.entries.prefix(limit))
-            let ids = try await resolveIMDbIDs(for: entries, mediaType: mediaType)
-            all.append(zip(entries, ids).compactMap { entry, imdb -> MetaPreview? in
-                guard let imdb else { return nil }
-                return MetaPreview(id: imdb, type: mediaType == "movie" ? "movie" : "series",
-                                   name: entry.title, poster: TMDbImage.url(entry.posterPath, size: "w500"),
-                                   background: TMDbImage.url(entry.backdropPath, size: "w1280"),
-                                   description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date),
-                               genres: Self.genreNames(entry.genreIDs, mediaType: mediaType))
-            })
+        guard !term.isEmpty, credential != nil else { return .empty }
+        let (url, headers) = try request(path: ["search", "multi"],
+                                         query: [URLQueryItem(name: "query", value: term),
+                                                 URLQueryItem(name: "page", value: "1"),
+                                                 URLQueryItem(name: "include_adult", value: "false")])
+        let response = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
+        let found = try TMDbSearchHits.parseMulti(response.data)
+        let media = Array(found.media.prefix(max(limit, 0)))
+        let movieIDs = try await resolveIMDbIDs(for: media.filter { $0.mediaType == "movie" }.map { $0.entry }, mediaType: "movie")
+        let showIDs = try await resolveIMDbIDs(for: media.filter { $0.mediaType == "tv" }.map { $0.entry }, mediaType: "tv")
+        var movies = movieIDs.makeIterator()
+        var shows = showIDs.makeIterator()
+        var hits = TMDbSearchHits(people: Array(found.people.prefix(max(peopleLimit, 0))))
+        for item in media {
+            let isMovie = item.mediaType == "movie"
+            guard let imdb = (isMovie ? movies.next() : shows.next()) ?? nil else { continue }
+            let entry = item.entry
+            let preview = MetaPreview(id: imdb, type: isMovie ? "movie" : "series", name: entry.title,
+                                      poster: TMDbImage.url(entry.posterPath, size: "w500"),
+                                      background: TMDbImage.url(entry.backdropPath, size: "w1280"),
+                                      description: entry.overview.isEmpty ? nil : entry.overview,
+                                      releaseInfo: Self.releaseYear(entry.date),
+                                      genres: Self.genreNames(entry.genreIDs, mediaType: item.mediaType))
+            guard !hits.titles.contains(where: { $0.identity == preview.identity }) else { continue }
+            hits.titles.append(preview)
+            if let original = item.originalName, original != entry.title { hits.originalNames[preview.identity] = original }
+            if let votes = entry.voteCount, votes > 0 { hits.votes[preview.identity] = votes }
         }
-        // Interleave the movie and TV results without allowing either to dominate an untyped query.
-        var merged: [MetaPreview] = []
-        var seen: Set<String> = []
-        for index in 0..<(all.map(\.count).max() ?? 0) {
-            for list in all where index < list.count {
-                let item = list[index]
-                if seen.insert(item.identity).inserted { merged.append(item) }
-                if merged.count == limit { return merged }
-            }
-        }
-        return merged
+        return hits
     }
 
     /// The entries whose IMDb rating meets the query's score and vote bounds, in order, with their IMDb ids, at most `wanted`. Ids are asked

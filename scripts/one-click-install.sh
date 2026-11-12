@@ -13,6 +13,10 @@ case "$TARGET" in
   iphone) TITLE="Blusion for iPhone";;
   *) echo "usage: scripts/one-click-install.sh mac|iphone" >&2; exit 64;;
 esac
+# Over SSH, codesign cannot use the login keychain: hand the install to the launchd job in the desktop session (scripts/ssh-install.sh).
+if [[ -n "${SSH_CONNECTION:-}" && -f "$HOME/Library/LaunchAgents/app.blusion.install.plist" ]]; then
+  exec "$ROOT/scripts/ssh-install.sh" "$TARGET"
+fi
 notify() { osascript -e "display notification \"$2\" with title \"$TITLE\" sound name \"$3\"" >/dev/null 2>&1 || true; }
 started=$(date +%s)
 

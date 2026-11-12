@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import StremioKit
 import SwiftUI
+import UIKit
 
 /// The spotlight section of Home: the carousel once its items arrive, a placeholder of the same size until then, and a message when
 /// it cannot load.
@@ -125,11 +126,20 @@ struct HeroCarousel: View {
     private func page(by step: Int) {
         let target = min(max(currentIndex + step, 0), items.count - 1)
         guard target != currentIndex else { return }
-        withAnimation(.snappy(duration: 0.35)) { pageID = items[target].identity }
+        withAnimation(Theme.Motion.snap) { pageID = items[target].identity }
     }
     #endif
 
     var body: some View {
+        VStack(spacing: 0) {
+            carousel
+            ShowcasePageControl(count: items.count, currentPage: currentIndex)
+                .frame(height: ShowcasePageControl.height)
+                .padding(.horizontal, metrics.pageMargin)
+        }
+    }
+
+    private var carousel: some View {
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: metrics.spotlightHeight(isLandscape: isLandscape, containerWidth: containerWidth,
@@ -150,7 +160,7 @@ struct HeroCarousel: View {
                                 .tag(Optional(item.identity))
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: items.count > 1 && appearance.showsPageDots ? .always : .never))
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                     // Plays once each time Home returns from a title (the revision changes), never on first appearance. It starts a little
                     // larger and the frame below clips it, so the picture always reaches the screen's edges: started smaller, it showed
                     // black borders round the picture until it settled.
@@ -232,6 +242,34 @@ struct HeroCarousel: View {
     }
 }
 
+/// Kept outside the pager's clipping and animation, with its own space below the showcase.
+struct ShowcasePageControl: UIViewRepresentable {
+    let count: Int
+    let currentPage: Int
+    static let height: CGFloat = 20
+
+    func makeUIView(context: Context) -> UIPageControl {
+        let control = UIPageControl()
+        control.hidesForSinglePage = false
+        control.currentPageIndicatorTintColor = .white
+        control.pageIndicatorTintColor = .white.withAlphaComponent(0.45)
+        control.backgroundStyle = .minimal
+        control.preferredIndicatorImage = UIImage(systemName: "circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 5))
+        control.preferredCurrentPageIndicatorImage = control.preferredIndicatorImage
+        control.isUserInteractionEnabled = false
+        return control
+    }
+
+    func updateUIView(_ control: UIPageControl, context: Context) {
+        control.numberOfPages = count
+        control.currentPage = currentPage
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIPageControl, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? uiView.intrinsicContentSize.width, height: Self.height)
+    }
+}
+
 /// The grey stand-in for the spotlight, the same size as a page, shimmering while the items load.
 struct HeroPlaceholder: View {
     @Environment(\.layoutMetrics) private var metrics
@@ -246,7 +284,7 @@ struct HeroPlaceholder: View {
         Color.clear
             .frame(maxWidth: .infinity)
             .frame(height: metrics.spotlightHeight(isLandscape: isLandscape, containerWidth: containerWidth,
-                                                   containerHeight: containerHeight, captionBelow: captionBelow))
+                                                   containerHeight: containerHeight, captionBelow: captionBelow) + ShowcasePageControl.height)
             .background { Rectangle().fill(Theme.surface) }
             .shimmering()
             .accessibilityElement(children: .ignore)
@@ -354,7 +392,7 @@ private struct HeroPage: View {
                     .multilineTextAlignment(.center)
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: awaitsDetails)
+            .animation(Theme.Motion.fade, value: awaitsDetails)
     }
 
     /// Two lines of the synopsis, a little see-through, cut short with an ellipsis. The two lines' room is kept whatever the text, and two
@@ -375,7 +413,7 @@ private struct HeroPage: View {
                     }
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: awaitsDetails)
+            .animation(Theme.Motion.fade, value: awaitsDetails)
             .accessibilityHidden(awaitsDetails || synopsis == nil)
             .accessibilityIdentifier("hero.synopsis")
     }
@@ -563,8 +601,7 @@ private struct HeroPage: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, metrics.pageMargin)
-        // Room for the page dots beneath the metadata.
-        .padding(.bottom, 44)
+        .padding(.bottom, Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -578,7 +615,7 @@ private struct HeroPage: View {
                     .transition(.identity)
             case .none:
                 Text(item.name)
-                    .font(.largeTitle.bold())
+                    .font(Theme.Typography.largeTitle)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

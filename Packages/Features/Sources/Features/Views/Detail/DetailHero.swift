@@ -124,7 +124,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .modifier(DetailHeroScrollPull(scroll: scroll))
-        .animation(.smooth(duration: 0.3), value: model.playColourHex)
+        .animation(Theme.Motion.standard, value: model.playColourHex)
         .allowsHitTesting(false)
         .ignoresSafeArea(.container, edges: [.top, .horizontal])
     }

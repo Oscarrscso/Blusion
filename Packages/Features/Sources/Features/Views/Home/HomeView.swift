@@ -297,7 +297,7 @@ struct HomeView: View {
             .onDisappear { scroll.isScrolling = false }
             .contentMargins(.top, 0, for: .scrollContent)
             .screenBackground()
-            .scrollEdgeEffectHidden(heroIsFirst || isPhoneLandscape || HeroCarousel.isMacCatalyst, for: .top)
+            .modifier(HeroScrollEdgeModifier(scroll: heroScroll))
             .scrollEdgeEffectHidden(isPhoneInLandscape, for: .bottom)
             .ignoresSafeArea(.container, edges: ignoredEdges)
             .onChange(of: router.spotlightRevision) { _, _ in
@@ -307,7 +307,7 @@ struct HomeView: View {
             }
             // A tap on Home's tab item goes back to its first page, and scrolls it to the top.
             .onChange(of: router.tabTapRevisions[.home, default: 0]) { _, _ in
-                withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(Self.topID, anchor: .top) }
+                withAnimation(Theme.Motion.snap) { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
     }
@@ -351,7 +351,7 @@ struct HomeView: View {
         case .hero:
             HeroSection(section: section, pageID: $heroPages[section.id], onRetry: { retry(section) },
                         menu: AnyView(widgetMenu(section)))
-                .padding(.bottom, 20 - metrics.shelfSpacing)
+                .padding(.bottom, Theme.Spacing.s - metrics.shelfSpacing)
         case .banner(let row):
             // On iPhone a held card plays it, so the banner's menu is kept off its cards; the Mac's cards have their own menu.
             #if targetEnvironment(macCatalyst)
@@ -519,18 +519,25 @@ private struct BelowScreenArtwork: ViewModifier {
     let model: HomeViewModel
     @AppStorage(LazyLoadLookahead.defaultsKey) private var lookaheadLevel = LazyLoadLookahead.defaultLevel
     @AppStorage(OptimisationSettings.homePreloadKey) private var homePreload = OptimisationSettings.homePreloadMatchesLazyLoad
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
 
     func body(content: Content) -> some View {
+        // The narrowest card a row uses, so no row shows more cards across the page than are kept ready for it.
+        let pitch = MediaCard.resolvedWidth(width: nil, aspect: .poster, size: .small, metrics: metrics, isLandscape: isLandscape)
+            + metrics.cardSpacing
         content.modifier(BufferedArtwork(shelves: shelves))
+            .onGeometryChange(for: Int.self) { max(1, Int(($0.size.width / pitch).rounded(.up))) } action: { model.cardsAcross = $0 }
     }
 
-    /// The loaded cards of the queued rows, in page order, for as many titles as Optimisation's Home preloading keeps ready.
+    /// The first cards of the queued rows, as many as each shows across the page, in page order, for as many titles as Optimisation's
+    /// Home preloading keeps ready.
     private var shelves: [ArtworkShelf] {
         var remaining = OptimisationSettings.homeTitles(saved: homePreload, level: lookaheadLevel)
         var result: [ArtworkShelf] = []
         for section in model.sections where model.queuedRowIDs.contains(section.id) {
             guard remaining > 0, case .row(let row) = section.widget.content, case .loaded(let items) = section.state else { continue }
-            let shown = Array(items.prefix(remaining))
+            let shown = Array(items.prefix(min(remaining, max(1, model.cardsAcross))))
             remaining -= shown.count
             result.append(ArtworkShelf(items: shown, aspect: row.presentation.aspectRatio.cardAspect,
                                        size: row.presentation.cardStyle.cardSize, usesBetterPosters: row.presentation.usesBetterPosters,

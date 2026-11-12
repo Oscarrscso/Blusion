@@ -55,7 +55,7 @@ struct HeroBannerSection: View {
                     IssueMessage(issue: issue)
                 } else {
                     Text("Nothing here yet")
-                        .font(.subheadline)
+                        .font(Theme.Typography.medium)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                 }
@@ -97,6 +97,9 @@ struct HeroBanner: View {
                 Group {
                     if let menu { tray.shelfMenu { menu } } else { tray }
                 }
+                // Inside the card the cards start level with the caption, not at the page's margin, which in landscape includes the
+                // screen's side inset and left a gap before the first card.
+                .environment(\.layoutMetrics, Self.trayMetrics(metrics))
                 .padding(.top, Theme.Spacing.m)
                 .padding(.bottom, Theme.Spacing.m)
             }
@@ -114,6 +117,15 @@ struct HeroBanner: View {
     }
 
     private var cardWidth: CGFloat { Self.cardWidth(metrics, size: row.presentation.cardStyle.cardSize) }
+
+    /// The page's metrics with the margin the card gives its own content (`BannerFeature.caption`'s).
+    static func trayMetrics(_ metrics: LayoutMetrics) -> LayoutMetrics {
+        var tray = metrics
+        tray.pageMargin = trayMargin
+        return tray
+    }
+
+    static let trayMargin: CGFloat = Theme.Spacing.l
 
     /// The small cards of the tray: about a third of the banner's width on a phone, a little under a shelf poster's width.
     static func cardWidth(_ metrics: LayoutMetrics, size: CardSize) -> CGFloat {
@@ -228,12 +240,12 @@ private struct BannerFeature: View {
                     .lineLimit(2)
             }
             Text([item.releaseInfo, rating].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.75))
+                .font(Theme.Typography.medium)
+                .foregroundStyle(Theme.dimText)
         }
         .foregroundStyle(.white)
         .shadow(color: .black.opacity(0.35), radius: 6, y: 1)
-        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.horizontal, HeroBanner.trayMargin)
         .padding(.bottom, Theme.Spacing.l)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -265,7 +277,7 @@ struct HeroBannerPlaceholder: View {
             }
             .scrollIndicators(.hidden, axes: .horizontal)
             .scrollDisabled(true)
-            .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
+            .contentMargins(.horizontal, HeroBanner.trayMargin, for: .scrollContent)
             .padding(.vertical, Theme.Spacing.m)
         }
         .frame(maxWidth: .infinity)

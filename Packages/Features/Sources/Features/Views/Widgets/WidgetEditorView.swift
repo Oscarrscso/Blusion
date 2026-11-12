@@ -70,7 +70,7 @@ struct WidgetEditorView: View {
             case .unsupported:
                 Section {
                     Text("Blusion can't show this kind of row yet, so it has no settings here. It is kept so your layout stays intact.")
-                        .font(.footnote)
+                        .font(Theme.Typography.small)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -96,12 +96,13 @@ struct WidgetEditorView: View {
                 Button(mode == .create ? "Add" : "Save", action: commit)
                     .accessibilityIdentifier("widgetEditor.save")
             }
-            if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton() } }
+            if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton().buttonCursor() } }
             // An existing widget, as saved, as text for Import Widgets.
             if mode != .create, let saved = model.widgets.first(where: { $0.id == widget.id }), !HomeLayout.isContinueWatching(saved),
                let text = WidgetsManagerViewModel.exportJSON(of: saved) {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                        .buttonCursor()
                         .accessibilityLabel("Export Widget")
                         .accessibilityIdentifier("widgetEditor.export")
                 }
@@ -179,7 +180,7 @@ struct WidgetEditorView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tile.title)
                         if let source = tile.sources.first {
-                            Text(model.describe(source)).font(.caption).foregroundStyle(.secondary)
+                            Text(model.describe(source)).font(Theme.Typography.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -224,6 +225,7 @@ private struct CollectionTileEditor: View {
             Picker("Shape", selection: $tile.imageAspect) {
                 ForEach(WidgetPresentation.AspectRatio.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
             }
+            .buttonCursor()
             TextField("Image URL (optional)", text: $imageURL).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
         }
         .scrollIndicators(.visible, axes: .vertical)

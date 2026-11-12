@@ -31,8 +31,8 @@ struct WidgetCard: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
                 Text(styleName)
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(Theme.Typography.large)
+                    .foregroundStyle(Theme.dimmerText)
             }
             .padding(16)
         }
@@ -142,7 +142,7 @@ struct WidgetCard: View {
     /// The widget's style, as its editor names it.
     private var styleName: String {
         switch widget.content {
-        case .hero: "Hero"
+        case .hero: "Showcase"
         case .banner: "Carousel"
         case .row(let row): row.layout.map { WidgetStyle($0).rawValue } ?? (row.presentation.showsRank ? "Row Numbered" : "Row Classic")
         case .collection: "Collection"
@@ -196,7 +196,7 @@ struct WidgetsPageGroup<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             if let title {
-                Text(title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                Text(title).subheadingStyle().accessibilityAddTraits(.isHeader)
             }
             VStack(spacing: 0) { content }
                 .buttonStyle(.hoverPlain)

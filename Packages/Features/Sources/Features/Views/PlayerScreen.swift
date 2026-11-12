@@ -143,7 +143,7 @@ private struct PlayerHoldBadge: View {
                         .transition(.opacity)
                 }
             }
-            .font(.subheadline.weight(.semibold))
+            .font(Theme.Typography.mediumStrong)
             .foregroundStyle(.white)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .glassEffect(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -245,6 +245,7 @@ struct PlayerContent: View {
     @State private var testVideoGeometry = ""
     #endif
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appAppearance) private var appearance
     @Environment(\.scenePhase) private var scenePhase
     @Environment(LivePlaybackSession.self) private var livePlayback
     let services: AppServices
@@ -306,7 +307,7 @@ struct PlayerContent: View {
                     spinner.accessibilityIdentifier("player.buffering").transition(.opacity)
                 }
             }
-            .animation(.easeOut(duration: 0.2), value: showsStandaloneSpinner)
+            .animation(Theme.Motion.fade, value: showsStandaloneSpinner)
             .allowsHitTesting(false)
             gestureLayer
             // With a menu or the episodes open, a tap anywhere but them and the controls closes them.
@@ -338,19 +339,20 @@ struct PlayerContent: View {
             ZStack {
                 if let progress = upNextProgress, model.failureMessage == nil {
                     upNextPrompt(progress: progress)
-                } else if let marker = model.activeSkipMarker, marker != hiddenSkipMarker,
-                          model.failureMessage == nil, isVideoReady {
+                } else if let marker = model.activeSkipMarker,
+                          marker != hiddenSkipMarker || model.controlsVisible, model.failureMessage == nil, isVideoReady {
                     skipButton(marker)
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: upNextProgress != nil)
+            .animation(Theme.Motion.toggle, value: upNextProgress != nil)
+            .animation(Theme.Motion.toggle, value: model.controlsVisible)
             if let swipeLevel { SwipeLevelIndicator(level: swipeLevel) }
             ZStack {
                 if let fraction = seekSwipeFraction {
                     VStack {
                         Text(PlayerTime.format(fraction * (model.duration ?? 0)))
                             .monospacedDigit()
-                            .font(.subheadline.weight(.semibold))
+                            .font(Theme.Typography.mediumStrong)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .glassEffect(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -380,7 +382,7 @@ struct PlayerContent: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(.ultraThinMaterial, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
-                    .overlay(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)).strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+                    .overlay(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)).strokeBorder(Theme.separator, lineWidth: 0.5))
                     .frame(maxWidth: 320)
                     .padding(.bottom, 150)
                 }
@@ -413,13 +415,13 @@ struct PlayerContent: View {
         }
         #endif
         .onChange(of: model.notice, initial: true) { _, notice in
-            withAnimation(.easeInOut(duration: 0.2)) { noticeVisible = notice != nil }
+            withAnimation(Theme.Motion.toggle) { noticeVisible = notice != nil }
         }
         .task(id: model.notice) {
             guard model.notice != nil else { return }
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.2)) { noticeVisible = false }
+            withAnimation(Theme.Motion.toggle) { noticeVisible = false }
         }
         .task(id: model.activeSkipMarker) {
             guard let marker = model.activeSkipMarker else {
@@ -429,7 +431,7 @@ struct PlayerContent: View {
             hiddenSkipMarker = nil
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled, model.activeSkipMarker == marker else { return }
-            withAnimation(.easeInOut(duration: 0.2)) { hiddenSkipMarker = marker }
+            withAnimation(Theme.Motion.toggle) { hiddenSkipMarker = marker }
         }
         .task { await model.start() }
         .alert("Next programme unavailable", isPresented: $channelAdvanceFailed) {
@@ -445,7 +447,7 @@ struct PlayerContent: View {
             await infoModel.load()
             guard !Task.isCancelled, infoModel.openedReviews == nil,
                   let item = infoModel.reviewItem, let url = infoModel.imdbReviewsURL else { return }
-            ReviewPreloader.shared.preload(site: .imdb, url: url, item: item, width: 360)
+            ReviewPreloader.shared.preload(site: .imdb, url: url, item: item, background: appearance.pageBackgroundRGB, width: 360)
         }
         .task(id: waitingForPlayback) {
             guard waitingForPlayback else {
@@ -729,7 +731,7 @@ struct PlayerContent: View {
                 } label: {
                     Label(marker.kind == .credits && model.hasNextEpisode ? "Next Episode" : marker.kind.buttonTitle,
                           systemImage: "forward.fill")
-                        .font(.headline)
+                        .font(Theme.Typography.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .pointerInteraction(cornerRadius: 22 * metrics.cornerScale(for: .playerControls))
@@ -1253,7 +1255,7 @@ struct PlayerContent: View {
                     nextPrompt = .creditsChosen
                 } label: {
                     Text("Watch Credits")
-                        .font(.headline)
+                        .font(Theme.Typography.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .pointerInteraction(cornerRadius: 22 * metrics.cornerScale(for: .playerControls))
@@ -1265,7 +1267,7 @@ struct PlayerContent: View {
                     playNextEpisode()
                 } label: {
                     Label("Next Episode", systemImage: "play.fill")
-                        .font(.headline)
+                        .font(Theme.Typography.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .background(alignment: .leading) {
                             GeometryReader { proxy in

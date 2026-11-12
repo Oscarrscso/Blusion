@@ -46,39 +46,86 @@ enum Theme {
     /// A raised surface on the black page (grouped panels, placeholders): the system's dark secondary grouped grey.
     static let surface = Color.white.opacity(0.11)
     static let surfaceStrong = Color.white.opacity(0.18)
+    /// The least width of a card's hairline, in points: zero, so plain, glass and material cards draw the artwork's one-pixel line.
+    static let cardHairlineWidth: CGFloat = 0
     static let separator = Color.white.opacity(0.12)
     /// The faint line between a title page's sections: fainter than `separator`, so it parts them without drawing the eye.
     static let sectionLine = Color.white.opacity(0.06)
-    static let artworkBorder = Color.white.opacity(0.22)
+    static let artworkBorder = Color.white.opacity(AppearancePreferences.Outline.standard.opacity)
     /// The grey of the metadata line under a title's name, on Home's spotlight and on the title page alike. A fixed colour rather than a
     /// hierarchical style, so the line never takes a tint from the view around it.
     static let metaText = Color(white: 0.58)
+    /// White type over artwork, glass and the player, in three strengths below full white: a second line, a quieter label, a note.
+    static let dimText = Color.white.opacity(0.75)
+    static let dimmerText = Color.white.opacity(0.7)
+    static let faintText = Color.white.opacity(0.6)
     /// Flat grey shown where artwork is still loading. Opaque, so a card never shows what is behind it.
     static let placeholder = Color(white: 0.11)
     static let brandStart = Color(red: 0.12, green: 0.30, blue: 0.86)
     static let brandEnd = Color(red: 0.48, green: 0.17, blue: 1.0)
     static let brandGradient = LinearGradient(colors: [brandStart, brandEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
 
-    /// The TV app's type styles. System text styles, so Dynamic Type works; weights are the app's.
+    /// The app's shared timings. A view with a motion of its own keeps its own curve; these are the ones most views share.
+    enum Motion {
+        /// A control or panel changing state: a tint arriving, a section opening.
+        static let standard = Animation.smooth(duration: 0.3)
+        /// The same, for a smaller change.
+        static let quick = Animation.smooth(duration: 0.25)
+        /// A control snapping to a new place or size.
+        static let snap = Animation.snappy(duration: 0.35)
+        /// Something fading in or out.
+        static let fade = Animation.easeOut(duration: 0.2)
+        /// A state toggling back and forth.
+        static let toggle = Animation.easeInOut(duration: 0.2)
+    }
+
+    /// The app's type. Every style is a system text style, so Dynamic Type and Appearance's text settings reach it.
+    ///
+    /// A view names a role below when one fits what it draws (a card's title, a meta line), and otherwise a step of the scale. It does
+    /// not write `.font(.footnote)` or `.font(.subheadline.weight(.semibold))` itself, so a size or weight is retuned here, once.
+    /// A further trait chains on: `Theme.Typography.small.monospacedDigit()`.
     enum Typography {
-        /// A shelf header: "Continue Watching", "Season 2".
+        // MARK: Scale
+        // Five sizes, each plain and strong (semibold), and the headline. Roles are built from these.
+
+        /// Reading text in a panel or a list row.
+        static let large = Font.body
+        static let largeStrong = Font.body.weight(.semibold)
+        /// The name of a row or a panel, and a button's label.
+        static let headline = Font.headline
+        /// The app's everyday text: copy, a control's label, a row's value.
+        static let medium = Font.subheadline
+        static let mediumStrong = Font.subheadline.weight(.semibold)
+        /// Secondary lines: metadata, notes, a status.
+        static let small = Font.footnote
+        static let smallStrong = Font.footnote.weight(.semibold)
+        /// The line under something, and small symbols.
+        static let caption = Font.caption
+        static let captionStrong = Font.caption.weight(.semibold)
+        /// The smallest type: badges and eyebrows.
+        static let micro = Font.caption2
+        static let microStrong = Font.caption2.weight(.semibold)
+
+        // MARK: Roles
+
+        /// A shelf header: "Continue Watching", "Season 2". Headings draw through `headingStyle()`, which Appearance can restyle.
         static let shelfTitle = Font.title2.bold()
-        /// The title under a card, and a row title: bold footnote.
-        static let cardTitle = Font.footnote.weight(.semibold)
+        /// The title under a card, and a row title.
+        static let cardTitle = smallStrong
         /// The grey line under a card title: "S2, E5 · 21 min left".
-        static let cardSubtitle = Font.caption
+        static let cardSubtitle = caption
         /// The small grey caps above an episode title: "EPISODE 5". Apply `.textCase(.uppercase)` too.
-        static let eyebrow = Font.caption2.weight(.semibold)
+        static let eyebrow = microStrong
         /// A screen's large title ("Search", "Library") when it draws its own.
         static let largeTitle = Font.largeTitle.bold()
         /// The name of a title on its own page when there is no logo artwork.
         static let heroTitle = Font.system(.largeTitle, design: .default, weight: .bold)
         /// The single grey line under a title's name: "Drama · 2008 · 2 hr 32 min".
-        static let metaLine = Font.footnote
+        static let metaLine = small
         /// Body copy such as a synopsis.
-        static let body = Font.subheadline
+        static let body = medium
         /// A label inside a button.
-        static let button = Font.headline
+        static let button = headline
     }
 }
 
@@ -106,11 +153,7 @@ extension View {
 
     /// The translucent hairline that edges a glass card or panel, drawn just inside `shape`.
     func glassHairline(_ shape: some InsettableShape) -> some View {
-        overlay {
-            shape.strokeBorder(.white.opacity(0.18), lineWidth: 0.7)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
+        overlay { CardOutline(shape: shape, minimumWidth: Theme.cardHairlineWidth) }
     }
 
     /// The same inset, one-pixel hairline for posters, cards and tiles. Full-screen hero artwork does not use it.
@@ -133,6 +176,7 @@ private struct CardSurfaceModifier: ViewModifier {
         switch kind {
         case .plain:
             content.background(Theme.surface, in: shape)
+                .overlay { CardOutline(shape: shape, minimumWidth: Theme.cardHairlineWidth) }
         case .glass:
             content.glassEffect(.regular, in: shape).glassHairline(shape)
         case .material:
@@ -159,9 +203,22 @@ struct ScaledCapsule: InsettableShape {
     }
 }
 
+struct CardOutline<S: InsettableShape>: View {
+    let shape: S
+    var minimumWidth: CGFloat = 0
+    @Environment(\.appAppearance) private var appearance
+    @Environment(\.pixelLength) private var pixelLength
+
+    var body: some View {
+        let outline = appearance.outline
+        shape.strokeBorder(Color.white.opacity(outline.opacity), lineWidth: max(minimumWidth, pixelLength) * outline.pixels)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 private struct MediaArtworkModifier: ViewModifier {
     let cornerRadius: CGFloat
-    @Environment(\.pixelLength) private var pixelLength
     /// Appearance's corners scale every artwork's radius alike.
     @Environment(\.layoutMetrics) private var metrics
     /// Appearance's Outline sets the hairline's strength (or turns it off), and its Artwork tone the picture's colour.
@@ -169,17 +226,26 @@ private struct MediaArtworkModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius * metrics.cornerScale(for: .artwork), style: .continuous)
-        let outline = appearance.outline
         content
             .artworkTone(appearance.artworkTone)
             .clipShape(shape)
-            .overlay {
-                shape.strokeBorder(outline == .standard ? Theme.artworkBorder : Color.white.opacity(outline.opacity),
-                                   lineWidth: pixelLength * outline.pixels)
-                    .opacity(outline == .off ? 0 : 1)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            .overlay { CardOutline(shape: shape) }
+    }
+}
+
+/// A hero is clear at rest; once it scrolls, the system protects the portrait status/navigation edge.
+struct HeroScrollEdgeModifier: ViewModifier {
+    let scroll: DetailHeroScrollState
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+
+    func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content.scrollEdgeEffectHidden(true, for: .top)
+        #else
+        content
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectHidden(isPhoneLandscape || scroll.offset <= 1, for: .top)
+        #endif
     }
 }
 

@@ -91,6 +91,7 @@ struct AppearanceSettingsPage: View {
                             .tag(Optional(preset))
                     }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.appearance.preset")
             }
             Section {
@@ -148,7 +149,7 @@ struct AppearanceSettingsPage: View {
             }
             Section {
                 Button("Reset Appearance", role: .destructive) { confirmsReset = true }
-                    .disabled(appearance.isDefault)
+                    .disabled(appearance.isDefault && model.isPosterArtworkDefault)
                     .accessibilityIdentifier("settings.appearance.reset")
             }
         }
@@ -159,6 +160,7 @@ struct AppearanceSettingsPage: View {
             Button("Reset Appearance", role: .destructive) {
                 Haptics.play(.buttons)
                 appearance = AppearancePreferences()
+                Task { await model.restorePosterArtworkDefaults() }
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -224,6 +226,8 @@ private struct AppearanceSectionPage<Content: View>: View {
     let title: String
     let section: AppearancePreferences.Section
     let preview: AppearancePreview.Kind
+    var extraIsDefault = true
+    var onRestore: (() -> Void)?
     @ViewBuilder let content: (AppearanceControls) -> Content
     @AppStorage(AppearancePreferences.defaultsKey) private var appearance = AppearancePreferences()
     /// A slider's value while it is dragged, shown in the preview and saved when the drag ends, so the whole app is not laid out again on
@@ -244,8 +248,9 @@ private struct AppearanceSectionPage<Content: View>: View {
                 Button("Restore Defaults") {
                     Haptics.play(.buttons)
                     appearance = appearance.restoringDefaults(of: section)
+                    onRestore?()
                 }
-                .disabled(appearance.isDefault(section))
+                .disabled(appearance.isDefault(section) && extraIsDefault)
                 .accessibilityIdentifier("settings.appearance.\(section.rawValue).restore")
             }
         }
@@ -292,6 +297,7 @@ private struct AppearanceControls {
         Picker(title, selection: choice(keyPath)) {
             ForEach(Option.allCases) { option in Text(option.label).tag(option) }
         }
+        .buttonCursor()
         .accessibilityIdentifier("settings.appearance.\(id)")
     }
 
@@ -300,11 +306,9 @@ private struct AppearanceControls {
                                              id: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(title)
-            Picker(title, selection: choice(keyPath)) {
-                ForEach(Option.allCases) { option in Text(option.label).tag(option) }
+            CornerSegmentedPicker(title, options: Array(Option.allCases), selection: choice(keyPath)) {
+                $0.label
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
         }
         .accessibilityIdentifier("settings.appearance.\(id)")
     }
@@ -314,11 +318,9 @@ private struct AppearanceControls {
                  id: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(title)
-            Picker(title, selection: choice(keyPath)) {
-                ForEach(Array(values), id: \.self) { Text("\($0)").tag($0) }
+            CornerSegmentedPicker(title, options: Array(values), selection: choice(keyPath)) {
+                String($0)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
         }
         .accessibilityIdentifier("settings.appearance.\(id)")
     }
@@ -416,9 +418,11 @@ private struct AppearanceColourPage: View {
                             .tag(accent)
                     }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.appearance.accent")
                 if controls.current.accent == .custom {
                     ColorPicker("Custom accent", selection: controls.colour(\.customAccent), supportsOpacity: false)
+                        .buttonCursor()
                         .accessibilityIdentifier("settings.appearance.customAccent")
                 }
             }
@@ -429,9 +433,11 @@ private struct AppearanceColourPage: View {
                             .tag(background)
                     }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.appearance.background")
                 if controls.current.background == .custom {
                     ColorPicker("Custom background", selection: controls.colour(\.customBackground), supportsOpacity: false)
+                        .buttonCursor()
                         .accessibilityIdentifier("settings.appearance.customBackground")
                 }
                 if controls.current.background == .tinted {
@@ -476,7 +482,13 @@ private struct AppearanceCardsPage: View {
     let model: SettingsViewModel
 
     var body: some View {
-        AppearanceSectionPage(title: "Cards", section: .cards, preview: .cards) { controls in
+        AppearanceSectionPage(
+            title: "Cards",
+            section: .cards,
+            preview: .cards,
+            extraIsDefault: model.isPosterArtworkDefault,
+            onRestore: { Task { await model.restorePosterArtworkDefaults() } }
+        ) { controls in
             Section("Size & Shape") {
                 controls.slider("Card size", \.cardScale, in: AppearancePreferences.cardScaleRange, step: 0.05,
                                 low: "rectangle.portrait", high: "rectangle.portrait", id: "cardSize")
@@ -511,6 +523,7 @@ private struct AppearanceCardsPage: View {
             Section("Artwork") {
                 controls.menu("Tone", \.artworkTone, id: "tone")
                 controls.segmented("Outline", \.outline, id: "outline")
+                controls.toggle("Outline buttons", \.outlinesButtons, id: "buttonOutline")
                 Toggle("Hero artwork on posters", isOn: Binding(get: { model.settings.usesHeroPosters }, set: { value in
                     Haptics.play(.choices)
                     Task { await model.setUsesHeroPosters(value) }
@@ -533,6 +546,7 @@ private struct AppearanceCardsPage: View {
                     })) {
                         ForEach(PosterMarkPlacement.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
+                    .buttonCursor()
                     .accessibilityIdentifier("settings.posterBrandLocation")
                 }
                 Toggle("Coloured rating logos", isOn: Binding(get: { model.settings.showsColouredRatingLogos }, set: { value in
@@ -578,6 +592,7 @@ private struct AppearanceCornersPage: View {
                     } label: {
                         // A part with its own roundness shows it; one that follows All Corners says so, rather than repeating its number.
                         LabeledContent(group.label, value: controls.current.cornerOverrides[group.rawValue].map(percent) ?? "Same as All")
+                            .buttonCursor()
                     }
                 }
             }
@@ -588,14 +603,20 @@ private struct AppearanceCornersPage: View {
 private struct AppearanceHomePage: View {
     var body: some View {
         AppearanceSectionPage(title: "Home", section: .home, preview: .home) { controls in
-            Section("Spotlight") {
+            Section("Showcase") {
                 Picker("Turn pages", selection: controls.choice(\.heroAutoAdvance)) {
                     ForEach(AppearancePreferences.heroAutoAdvanceOptions, id: \.self) { seconds in
                         Text(seconds == 0 ? "Never" : "Every \(seconds) seconds").tag(seconds)
                     }
                 }
+                .buttonCursor()
                 .accessibilityIdentifier("settings.appearance.turnPages")
-                controls.toggle("Page dots", \.showsPageDots, id: "pageDots")
+            }
+            Section("Continue Watching") {
+                Stepper("Titles: \(controls.current.continueWatchingLimit)",
+                        value: controls.choice(\.continueWatchingLimit), in: 1...100)
+                    .buttonCursor()
+                    .accessibilityIdentifier("settings.appearance.continueWatchingLimit")
             }
         }
     }
@@ -614,15 +635,48 @@ private struct AppearanceTitlePagesPage: View {
             }
             Section("Layout") {
                 controls.toggle("Unfold synopsis", \.expandsSynopsis, id: "unfoldSynopsis")
-                controls.segmented("Section order", \.sectionOrder, id: "sectionOrder")
             }
-            Section("Sections") {
-                controls.toggle("Reviews", \.showsReviews, id: "reviews")
-                controls.toggle("Cast & Crew", \.showsCast, id: "cast")
-                controls.toggle("Information", \.showsInformation, id: "information")
-                controls.toggle("More Like This", \.showsRelated, id: "related")
-                controls.toggle("Watch Anywhere", \.showsWatchAnywhere, id: "watchAnywhere")
+            Section("Section order") {
+                ForEach(controls.current.orderedTitleSections) { section in
+                    HStack {
+                        Text(section.label)
+                            .foregroundStyle(controls.current.showsTitleSection(section) ? .primary : .secondary)
+                        Spacer()
+                        if let keyPath = visibilityKeyPath(for: section) {
+                            let visible = controls.current.showsTitleSection(section)
+                            Button {
+                                controls.choice(keyPath).wrappedValue.toggle()
+                            } label: {
+                                Image(systemName: visible ? "eye" : "eye.slash")
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.hoverPlain)
+                            .accessibilityLabel("\(visible ? "Hide" : "Show") \(section.label)")
+                            .accessibilityValue(visible ? "Visible" : "Hidden")
+                            .accessibilityIdentifier("settings.appearance.visibility.\(section.rawValue)")
+                        }
+                    }
+                }
+                .onMove { source, destination in
+                    var order = controls.current.orderedTitleSections
+                    order.move(fromOffsets: source, toOffset: destination)
+                    controls.choice(\.titleSectionOrder).wrappedValue = order
+                }
             }
+        }
+        .environment(\.editMode, .constant(.active))
+    }
+
+    private func visibilityKeyPath(for section: AppearancePreferences.TitleSection) -> WritableKeyPath<AppearancePreferences, Bool>? {
+        switch section {
+        case .reviews: \.showsReviews
+        case .cast: \.showsCast
+        case .information: \.showsInformation
+        case .franchise: \.showsFranchise
+        case .related: \.showsRelated
+        case .watchAnywhere: \.showsWatchAnywhere
+        case .episodes: nil
         }
     }
 }
@@ -723,13 +777,16 @@ extension AppearancePreferences {
     }
 
     var homeSummary: String {
-        heroAutoAdvance > 0 ? "Spotlight every \(heroAutoAdvance) s" : "Spotlight stays put"
+        heroAutoAdvance > 0 ? "Showcase every \(heroAutoAdvance) s" : "Showcase stays put"
     }
 
     var titlePagesSummary: String {
-        let shown = [showsReviews, showsCast, showsInformation, showsRelated].filter { $0 }.count
-        var parts = [shown == 4 ? "All sections" : "\(shown) of 4 sections"]
-        if sectionOrder == .castFirst { parts.append("Cast first") }
+        let sections = [showsReviews, showsCast, showsInformation, showsFranchise, showsRelated]
+        let shown = sections.filter { $0 }.count + (showsWatchAnywhere ? 1 : 0)
+        let total = sections.count + (showsWatchAnywhere ? 1 : 0)
+        var parts = [shown == total ? "All sections" : "\(shown) of \(total) sections"]
+        if !titleSectionOrder.isEmpty { parts.append("Custom order") }
+        else if sectionOrder == .castFirst { parts.append("Cast first") }
         if hidesSpoilers { parts.append("No spoilers") }
         return parts.joined(separator: " · ")
     }

@@ -210,7 +210,8 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
     public let title: String
     public let year: Int?
     public let rating: Double?
-    public let genres: [String]
+    /// As saved, until the Library replaces them with the genres the title's own page lists.
+    public var genres: [String]
     public let addedAt: Date?
     /// The title as the rating lookups know it, by its id.
     public let preview: MetaPreview
@@ -218,7 +219,7 @@ public struct LibraryEntry: Identifiable, Equatable, Sendable {
     public let activityAt: Date?
     public let status: WatchStatus
     /// The saved title, when there is one.
-    public let item: LibraryItem?
+    public var item: LibraryItem?
     /// The progress record shown for this title: the one a Continue Watching or Watched card opens. For a saved title, the most recent
     /// record, when it has any.
     public let progress: WatchProgress?
@@ -308,7 +309,7 @@ public enum LibraryFiltering {
             if let low = filter.minimumYear, year < low { return false }
             if let high = filter.maximumYear, year > high { return false }
         }
-        if !filter.genres.isEmpty, filter.genres.isDisjoint(with: entry.genres) { return false }
+        if !filter.genres.isEmpty, !filter.genres.contains(where: { MediaGenres.contains($0, in: entry.genres) }) { return false }
         if let minimum = filter.minimumRating {
             guard let rating = judgedRating(entry, score: score), rating >= minimum else { return false }
         }
@@ -358,7 +359,7 @@ public enum LibraryFiltering {
 
     /// Every genre any entry has, sorted, for the genre picker.
     public static func genres(in entries: [LibraryEntry]) -> [String] {
-        Set(entries.flatMap(\.genres)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        MediaGenres.choices(in: entries.flatMap(\.genres))
     }
 
     /// A release span as the chips name it: "1990", "1990–1999", "From 1990" or "Until 1999". Empty when neither end is set. Shared with

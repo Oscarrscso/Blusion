@@ -108,8 +108,8 @@ struct LayoutMetrics: Equatable, Sendable {
         return metrics
     }
 
-    /// The side margin of the grid pages (Discover, Library, See All, Search): the gap between cards, but never less than
-    /// `Theme.Spacing.l`, so the grid, and the filters and headings above it, keep to the same edge as Back and the large title.
+    /// The side margin of the grid pages (Discover, Library, See All, Search): the page margin, so the grid, and the filters and
+    /// headings above it, keep to one edge.
     var gridPageMargin: CGFloat { pageMargin }
 
     /// These metrics for a grid page, whose page margin is `gridPageMargin`. The page hands them to everything on it.
@@ -119,7 +119,7 @@ struct LayoutMetrics: Equatable, Sendable {
         return metrics
     }
 
-    /// The horizontal inset of a title page's content: the page margin, but never less than `Theme.Spacing.l`. Home uses it too, so its
+    /// The horizontal inset of a title page's content: the page margin. Home and the stream picker use it too, so their
     /// headings, selector and shelves line up with the title page.
     var contentMargin: CGFloat { pageMargin }
 

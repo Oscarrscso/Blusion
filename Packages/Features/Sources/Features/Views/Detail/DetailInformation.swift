@@ -31,11 +31,11 @@ struct DetailInformation: View {
                                 .transition(.opacity)
                         }
                     }
-                    .font(.footnote)
+                    .font(Theme.Typography.small)
                 }
                 if folds {
                     Image(systemName: "chevron.down")
-                        .font(.footnote.weight(.semibold))
+                        .font(Theme.Typography.smallStrong)
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .frame(maxWidth: .infinity)

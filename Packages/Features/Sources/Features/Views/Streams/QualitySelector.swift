@@ -4,7 +4,6 @@ import SwiftUI
 
 /// The system's segmented control for media types and quality filters.
 struct QualitySelector: View {
-    @Environment(\.layoutMetrics) private var metrics
     let titles: [String]
     @Binding var selection: Int
     var symbols: [String] = []
@@ -12,30 +11,13 @@ struct QualitySelector: View {
     var accessibilityID = "streams.filter"
 
     var body: some View {
-        Picker("Show", selection: $selection) {
-            ForEach(titles.indices, id: \.self) { index in
-                segment(index)
-                    .tag(index)
-            }
+        CornerSegmentedPicker("Show", options: Array(titles.indices), selection: $selection,
+                              symbols: symbols, showsTitles: showsTitles) { index in
+            titles[index]
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
         .frame(width: showsTitles ? nil : CGFloat(titles.count * 44))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small * metrics.cornerScale(for: .filters), style: .continuous))
         .accessibilityIdentifier(accessibilityID)
         .onChange(of: selection) { _, _ in Haptics.play(.choices) }
-    }
-
-    @ViewBuilder private func segment(_ index: Int) -> some View {
-        if showsTitles, symbols.indices.contains(index) {
-            Label(titles[index], systemImage: symbols[index])
-        } else if showsTitles {
-            Text(titles[index])
-        } else if symbols.indices.contains(index) {
-            Image(systemName: symbols[index])
-        } else {
-            Text(titles[index])
-        }
     }
 }
 #endif

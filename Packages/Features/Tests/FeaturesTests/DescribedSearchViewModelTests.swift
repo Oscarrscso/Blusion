@@ -69,7 +69,7 @@ import StremioKit
         #expect(ranked.map(\.name) == ["Second", "First"])
     }
 
-    @Test func evenATitleSearchUsesTheAISearchPathButNotAPopularityPage() async {
+    @Test func aTitleSearchIsAnsweredByTMDbsTitleSearchAndNeverAPopularityPage() async {
         let asked = Asked()
         let title = MetaPreview(id: "tt1375666", type: "movie", name: "Inception",
                                 description: "A thief enters dreams to steal secrets.")
@@ -80,8 +80,7 @@ import StremioKit
         }, titleMatches: { text in
             text == "Inception" ? [title] : []
         })
-        let model = SearchViewModel(services: services(), debounce: .milliseconds(1),
-                                    describer: service, usesLivePicker: false)
+        let model = SearchViewModel(services: services(), debounce: .milliseconds(1), describer: service)
         model.query = "Inception"
         model.queryDidChange()
         #expect(model.aiPhase == .searching)
@@ -99,8 +98,7 @@ import StremioKit
             try await Task.sleep(for: .milliseconds(150))
             return [item]
         })
-        let model = SearchViewModel(services: services(), debounce: .milliseconds(1),
-                                    describer: service, usesLivePicker: false)
+        let model = SearchViewModel(services: services(), debounce: .milliseconds(1), describer: service)
         model.query = "dark gritty crime"
         model.queryDidChange()
         #expect(model.aiPhase == .searching)

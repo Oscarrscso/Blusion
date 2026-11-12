@@ -32,6 +32,7 @@ public enum WidgetSourceError: Error, Equatable, Sendable {
 public final class WidgetContentService: Sendable {
     private let registry: AddonRegistry
     private let client: AddonClient
+    private let browse: BrowseService
     private let settings: any SettingsStore
     private let trakt: TraktClient
     private let account: TraktAccount?
@@ -46,9 +47,10 @@ public final class WidgetContentService: Sendable {
     public init(registry: AddonRegistry, client: AddonClient, settings: any SettingsStore,
                 trakt: TraktClient? = nil, account: TraktAccount? = nil, snapshots: (any WidgetSnapshotStore)? = nil,
                 imdb: (any IMDbDataset)? = nil, now: @escaping @Sendable () -> Date = { Date() },
-                region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }) {
+                region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }, browse: BrowseService? = nil) {
         self.registry = registry
         self.client = client
+        self.browse = browse ?? BrowseService(registry: registry, client: client)
         self.settings = settings
         self.account = account
         self.trakt = trakt ?? TraktClient(client: client, account: account)
@@ -61,6 +63,65 @@ public final class WidgetContentService: Sendable {
     /// Items of one source. Addon pages share display limits; Trakt pages keep their server limit.
     /// `cacheTTL` is in seconds; 0 bypasses saved pages. A loaded first page replaces the source's snapshot.
     public func items(for source: WidgetSource, limit: Int = 20, skip: Int = 0, cacheTTL: Int = 3600) async throws -> [MetaPreview] {
+        let page = try await page(for: source, limit: limit, skip: skip, cacheTTL: cacheTTL)
+        if skip == 0, !source.requiresAccount, let snapshots { await snapshots.save(page.items, for: source) }
+        return page.items
+    }
+
+    public struct Page: Sendable {
+        public let items: [MetaPreview]
+        /// Offset in the source's unfiltered list, including rejected titles.
+        public let nextSkip: Int
+        public let hasMore: Bool
+    }
+
+    /// Filtered items and their raw cursor travel together, so rejected titles never corrupt the next page.
+    public func page(for source: WidgetSource, limit: Int = 20, skip: Int = 0, cacheTTL: Int = 3600) async throws -> Page {
+        var offset = max(0, skip)
+        guard limit > 0 else { return Page(items: [], nextSkip: offset, hasMore: false) }
+        let required: [String]
+        let excluded: [String]
+        let canPage: Bool
+        switch source {
+        case .addonCatalog(let reference):
+            let addons = await registry.addons
+            guard let match = reference.resolve(in: addons) else { throw WidgetSourceError.addonMissing(host: reference.host) }
+            required = reference.genre.flatMap { MediaGenres.isKnown($0) ? [$0] : nil } ?? []
+            excluded = []
+            canPage = match.catalog.supportsSkip
+        case .tmdbDiscover(let query):
+            required = query.genres.map(\.name)
+            excluded = query.effectiveExcludedGenres.map(\.name)
+            canPage = true
+        default:
+            required = []
+            excluded = []
+            canPage = true
+        }
+        var seen = Set<String>()
+        while true {
+            try Task.checkCancellation()
+            let raw = try await rawItems(for: source, limit: limit, skip: offset, cacheTTL: cacheTTL)
+            guard !raw.isEmpty else { return Page(items: [], nextSkip: offset, hasMore: false) }
+            let fresh = raw.filter { seen.insert($0.identity).inserted }
+            offset += source.usesTrakt ? limit : raw.count
+            guard !fresh.isEmpty else { return Page(items: [], nextSkip: offset, hasMore: false) }
+            let resolved = required.isEmpty && excluded.isEmpty ? fresh : await browse.resolvingGenres(in: fresh)
+            try Task.checkCancellation()
+            let kept = resolved.filter { item in
+                required.allSatisfy { MediaGenres.contains($0, in: item.genres) }
+                    && !excluded.contains { MediaGenres.contains($0, in: item.genres) }
+            }.map { item -> MetaPreview in
+                // A title shown for a genre leads with it on its card and its page.
+                var copy = item
+                copy.genres = MediaGenres.leading(required, in: item.genres)
+                return copy
+            }
+            if !kept.isEmpty || !canPage { return Page(items: kept, nextSkip: offset, hasMore: canPage) }
+        }
+    }
+
+    private func rawItems(for source: WidgetSource, limit: Int, skip: Int, cacheTTL: Int) async throws -> [MetaPreview] {
         guard limit > 0 else { return [] }
         let offset = max(skip, 0)
         if source.requiresAccount { return Array(try await fetch(source, limit: limit, skip: offset).prefix(limit)) }
@@ -68,7 +129,6 @@ public final class WidgetContentService: Sendable {
         let items = try await cache.load(source: source, limit: limit, skip: offset, ttl: TimeInterval(ttl), at: now()) { [self] in
             let items = try await fetch(source, limit: limit, skip: offset)
             try Task.checkCancellation()
-            if offset == 0, let snapshots { await snapshots.save(items, for: source) }
             return items
         }
         return Array(items.prefix(limit))
@@ -78,6 +138,12 @@ public final class WidgetContentService: Sendable {
     /// asked first, then the snapshot store. Nothing is requested from an addon; nil when the source was never loaded.
     public func lastKnownItems(for source: WidgetSource, limit: Int = 20) async -> [MetaPreview]? {
         guard !source.requiresAccount else { return nil }
+        // Old snapshots and raw cached pages may predate genre validation. Do not flash unverified titles in a genre shelf.
+        switch source {
+        case .addonCatalog(let reference) where reference.genre.map(MediaGenres.isKnown) == true: return nil
+        case .tmdbDiscover(let query) where !query.genres.isEmpty || !query.effectiveExcludedGenres.isEmpty: return nil
+        default: break
+        }
         let known: [MetaPreview]?
         if let inMemory = await cache.latestFirstPage(for: source) {
             known = inMemory
@@ -158,7 +224,13 @@ public final class WidgetContentService: Sendable {
             let addons = await registry.addons
             guard let match = reference.resolve(in: addons) else { throw WidgetSourceError.addonMissing(host: reference.host) }
             var extras: [ExtraParam] = []
-            if let genre = reference.genre, !genre.isEmpty { extras.append(ExtraParam("genre", genre)) }
+            if let genre = reference.genre, !genre.isEmpty, match.catalog.extra(named: "genre") != nil {
+                if let option = MediaGenres.option(genre, in: match.catalog) {
+                    extras.append(ExtraParam("genre", option))
+                } else if match.catalog.genreOptions.isEmpty || !MediaGenres.isKnown(genre) {
+                    extras.append(ExtraParam("genre", genre))
+                }
+            }
             if skip > 0 {
                 // A catalog that cannot page has nothing beyond its first page.
                 guard match.catalog.supportsSkip else { return [] }

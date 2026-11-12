@@ -194,14 +194,14 @@ struct LandscapeTabControls: View {
     }
     /// The panel slides away smoothly and returns on a soft spring; Search uses the same timing for its fade.
     static func fade(collapsed: Bool) -> Animation {
-        collapsed ? .smooth(duration: 0.3) : .spring(duration: 0.38, bounce: 0.18)
+        collapsed ? Theme.Motion.standard : .spring(duration: 0.38, bounce: 0.18)
     }
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             VStack(alignment: .leading, spacing: 0) {
                 if !hidesPageHeader {
                     Text(title)
-                        .font(.footnote.weight(.semibold))
+                        .font(Theme.Typography.smallStrong)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -232,7 +232,10 @@ struct LandscapeTabControls: View {
             // The clearer, more see-through variant of Liquid Glass; it clears away with the rest when scrolled.
             .glassEffect(.clear, in: panelShape)
             .offset(x: collapsed ? -(Self.panelContentWidth + 10 + 12) : 0)
-            .clipped()
+            // Cut the sliding panel to its own rounded outline, which matches Home's corners, so no square edge shows past Home; it
+            // fades as it goes, so its icons don't pass visibly behind Home's glass.
+            .clipShape(panelShape)
+            .opacity(collapsed ? 0 : 1)
             .allowsHitTesting(!collapsed)
             .accessibilityHidden(collapsed)
             .animation(Self.fade(collapsed: collapsed), value: collapsed)

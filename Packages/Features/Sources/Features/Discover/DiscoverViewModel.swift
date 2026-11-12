@@ -58,25 +58,18 @@ public final class DiscoverViewModel {
         self.services = services
     }
 
-    /// The Genre menu's choices: every catalog's genres, one of each whatever its case, A to Z. Orders and years an addon lists as genres
-    /// are left out, since the Sort and Year menus cover them.
+    /// The Genre menu's choices: the genres the catalogs offer, named as title pages name them, one of each, A to Z. A compound such as
+    /// "Action & Adventure" is offered as the genres it groups. Orders and years an addon lists as genres are left out, since the Sort and
+    /// Year menus cover them.
     public var genres: [String] { Self.genres(of: visibleSources.map(\.catalog)) }
 
     static func genres(of catalogs: [CatalogDescriptor]) -> [String] {
-        var seen = Set<String>()
-        var genres: [String] = []
-        for catalog in catalogs {
-            for genre in genreOptions(of: catalog) where seen.insert(genre.lowercased()).inserted { genres.append(genre) }
-        }
-        return genres.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        MediaGenres.choices(in: catalogs.flatMap(genreOptions(of:)))
     }
 
-    /// The catalog's genre options that are genres, in its order: no blanks, years or orders ("Shortest", "Random", "Not Watched"). None
-    /// for a list that is mostly orders ("Date Added ↓", "Title A-Z"), which picks the catalog's order, so none of it is a genre.
+    /// The same recognised genre options as Search, excluding orders, years and curated topics.
     static func genreOptions(of catalog: CatalogDescriptor) -> [String] {
-        let options = catalog.genreOptions.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isYear($0) }
-        let kept = options.filter { !isOrder($0) }
-        return kept.count * 2 > options.count ? kept : []
+        MediaGenres.options(of: catalog)
     }
 
     /// "2024", "1990s" or "1990's".
@@ -157,10 +150,10 @@ public final class DiscoverViewModel {
         canLoadMore = false
         cursors = visibleSources.map { source in
             guard let genre = selectedGenre else { return Cursor(source: source) }
-            // A catalog that lists genres must offer this one, in any case; one that lists none is filtered locally.
-            let options = source.catalog.genreOptions
-            let match = options.first { $0.caseInsensitiveCompare(genre) == .orderedSame }
-            return Cursor(source: source, genre: match ?? genre, hasMore: options.isEmpty || match != nil)
+            let options = MediaGenres.options(of: source.catalog)
+            let match = MediaGenres.option(genre, in: source.catalog)
+            let parameter = match ?? (source.catalog.genreOptions.isEmpty ? genre : nil)
+            return Cursor(source: source, genre: parameter, hasMore: options.isEmpty || match != nil)
         }
         guard !sources.isEmpty else {
             state = .idle
@@ -178,21 +171,42 @@ public final class DiscoverViewModel {
         await loadMixedPage(generation: current)
     }
 
-    /// Reads a page from every catalog and interleaves their titles, removing duplicates across sources. A catalog that fails is skipped; the mix only fails when none answers.
-    private func loadMixedPage(generation current: Int) async {
+    /// Empty rounds a genre may read in a row before the page stops asking: catalogs without the genre are checked title by title.
+    private static let emptyRoundLimit = 6
+
+    /// Reads a page from every catalog and interleaves their titles, removing duplicates across sources. A catalog that fails is skipped; the
+    /// mix only fails when none answers. Under a genre, each title is kept only when its own page lists that genre, and each catalog's
+    /// titles show as soon as they are checked.
+    private func loadMixedPage(generation current: Int, emptyRounds: Int = 0) async {
         let browse = services.browse
         let genre = selectedGenre
         let pending = cursors.enumerated().filter(\.element.hasMore)
+        let previousCount = items.count
+        var known = Set(items.map(\.identity))
         var pages: [Int: [MetaPreview]] = [:]
         var failure: Error?
         await withTaskGroup(of: (Int, [MetaPreview]?, Error?).self) { group in
             for (index, cursor) in pending {
                 group.addTask {
-                    do { return (index, try await browse.page(cursor.source, genre: cursor.genre, skip: cursor.received), nil) } catch { return (index, nil, error) }
+                    do {
+                        let raw = try await browse.page(cursor.source, genre: cursor.genre, skip: cursor.received)
+                        let page = genre == nil ? raw : await browse.resolvingGenres(in: raw)
+                        return (index, page, nil)
+                    } catch { return (index, nil, error) }
                 }
             }
             for await (index, page, error) in group {
-                if let page { pages[index] = page } else { failure = error }
+                guard let page else {
+                    failure = error
+                    continue
+                }
+                pages[index] = page
+                guard let genre, current == generation, !Task.isCancelled else { continue }
+                for var item in page where MediaGenres.contains(genre, in: item.genres) && known.insert(item.identity).inserted {
+                    // The card and the page it opens lead with the genre the title is shown for.
+                    item.genres = MediaGenres.leading([genre], in: item.genres)
+                    items.append(item)
+                }
             }
         }
         guard current == generation else { return }
@@ -209,27 +223,28 @@ public final class DiscoverViewModel {
             }
             return
         }
+        // Skip counts the complete raw page, whatever the genre kept of it.
         for (index, page) in pages {
             let identities = page.map(\.identity)
             cursors[index].received += page.count
             cursors[index].hasMore = identities.contains { !cursors[index].seenIDs.contains($0) } && cursors[index].source.catalog.supportsSkip
             cursors[index].seenIDs.formUnion(identities)
         }
-        let previousCount = items.count
-        var known = Set(items.map(\.identity))
-        let ordered = pages.keys.sorted().map { index in
-            let page = pages[index] ?? []
-            // Addons without a genre parameter are filtered locally; skip still counts the complete page above.
-            guard let genre, cursors[index].source.catalog.extra(named: "genre") == nil else { return page }
-            return page.filter { $0.genres.contains { $0.localizedCaseInsensitiveCompare(genre) == .orderedSame } }
-        }
-        for position in 0..<(ordered.map(\.count).max() ?? 0) {
-            for page in ordered where position < page.count && known.insert(page[position].identity).inserted { items.append(page[position]) }
+        if genre == nil {
+            let ordered = pages.keys.sorted().map { pages[$0] ?? [] }
+            for position in 0..<(ordered.map(\.count).max() ?? 0) {
+                for page in ordered where position < page.count && known.insert(page[position].identity).inserted { items.append(page[position]) }
+            }
         }
         canLoadMore = cursors.contains(where: \.hasMore)
-        // A locally filtered raw page can add no cards. Keep paging until the screen can trigger the next load itself.
+        // A round can add no cards. Keep paging until the screen can trigger the next load itself.
         if items.count == previousCount, canLoadMore {
-            await loadMixedPage(generation: current)
+            guard emptyRounds + 1 < Self.emptyRoundLimit else {
+                canLoadMore = false
+                state = .loaded
+                return
+            }
+            await loadMixedPage(generation: current, emptyRounds: emptyRounds + 1)
             return
         }
         state = .loaded

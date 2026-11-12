@@ -34,7 +34,7 @@ extension ScrollViewProxy {
     @MainActor var pageReveal: PageReveal {
         let proxy = self
         return PageReveal { id in
-            withAnimation(.snappy(duration: 0.35)) { proxy.scrollTo(id) }
+            withAnimation(Theme.Motion.snap) { proxy.scrollTo(id) }
         }
     }
 }

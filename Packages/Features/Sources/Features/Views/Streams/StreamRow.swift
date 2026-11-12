@@ -30,6 +30,7 @@ struct StreamRow: View {
     private let torBox: TorBoxCache?
     /// Compact width (iPhone in portrait) takes the short badge words: "RMX" and "DV".
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.layoutMetrics) private var metrics
 
     init(item: RankedStream, isBest: Bool = false, isRemux: Bool = false, savesToPlayer: Bool = false, downloadsToPlayer: Bool = false, downloadsNatively: Bool = false,
          isPreparing: Bool = false, preparation: PlaybackPreparation? = nil, preparationBeganAt: Date? = nil,
@@ -55,7 +56,7 @@ struct StreamRow: View {
                     Label("Best match", systemImage: "sparkles")
                         .font(Theme.Typography.eyebrow)
                         .textCase(.uppercase)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Theme.dimmerText)
                         .lineLimit(1)
                         .accessibilityIdentifier("stream.bestMatch")
                 }
@@ -75,7 +76,7 @@ struct StreamRow: View {
                         StreamDiscBox(is4K: disc == .fourKDisc)
                     }
                     Text(Self.headline(for: item))
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.Typography.mediumStrong)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
@@ -245,7 +246,7 @@ struct StreamRow: View {
             }
         }
         .frame(width: side, height: side)
-        .background(Theme.surfaceStrong, in: Circle())
+        .background(Theme.surfaceStrong, in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
         .animation(.smooth(duration: 0.2), value: isPreparing)
         .accessibilityHidden(true)
     }
@@ -375,14 +376,13 @@ private struct StreamPreparationMeter: View {
 
 /// Shared stream-card proportions on iPhone and Mac.
 enum StreamCardMetrics {
+    static let cornerRadius: CGFloat = Theme.Radius.card
     #if targetEnvironment(macCatalyst)
     static let padding: CGFloat = Theme.Spacing.m
-    static let cornerRadius: CGFloat = Theme.Radius.card
     static let markSize: CGFloat = 32
     static let playButtonSize: CGFloat = 36
     #else
     static let padding: CGFloat = Theme.Spacing.l
-    static let cornerRadius: CGFloat = Theme.Radius.surface
     static let markSize: CGFloat = 36
     static let playButtonSize: CGFloat = 44
     #endif
@@ -493,7 +493,7 @@ struct StreamTechnicalDetails: View {
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .accessibilityHidden(true)
                 }
-                .font(.footnote.weight(.semibold))
+                .font(Theme.Typography.smallStrong)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, StreamCardMetrics.padding)
                 .padding(.vertical, Theme.Spacing.m)
@@ -520,7 +520,7 @@ struct StreamTechnicalDetails: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .font(.footnote)
+        .font(Theme.Typography.small)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, StreamCardMetrics.padding)

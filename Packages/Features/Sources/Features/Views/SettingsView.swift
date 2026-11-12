@@ -78,6 +78,10 @@ struct SettingsView: View {
         }
         #else
         list.navigationDestination(for: SettingsDestination.self) { page($0) }
+            // A section's row opened from the list, as on a button (the Haptics page's Buttons).
+            .onChange(of: router.settingsPath.count) { old, new in
+                if old == 0, new == 1 { Haptics.play(.buttons) }
+            }
         #endif
     }
 
@@ -88,7 +92,7 @@ struct SettingsView: View {
                 Section {
                     HStack(spacing: Theme.Spacing.m) {
                         Text("👻").font(.title2).accessibilityHidden(true)
-                        Text("Ghost mode is on").font(.subheadline.weight(.semibold))
+                        Text("Ghost mode is on").font(Theme.Typography.mediumStrong)
                         Spacer(minLength: 0)
                         Button("Turn Off") { setGhost(false) }
                             .buttonStyle(.glassCapsule)
@@ -175,7 +179,7 @@ struct SettingsView: View {
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .listStyle(.insetGrouped)
+        .listStyle(.grouped)
         .scrollContentBackground(.hidden)
         .readableColumn()
         .trackLandscapeTabScroll()
@@ -221,8 +225,30 @@ struct SettingsView: View {
 
     /// A row that opens `destination`. Beside the list, the chosen row is lit.
     private func link<Label: View>(_ destination: SettingsDestination, @ViewBuilder label: () -> Label) -> some View {
-        NavigationLink(value: destination, label: label)
-            .listRowBackground(SettingsRowBackground(isSelected: Self.selectsBesideList && router.settingsSelection == destination))
+        Group {
+            #if targetEnvironment(macCatalyst)
+            Button {
+                Haptics.play(.buttons)
+                router.settingsSelection = destination
+            } label: {
+                rowLabel(label)
+            }
+            .buttonStyle(.plain)
+            #else
+            // The Buttons haptic plays as the list opens a page (see `body`), so no extra gesture competes with the link's tap.
+            NavigationLink(value: destination) {
+                rowLabel(label)
+            }
+            #endif
+        }
+        .listRowBackground(SettingsRowBackground(isSelected: Self.selectsBesideList && router.settingsSelection == destination))
+    }
+
+    private func rowLabel<Label: View>(@ViewBuilder _ label: () -> Label) -> some View {
+        label()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+            .pointerInteraction(cornerRadius: Theme.Radius.surface * metrics.cornerScale(for: .settingsRows), showsFocus: false)
     }
 
     @ViewBuilder
@@ -283,7 +309,7 @@ struct SettingsView: View {
                     }
                 Text(holdProgress >= 1 ? (ghostIsOn ? "Ghost mode on" : "Ghost mode off")
                      : isHolding ? "Keep holding…" : (ghostIsOn ? "Pull and hold to leave ghost mode" : "Pull and hold for ghost mode"))
-                    .font(.footnote.weight(.semibold))
+                    .font(Theme.Typography.smallStrong)
             }
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.s)
@@ -400,7 +426,7 @@ struct SettingsRow: View {
         Label {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(summary).font(Theme.Typography.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         } icon: {
             Image(systemName: systemImage)
@@ -416,14 +442,18 @@ struct SettingsList<Content: View>: View {
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        List(selection: selection) {
-            if selection == nil {
-                content()
-                    .listRowBackground(SettingsRowBackground())
-                    .listRowSeparator(.hidden)
+        Group {
+            if let selection {
+                List(selection: selection) {
+                    content()
+                        .listRowSeparator(.hidden)
+                }
             } else {
-                content()
-                    .listRowSeparator(.hidden)
+                List {
+                    content()
+                        .listRowBackground(SettingsRowBackground())
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .listStyle(.grouped)
@@ -446,7 +476,7 @@ struct SettingsRowBackground: View {
 /// The look every Settings page shares with the Widgets page.
 extension View {
     func settingsPage(_ title: String) -> some View {
-        listStyle(.insetGrouped)
+        listStyle(.grouped)
             .scrollContentBackground(.hidden)
             .readableColumn()
             .screenBackground()

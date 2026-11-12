@@ -73,8 +73,8 @@ struct PlayerControls: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
             }
-            .animation(.easeInOut(duration: 0.2), value: menuOpen)
-            .animation(.easeInOut(duration: 0.2), value: topPanelOpen)
+            .animation(Theme.Motion.toggle, value: menuOpen)
+            .animation(Theme.Motion.toggle, value: topPanelOpen)
             #if targetEnvironment(macCatalyst)
             .frame(maxWidth: 900)
             #endif
@@ -106,10 +106,10 @@ struct PlayerControls: View {
                 Haptics.play(.playerControls)
                 onClose()
             } label: {
-                Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                Image(systemName: "xmark").font(Theme.Typography.largeStrong).frame(width: 44, height: 44)
                     .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
                     .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
-                    .pointerInteraction(cornerRadius: 22)
+                    .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
             }
             #if !targetEnvironment(macCatalyst)
             .keyboardShortcut(.escape, modifiers: [])
@@ -126,9 +126,9 @@ struct PlayerControls: View {
                             Haptics.play(.playerControls)
                             onShowEpisodes()
                         } label: {
-                            Image(systemName: "list.bullet").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                            Image(systemName: "list.bullet").font(Theme.Typography.largeStrong).frame(width: 44, height: 44)
                                 .contentShape(.rect)
-                                .pointerInteraction(cornerRadius: 22)
+                                .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
                         }
                         .help("Episodes")
                         .accessibilityLabel("Episodes")
@@ -139,9 +139,9 @@ struct PlayerControls: View {
                             Haptics.play(.playerControls)
                             pipToggle()
                         } label: {
-                            Image(systemName: "pip.enter").font(.body.weight(.semibold)).frame(width: 44, height: 44)
+                            Image(systemName: "pip.enter").font(Theme.Typography.largeStrong).frame(width: 44, height: 44)
                                 .contentShape(.rect)
-                                .pointerInteraction(cornerRadius: 22)
+                                .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
                         }
                         .help("Picture in Picture")
                         .accessibilityLabel("Picture in Picture")
@@ -149,7 +149,7 @@ struct PlayerControls: View {
                     }
                     #if canImport(AVKit)
                     AirPlayButton().frame(width: 44, height: 44)
-                        .pointerInteraction(cornerRadius: 22)
+                        .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
                         .help("AirPlay")
                         .accessibilityLabel("AirPlay").accessibilityIdentifier("player.airplay")
                     #endif
@@ -159,10 +159,10 @@ struct PlayerControls: View {
                             onShowStreams()
                         } label: {
                             Image(systemName: "arrow.trianglehead.2.clockwise")
-                                .font(.body.weight(.semibold))
+                                .font(Theme.Typography.largeStrong)
                                 .frame(width: 44, height: 44)
                                 .contentShape(.rect)
-                                .pointerInteraction(cornerRadius: 22)
+                                .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
                         }
                         .help("Choose another stream")
                         .accessibilityLabel("Choose stream")
@@ -182,11 +182,11 @@ struct PlayerControls: View {
             Haptics.play(.playerControls)
             model.cycleZoomMode()
         } label: {
-            Image(systemName: Self.zoomSymbol(model.zoomMode)).font(.body.weight(.semibold)).frame(width: 44, height: 44)
+            Image(systemName: Self.zoomSymbol(model.zoomMode)).font(Theme.Typography.largeStrong).frame(width: 44, height: 44)
                 .contentTransition(.symbolEffect(.replace))
                 .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
                 .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
-                .pointerInteraction(cornerRadius: 22)
+                .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
         }
         .help("Zoom Mode: \(model.zoomMode.label)")
         .accessibilityLabel("Zoom Mode")
@@ -237,7 +237,7 @@ struct PlayerControls: View {
                     Image(systemName: "gobackward.\(Int(model.skipBackSeconds))").font(.title2.weight(.medium)).frame(width: 58, height: 58)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
                         .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
-                        .pointerInteraction(cornerRadius: 29)
+                        .pointerInteraction(cornerRadius: 29 * metrics.circularButtonScale(for: .playerControls))
                 }
                 #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(.leftArrow, modifiers: [])
@@ -255,10 +255,10 @@ struct PlayerControls: View {
                                 .transition(.opacity)
                         }
                     }
-                    .animation(.easeOut(duration: 0.2), value: isStalled)
+                    .animation(Theme.Motion.fade, value: isStalled)
                     .frame(width: 80, height: 80).buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
                     .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
-                    .pointerInteraction(cornerRadius: 40)
+                    .pointerInteraction(cornerRadius: 40 * metrics.circularButtonScale(for: .playerControls))
                 }
                 #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(" ", modifiers: [])
@@ -271,7 +271,7 @@ struct PlayerControls: View {
                     Image(systemName: "goforward.\(Int(model.skipForwardSeconds))").font(.title2.weight(.medium)).frame(width: 58, height: 58)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
                         .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .playerControls)))
-                        .pointerInteraction(cornerRadius: 29)
+                        .pointerInteraction(cornerRadius: 29 * metrics.circularButtonScale(for: .playerControls))
                 }
                 #if !targetEnvironment(macCatalyst)
                 .keyboardShortcut(.rightArrow, modifiers: [])
@@ -307,7 +307,7 @@ struct PlayerControls: View {
                 Text(headline).font(.title3.weight(.bold)).lineLimit(1)
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("player.title")
                 if let episodeLine {
-                    Text(episodeLine).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                    Text(episodeLine).font(Theme.Typography.mediumStrong).foregroundStyle(Theme.dimmerText).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -316,7 +316,7 @@ struct PlayerControls: View {
                     Haptics.play(.playerControls)
                     onNextEpisode()
                 } label: {
-                    Label("Next Episode", systemImage: "forward.end.fill").font(.subheadline.weight(.semibold))
+                    Label("Next Episode", systemImage: "forward.end.fill").font(Theme.Typography.mediumStrong)
                         .padding(.horizontal, 16).frame(height: 40)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -362,7 +362,7 @@ struct PlayerControls: View {
             // Speak the useful clock information in its label instead.
             .accessibilityLabel(Text("Position, \(model.positionText) of \(model.duration.map(PlayerTime.format) ?? "unknown")"))
             .accessibilityIdentifier("player.scrubber")
-            Text(model.remainingText).font(.footnote.monospacedDigit().weight(.medium)).foregroundStyle(.white.opacity(0.75))
+            Text(model.remainingText).font(.footnote.monospacedDigit().weight(.medium)).foregroundStyle(Theme.dimText)
                 .frame(width: 68, alignment: .trailing)
                 .accessibilityLabel("Remaining time")
         }
@@ -375,12 +375,13 @@ struct PlayerControls: View {
             PlayerMenuBar(tabs: menuTabs, selection: $panel, speedLabel: speedLabel, subtitlesOn: model.subtitleChoice != .off,
                           cornerScale: metrics.cornerScale(for: .playerControls))
                 .fixedSize()
+                .buttonCursor()
             #if targetEnvironment(macCatalyst)
             volumeButton
             #endif
             }
         }
-        .font(.body.weight(.semibold))
+        .font(Theme.Typography.largeStrong)
         .padding(4)
         .buttonSurface(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
     }
@@ -407,7 +408,7 @@ struct PlayerControls: View {
         Button { Haptics.play(.playerControls); model.toggleMute() } label: {
             Image(systemName: volumeSymbol).frame(width: 44, height: 44)
                 .contentShape(.rect)
-                .pointerInteraction(cornerRadius: 22)
+                .pointerInteraction(cornerRadius: 22 * metrics.circularButtonScale(for: .playerControls))
         }
         .help(model.isMuted ? "Unmute (M)" : "Mute (M)")
         .accessibilityLabel(model.isMuted ? "Unmute" : "Mute")

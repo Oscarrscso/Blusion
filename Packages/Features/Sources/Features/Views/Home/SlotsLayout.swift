@@ -245,7 +245,7 @@ private struct SlotLever: View {
             ZStack(alignment: .top) {
                 Capsule()
                     .fill(.black.opacity(0.6))
-                    .overlay { Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5) }
+                    .overlay { Capsule().strokeBorder(Theme.separator, lineWidth: 0.5) }
                     .frame(width: 7, height: travel + Self.knob)
                 Circle()
                     .fill(.tint)
@@ -263,6 +263,7 @@ private struct SlotLever: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .buttonCursor()
         .disabled(isSpinning)
         .help("Spin")
         .accessibilityLabel("Spin")

@@ -86,6 +86,7 @@ struct TraktAccountView: View {
             })) {
                 ForEach(SettingsViewModel.continueWatchingRefreshOptions) { Text($0.label).tag($0.value) }
             }
+            .buttonCursor()
             .accessibilityIdentifier("settings.continueWatchingRefresh")
         }
     }

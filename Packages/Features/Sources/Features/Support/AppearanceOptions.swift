@@ -299,7 +299,7 @@ extension AppearancePreferences {
             switch self {
             case .off: 0
             case .faint: 0.1
-            case .standard: 0.22
+            case .standard: 0.26
             case .strong: 0.5
             }
         }
@@ -410,6 +410,23 @@ extension AppearancePreferences {
     }
 
     // MARK: - Title pages, navigation and motion
+
+    public enum TitleSection: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+        case episodes, reviews, cast, information, franchise, related, watchAnywhere
+
+        public var id: String { rawValue }
+        public var label: String {
+            switch self {
+            case .episodes: "Episodes"
+            case .reviews: "Reviews"
+            case .cast: "Cast & Crew"
+            case .information: "Information"
+            case .franchise: "Collection"
+            case .related: "More Like This"
+            case .watchAnywhere: "Watch Anywhere"
+            }
+        }
+    }
 
     /// The order of the two sections under a title's episodes.
     public enum SectionOrder: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {

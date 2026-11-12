@@ -20,10 +20,10 @@ struct AddonsView: View {
 
     var body: some View {
         @Bindable var model = model
-        List {
+        SettingsList {
             #if targetEnvironment(macCatalyst)
             if !model.addons.isEmpty {
-                HStack { Spacer(); EditButton() }
+                HStack { Spacer(); EditButton().buttonCursor() }
                     .listRowBackground(Color.clear)
             }
             #endif
@@ -36,15 +36,10 @@ struct AddonsView: View {
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .scrollContentBackground(.hidden)
-        .readableColumn()
-        .screenBackground()
-        .navigationTitle("Addons")
-        .macBackNavigation()
-        .navigationBarTitleDisplayMode(.inline)
+        .settingsPage("Addons")
         #if !targetEnvironment(macCatalyst)
         .toolbar {
-            if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton() } }
+            if !model.addons.isEmpty { ToolbarItem(placement: .primaryAction) { EditButton().buttonCursor() } }
         }
         #endif
         .navigationDestination(for: UUID.self) { id in
@@ -122,8 +117,8 @@ struct AddonsView: View {
             Text("Paste a link above, or add Cinemeta for catalogs and search.")
                 .accessibilityIdentifier("addons.emptyText")
             VStack(alignment: .leading, spacing: 6) {
-                Text("Suggested: \(AddonsViewModel.suggestion.name)").font(.headline)
-                Text(AddonsViewModel.suggestion.detail).font(.footnote).foregroundStyle(.secondary)
+                Text("Suggested: \(AddonsViewModel.suggestion.name)").font(Theme.Typography.headline)
+                Text(AddonsViewModel.suggestion.detail).font(Theme.Typography.small).foregroundStyle(.secondary)
                 Button("Install \(AddonsViewModel.suggestion.name)") { Task { await model.installSuggested() } }
                     .buttonStyle(.glassCapsule)
                     .accessibilityIdentifier("addons.installSuggested")
@@ -149,12 +144,12 @@ struct AddonsView: View {
                                     .background(Theme.surfaceStrong, in: RoundedRectangle(cornerRadius: 10 * metrics.cornerScale(for: .panels)))
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(addon.name).font(.headline)
+                                Text(addon.name).font(Theme.Typography.headline)
                                 Text("\(addon.manifest.version.isEmpty ? "" : "v\(addon.manifest.version) · ")\(addon.displayHost)")
-                                    .font(.caption)
+                                    .font(Theme.Typography.caption)
                                     .foregroundStyle(.secondary)
                                 Text(model.capabilities(of: addon).joined(separator: " · "))
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .font(Theme.Typography.micro).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -208,12 +203,12 @@ struct AddonDetailView: View {
 
     var body: some View {
         let details = model.details(for: addon)
-        List {
+        SettingsList {
             Section("About") {
                 LabeledContent("Name", value: details.name)
                 if !details.version.isEmpty { LabeledContent("Version", value: details.version) }
                 LabeledContent("Host", value: details.host)
-                if let description = details.description { Text(description).font(.footnote) }
+                if let description = details.description { Text(description).font(Theme.Typography.small) }
             }
             if !details.warnings.isEmpty {
                 Section("Notes") { ForEach(details.warnings, id: \.self) { Label($0, systemImage: "info.circle") } }
@@ -243,12 +238,7 @@ struct AddonDetailView: View {
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .scrollContentBackground(.hidden)
-        .readableColumn()
-        .screenBackground()
-        .navigationTitle(details.name)
-        .macBackNavigation()
-        .navigationBarTitleDisplayMode(.inline)
+        .settingsPage(details.name)
     }
 }
 #endif

@@ -32,7 +32,7 @@ struct WidgetFieldPanel: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(spacing: Theme.Spacing.s) {
                 Text(title)
-                    .font(.headline)
+                    .font(Theme.Typography.headline)
                 Spacer(minLength: 0)
                 Button {
                     Haptics.play(.buttons)
@@ -198,7 +198,7 @@ struct WidgetFieldPanel: View {
                 }
             }
             Text("Shown for \(regionName). Change it with Region.")
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
         .task(id: "\(query.kind.rawValue)/\(region)") { await model.loadOptions(for: .providers) }
@@ -214,7 +214,7 @@ struct WidgetFieldPanel: View {
                 .frame(maxWidth: .infinity)
         } else if let message = model.optionsMessage {
             Text(message)
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
     }
@@ -271,10 +271,10 @@ struct WidgetFieldPanel: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Typography.mediumStrong)
                 Spacer(minLength: 0)
                 Text(value == neutral ? "Any" : ScoreText.wholeScore(value))
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
@@ -370,7 +370,7 @@ struct WidgetFieldPanel: View {
             yearRow("From", text: query.releasedFrom, date: ReleaseYears.from) { value in model.updateQuery { $0.releasedFrom = value } }
             yearRow("To", text: query.releasedTo, date: ReleaseYears.to) { value in model.updateQuery { $0.releasedTo = value } }
             Text("Setting a year replaces the period.")
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
     }
@@ -381,7 +381,7 @@ struct WidgetFieldPanel: View {
                          update: @escaping (String?) -> Void) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
             Spacer(minLength: 0)
             if let year = ReleaseYears.year(of: text) {
                 Picker(title, selection: Binding(get: { year }, set: { picked in
@@ -389,6 +389,7 @@ struct WidgetFieldPanel: View {
                 })) {
                     ForEach(ReleaseYears.offered(including: year), id: \.self) { Text(verbatim: String($0)).tag($0) }
                 }
+                .buttonCursor()
                 .pickerStyle(.menu)
                 .labelsHidden()
                 Button("Clear") { update(nil) }
@@ -426,7 +427,7 @@ struct WidgetFieldPanel: View {
                 }
             }
             Text("List Default keeps the order the list's owner chose.")
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
     }
@@ -511,6 +512,7 @@ struct WidgetFieldPanel: View {
                 Text("On").tag(true as Bool?)
                 Text("Off").tag(false as Bool?)
             }
+            .buttonCursor()
             .accessibilityIdentifier("widgetEditor.heroPosters")
             Toggle("Use Better Posters addon", isOn: presentationBinding(\.usesBetterPosters))
                 .accessibilityIdentifier("widgetEditor.betterPosters")
@@ -534,7 +536,7 @@ struct WidgetFieldPanel: View {
                 Shuffles the order of this widget's titles. An order stays until its next shuffle. Like Other Widgets follows the Shuffle \
                 setting on the widgets page.
                 """)
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
     }
@@ -575,7 +577,7 @@ struct WidgetFieldPanel: View {
                 Home shows this widget with a source picked at random, named after the source, and picks again on the New Source schedule. \
                 With none ticked, it picks from every source, less any unticked.
                 """)
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         }
     }
@@ -593,7 +595,7 @@ struct WidgetFieldPanel: View {
     private func labelled<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .foregroundStyle(.secondary)
             content()
         }
@@ -654,12 +656,12 @@ private struct ValueSearch: View {
     private var results: some View {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             Text("Type to search TMDB.")
-                .font(.footnote)
+                .font(Theme.Typography.small)
                 .foregroundStyle(.secondary)
         } else if matches.isEmpty {
             if matchedText == text {
                 Text("Nothing found.")
-                    .font(.footnote)
+                    .font(Theme.Typography.small)
                     .foregroundStyle(.secondary)
             }
         } else {
@@ -708,20 +710,20 @@ private struct ChoiceRow: View {
             HStack(spacing: Theme.Spacing.m) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.Typography.mediumStrong)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer(minLength: 0)
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.Typography.mediumStrong)
                 } else if opensScreen {
                     Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
+                        .font(Theme.Typography.smallStrong)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -863,10 +865,19 @@ private struct CodedName: Identifiable {
 private extension View {
     /// A text field of a panel: a rounded surface like the rows, at least 44 points tall and as wide as the panel.
     func panelField() -> some View {
-        padding(.horizontal, Theme.Spacing.m)
+        modifier(PanelField())
+    }
+}
+
+private struct PanelField: ViewModifier {
+    @Environment(\.layoutMetrics) private var metrics
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, Theme.Spacing.m)
             .frame(minHeight: 44)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.small * metrics.cornerScale(for: .panels), style: .continuous))
     }
 }
 #endif

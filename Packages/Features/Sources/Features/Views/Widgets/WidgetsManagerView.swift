@@ -124,7 +124,7 @@ struct WidgetsManagerView: View {
         WidgetsPageGroup("Import & Export") {
             Button { showsImport = true } label: {
                 WidgetsPageRow("Import Widgets", systemImage: "square.and.arrow.down") {
-                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.right").font(Theme.Typography.smallStrong).foregroundStyle(.tertiary)
                 }
             }
             .accessibilityIdentifier("widgets.import")
@@ -141,6 +141,7 @@ struct WidgetsManagerView: View {
                 ShareLink(item: text) {
                     WidgetsPageRow("Share JSON", systemImage: "square.and.arrow.up") { EmptyView() }
                 }
+                .buttonCursor()
             }
         }
     }
@@ -316,6 +317,7 @@ struct WidgetsManagerView: View {
                 })) {
                     ForEach(WidgetShuffle.choices, id: \.self) { Text(WidgetBuilderModel.shuffleText($0, compact: true)).tag($0) }
                 }
+                .buttonCursor()
                 .pickerStyle(.menu)
                 .labelsHidden()
                 // The menu's label keeps to one line; the row's title takes what is left.
@@ -348,13 +350,13 @@ struct WidgetsManagerView: View {
                 }
             }
             if model.catalogChoices.isEmpty {
-                Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").font(.footnote).foregroundStyle(.secondary)
+                Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").font(Theme.Typography.small).foregroundStyle(.secondary)
             }
             shuffleSettings
             importAndExport
             if model.isCustomised { resetRow }
             if let message = model.message {
-                Text(message).font(.footnote).foregroundStyle(model.messageIsError ? Color.orange : Color.secondary)
+                Text(message).font(Theme.Typography.small).foregroundStyle(model.messageIsError ? Color.orange : Color.secondary)
                     .accessibilityIdentifier("widgets.message")
             }
         }
@@ -379,6 +381,7 @@ struct WidgetsManagerView: View {
                         .opacity(drag?.id == id ? 0 : 1)
                         .position(layout.center(for: index))
                         .onTapGesture { tapped(id) }
+                        .buttonCursor()
                         .accessibilityActions {
                             // The showcase does not move. The card after it cannot move earlier, above it.
                             if !isShowcase {

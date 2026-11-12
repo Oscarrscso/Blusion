@@ -15,7 +15,7 @@ public enum DefaultWidgets {
             // Right after the second row; at the end when there are fewer than two.
             rows.insert(genres, at: min(2, rows.count))
         }
-        let hero = HomeWidget(id: "auto.hero", title: "Spotlight", hideTitle: true,
+        let hero = HomeWidget(id: "auto.hero", title: "Showcase", hideTitle: true,
                               content: .hero(RowConfiguration(source: .addonCatalog(spotlight.reference()), limit: 8)))
         let continueWatching = HomeWidget(id: HomeLayout.continueWatchingID, title: "Continue", content: .continueWatching)
         let tv = HomeWidget(id: blusionTVID, title: "Blusion TV", content: .blusionTV)

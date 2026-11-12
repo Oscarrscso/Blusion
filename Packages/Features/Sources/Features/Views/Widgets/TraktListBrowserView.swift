@@ -113,9 +113,9 @@ struct TraktListBrowserView: View {
 
     private var titleField: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Image(systemName: "textformat").font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+            Image(systemName: "textformat").font(Theme.Typography.caption).foregroundStyle(.secondary).accessibilityHidden(true)
             TextField(titlePlaceholder.isEmpty ? "Widget title (optional)" : titlePlaceholder, text: $title)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .submitLabel(.done)
                 .accessibilityIdentifier("widgetEditor.title")
         }
@@ -128,7 +128,7 @@ struct TraktListBrowserView: View {
     private static let controlHeight: CGFloat = 36
 
     private var sortMenu: some View {
-        Menu {
+        FilterMenu(minHeight: Self.controlHeight) {
             Picker("Sort by", selection: $sort) {
                 Text("List Default").tag(TraktListSort?.none)
                 ForEach(TraktListSort.allCases) { option in Text(option.title).tag(TraktListSort?.some(option)) }
@@ -157,7 +157,7 @@ struct TraktListBrowserView: View {
             browser.leaveUser()
         } label: {
             Label("Lists by @\(user.username)", systemImage: "chevron.left")
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
         }
         .buttonStyle(GlassCapsuleButtonStyle())
         .padding(.horizontal, metrics.contentMargin)
@@ -241,26 +241,26 @@ struct TraktListRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             Image(systemName: list.isPrivate ? "lock.rectangle.stack" : "list.bullet.rectangle")
-                .font(.body)
+                .font(Theme.Typography.large)
                 .foregroundStyle(.secondary)
                 .frame(width: 32, height: 32)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.small * metrics.cornerScale(for: .panels), style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Typography.mediumStrong)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text("@\(list.username)").lineLimit(1)
                     Label("\(list.itemCount)", systemImage: "film.stack")
                     Label("\(list.likes)", systemImage: "heart")
                 }
-                .font(.caption)
+                .font(Theme.Typography.caption)
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 if !list.description.isEmpty {
                     Text(TraktListRow.plain(list.description))
-                        .font(.caption)
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
                 }
@@ -311,12 +311,12 @@ private struct TraktUserRow: View {
                 .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName ?? "@\(user.username)").font(.subheadline.weight(.semibold)).lineLimit(1)
-                if user.displayName != nil { Text("@\(user.username)").font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                Text(user.displayName ?? "@\(user.username)").font(Theme.Typography.mediumStrong).lineLimit(1)
+                if user.displayName != nil { Text("@\(user.username)").font(Theme.Typography.caption).foregroundStyle(.secondary).lineLimit(1) }
             }
             Spacer(minLength: 0)
             if user.isVIP { Badge("VIP") }
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            Image(systemName: "chevron.right").font(Theme.Typography.smallStrong).foregroundStyle(.tertiary)
         }
         .padding(.horizontal, Theme.Spacing.m)
         .padding(.vertical, 10)

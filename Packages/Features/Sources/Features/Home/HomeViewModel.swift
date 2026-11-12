@@ -49,6 +49,9 @@ public final class HomeViewModel {
     public private(set) var loadRevision = 0
     /// The rows below the one on screen that `loadRowsBelow` loaded ahead, in page order. Their posters are kept loaded too.
     public private(set) var queuedRowIDs: [String] = []
+    /// The cards a row shows across the page as it scrolls in, which Home sets from its width. A row below the screen takes this many of
+    /// Home's titles ahead, not its whole list, so the titles reach as many rows down as they fill.
+    public var cardsAcross = 4
     @ObservationIgnored private var requestedSections: Set<String> = []
     @ObservationIgnored private var loadingSections: Set<String> = []
     private var traktPlayback: [TraktPlaybackItem] = []
@@ -100,7 +103,7 @@ public final class HomeViewModel {
         var widgets = await shuffled(laidOut, addons: addons)
         if UserDefaults.standard.bool(forKey: OptimisationSettings.lowPerformanceWidgetsKey) {
             widgets = widgets.map { widget in
-                guard var row = loadingConfiguration(widget.content) else { return widget }
+                guard !HomeLayout.isShowcase(widget), var row = loadingConfiguration(widget.content) else { return widget }
                 row.limit = 15
                 row.layout = nil
                 row.presentation = WidgetPresentation(showsRatings: false, usesHeroPosters: false)
@@ -146,7 +149,8 @@ public final class HomeViewModel {
     }
 
     /// Loads the rows below `id`, which has just come on screen, before they scroll in. It loads as many titles as Optimisation's Home
-    /// preloading keeps ready, and `queuedRowIDs` becomes those rows, so only the rows nearest the screen keep their posters loaded.
+    /// preloading keeps ready, counting `cardsAcross` for each row, and `queuedRowIDs` becomes those rows, so only the rows nearest the
+    /// screen keep their posters loaded.
     public func loadRowsBelow(_ id: String) async {
         let current = generation
         guard !isOffline, let index = sections.firstIndex(where: { $0.id == id }) else { return }
@@ -158,7 +162,7 @@ public final class HomeViewModel {
             queued.append(next)
             if queuedRowIDs != queued { queuedRowIDs = queued }
             if !requestedSections.contains(next) { await loadVisibleSection(next) }
-            ahead -= sections.first(where: { $0.id == next })?.state.value?.count ?? 0
+            ahead -= min(sections.first(where: { $0.id == next })?.state.value?.count ?? 0, max(1, cardsAcross))
         }
     }
 

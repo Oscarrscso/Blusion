@@ -7,22 +7,20 @@ import UIKit
 /// capitals beside their label, and a featured title low on the page over its own poster drawn as a two-tone silhouette in the accent.
 /// With a query the page turns to the accent with black type: BACK, SEARCH RESULTS, the results as staggered stills in Appearance's
 /// tone with their captions, the filters as black tags with ×, a dashed place to add one, and the genres list. The field stays where it
-/// is between the two, so typing never drops the keyboard.
+/// is between the two, so typing never drops the keyboard. The search itself, its filters, people, suggestions and chips are the
+/// standard page's (`SearchViewModel`); only how they are drawn is this page's own.
 struct EditorialSearchPage: View {
     @Bindable var model: SearchViewModel
     let services: AppServices
     /// The results as the standard page lists them, already narrowed to the type chosen.
     let results: [MetaPreview]
     let isLoading: Bool
-    @Binding var selectedType: String
     @Environment(AppRouter.self) private var router
     @Environment(\.appAppearance) private var appearance
     @Environment(\.zoomNamespace) private var zoomNamespace
     @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
     @FocusState private var isFieldFocused: Bool
     @State private var showsAllGenres = false
-    /// The genres the results are narrowed to, in the order they were added. A result with any of them shows.
-    @State private var genreFilter: [String] = []
     /// The title low on the idle page, and the silhouette behind it: one of the first genre's titles.
     @State private var featured: MetaPreview?
 
@@ -32,30 +30,25 @@ struct EditorialSearchPage: View {
     /// How far every other tag stands in from the right, as the mockup staggers them.
     private static let tagStep: CGFloat = 56
 
-    private struct TypeChoice: Identifiable, Sendable {
-        let tag: String
-        let title: String
-        var id: String { tag }
-    }
-
-    private static let types = [TypeChoice(tag: "all", title: "All"), TypeChoice(tag: "movie", title: "Movies"),
-                                TypeChoice(tag: "series", title: "Series"), TypeChoice(tag: "ai", title: "AI")]
-
-    /// A filter on the results, drawn as a black tag: the type, when it is not All, and each genre.
+    /// A filter on the results, drawn as a black tag: the kind shown, when it is not All, each genre, and each requirement a
+    /// described search was read as asking for.
     private enum Tag: Identifiable, Hashable {
-        case type(String)
+        case scope(String)
         case genre(String)
+        case chip(SearchChip)
 
         var id: String {
             switch self {
-            case .type: "type"
+            case .scope: "scope"
             case .genre(let genre): "genre.\(genre)"
+            case .chip(let chip): "chip.\(chip.title)"
             }
         }
 
         var title: String {
             switch self {
-            case .type(let title), .genre(let title): title
+            case .scope(let title), .genre(let title): title
+            case .chip(let chip): chip.title
             }
         }
     }
@@ -68,7 +61,7 @@ struct EditorialSearchPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 field
-                TonightControls(model: model) { selectedType = "all"; isFieldFocused = false }
+                PickControls(model: model) { isFieldFocused = false }
                     .padding(.vertical, Theme.Spacing.m)
                 if hasQuery {
                     resultsPage.transition(.opacity)
@@ -86,7 +79,6 @@ struct EditorialSearchPage: View {
         .animation(.smooth(duration: 0.35), value: hasQuery)
         .onChange(of: hasQuery, initial: true) { _, has in
             router.showsAccentPage = has
-            if !has { genreFilter = [] }
         }
         // Every arrival on Search, and every tap on its capsule, puts the cursor in the field, as the standard page does.
         .onChange(of: router.searchFocusRevision, initial: true) { focusField() }
@@ -198,7 +190,7 @@ struct EditorialSearchPage: View {
                 } label: {
                     Text("+ \(hidden)")
                         .font(Editorial.font(.footnote))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(Theme.faintText)
                         .padding(.vertical, Theme.Spacing.s)
                         .contentShape(Rectangle())
                 }
@@ -289,11 +281,25 @@ struct EditorialSearchPage: View {
                 .accessibilityAddTraits(.isHeader)
             }
             .padding(.top, Theme.Spacing.xl)
-            SearchRefinements(model: model, showsGenre: false)
+            SearchRefinements(model: model, showsGenre: false, showsChips: false, usesFilterBar: false)
                 .tint(.black)
                 .padding(.top, Theme.Spacing.l)
-            resultRow
-                .padding(.top, 40)
+            if let correction = model.correction {
+                Button {
+                    Haptics.play(.buttons)
+                    Task { await model.applyCorrection() }
+                } label: {
+                    Text("DID YOU MEAN \(correction.uppercased())?")
+                        .font(Editorial.font(.body))
+                        .underline()
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.hoverPlain)
+                .padding(.top, Theme.Spacing.l)
+                .accessibilityIdentifier("search.correction")
+            }
+            if model.scope != .people { resultRow.padding(.top, 40) }
+            if model.scope == .all || model.scope == .people { peopleRow.padding(.top, 40) }
             tagStack
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.top, 48)
@@ -303,15 +309,34 @@ struct EditorialSearchPage: View {
         .foregroundStyle(.black)
     }
 
-    private var filteredResults: [MetaPreview] {
-        guard !genreFilter.isEmpty else { return results }
-        let wanted = Set(genreFilter.map { $0.lowercased() })
-        return results.filter { item in item.genres.contains { wanted.contains($0.lowercased()) } }
+    /// The people found, as portraits in Appearance's tone with their names in capitals. On People alone, the place of the results.
+    @ViewBuilder
+    private var peopleRow: some View {
+        if !model.people.isEmpty {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 6) {
+                    ForEach(model.people) { EditorialPersonCard(person: $0) }
+                }
+                .padding(.horizontal, Editorial.margin)
+            }
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, -Editorial.margin)
+        } else if model.scope == .people {
+            Group {
+                if isLoading {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(model.isOffline ? "OFFLINE" : "NO RESULTS")
+                        .font(Editorial.font(size: 32, weight: .medium))
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 236, alignment: .leading)
+        }
     }
 
     @ViewBuilder
     private var resultRow: some View {
-        let items = filteredResults
+        let items = results
         if items.isEmpty {
             Group {
                 if isLoading {
@@ -338,18 +363,16 @@ struct EditorialSearchPage: View {
 
     // MARK: Filters
 
-    private var typeChoices: [TypeChoice] {
-        Self.types.filter { $0.tag != "ai" || model.aiAvailable }
-    }
-
     private var activeTags: [Tag] {
-        let type = Self.types.first { $0.tag == selectedType && $0.tag != "all" }.map { Tag.type($0.title) }
-        return (type.map { [$0] } ?? []) + genreFilter.map { Tag.genre($0) }
+        let scope: [Tag] = model.scope == .all ? [] : [.scope(model.scope.title)]
+        return scope + model.chips.map { Tag.chip($0) } + model.filter.genres.map { Tag.genre($0) }
     }
 
     /// The genres the results carry, the most common first; before any carry one, the genres Search browses.
     private var availableGenres: [String] {
         var counts: [String: Int] = [:]
+        // Counted before the genre filter, so choosing one genre does not take the others off the list.
+        for genre in model.availableGenres { counts[genre, default: 0] += 0 }
         for item in results {
             for genre in item.genres where !genre.isEmpty { counts[genre, default: 0] += 1 }
         }
@@ -379,27 +402,38 @@ struct EditorialSearchPage: View {
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.3), value: tags)
+        .animation(Theme.Motion.standard, value: tags)
     }
 
+    /// A tag removes its filter on a tap. One whose requirement can be changed (the kind, years, runtime or score a described
+    /// search asked for) opens the values it can take, with its removal.
+    @ViewBuilder
     private func tagView(_ tag: Tag) -> some View {
-        Button { remove(tag) } label: {
-            HStack(spacing: Theme.Spacing.s) {
-                Text(tag.title.uppercased())
-                    .font(Editorial.font(.body))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .regular))
-            }
-            .foregroundStyle(.white.opacity(0.92))
-            .padding(.horizontal, 18)
-            .frame(width: Self.tagWidth, height: Self.tagHeight)
-            .background(Color.black)
-            .contentShape(Rectangle())
+        if case .chip(let chip) = tag, !model.options(for: chip).isEmpty {
+            Menu { SearchChipActions(model: model, chip: chip) } label: { tagLabel(tag, systemImage: "chevron.down") }
+                .tint(.black)
+                .accessibilityLabel(tag.title)
+        } else {
+            Button { remove(tag) } label: { tagLabel(tag, systemImage: "xmark") }
+                .buttonStyle(.hoverPlain)
+                .accessibilityLabel("Remove \(tag.title)")
         }
-        .buttonStyle(.hoverPlain)
-        .accessibilityLabel("Remove \(tag.title)")
+    }
+
+    private func tagLabel(_ tag: Tag, systemImage: String) -> some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Text(tag.title.uppercased())
+                .font(Editorial.font(.body))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .regular))
+        }
+        .foregroundStyle(.white.opacity(0.92))
+        .padding(.horizontal, 18)
+        .frame(width: Self.tagWidth, height: Self.tagHeight)
+        .background(Color.black)
+        .contentShape(Rectangle())
     }
 
     private var addTag: some View {
@@ -438,12 +472,12 @@ struct EditorialSearchPage: View {
     @ViewBuilder
     private var filterOptions: some View {
         Section("Show") {
-            ForEach(typeChoices) { choice in
-                Button { choose(choice.tag) } label: {
-                    if choice.tag == selectedType {
-                        Label(choice.title, systemImage: "checkmark")
+            ForEach(SearchScope.allCases) { scope in
+                Button { choose(scope) } label: {
+                    if scope == model.scope {
+                        Label(scope.title, systemImage: "checkmark")
                     } else {
-                        Text(choice.title)
+                        Text(scope.title)
                     }
                 }
             }
@@ -451,7 +485,7 @@ struct EditorialSearchPage: View {
         Section("Genres") {
             ForEach(availableGenres, id: \.self) { genre in
                 Button { toggle(genre) } label: {
-                    if genreFilter.contains(genre) {
+                    if model.filter.genres.contains(genre) {
                         Label(genre, systemImage: "checkmark")
                     } else {
                         Text(genre)
@@ -461,31 +495,66 @@ struct EditorialSearchPage: View {
         }
     }
 
-    private func choose(_ type: String) {
-        guard type != selectedType else { return }
+    private func choose(_ scope: SearchScope) {
+        guard scope != model.scope else { return }
         Haptics.play(.choices)
-        withAnimation(.smooth(duration: 0.3)) { selectedType = type }
+        withAnimation(Theme.Motion.standard) { model.scope = scope }
     }
 
     private func toggle(_ genre: String) {
         Haptics.play(.choices)
-        withAnimation(.smooth(duration: 0.3)) {
-            if let index = genreFilter.firstIndex(of: genre) {
-                genreFilter.remove(at: index)
+        withAnimation(Theme.Motion.standard) {
+            if let index = model.filter.genres.firstIndex(of: genre) {
+                model.filter.genres.remove(at: index)
             } else {
-                genreFilter.append(genre)
+                model.filter.genres.append(genre)
             }
         }
     }
 
     private func remove(_ tag: Tag) {
         Haptics.play(.choices)
-        withAnimation(.smooth(duration: 0.3)) {
+        withAnimation(Theme.Motion.standard) {
             switch tag {
-            case .type: selectedType = "all"
-            case .genre(let genre): genreFilter.removeAll { $0 == genre }
+            case .scope: model.scope = .all
+            case .genre(let genre): model.filter.genres.removeAll { $0 == genre }
+            case .chip(let chip): model.remove(chip)
             }
         }
+    }
+}
+
+/// One person on the editorial results: the portrait in Appearance's artwork tone, the name in capitals and what they are known
+/// for under it. Opens the person's page.
+private struct EditorialPersonCard: View {
+    let person: TMDbTitlePerson
+    @Environment(\.appAppearance) private var appearance
+    static let width: CGFloat = 132
+
+    var body: some View {
+        NavigationLink(value: PersonDestination(id: person.id, name: person.name, profile: person.profile)) {
+            VStack(alignment: .leading, spacing: 6) {
+                ArtworkImage(url: person.profile, title: person.name, maxPixelSize: 400, contentMode: .fill)
+                    .frame(width: Self.width, height: 178)
+                    .clipped()
+                    .artworkTone(appearance.artworkTone)
+                Text(person.name.uppercased())
+                    .font(Editorial.font(size: 21, weight: .medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                if let role = person.roleText {
+                    Text(role.uppercased())
+                        .font(Editorial.font(.caption))
+                        .opacity(0.75)
+                }
+            }
+            .frame(width: Self.width, alignment: .leading)
+            .foregroundStyle(.black)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableCardStyle.poster)
+        .titleTapHaptic()
+        .accessibilityIdentifier("editorial.person.\(person.id)")
     }
 }
 

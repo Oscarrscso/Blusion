@@ -172,7 +172,7 @@ struct EditorialTabBar: View {
                 .strokeBorder(.white.opacity(onAccent ? 0 : (isActive ? 0.95 : 0.5)), lineWidth: 1)
                 .allowsHitTesting(false)
         }
-        .animation(.smooth(duration: 0.25), value: isActive)
+        .animation(Theme.Motion.quick, value: isActive)
     }
 
     private func go(to tab: LaunchRoute.Tab) {

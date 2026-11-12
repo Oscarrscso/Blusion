@@ -26,12 +26,12 @@ struct BestEditionView: View {
                 } label: {
                     HStack(spacing: Theme.Spacing.s) {
                         Image(systemName: "opticaldisc")
-                            .font(.subheadline)
+                            .font(Theme.Typography.medium)
                             .foregroundStyle(.secondary)
                         Text("Best Blu-ray")
-                            .font(.subheadline.weight(.semibold))
+                            .font(Theme.Typography.mediumStrong)
                         Text(summary)
-                            .font(.caption)
+                            .font(Theme.Typography.caption)
                             .foregroundStyle(summaryColor)
                             .lineLimit(1)
                         Spacer(minLength: Theme.Spacing.s)
@@ -58,6 +58,7 @@ struct BestEditionView: View {
                         // Anywhere on the open panel folds it, except a link: a link is a button of its own, so it takes its own tap.
                         .contentShape(Rectangle())
                         .onTapGesture { toggle() }
+                        .buttonCursor()
                         .transition(.opacity)
                 }
             }
@@ -96,7 +97,7 @@ struct BestEditionView: View {
             HStack(spacing: Theme.Spacing.m) {
                 Spinner()
                 Text("Checking Best Blurays for \(model.request.title)…")
-                    .font(.subheadline)
+                    .font(Theme.Typography.medium)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -120,14 +121,14 @@ struct BestEditionView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)
             Text(edition.release)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Typography.mediumStrong)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("bestEdition.release")
             HStack(spacing: Theme.Spacing.s) {
                 if edition.is4K { Badge("4K", style: .quality) }
                 if let tier = edition.uhdTier { Badge("\(tier) 4K tier") }
                 if let updated = edition.updated {
-                    Text(updated).font(.caption).foregroundStyle(.secondary)
+                    Text(updated).font(Theme.Typography.caption).foregroundStyle(.secondary)
                 }
             }
             if let notes = edition.videoNotes {
@@ -148,9 +149,9 @@ struct BestEditionView: View {
 
     private func labelled(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title).font(.subheadline.weight(.semibold))
+            Text(title).font(Theme.Typography.mediumStrong)
             Text(text)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .foregroundStyle(.secondary)
                 .lineLimit(12)
                 .fixedSize(horizontal: false, vertical: true)
@@ -160,7 +161,7 @@ struct BestEditionView: View {
     private func message(_ text: String, link: URL, linkTitle: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(text)
-                .font(.subheadline)
+                .font(Theme.Typography.medium)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button { openURL(link) } label: {

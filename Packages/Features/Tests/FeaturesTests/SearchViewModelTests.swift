@@ -29,7 +29,7 @@ import StremioKitTestSupport
         // Intelligence (with it, the live model was still reading when a test looked).
         let quietAI = DescribedSearchService(interpreter: KeywordDescriptionInterpreter(), keywords: { _ in [] }, titles: { _ in [] })
         return SearchViewModel(services: AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: client)),
-                               debounce: debounce, history: history, describer: quietAI, usesLivePicker: false)
+                               debounce: debounce, history: history, describer: quietAI)
     }
 
     @Test func typingIsDebouncedIntoOneSearch() async throws {

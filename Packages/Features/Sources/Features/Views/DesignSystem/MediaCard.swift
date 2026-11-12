@@ -136,7 +136,8 @@ struct MediaCard: View {
 
     /// The pictures a card for `item` asks `ImagePipeline` for, with the URLs and pixel sizes it uses. The card draws from this, and so does
     /// `BufferedArtwork`, so what the buffer loads is exactly what the card finds in the cache. A landscape poster also shows the
-    /// title's logo. A poster that uses Better Posters asks for its BetterPosters picture, which the card shows first.
+    /// title's logo. A poster that uses Better Posters asks for its BetterPosters picture, which the card shows first. A landscape poster
+    /// and a BetterPosters picture carry the usual poster as their fallback, as the card's do.
     static func artworkRequests(for item: MetaPreview, aspect: CardAspect, size: CardSize = .medium, width: CGFloat? = nil,
                                 metrics: LayoutMetrics, isLandscape: Bool, displayScale: CGFloat,
                                 usesBetterPosters: Bool = false, usesHeroPosters: Bool = false,
@@ -156,10 +157,13 @@ struct MediaCard: View {
                 requests.append(.init(url: logo, maxPixelSize: logoPixelSize))
             }
         } else if landscape {
-            if let url = landscapeArtworkURL(for: item) { requests.append(.init(url: url, maxPixelSize: pixels)) }
+            if let url = landscapeArtworkURL(for: item) {
+                requests.append(.init(url: url, maxPixelSize: pixels, fallback: PosterQuality.poster(for: item)))
+            }
             if let logo = landscapeLogoURL(for: item) { requests.append(.init(url: logo, maxPixelSize: logoPixelSize)) }
-        } else if let url = betterPosterURL(for: item, aspect: aspect, usesBetterPosters: usesBetterPosters)
-                    ?? artworkURL(for: item, aspect: aspect) {
+        } else if let url = betterPosterURL(for: item, aspect: aspect, usesBetterPosters: usesBetterPosters) {
+            requests.append(.init(url: url, maxPixelSize: pixels, fallback: artworkURL(for: item, aspect: aspect)))
+        } else if let url = artworkURL(for: item, aspect: aspect) {
             requests.append(.init(url: url, maxPixelSize: pixels))
         }
         return requests

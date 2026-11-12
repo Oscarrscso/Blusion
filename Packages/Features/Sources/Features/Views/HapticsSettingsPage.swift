@@ -302,7 +302,7 @@ private struct HapticPlacePage: View {
         Button(action: action) {
             Label(title, systemImage: "hand.tap")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(PointingHandButtonStyle(style: .borderless))
         .accessibilityIdentifier("settings.haptics.\(place.rawValue).test")
     }
 
