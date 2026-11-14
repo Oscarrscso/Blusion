@@ -106,7 +106,7 @@ struct DeckLayout: View {
                     button("chevron.backward", label: "Previous title", action: bringBack)
                     button("chevron.forward", label: "Next title") { throwTop(towards: -1) }
                     Text("\(position) of \(items.count)")
-                        .font(Theme.Typography.captionStrong.monospacedDigit())
+                        .appFont(.captionStrong, monospacedDigits: true)
                         .foregroundStyle(Theme.metaText)
                         .padding(.leading, Theme.Spacing.xs)
                         .accessibilityHidden(true)
@@ -227,13 +227,13 @@ private struct DeckDetails: View, Equatable {
             LayoutLogo(item: item, width: min(width, 200), height: 52)
             if !line.isEmpty {
                 Text(line)
-                    .font(Theme.Typography.metaLine.weight(.semibold))
+                    .appFont(.metaLine, weight: .semibold)
                     .foregroundStyle(Theme.metaText)
                     .lineLimit(1)
             }
             if !synopsis.isEmpty {
                 Text(synopsis)
-                    .font(Theme.Typography.metaLine)
+                    .appFont(.metaLine, role: .reading)
                     .foregroundStyle(.secondary)
                     .lineLimit(metrics.isRegular ? 6 : 5)
                     .multilineTextAlignment(.leading)

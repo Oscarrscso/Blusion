@@ -1,8 +1,9 @@
 import Foundation
 import Observation
+import PlayerKit
 import StremioKit
 
-/// Discover: combine every installed catalog, filter and sort titles, and paginate each source.
+/// Discover: mix TMDb recommendations for a shuffled sample of the library, filter and sort locally, and paginate.
 @MainActor
 @Observable
 public final class DiscoverViewModel {
@@ -14,8 +15,27 @@ public final class DiscoverViewModel {
         case failed(AddonError)
     }
 
+    /// One library title chosen as a recommendation seed.
+    public struct Seed: Equatable, Hashable, Sendable {
+        public let id: String
+        public let type: String
+
+        public init(id: String, type: String) {
+            self.id = id
+            self.type = type
+        }
+
+        public var identity: String { "\(type)/\(id)" }
+    }
+
+    public static let windowSize = 24
+    public static let seedLimit = 6
+    public static let keywordPageLimit = 4
+    private static let imdbBatchSize = 6
+    private static let discoverPageSize = 20
+
     public private(set) var sources: [CatalogSource] = []
-    /// Nil combines all content types.
+    /// Nil combines movies and series.
     public private(set) var selectedType: String?
     public private(set) var selectedGenre: String?
     public var showsAllTypes: Bool { selectedType == nil }
@@ -30,6 +50,9 @@ public final class DiscoverViewModel {
     public var minimumYear: Int?
     public var maximumYear: Int?
 
+    /// The library seeds chosen on the latest reload, kept across `loadMore()`.
+    public private(set) var seeds: [Seed] = []
+
     /// The year span as a filter chip words it, the same as the Library's chips ("1990–1999"); nil when no span is set.
     public var yearSpanLabel: String? {
         switch (minimumYear, maximumYear) {
@@ -40,28 +63,30 @@ public final class DiscoverViewModel {
         }
     }
 
-    /// One catalog feeding the "All" mix, with how far it has been read.
-    private struct Cursor {
-        var source: CatalogSource
-        /// The selected genre as this catalog spells it, sent with its requests.
-        var genre: String?
-        var received = 0
-        var hasMore = true
-        var seenIDs: Set<String> = []
-    }
-
     private let services: AppServices
-    private var cursors: [Cursor] = []
+    private let shuffleSeeds: ([Seed]) -> [Seed]
+    private let titleIDs = TMDbTitleIDCache()
+    private let imdbIDs = TMDbIMDbIDCache()
     private var generation = 0
+    private var libraryIdentities: Set<String> = []
+    private var knownIdentities: Set<String> = []
+    private var seenTMDb: Set<String> = []
+    private var candidates: [TMDbRelatedTitle] = []
+    private var overflow: [MetaPreview] = []
+    private var activeSeedIndices: [Int] = []
+    private var recommendationPage = 1
+    private var keywordQueries: [TMDbDiscoverQuery]?
+    private var keywordSkip = 0
+    private var hasMoreKeywords = true
+    private var popularSkip = 0
 
-    public init(services: AppServices) {
+    public init(services: AppServices, shuffle: @escaping ([Seed]) -> [Seed] = { $0.shuffled() }) {
         self.services = services
+        self.shuffleSeeds = shuffle
     }
 
-    /// The Genre menu's choices: the genres the catalogs offer, named as title pages name them, one of each, A to Z. A compound such as
-    /// "Action & Adventure" is offered as the genres it groups. Orders and years an addon lists as genres are left out, since the Sort and
-    /// Year menus cover them.
-    public var genres: [String] { Self.genres(of: visibleSources.map(\.catalog)) }
+    /// The Genre menu's choices: the genres the loaded titles list, named as title pages name them, one of each, A to Z.
+    public var genres: [String] { MediaGenres.choices(in: items.flatMap(\.genres)) }
 
     static func genres(of catalogs: [CatalogDescriptor]) -> [String] {
         MediaGenres.choices(in: catalogs.flatMap(genreOptions(of:)))
@@ -89,45 +114,36 @@ public final class DiscoverViewModel {
                                           "unwatched", "runtime", "duration", "length"]
         return text.split(whereSeparator: { !$0.isLetter }).contains { orderWords.contains($0) }
     }
-    public var hasSources: Bool { !sources.isEmpty }
 
-    /// Sort and filter the loaded titles using the same rules as a catalog's See All page.
+    public var hasSources: Bool { true }
+
+    /// Sort and filter the loaded titles locally using the same rules as a catalog's See All page. Under a rating threshold or Top Rated,
+    /// each title's scores come from the rating store, and a view reading this draws again as each one arrives.
     public var visibleItems: [MetaPreview] {
-        CatalogListFiltering.apply(CatalogListFilter(sort: sort, minimumYear: minimumYear,
-                                                    maximumYear: maximumYear, minimumRating: minimumRating), to: items)
+        let filter = CatalogListFilter(sort: sort, type: selectedType, genre: selectedGenre, minimumYear: minimumYear,
+                                       maximumYear: maximumYear, minimumRating: minimumRating)
+        guard filter.minimumRating != nil || filter.sort == .rating else { return CatalogListFiltering.apply(filter, to: items) }
+        let store = services.posterRatings
+        return CatalogListFiltering.apply(filter, to: items, rating: { item in store.judgedRating(for: item) ?? JudgedRating.catalogue(item) })
     }
 
-    /// Distinct content types of `sources`: by `ContentTypeName.sortRank`, then by first appearance.
-    public var types: [String] {
-        var order: [String] = []
-        for source in sources where !order.contains(source.type) { order.append(source.type) }
-        return order.enumerated().sorted { lhs, rhs in
-            let (left, right) = (ContentTypeName.sortRank(lhs.element), ContentTypeName.sortRank(rhs.element))
-            return left != right ? left < right : lhs.offset < rhs.offset
-        }.map(\.element)
-    }
+    /// Discover's content types on both platforms.
+    public var types: [String] { ["movie", "series"] }
 
-    /// Every catalog of the selected type, or every installed catalog on All.
-    public var visibleSources: [CatalogSource] {
-        guard let selectedType else { return sources }
-        return sources.filter { $0.type == selectedType }
-    }
+    public var visibleSources: [CatalogSource] { sources }
 
+    /// Starts the initial load without touching addon catalogs.
     public func loadSources() async {
-        let refreshed = await services.browse.catalogSources()
-        guard !Task.isCancelled else { return }
-        let changed = refreshed != sources
-        sources = refreshed
-        if let selectedType, !types.contains(selectedType) { self.selectedType = nil }
-        if let genre = selectedGenre, !genres.contains(genre) { selectedGenre = nil }
-        if changed || state == .idle || state == .loadingFirstPage { await reload() }
+        if state == .idle || state == .loadingFirstPage {
+            await reload()
+        }
     }
 
-    /// Type choices narrow the catalogs being combined; they never select an individual catalog.
+    /// Changing type reloads the library seeds for that type.
     public func select(type: String) async {
-        guard types.contains(type) else { return }
-        selectedType = type
-        if let genre = selectedGenre, !genres.contains(genre) { selectedGenre = nil }
+        let normalized = type.lowercased()
+        guard types.contains(normalized) else { return }
+        selectedType = normalized
         await reload()
     }
 
@@ -136,10 +152,9 @@ public final class DiscoverViewModel {
         await reload()
     }
 
-    /// `nil` clears the filter.
+    /// `nil` clears the filter. Genre filters the loaded titles locally without reloading the seeds.
     public func select(genre: String?) async {
         selectedGenre = genre
-        await reload()
     }
 
     public func reload() async {
@@ -148,106 +163,366 @@ public final class DiscoverViewModel {
         let current = generation
         items = []
         canLoadMore = false
-        cursors = visibleSources.map { source in
-            guard let genre = selectedGenre else { return Cursor(source: source) }
-            let options = MediaGenres.options(of: source.catalog)
-            let match = MediaGenres.option(genre, in: source.catalog)
-            let parameter = match ?? (source.catalog.genreOptions.isEmpty ? genre : nil)
-            return Cursor(source: source, genre: parameter, hasMore: options.isEmpty || match != nil)
-        }
-        guard !sources.isEmpty else {
-            state = .idle
+        seeds = []
+        libraryIdentities = []
+        knownIdentities = []
+        seenTMDb = []
+        candidates = []
+        overflow = []
+        activeSeedIndices = []
+        recommendationPage = 1
+        keywordQueries = nil
+        keywordSkip = 0
+        hasMoreKeywords = true
+        popularSkip = 0
+
+        let rawToken = await services.settings.load().tmdbReadToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !Task.isCancelled, current == generation else { return }
+        guard let token = rawToken, !token.isEmpty else {
+            state = .loaded
             return
         }
+
         state = .loadingFirstPage
-        await loadMixedPage(generation: current)
+        let (pool, known) = await loadLibraryPool(for: selectedType)
+        guard !Task.isCancelled, current == generation else {
+            state = items.isEmpty ? .idle : .loaded
+            return
+        }
+        libraryIdentities = known
+        seeds = Array(shuffleSeeds(pool).prefix(Self.seedLimit))
+        activeSeedIndices = Array(seeds.indices)
+
+        let tmdb = makeTMDb(token: token)
+        if seeds.isEmpty {
+            await loadPopularPage(tmdb: tmdb, generation: current)
+        } else {
+            await loadSeededWindow(tmdb: tmdb, generation: current)
+        }
     }
 
-    /// Each catalog keeps its own raw skip count, independently of duplicate or filtered titles.
     public func loadMore() async {
         guard canLoadMore, state == .loaded else { return }
         let current = generation
+        let rawToken = await services.settings.load().tmdbReadToken?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !Task.isCancelled, current == generation, let token = rawToken, !token.isEmpty else { return }
         state = .loadingMore
-        await loadMixedPage(generation: current)
+        let tmdb = makeTMDb(token: token)
+        if seeds.isEmpty {
+            await loadPopularPage(tmdb: tmdb, generation: current)
+        } else {
+            await loadSeededWindow(tmdb: tmdb, generation: current)
+        }
     }
 
-    /// Empty rounds a genre may read in a row before the page stops asking: catalogs without the genre are checked title by title.
-    private static let emptyRoundLimit = 6
+    private func makeTMDb(token: String) -> TMDbRatings {
+        TMDbRatings(client: services.client, readAccessToken: token, titleIDs: titleIDs, imdbIDs: imdbIDs)
+    }
 
-    /// Reads a page from every catalog and interleaves their titles, removing duplicates across sources. A catalog that fails is skipped; the
-    /// mix only fails when none answers. Under a genre, each title is kept only when its own page lists that genre, and each catalog's
-    /// titles show as soon as they are checked.
-    private func loadMixedPage(generation current: Int, emptyRounds: Int = 0) async {
-        let browse = services.browse
-        let genre = selectedGenre
-        let pending = cursors.enumerated().filter(\.element.hasMore)
-        let previousCount = items.count
-        var known = Set(items.map(\.identity))
-        var pages: [Int: [MetaPreview]] = [:]
-        var failure: Error?
-        await withTaskGroup(of: (Int, [MetaPreview]?, Error?).self) { group in
-            for (index, cursor) in pending {
+    /// Reads the saved and watched titles from the library stores. `known` holds every library title's identity so recommendations skip
+    /// them; `pool` holds the eligible IMDb seeds for `type` (`nil` keeps both movies and series).
+    private func loadLibraryPool(for type: String?) async -> (pool: [Seed], known: Set<String>) {
+        let saved = await services.library.all()
+        let progress = await services.progress.all()
+        var known: Set<String> = []
+        var seenSeeds: Set<Seed> = []
+        var pool: [Seed] = []
+
+        func consider(id: String, rawType: String) {
+            let kind = rawType.lowercased()
+            let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedID.isEmpty else { return }
+            known.insert("\(kind)/\(trimmedID)")
+            guard ["movie", "series"].contains(kind), LetterboxdRatings.isIMDbID(trimmedID) else { return }
+            if let type, kind != type { return }
+            let seed = Seed(id: trimmedID, type: kind)
+            if seenSeeds.insert(seed).inserted {
+                pool.append(seed)
+            }
+        }
+
+        for item in saved {
+            consider(id: item.contentID, rawType: item.type)
+        }
+        for record in progress where record.isWatched {
+            consider(id: record.seriesID ?? record.contentID, rawType: record.type)
+        }
+        return (pool, known)
+    }
+
+    /// Empty-library fallback: one popular movie page and one popular series page interleaved on All, or one popular page of the selected
+    /// type when narrowed.
+    private func loadPopularPage(tmdb: TMDbRatings, generation current: Int) async {
+        let region = Locale.current.region?.identifier ?? "US"
+        let kinds: [TMDbDiscoverQuery.Kind]
+        switch selectedType {
+        case "movie": kinds = [.movie]
+        case "series": kinds = [.series]
+        default: kinds = [.movie, .series]
+        }
+        let skip = popularSkip
+        let outcomes = await withTaskGroup(of: (Int, Result<[MetaPreview], Error>).self,
+                                           returning: [(Int, Result<[MetaPreview], Error>)].self) { group in
+            for (index, kind) in kinds.enumerated() {
+                let query = TMDbDiscoverQuery(kind: kind, ordering: .popular)
                 group.addTask {
                     do {
-                        let raw = try await browse.page(cursor.source, genre: cursor.genre, skip: cursor.received)
-                        let page = genre == nil ? raw : await browse.resolvingGenres(in: raw)
-                        return (index, page, nil)
-                    } catch { return (index, nil, error) }
+                        let page = try await tmdb.discoverItems(query, limit: Self.discoverPageSize, skip: skip, defaultRegion: region)
+                        return (index, .success(page))
+                    } catch {
+                        return (index, .failure(error))
+                    }
                 }
             }
-            for await (index, page, error) in group {
-                guard let page else {
-                    failure = error
-                    continue
-                }
-                pages[index] = page
-                guard let genre, current == generation, !Task.isCancelled else { continue }
-                for var item in page where MediaGenres.contains(genre, in: item.genres) && known.insert(item.identity).inserted {
-                    // The card and the page it opens lead with the genre the title is shown for.
-                    item.genres = MediaGenres.leading([genre], in: item.genres)
-                    items.append(item)
-                }
-            }
+            var collected: [(Int, Result<[MetaPreview], Error>)] = []
+            for await outcome in group { collected.append(outcome) }
+            return collected.sorted { $0.0 < $1.0 }
         }
         guard current == generation else { return }
         guard !Task.isCancelled else {
             state = items.isEmpty ? .idle : .loaded
             return
         }
-        if pages.isEmpty, let failure, !pending.isEmpty {
-            let error = AddonError.from(failure)
-            if Task.isCancelled || error == .cancelled {
-                state = items.isEmpty ? .idle : .loaded
-            } else {
-                state = items.isEmpty ? .failed(error) : .loaded
+        var pages: [[MetaPreview]] = []
+        var firstError: Error?
+        for (_, result) in outcomes {
+            switch result {
+            case .success(let page): pages.append(page)
+            case .failure(let error): firstError = firstError ?? error
             }
+        }
+        if pages.isEmpty, let firstError {
+            finishWithError(firstError)
             return
         }
-        // Skip counts the complete raw page, whatever the genre kept of it.
-        for (index, page) in pages {
-            let identities = page.map(\.identity)
-            cursors[index].received += page.count
-            cursors[index].hasMore = identities.contains { !cursors[index].seenIDs.contains($0) } && cursors[index].source.catalog.supportsSkip
-            cursors[index].seenIDs.formUnion(identities)
+        popularSkip += Self.discoverPageSize
+        let merged = Self.interleave(pages).filter { item in
+            !libraryIdentities.contains(item.identity) && knownIdentities.insert(item.identity).inserted
         }
-        if genre == nil {
-            let ordered = pages.keys.sorted().map { pages[$0] ?? [] }
-            for position in 0..<(ordered.map(\.count).max() ?? 0) {
-                for page in ordered where position < page.count && known.insert(page[position].identity).inserted { items.append(page[position]) }
-            }
-        }
-        canLoadMore = cursors.contains(where: \.hasMore)
-        // A round can add no cards. Keep paging until the screen can trigger the next load itself.
-        if items.count == previousCount, canLoadMore {
-            guard emptyRounds + 1 < Self.emptyRoundLimit else {
-                canLoadMore = false
-                state = .loaded
-                return
-            }
-            await loadMixedPage(generation: current, emptyRounds: emptyRounds + 1)
-            return
-        }
+        items.append(contentsOf: merged)
+        canLoadMore = !merged.isEmpty
         state = .loaded
     }
 
+    /// Loads the next 24-title window from the current seeds' recommendation pages, resolving IMDb ids six at a time, and tops up from
+    /// up to 4 keyword discover pages when the window is still short.
+    private func loadSeededWindow(tmdb: TMDbRatings, generation current: Int) async {
+        var added: [MetaPreview] = []
+        if !overflow.isEmpty {
+            let take = min(Self.windowSize, overflow.count)
+            added.append(contentsOf: overflow.prefix(take))
+            overflow.removeFirst(take)
+        }
+
+        if added.count < Self.windowSize, !candidates.isEmpty {
+            let resolved = await resolveNextCandidates(tmdb: tmdb, needed: Self.windowSize - added.count, generation: current)
+            guard current == generation, !Task.isCancelled else {
+                if current == generation { state = items.isEmpty ? .idle : .loaded }
+                return
+            }
+            added.append(contentsOf: resolved)
+        }
+
+        var seedError: Error?
+        var anySeedAnswered = !added.isEmpty
+        if added.count < Self.windowSize, !activeSeedIndices.isEmpty {
+            let page = recommendationPage
+            recommendationPage += 1
+            let pending = activeSeedIndices
+            let currentSeeds = seeds
+            let outcomes = await withTaskGroup(of: (Int, Result<[TMDbRelatedTitle], Error>).self,
+                                               returning: [(Int, Result<[TMDbRelatedTitle], Error>)].self) { group in
+                for index in pending {
+                    let seed = currentSeeds[index]
+                    group.addTask {
+                        do {
+                            let list = try await tmdb.relatedTitles(imdbID: seed.id, type: seed.type, page: page)
+                            return (index, .success(list))
+                        } catch {
+                            return (index, .failure(error))
+                        }
+                    }
+                }
+                var collected: [(Int, Result<[TMDbRelatedTitle], Error>)] = []
+                for await outcome in group { collected.append(outcome) }
+                return collected.sorted { $0.0 < $1.0 }
+            }
+            guard current == generation else { return }
+            guard !Task.isCancelled else {
+                state = items.isEmpty ? .idle : .loaded
+                return
+            }
+
+            var lists: [[TMDbRelatedTitle]] = []
+            var nextActive: [Int] = []
+            for (index, outcome) in outcomes {
+                switch outcome {
+                case .success(let list):
+                    anySeedAnswered = true
+                    if !list.isEmpty {
+                        lists.append(list)
+                        nextActive.append(index)
+                    }
+                case .failure(let error):
+                    seedError = seedError ?? error
+                }
+            }
+            activeSeedIndices = nextActive
+
+            if !anySeedAnswered, let seedError, items.isEmpty, added.isEmpty {
+                finishWithError(seedError)
+                return
+            }
+
+            for title in Self.interleave(lists) where seenTMDb.insert(title.id).inserted {
+                candidates.append(title)
+            }
+
+            let resolved = await resolveNextCandidates(tmdb: tmdb, needed: Self.windowSize - added.count, generation: current)
+            guard current == generation, !Task.isCancelled else {
+                if current == generation { state = items.isEmpty ? .idle : .loaded }
+                return
+            }
+            added.append(contentsOf: resolved)
+        }
+
+        if added.count < Self.windowSize {
+            let filled = await fillWithKeywords(tmdb: tmdb, needed: Self.windowSize - added.count, generation: current)
+            guard current == generation, !Task.isCancelled else {
+                if current == generation { state = items.isEmpty ? .idle : .loaded }
+                return
+            }
+            added.append(contentsOf: filled)
+        }
+
+        items.append(contentsOf: added)
+        let hasMoreSeedWork = !overflow.isEmpty || !candidates.isEmpty || !activeSeedIndices.isEmpty
+            || (hasMoreKeywords && !(keywordQueries?.isEmpty ?? true))
+        canLoadMore = !added.isEmpty && hasMoreSeedWork
+        state = .loaded
+    }
+
+    /// Resolves IMDb ids for `candidates` six at a time until `needed` valid titles are kept or `candidates` is empty. Any extra valid
+    /// titles from the final batch of six are kept in `overflow` for the next page.
+    private func resolveNextCandidates(tmdb: TMDbRatings, needed: Int, generation current: Int) async -> [MetaPreview] {
+        var kept: [MetaPreview] = []
+        while kept.count < needed, !candidates.isEmpty {
+            guard current == generation, !Task.isCancelled else { return kept }
+            let count = min(Self.imdbBatchSize, candidates.count)
+            let batch = Array(candidates.prefix(count))
+            candidates.removeFirst(count)
+            let ids = await withTaskGroup(of: (Int, String?).self, returning: [String?].self) { group in
+                for (offset, title) in batch.enumerated() {
+                    group.addTask {
+                        (offset, try? await tmdb.imdbID(tmdbID: title.tmdbID, mediaType: title.mediaType))
+                    }
+                }
+                var resolved = [String?](repeating: nil, count: batch.count)
+                for await (offset, id) in group { resolved[offset] = id }
+                return resolved
+            }
+            guard current == generation, !Task.isCancelled else { return kept }
+            for (title, imdbID) in zip(batch, ids) {
+                guard let imdbID else { continue }
+                let preview = title.preview(imdbID: imdbID)
+                guard !libraryIdentities.contains(preview.identity), knownIdentities.insert(preview.identity).inserted else { continue }
+                if kept.count < needed {
+                    kept.append(preview)
+                } else {
+                    overflow.append(preview)
+                }
+            }
+        }
+        return kept
+    }
+
+    /// Looks up keywords on the current seeds when the 24-title window is short and mixes in up to 4 discover pages, one keyword each.
+    private func fillWithKeywords(tmdb: TMDbRatings, needed: Int, generation current: Int) async -> [MetaPreview] {
+        guard needed > 0, hasMoreKeywords, !seeds.isEmpty else { return [] }
+        if keywordQueries == nil {
+            let currentSeeds = seeds
+            let lists = await withTaskGroup(of: (Int, [TMDbDiscoverQuery.Named]).self,
+                                            returning: [[TMDbDiscoverQuery.Named]].self) { group in
+                for (index, seed) in currentSeeds.enumerated() {
+                    group.addTask {
+                        let found = (try? await tmdb.titleKeywords(imdbID: seed.id, type: seed.type)) ?? []
+                        return (index, found)
+                    }
+                }
+                var bySeed = Array(repeating: [TMDbDiscoverQuery.Named](), count: currentSeeds.count)
+                for await (index, list) in group { bySeed[index] = list }
+                return bySeed
+            }
+            guard current == generation, !Task.isCancelled else { return [] }
+            var seenKeywords: Set<Int> = []
+            var queries: [TMDbDiscoverQuery] = []
+            let longest = lists.map(\.count).max() ?? 0
+            outer: for position in 0..<longest {
+                for (seedIndex, list) in lists.enumerated() where position < list.count {
+                    let keyword = list[position]
+                    guard seenKeywords.insert(keyword.id).inserted else { continue }
+                    let kind: TMDbDiscoverQuery.Kind = currentSeeds[seedIndex].type == "series" ? .series : .movie
+                    queries.append(TMDbDiscoverQuery(kind: kind, ordering: .popular, keywords: [keyword]))
+                    if queries.count == Self.keywordPageLimit { break outer }
+                }
+            }
+            keywordQueries = queries
+        }
+
+        guard let queries = keywordQueries, !queries.isEmpty else {
+            hasMoreKeywords = false
+            return []
+        }
+
+        let region = Locale.current.region?.identifier ?? "US"
+        let skip = keywordSkip
+        let pages = await withTaskGroup(of: (Int, [MetaPreview]).self, returning: [[MetaPreview]].self) { group in
+            for (index, query) in queries.enumerated() {
+                group.addTask {
+                    let items = (try? await tmdb.discoverItems(query, limit: Self.discoverPageSize, skip: skip, defaultRegion: region)) ?? []
+                    return (index, items)
+                }
+            }
+            var ordered = Array(repeating: [MetaPreview](), count: queries.count)
+            for await (index, page) in group { ordered[index] = page }
+            return ordered
+        }
+        guard current == generation, !Task.isCancelled else { return [] }
+        keywordSkip += Self.discoverPageSize
+        let interleaved = Self.interleave(pages)
+        if interleaved.isEmpty {
+            hasMoreKeywords = false
+            return []
+        }
+        var kept: [MetaPreview] = []
+        for item in interleaved {
+            guard !libraryIdentities.contains(item.identity), knownIdentities.insert(item.identity).inserted else { continue }
+            if kept.count < needed {
+                kept.append(item)
+            } else {
+                overflow.append(item)
+            }
+        }
+        return kept
+    }
+
+    private func finishWithError(_ error: Error) {
+        let addonError = AddonError.from(error)
+        if Task.isCancelled || addonError == .cancelled {
+            state = items.isEmpty ? .idle : .loaded
+        } else {
+            state = items.isEmpty ? .failed(addonError) : .loaded
+        }
+    }
+
+    private static func interleave<Element>(_ lists: [[Element]]) -> [Element] {
+        var merged: [Element] = []
+        let longest = lists.map(\.count).max() ?? 0
+        for position in 0..<longest {
+            for list in lists where position < list.count {
+                merged.append(list[position])
+            }
+        }
+        return merged
+    }
 }

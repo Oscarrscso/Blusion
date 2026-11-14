@@ -68,6 +68,7 @@ public final class CatalogListViewModel {
         return MediaGenres.choices(in: listed + (filter.genre.map { [$0] } ?? []))
     }
     private var shuffleRank: [String: Int] = [:]
+    @ObservationIgnored private var ratingsTask: Task<Void, Never>?
     private let defaults: UserDefaults
     private var sortKey: String { "catalogList.sort.\(request.title)" }
 
@@ -110,7 +111,28 @@ public final class CatalogListViewModel {
     }
 
     private func refreshVisible() {
-        visibleItems = CatalogListFiltering.apply(filter, to: items, shuffleRank: shuffleRank)
+        let (filter, items, shuffleRank) = (filter, items, shuffleRank)
+        let rating = ratingLookup(for: filter)
+        // Reading each title's score inside the tracking block means a score that arrives later re-runs the filter on its own.
+        visibleItems = withObservationTracking {
+            CatalogListFiltering.apply(filter, to: items, shuffleRank: shuffleRank, rating: rating)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.ratingsTask?.cancel()
+                self.ratingsTask = Task { [weak self] in
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                    self?.refreshVisible()
+                }
+            }
+        }
+    }
+
+    /// Scores come from the rating store, which looks up the ones a title lacks. Without a threshold or Top Rated no score is needed.
+    private func ratingLookup(for filter: CatalogListFilter) -> CatalogListFiltering.RatingLookup {
+        guard filter.minimumRating != nil || filter.sort == .rating else { return JudgedRating.catalogue }
+        let store = services.posterRatings
+        return { item in store.judgedRating(for: item) ?? JudgedRating.catalogue(item) }
     }
 
     /// New titles join the shuffle after the ones already placed, shuffled among themselves, so the grid never reorders under the reader.

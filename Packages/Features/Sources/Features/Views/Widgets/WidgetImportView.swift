@@ -23,7 +23,7 @@ struct WidgetImportView: View {
             }
             .buttonCursor()
             if let message = model.message, model.messageIsError {
-                Text(message).font(Theme.Typography.small).foregroundStyle(.orange)
+                Text(message).appFont(.small).foregroundStyle(.orange)
             }
             if fromURL {
                 TextField("https://example.com/widgets.json", text: $text)

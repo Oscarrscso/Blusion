@@ -223,8 +223,8 @@ public final class WidgetBuilderModel {
             clauses.append(Self.clause("from", [Self.token(.period, Self.periodPhrase(period))]))
         }
         if let text = Self.releaseText(query) { clauses.append(Self.clause("released", [Self.token(.release, text)])) }
-        // A widget's score and votes are IMDb's (see `TMDbDiscoverQuery.usesTMDbScores`), and the sentence says so.
-        if let text = Self.scoreText(query) { clauses.append(Self.clause("rated", [Self.token(.score, text + " on IMDb")])) }
+        // A widget's score is each title's rating as the rating filters judge it, and its votes IMDb's: the sentence says so.
+        if let text = Self.scoreText(query) { clauses.append(Self.clause("rated", [Self.token(.score, text)])) }
         if query.isSet(.votes), let votes = query.minimumVotes {
             clauses.append(Self.clause("with", [Self.token(.votes, "\(votes)+ IMDb votes")]))
         }
@@ -324,7 +324,7 @@ public final class WidgetBuilderModel {
             filterPill(.genres, "Genres", "theatermasks", .genres, Self.listValue(query.genres, none: "Any")),
             filterPill(.keywords, "Keywords", "tag", .keywords, Self.listValue(query.keywords, none: "Any")),
             filterPill(.excludedKeywords, "Exclude", "tag.slash", .excludedKeywords, Self.listValue(query.excludedKeywords, none: "None")),
-            filterPill(.score, "IMDb Score", "star", .score, Self.scoreText(query) ?? "Any"),
+            filterPill(.score, "Rating", "star", .score, Self.scoreText(query) ?? "Any"),
             filterPill(.votes, "IMDb Votes", "person.3", .votes, query.minimumVotes.map { "\($0)+" } ?? "Any"),
             filterPill(.language, "Language", "globe", .language, query.language.map(Self.languageName) ?? "Any"),
             filterPill(.runtime, "Runtime", "clock", .runtime, Self.runtimeText(query) ?? "Any"),
@@ -460,7 +460,7 @@ public final class WidgetBuilderModel {
         change(&edited)
         if edited.minimumScore != current.minimumScore || edited.maximumScore != current.maximumScore
             || edited.minimumVotes != current.minimumVotes {
-            // A score or vote count set here is IMDb's, as the editor says, even on a list a search made with TMDb's.
+            // A vote count set here is IMDb's, as the editor says, even on a list a search made with TMDb's; so is a score without the app's rating.
             edited.usesTMDbScores = false
         }
         let periodChanged = edited.period != current.period

@@ -143,7 +143,7 @@ private struct PlayerHoldBadge: View {
                         .transition(.opacity)
                 }
             }
-            .font(Theme.Typography.mediumStrong)
+            .appFont(.mediumStrong)
             .foregroundStyle(.white)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .glassEffect(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -352,7 +352,7 @@ struct PlayerContent: View {
                     VStack {
                         Text(PlayerTime.format(fraction * (model.duration ?? 0)))
                             .monospacedDigit()
-                            .font(Theme.Typography.mediumStrong)
+                            .appFont(.mediumStrong)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .glassEffect(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -377,7 +377,7 @@ struct PlayerContent: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
-                    .font(.caption.weight(.medium))
+                    .appFont(.caption, weight: .medium, role: .interface)
                     .foregroundStyle(.white.opacity(0.84))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -731,7 +731,7 @@ struct PlayerContent: View {
                 } label: {
                     Label(marker.kind == .credits && model.hasNextEpisode ? "Next Episode" : marker.kind.buttonTitle,
                           systemImage: "forward.fill")
-                        .font(Theme.Typography.headline)
+                        .appFont(.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .pointerInteraction(cornerRadius: 22 * metrics.cornerScale(for: .playerControls))
@@ -1255,7 +1255,7 @@ struct PlayerContent: View {
                     nextPrompt = .creditsChosen
                 } label: {
                     Text("Watch Credits")
-                        .font(Theme.Typography.headline)
+                        .appFont(.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .pointerInteraction(cornerRadius: 22 * metrics.cornerScale(for: .playerControls))
@@ -1267,7 +1267,7 @@ struct PlayerContent: View {
                     playNextEpisode()
                 } label: {
                     Label("Next Episode", systemImage: "play.fill")
-                        .font(Theme.Typography.headline)
+                        .appFont(.headline)
                         .padding(.horizontal, 18).padding(.vertical, 12)
                         .background(alignment: .leading) {
                             GeometryReader { proxy in
@@ -1409,8 +1409,8 @@ struct FailureOverlay: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill").font(.largeTitle).foregroundStyle(.orange)
-            Text("Can't play this").font(.title2.bold())
-            Text(message).font(.callout).multilineTextAlignment(.center).foregroundStyle(.secondary)
+            Text("Can't play this").appFont(style: .title2, weight: .bold, role: .display)
+            Text(message).appFont(style: .callout, weight: .regular, role: .reading).multilineTextAlignment(.center).foregroundStyle(.secondary)
             Button("Close", action: onClose).buttonStyle(.primaryActionCompact).accessibilityIdentifier("player.failure.close")
         }
         .padding(24)

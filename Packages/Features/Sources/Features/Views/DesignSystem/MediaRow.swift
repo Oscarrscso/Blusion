@@ -44,7 +44,7 @@ private struct SectionHeaderLabel: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)

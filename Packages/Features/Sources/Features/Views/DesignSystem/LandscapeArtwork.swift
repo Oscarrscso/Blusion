@@ -57,7 +57,7 @@ struct LandscapeArtwork: View {
                         } else {
                             Theme.placeholder.overlay {
                                 Text(title)
-                                    .font(Theme.Typography.cardTitle)
+                                    .appFont(.cardTitle)
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
                                     .lineLimit(4)
@@ -78,7 +78,7 @@ struct LandscapeArtwork: View {
                                 Image(uiImage: logoImage).resizable().scaledToFit()
                             } else {
                                 Text(title)
-                                    .font(Theme.Typography.cardTitle)
+                                    .appFont(.cardTitle)
                                     .foregroundStyle(.white)
                                     .multilineTextAlignment(.center)
                                     .lineLimit(2)

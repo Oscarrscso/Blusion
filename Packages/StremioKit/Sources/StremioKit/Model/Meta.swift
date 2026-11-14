@@ -77,6 +77,30 @@ public struct MetaPreview: Sendable, Equatable, Hashable, Codable, Identifiable 
                   runtime: container.string(.runtime))
     }
 
+    private static let releaseResolutions: Set<Substring> = ["480p", "576p", "720p", "1080i", "1080p", "2160p", "4320p"]
+    private static let releaseTags: Set<Substring> = ["webdl", "webrip", "bluray", "bdrip", "remux", "hdtv", "x264", "x265", "h264", "h265", "hevc"]
+    private static let videoExtensions: Set<Substring> = ["mkv", "mp4", "avi", "m4v", "mov", "wmv", "ts", "m2ts", "webm"]
+
+    /// File listings can arrive in addon catalogs alongside movies and series.
+    /// A name with no spaces that joins its words with dots or underscores is a file when it has a resolution, ends in a video extension
+    /// or carries a year, as "Der.goldene.Handschuh.BDRemux.1080p.pk" does.
+    /// Otherwise require both a resolution and an encoding or source tag in the name.
+    public var hasReleaseFilename: Bool {
+        let lowered = name.lowercased()
+        let words = lowered.split { !$0.isLetter && !$0.isNumber }
+        let hasResolution = words.contains(where: Self.releaseResolutions.contains)
+        if !lowered.contains(where: \.isWhitespace), lowered.contains(where: { $0 == "." || $0 == "_" }) {
+            let parts = lowered.split { $0 == "." || $0 == "_" }
+            if hasResolution { return true }
+            if parts.count > 1, let last = parts.last, Self.videoExtensions.contains(last) { return true }
+            if parts.contains(where: { $0.count == 4 && $0.allSatisfy(\.isNumber) }) { return true }
+        }
+        guard hasResolution else { return false }
+        return words.contains(where: Self.releaseTags.contains) || zip(words, words.dropFirst()).contains {
+            ($0.0 == "web" && $0.1 == "dl") || ($0.0 == "blu" && $0.1 == "ray")
+        }
+    }
+
     /// `type/id`: an id can repeat across types, so this is what tells two items apart.
     public var identity: String { "\(type)/\(id)" }
 }

@@ -227,16 +227,16 @@ private let popularPrefix = "Make a movie list sorted by Popular and "
             return nil
         }
         #expect(separators == [",", ",", "and"])
-        #expect(plain(model) == "Make a movie list sorted by Popular , about animation , from last year and rated 7+ on IMDb .")
+        #expect(plain(model) == "Make a movie list sorted by Popular , about animation , from last year and rated 7+ .")
     }
 
     @Test func eachClauseReadsItsValue() async throws {
         let (manager, _) = try await loadedManager()
         let cases: [(TMDbDiscoverQuery, String)] = [
-            (TMDbDiscoverQuery(minimumScore: 7), "rated 7+ on IMDb"),
-            (TMDbDiscoverQuery(maximumScore: 6), "rated up to 6 on IMDb"),
-            (TMDbDiscoverQuery(minimumScore: 7, maximumScore: 9), "rated 7 to 9 on IMDb"),
-            (TMDbDiscoverQuery(minimumScore: 7.5, maximumScore: 8.5), "rated 7.5 to 8.5 on IMDb"),
+            (TMDbDiscoverQuery(minimumScore: 7), "rated 7+"),
+            (TMDbDiscoverQuery(maximumScore: 6), "rated up to 6"),
+            (TMDbDiscoverQuery(minimumScore: 7, maximumScore: 9), "rated 7 to 9"),
+            (TMDbDiscoverQuery(minimumScore: 7.5, maximumScore: 8.5), "rated 7.5 to 8.5"),
             (TMDbDiscoverQuery(minimumVotes: 500), "with 500+ IMDb votes"),
             (TMDbDiscoverQuery(minimumRuntime: 90), "running 90+ min"),
             (TMDbDiscoverQuery(maximumRuntime: 120), "running under 120 min"),

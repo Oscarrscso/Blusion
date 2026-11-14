@@ -1,8 +1,8 @@
 import Foundation
 import StremioKit
 
-/// What the app ships and under which terms. The default build links no third-party code (ADR-001), so the list is short; the fallback
-/// player's LGPL components appear only when that engine is built in (ADR-006, docs/licenses.md).
+/// What the app ships and under which terms. The default build links no third-party code, so the list is short; the fallback
+/// player's LGPL components appear only when that engine is built in.
 public struct Acknowledgement: Sendable, Equatable, Identifiable {
     public var id: String { name }
     public let name: String

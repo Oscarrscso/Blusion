@@ -41,13 +41,17 @@ public final class WidgetContentService: Sendable {
     /// The country TMDb watch providers are looked up in when a discover list names none.
     private let region: @Sendable () -> String
     private let cache = WidgetItemCache()
-    /// IMDb's ratings on the device, which a discover widget's score and votes are checked against.
+    /// IMDb's ratings on the device, which a discover widget's votes, and its score without `ratingJudge`, are checked against.
     private let imdb: (any IMDbDataset)?
+    /// The app's rating of a title, which a discover list's score bounds are held to when given.
+    private let ratingJudge: TitleRatingJudge?
 
     public init(registry: AddonRegistry, client: AddonClient, settings: any SettingsStore,
                 trakt: TraktClient? = nil, account: TraktAccount? = nil, snapshots: (any WidgetSnapshotStore)? = nil,
                 imdb: (any IMDbDataset)? = nil, now: @escaping @Sendable () -> Date = { Date() },
-                region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }, browse: BrowseService? = nil) {
+                region: @escaping @Sendable () -> String = { Locale.current.region?.identifier ?? "US" }, browse: BrowseService? = nil,
+                ratingJudge: TitleRatingJudge? = nil) {
+        self.ratingJudge = ratingJudge
         self.registry = registry
         self.client = client
         self.browse = browse ?? BrowseService(registry: registry, client: client)
@@ -106,7 +110,8 @@ public final class WidgetContentService: Sendable {
             let fresh = raw.filter { seen.insert($0.identity).inserted }
             offset += source.usesTrakt ? limit : raw.count
             guard !fresh.isEmpty else { return Page(items: [], nextSkip: offset, hasMore: false) }
-            let resolved = required.isEmpty && excluded.isEmpty ? fresh : await browse.resolvingGenres(in: fresh)
+            let titles = fresh.filter { !$0.hasReleaseFilename }
+            let resolved = required.isEmpty && excluded.isEmpty ? titles : await browse.resolvingGenres(in: titles)
             try Task.checkCancellation()
             let kept = resolved.filter { item in
                 required.allSatisfy { MediaGenres.contains($0, in: item.genres) }
@@ -150,7 +155,7 @@ public final class WidgetContentService: Sendable {
         } else {
             known = await snapshots?.items(for: source)
         }
-        return known.map { Array($0.prefix(max(limit, 0))) }
+        return known.map { Array($0.lazy.filter { !$0.hasReleaseFilename }.prefix(max(limit, 0))) }
     }
 
     /// Several sources as one list, for a collection tile. Sources load concurrently and are interleaved round-robin; an item
@@ -266,7 +271,7 @@ public final class WidgetContentService: Sendable {
             guard let token = await tmdbReadToken() else { throw WidgetSourceError.needsTMDbToken }
             do {
                 return try await TMDbRatings(client: client, readAccessToken: token)
-                    .discoverItems(query, limit: limit, skip: skip, defaultRegion: region(), today: now(), imdb: imdb)
+                    .discoverItems(query, limit: limit, skip: skip, defaultRegion: region(), today: now(), imdb: imdb, judge: ratingJudge)
             } catch {
                 throw WidgetSourceError.addon(AddonError.from(error))
             }

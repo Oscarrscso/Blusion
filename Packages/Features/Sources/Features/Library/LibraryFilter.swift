@@ -85,24 +85,55 @@ public enum AddedWithin: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// A rating site the Library ranks by. The cases are in priority order: a title is rated by the first of them that has scored it. Each
-/// score stays on its own site's scale until it is put out of 10 for the threshold, and it is never averaged with another site's.
+/// A rating site that every rating filter and Rating sort judges a title by. A title is rated by the first site in `order(isAnime:)` that
+/// has scored it. Each score stays on its own site's scale until it is put out of 10, and it is never averaged with another site's.
 public enum RatingSource: String, CaseIterable, Sendable, Identifiable {
-    case letterboxd, imdb, rottenTomatoes, metacritic
+    case letterboxd, imdb, myAnimeList, tmdb
 
     public var id: String { rawValue }
+
+    /// Letterboxd, then IMDb; anime by MyAnimeList, then IMDb and Letterboxd. TMDb scores posters and reviews, not the rating filter.
+    public static func order(isAnime: Bool) -> [RatingSource] {
+        isAnime ? [.myAnimeList, .imdb, .letterboxd] : [.letterboxd, .imdb]
+    }
 
     /// The top of the site's own scale.
     public var scaleMaximum: Double {
         switch self {
         case .letterboxd: 5
-        case .imdb: 10
-        case .rottenTomatoes, .metacritic: 100
+        case .imdb, .myAnimeList, .tmdb: 10
         }
     }
 
-    /// A score put out of 10: 3.5 of 5 is 7, and 70 of 100 is 7.
+    /// A score put out of 10: 3.5 of 5 is 7.
     public func outOfTen(_ score: Double) -> Double { score * 10 / scaleMaximum }
+
+    /// The title's rating from its sites' scores, each on its own scale; nil when none has scored it.
+    public static func judge(isAnime: Bool, score: (RatingSource) -> Double?) -> JudgedRating? {
+        for source in order(isAnime: isAnime) {
+            if let value = score(source) { return JudgedRating(score: source.outOfTen(value), hasIMDb: score(.imdb) != nil) }
+        }
+        return nil
+    }
+}
+
+/// A title's rating as the rating filters and the Rating sorts judge it (see `RatingSource.order(isAnime:)`).
+public struct JudgedRating: Equatable, Sendable {
+    /// Out of 10.
+    public var score: Double
+    /// IMDb has scored the title. IMDb's score is on the device, so such a title is judged as soon as it loads; one only another site has
+    /// scored waits for that site's lookup.
+    public var hasIMDb: Bool
+
+    public init(score: Double, hasIMDb: Bool) {
+        self.score = score
+        self.hasIMDb = hasIMDb
+    }
+
+    /// The catalog's IMDb rating, and nothing else: the rating where no lookups are supplied.
+    public static func catalogue(_ item: MetaPreview) -> JudgedRating? {
+        item.imdbRating.map { JudgedRating(score: $0, hasIMDb: true) }
+    }
 }
 
 /// One active filter, as a chip above the Library. `target` is what removing the chip clears.
@@ -283,21 +314,13 @@ public enum LibraryFiltering {
         return .unwatched
     }
 
-    /// The score an entry has from one rating site, on that site's scale; nil when the site has not scored it. IMDb is the catalogue's
-    /// rating; the other sites come from the rating lookups, which the view model supplies.
-    public typealias ScoreLookup = (LibraryEntry, RatingSource) -> Double?
-
-    /// The rating a title is judged by, out of 10: its first site in priority order that has scored it. Nil when no site has scored it.
-    public static func judgedRating(_ entry: LibraryEntry, score: ScoreLookup) -> Double? {
-        for source in RatingSource.allCases {
-            if let value = score(entry, source) { return source.outOfTen(value) }
-        }
-        return nil
-    }
+    /// The rating an entry is judged by for the rating filter and the Rating sort (see `RatingSource.order(isAnime:)`); nil when no site
+    /// has scored it. The view model supplies the rating lookups.
+    public typealias ScoreLookup = (LibraryEntry) -> JudgedRating?
 
     /// The catalogue's IMDb rating, and nothing else. Used when no lookup is supplied.
-    public static func catalogueScores(_ entry: LibraryEntry, _ source: RatingSource) -> Double? {
-        source == .imdb ? entry.rating : nil
+    public static func catalogueScores(_ entry: LibraryEntry) -> JudgedRating? {
+        entry.rating.map { JudgedRating(score: $0, hasIMDb: true) }
     }
 
     /// Whether an entry passes every active filter. `now` anchors the added-date window.
@@ -311,7 +334,7 @@ public enum LibraryFiltering {
         }
         if !filter.genres.isEmpty, !filter.genres.contains(where: { MediaGenres.contains($0, in: entry.genres) }) { return false }
         if let minimum = filter.minimumRating {
-            guard let rating = judgedRating(entry, score: score), rating >= minimum else { return false }
+            guard let rating = score(entry)?.score, rating >= minimum else { return false }
         }
         if let days = filter.addedWithin.days {
             guard let added = entry.addedAt, added >= now.addingTimeInterval(-Double(days) * 86_400) else { return false }
@@ -322,19 +345,22 @@ public enum LibraryFiltering {
     /// The entries that pass the filter, in the filter's sort order.
     public static func apply(_ filter: LibraryFilter, to entries: [LibraryEntry], now: Date = Date(),
                              score: ScoreLookup = catalogueScores) -> [LibraryEntry] {
-        sorted(entries.filter { matches($0, filter, now: now, score: score) }, by: filter.sort)
+        sorted(entries.filter { matches($0, filter, now: now, score: score) }, by: filter.sort, score: score)
     }
 
-    /// Sorts by one key, with the title (then id) as the tie-break so the order is always the same. Missing values sort last.
-    public static func sorted(_ entries: [LibraryEntry], by sort: LibrarySort) -> [LibraryEntry] {
-        entries.sorted { lhs, rhs in
+    /// Sorts by one key, with the title (then id) as the tie-break so the order is always the same. Missing values sort last. The Rating
+    /// sort rates each entry with `score`, as the rating filter does.
+    public static func sorted(_ entries: [LibraryEntry], by sort: LibrarySort, score: ScoreLookup = catalogueScores) -> [LibraryEntry] {
+        let ratings = sort == .rating ? entries.map { score($0)?.score } : []
+        return entries.indices.sorted { left, right in
+            let (lhs, rhs) = (entries[left], entries[right])
             switch sort {
             case .title:
                 break
             case .year:
                 if let order = descending(lhs.year.map(Double.init), rhs.year.map(Double.init)) { return order }
             case .rating:
-                if let order = descending(lhs.rating, rhs.rating) { return order }
+                if let order = descending(ratings[left], ratings[right]) { return order }
             case .recentlyAdded:
                 if let order = descending(lhs.addedAt ?? lhs.activityAt, rhs.addedAt ?? rhs.activityAt) { return order }
             case .recentlyWatched:
@@ -343,7 +369,7 @@ public enum LibraryFiltering {
             let byTitle = lhs.title.localizedStandardCompare(rhs.title)
             if byTitle != .orderedSame { return byTitle == .orderedAscending }
             return lhs.id < rhs.id
-        }
+        }.map { entries[$0] }
     }
 
     /// Newest or highest first. nil when the keys are equal, so the caller moves on to the next key. A missing value sorts after a

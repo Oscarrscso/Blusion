@@ -88,11 +88,11 @@ struct DetailReviewsPanel: View {
             HStack(spacing: 8) {
                 ReviewSiteIcon(site: visible.site, size: 14, keepsColour: true)
                 Text(visible.site.name)
-                    .font(Theme.Typography.mediumStrong)
+                    .appFont(.mediumStrong)
                     .foregroundStyle(.white)
                 if visible.isSearch && !ReviewPageReader.supports(visible.site) {
                     Text("Search")
-                        .font(Theme.Typography.caption)
+                        .appFont(.caption)
                         .foregroundStyle(Theme.faintText)
                 }
                 Spacer(minLength: 0)

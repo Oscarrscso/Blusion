@@ -75,7 +75,10 @@ public final class TraktAccountViewModel {
     public func signOut() async {
         authorizationURL = nil
         await perform {
-            await self.services.traktAccount.signOut()
+            guard await self.services.traktAccount.signOut() else {
+                self.errorMessage = "Couldn’t remove the Trakt sign-in from secure storage. Try Disconnect again."
+                return
+            }
             await self.services.traktSync.signedOut()
             await self.services.trakt.clearCache()
             await self.services.widgetContent.forgetEverything()
@@ -87,27 +90,39 @@ public final class TraktAccountViewModel {
     /// Forces a full sync: reads everything from Trakt and applies it here, removals included, so a title or mark that left Trakt leaves
     /// this device too.
     public func importFromTrakt() async {
+        guard canSync() else { return }
         await perform {
             let summary = try await self.services.traktSync.sync(force: true)
-            self.message = Self.importMessage(summary)
+            self.message = GhostMode.isOn ? "Paused by Ghost Mode" : Self.syncMessage(summary)
         }
     }
 
     /// Forces a full sync that also sends the saved titles and watched marks here that Trakt does not have yet. What Trakt removed is
     /// removed here too, as in an import.
     public func sendToTrakt() async {
+        guard canSync() else { return }
         await perform {
             let summary = try await self.services.traktSync.sync(force: true, sendingLocalOnly: true)
-            self.message = "Sent \(summary.savedSent) saved titles and \(summary.watchedSent) watched items to Trakt."
+            self.message = GhostMode.isOn ? "Paused by Ghost Mode" : Self.syncMessage(summary)
         }
     }
 
     /// Forces a full sync that sends local items to Trakt and reads Trakt back, in one pass.
     public func sync() async {
+        guard canSync() else { return }
         await perform {
             let summary = try await self.services.traktSync.sync(force: true, sendingLocalOnly: true)
-            self.message = Self.importMessage(summary)
+            self.message = GhostMode.isOn ? "Paused by Ghost Mode" : Self.syncMessage(summary)
         }
+    }
+
+    private func canSync() -> Bool {
+        guard !GhostMode.isOn else {
+            errorMessage = nil
+            message = "Paused by Ghost Mode"
+            return false
+        }
+        return true
     }
 
     private func perform(_ operation: () async throws -> Void) async {
@@ -120,11 +135,13 @@ public final class TraktAccountViewModel {
         pendingCount = await services.traktSync.pendingCount()
     }
 
-    /// The sentence after a sync: what came in, then what Trakt removed here, when it removed anything.
-    private static func importMessage(_ summary: TraktSync.Summary) -> String {
-        var text = "Imported \(summary.savedAdded) saved titles and \(summary.watchedAdded) watched items from Trakt."
-        if summary.savedRemoved + summary.watchedRemoved > 0 {
-            text += " Removed \(summary.savedRemoved) saved titles and \(summary.watchedRemoved) watched marks that were removed on Trakt."
+    /// Include uploads even when no local data changed. Sent counts include additions and removals.
+    private static func syncMessage(_ summary: TraktSync.Summary) -> String {
+        var text = "Sent \(summary.savedSent) saved-title changes and \(summary.watchedSent) watch-history changes to Trakt."
+        text += " Received \(summary.savedAdded) saved titles and \(summary.watchedAdded) watched items."
+        text += " Removed \(summary.savedRemoved) saved titles and \(summary.watchedRemoved) watched marks locally."
+        if summary.playbackSent + summary.playbackRemoved > 0 {
+            text += " Sent \(summary.playbackSent) playback positions and removed \(summary.playbackRemoved) paused records on Trakt."
         }
         return text
     }

@@ -29,7 +29,7 @@ public final class AddonSpeedViewModel {
     public func load() async {
         let settings = await services.settings.load()
         wait = settings.autoPickWait
-        await refresh(preferredResolution: settings.preferredResolution)
+        await refresh(preferredResolution: settings.rankingPreferences.preferredResolution)
     }
 
     /// Runs the test and keeps its results. Only on request: every request is a real lookup.
@@ -39,7 +39,7 @@ public final class AddonSpeedViewModel {
         defer { isTesting = false }
         let results = await services.speedTester.run()
         await services.addonSpeed.save(results)
-        await refresh(preferredResolution: await services.settings.load().preferredResolution)
+        await refresh(preferredResolution: await services.settings.load().rankingPreferences.preferredResolution)
     }
 
     /// Saves what Auto Pick waits for, then calls `saved`. Choosing Auto before anything has been tested starts a test, after that.

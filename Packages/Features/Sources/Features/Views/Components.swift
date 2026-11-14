@@ -16,7 +16,7 @@ struct ErrorChip: View {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.secondary)
         }
-        .font(.footnote.weight(.medium))
+        .appFont(style: .footnote, weight: .medium, role: .interface)
         .foregroundStyle(.primary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -35,9 +35,9 @@ struct OfflineBanner: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(Connectivity.offlineTitle)
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                 Text(Connectivity.offlineMessage)
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -154,13 +154,13 @@ private struct TitlePageBars: ViewModifier {
     @Environment(AppRouter.self) private var router
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     @Environment(\.usesEditorialTabBar) private var usesEditorialTabBar
+    @Environment(\.appAppearance) private var appearance
     @State private var depth: Int?
 
     func body(content: Content) -> some View {
         content
             #if !targetEnvironment(macCatalyst)
-            .toolbarVisibility(isOnTop || usesEditorialTabBar || (isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone)
-                ? .hidden : .visible, for: .tabBar)
+            .toolbarVisibility(hidesTabBar ? .hidden : .visible, for: .tabBar)
             #endif
             .onAppear {
                 let current = router[keyPath: path].count
@@ -179,6 +179,16 @@ private struct TitlePageBars: ViewModifier {
     private var isOnTop: Bool {
         guard let depth else { return true }
         return router[keyPath: path].count >= depth
+    }
+
+    /// Title pages hide the tab bar unless Appearance keeps it on an upright iPhone so Home can be tapped from them.
+    private var hidesTabBar: Bool {
+        if usesEditorialTabBar { return true }
+        if isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone { return true }
+        if isOnTop, appearance.showsTitlePageTabBar, UIDevice.current.userInterfaceIdiom == .phone, !isPhoneLandscape {
+            return false
+        }
+        return isOnTop
     }
 }
 

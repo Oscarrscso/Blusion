@@ -67,7 +67,7 @@ public struct CatalogListFilter: Equatable, Sendable {
     public var genre: String?
     public var minimumYear: Int?
     public var maximumYear: Int?
-    /// Out of 10, against the IMDb rating the source sent.
+    /// Out of 10, against the title's rating (see `RatingSource.order(isAnime:)`).
     public var minimumRating: Double?
 
     public init(sort: CatalogListSort = .original, type: String? = nil, genre: String? = nil, minimumYear: Int? = nil,
@@ -109,7 +109,15 @@ public struct CatalogListFilter: Equatable, Sendable {
 
 /// Pure functions behind the grid's filter, so they can be tested without a view or a source.
 public enum CatalogListFiltering {
-    public static func matches(_ item: MetaPreview, _ filter: CatalogListFilter) -> Bool {
+    /// How the rating filter and the Top Rated order rate a title (see `RatingSource.order(isAnime:)`). Without the rating store, the
+    /// catalog's IMDb rating.
+    public typealias RatingLookup = (MetaPreview) -> JudgedRating?
+    private typealias Kept = (offset: Int, element: MetaPreview, rating: JudgedRating?)
+
+    /// How many places ahead of its own a title that only a looked-up site has scored may land in the source's own order.
+    static let dispersal = 40
+
+    public static func matches(_ item: MetaPreview, _ filter: CatalogListFilter, rating: RatingLookup = JudgedRating.catalogue) -> Bool {
         if let type = filter.type, item.type.lowercased() != type { return false }
         if let genre = filter.genre, !MediaGenres.contains(genre, in: item.genres) { return false }
         if filter.minimumYear != nil || filter.maximumYear != nil {
@@ -118,21 +126,28 @@ public enum CatalogListFiltering {
             if let high = filter.maximumYear, year > high { return false }
         }
         if let minimum = filter.minimumRating {
-            guard let rating = item.imdbRating, rating >= minimum else { return false }
+            guard let judged = rating(item)?.score, judged >= minimum else { return false }
         }
         return true
     }
 
     /// The items that pass the filter, in its order. `shuffleRank` places each item when the order is Shuffle; an item it has no rank for
     /// goes after the ranked ones, in loaded order. Titles missing what an order needs (a rating, a year) go last, in loaded order.
-    public static func apply(_ filter: CatalogListFilter, to items: [MetaPreview], shuffleRank: [String: Int] = [:]) -> [MetaPreview] {
-        let kept = items.enumerated().filter { matches($0.element, filter) }
-        let ordered: [(offset: Int, element: MetaPreview)]
+    public static func apply(_ filter: CatalogListFilter, to items: [MetaPreview], shuffleRank: [String: Int] = [:],
+                             rating: RatingLookup = JudgedRating.catalogue) -> [MetaPreview] {
+        let needsRatings = filter.minimumRating != nil || filter.sort == .rating
+        var kept: [Kept] = []
+        for (offset, item) in items.enumerated() {
+            let judged = needsRatings ? rating(item) : nil
+            guard matches(item, filter, rating: { _ in judged }) else { continue }
+            kept.append((offset: offset, element: item, rating: judged))
+        }
+        let ordered: [Kept]
         switch filter.sort {
         case .original:
-            ordered = kept
+            ordered = filter.minimumRating == nil ? kept : dispersed(kept)
         case .rating:
-            ordered = kept.sorted { compare($0.element.imdbRating, $1.element.imdbRating, descending: true) ?? ($0.offset < $1.offset) }
+            ordered = kept.sorted { compare($0.rating?.score, $1.rating?.score, descending: true) ?? ($0.offset < $1.offset) }
         case .newest:
             ordered = kept.sorted { compare(year($0.element), year($1.element), descending: true) ?? ($0.offset < $1.offset) }
         case .oldest:
@@ -155,6 +170,34 @@ public enum CatalogListFiltering {
             item.genres = MediaGenres.leading([genre], in: item.genres)
             return item
         }
+    }
+
+    /// Under a rating filter in the source's own order, titles IMDb has scored keep their places, as they show first. A title only
+    /// MyAnimeList, Letterboxd or TMDb has scored arrives later, and lands at a random place up to `dispersal` ahead of its own, the same
+    /// each time it is drawn, so the late titles spread through the grid.
+    private static func dispersed(_ kept: [Kept]) -> [Kept] {
+        var placed: [(entry: Kept, place: Double)] = []
+        placed.reserveCapacity(kept.count)
+        for entry in kept { placed.append((entry, place(of: entry))) }
+        placed.sort(by: placedBefore)
+        return placed.map(\.entry)
+    }
+
+    private static func place(of entry: Kept) -> Double {
+        let offset = Double(entry.offset)
+        guard entry.rating?.hasIMDb == false else { return offset }
+        var hasher = Hasher()
+        hasher.combine(entry.element.identity)
+        let bucket: UInt = UInt(bitPattern: hasher.finalize()) % 1_000
+        let fraction: Double = Double(bucket) / 1_000
+        let reach: Double = Double(min(entry.offset, dispersal))
+        let shift: Double = fraction * reach
+        return offset - 0.5 - shift
+    }
+
+    private static func placedBefore(_ left: (entry: Kept, place: Double), _ right: (entry: Kept, place: Double)) -> Bool {
+        if left.place == right.place { return left.entry.offset < right.entry.offset }
+        return left.place < right.place
     }
 
     /// Fresh shuffle ranks for `items`, numbered from `start`.

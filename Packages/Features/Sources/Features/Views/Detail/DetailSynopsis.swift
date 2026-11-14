@@ -26,7 +26,7 @@ struct DetailSynopsis: View {
             // Folded when it runs past its folded lines; one that fits has nothing to fold, so a tap does nothing.
             let folds = isExpanded || isTruncated
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                JustifiedText(text: description, color: Self.textColour, lineLimit: isExpanded ? 0 : foldedLines,
+                JustifiedText(text: description, role: .reading, color: Self.textColour, lineLimit: isExpanded ? 0 : foldedLines,
                               reservesSpace: !isExpanded, isTruncated: $isTruncated)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())

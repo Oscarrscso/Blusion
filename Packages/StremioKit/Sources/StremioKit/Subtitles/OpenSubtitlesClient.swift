@@ -10,6 +10,11 @@ public struct OpenSubtitlesCredentials: Sendable, Equatable {
     public var username: String?
     public var password: String?
 
+    /// Half-filled credentials use anonymous access, just as a key on its own does.
+    public var hasLogin: Bool {
+        !(username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty && !(password ?? "").isEmpty
+    }
+
     public init(apiKey: String, username: String? = nil, password: String? = nil) {
         self.apiKey = apiKey
         self.username = username
@@ -97,6 +102,13 @@ public actor OpenSubtitlesClient {
         self.transport = transport ?? URLSessionTransport()
     }
 
+    /// Verifies the saved login without downloading a subtitle or consuming a download allowance.
+    public func signIn() async throws {
+        let key = try apiKey()
+        guard let login = loginPair else { throw OpenSubtitlesError.unauthorized }
+        token = try await logIn(login, key: key)
+    }
+
     /// Subtitles for a movie, or for one episode when `season` and `episode` are both given (`imdbID` is then the series).
     /// Hash matches come first, then human translations, then the most downloaded. No request is sent for an id with no digits.
     public func search(imdbID: String, season: Int?, episode: Int?, languages: [String], movieHash: String?) async throws -> [OpenSubtitlesResult] {
@@ -167,7 +179,7 @@ public actor OpenSubtitlesClient {
     private var loginPair: (username: String, password: String)? {
         let username = credentials.username?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let password = credentials.password ?? ""
-        guard !username.isEmpty, !password.isEmpty else { return nil }
+        guard credentials.hasLogin else { return nil }
         return (username, password)
     }
 

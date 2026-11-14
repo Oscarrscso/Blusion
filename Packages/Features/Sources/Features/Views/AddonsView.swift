@@ -117,8 +117,8 @@ struct AddonsView: View {
             Text("Paste a link above, or add Cinemeta for catalogs and search.")
                 .accessibilityIdentifier("addons.emptyText")
             VStack(alignment: .leading, spacing: 6) {
-                Text("Suggested: \(AddonsViewModel.suggestion.name)").font(Theme.Typography.headline)
-                Text(AddonsViewModel.suggestion.detail).font(Theme.Typography.small).foregroundStyle(.secondary)
+                Text("Suggested: \(AddonsViewModel.suggestion.name)").appFont(.headline)
+                Text(AddonsViewModel.suggestion.detail).appFont(.small).foregroundStyle(.secondary)
                 Button("Install \(AddonsViewModel.suggestion.name)") { Task { await model.installSuggested() } }
                     .buttonStyle(.glassCapsule)
                     .accessibilityIdentifier("addons.installSuggested")
@@ -144,12 +144,12 @@ struct AddonsView: View {
                                     .background(Theme.surfaceStrong, in: RoundedRectangle(cornerRadius: 10 * metrics.cornerScale(for: .panels)))
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(addon.name).font(Theme.Typography.headline)
+                                Text(addon.name).appFont(.headline)
                                 Text("\(addon.manifest.version.isEmpty ? "" : "v\(addon.manifest.version) · ")\(addon.displayHost)")
-                                    .font(Theme.Typography.caption)
+                                    .appFont(.caption)
                                     .foregroundStyle(.secondary)
                                 Text(model.capabilities(of: addon).joined(separator: " · "))
-                                    .font(Theme.Typography.micro).foregroundStyle(.secondary)
+                                    .appFont(.micro).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -208,7 +208,7 @@ struct AddonDetailView: View {
                 LabeledContent("Name", value: details.name)
                 if !details.version.isEmpty { LabeledContent("Version", value: details.version) }
                 LabeledContent("Host", value: details.host)
-                if let description = details.description { Text(description).font(Theme.Typography.small) }
+                if let description = details.description { Text(description).appFont(.small) }
             }
             if !details.warnings.isEmpty {
                 Section("Notes") { ForEach(details.warnings, id: \.self) { Label($0, systemImage: "info.circle") } }

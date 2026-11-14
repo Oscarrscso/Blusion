@@ -1,149 +1,72 @@
-# Built-in player: capabilities, limits and blockers
+# Player
 
-Status on 2026-10-24. "Built" means compiled for iOS with the fallback engine and covered by host tests; nothing here was watched on a device
-unless it says so. Source labels (HDR, DV, Atmos in a release name) are not proof of what plays. The on-screen Statistics panel was removed
-on 2026-10-24; `PlaybackEngine.statistics()` still reads what the engine decodes and outputs, for a future debug view.
+Playback rules. Engine behaviour that is not a product rule lives in `AVEngine`, `AetherSession` and `MPVBackend`.
 
-**Options panel (all engines, iPhone and Mac; replaced the system menus on 2026-10-24):** the bar under the timeline opens one glass
-panel, at the side on a wide screen and at the bottom on a tall one, with tabs for Subtitles, Audio, Picture, Speed and Chapters. Values
-are chips, delays are −/+ steppers (hold to repeat, tap the value to reset), switches are toggles; picking a track or a chapter closes it,
-a tap outside or Escape closes it too. **Start-up (2026-10-25):** until the film's first frame is on screen (`PlayerContent.isVideoReady`;
-playing over AirPlay counts) the player shows only a spinner on black, and Close: no poster, play button, skip buttons, subtitles or
-scrubber. Another
-stream or the next episode waits for its own first frame the same way. After that the spinner shows only for a stall, with the controls
-hidden. The picture never animates into place: the video views
-lay out with Core Animation's actions off, so a new size or scaling mode doesn't slide it up or down.
+## Routing
 
-**Preload (iPhone and iPad, AetherEngine):** the moment a player opens (`PlayerContent.init`, before its screen appears), its first stream
-starts downloading with `AetherEngine.prewarm` (4 MB, redirects followed: a debrid link resolves here), and `AetherSession.load` waits up
-to 4 s for a warm still under way, since the engine adopts only a finished one. AVPlayer and mpv fetch their own bytes, so their streams
-are not warmed.
+`PlaybackPolicy` chooses the engine from the container: sniffed bytes, then Content-Type, then the extension. MP4, MOV, M4V and HLS stay on AVPlayer. Anything else goes to the fallback engine when it is linked and enabled in Settings. `behaviorHints.notWebReady` does not force the fallback engine. It only breaks a tie when the container is unknown and the URL has no extension. Audio AVPlayer cannot decode (DTS, TrueHD) still uses the fallback engine. AV1 uses the fallback engine only where VideoToolbox cannot decode it; on A17 Pro, M3 and later, AVPlayer keeps AV1.
 
-**Readied before it opens (iPhone, iPad and Mac):** a stream Blusion plays opens its player only once the film is ready. Tapping a
-stream (or Auto Pick) turns its play button into a spinner while `PlayerViewModel.prepare` starts it off screen: muted, held paused on
-its first frame, saving no progress (`ProgressSession.isRecording`), so nothing reaches Continue Watching or Trakt. The player screen
-takes that model and plays at once. The first stream listed starts readying in the background as soon as it arrives, so playing it is
-nearly instant; tapping another stream replaces it, tapping the spinning one calls it off, and leaving the picker closes it. A muted
-start still takes the audio session, so music from another app stops when a stream list loads. mpv's view starts at 1280×720 so it has
-a picture layer to draw on before the screen lays it out. The picture itself can only be drawn once the player's screen is up, so the
-player's spinner takes over from the button's until the first frame: a spinner shows from the tap until the picture.
+If AVPlayer fails before the first frame with a format error, the coordinator plays that stream once in the fallback engine at the same position, only when the engine is linked and enabled. Network and timeout failures are not retried that way. A dropped connection mid-stream reloads the same stream once where it stopped. A buffer that is still filling is not a stall.
 
-**Swipe to seek (iPhone and iPad, 2026-10-29):** a sideways swipe anywhere on the picture seeks live, right forward and left back, in every
-orientation. Finger height continuously sets the sensitivity: five minutes across the width at the top, five seconds at the bottom
-(`SwipeSeek`), capped at the video's duration. Moving vertically alone does not jump the target. Once seeking starts, it stays seeking
-anywhere on screen until release; vertical swipes that start at the sides still control brightness and volume. A pinch stops further
-seeks at the last live position. Picture dragging is intentionally disabled on Mac at the user's request; Mac retains timeline and
-keyboard seeking.
+`infoHash` streams play only when the user has set a streaming-server URL: `<base>/<infoHash lowercased>/<fileIdx>`, or `-1` when the addon omits the index. No torrent engine is embedded. The URL can carry credentials, so it is a secret. A torrent that has been turned into an HTTP URL by that server is still ineligible for native download.
 
-**Picture tab (all engines, iPhone and Mac):** Fit / Fill / Stretch, Zoom, **Aspect Ratio** (Original, 1:1, 5:4, 4:3, 3:2, 1.66, 16:10,
-16:9, 1.85, 1.90, 2:1, 2.20, 2.35, 2.39, 2.40, 2.55, 2.76) and **Crop** (4:3 to 2.76:1, centred, takes off bars burned into the video). mpv
-applies them itself (`video-aspect-override`, `video-crop`); AVPlayer and AetherEngine through `VideoGeometry`, which places the whole picture
-and clips it to the kept part. Fit is remembered; zoom, aspect and crop are per video. **Dolby Vision** switch (Picture tab, and Settings → Player →
-Picture): off plays the HDR10/HLG base layer (AetherEngine `dolbyVisionHandling = .baseLayerOnly`, rebuilt at the current position; mpv
-`vf=format=dolbyvision=no`). Shown only for Dolby Vision streams with a base layer (not profile 5) on those two engines; AVPlayer always shows
-Dolby Vision.
+Streams with `behaviorHints.proxyHeaders.request` load through `HeaderResourceLoader` on a custom scheme. The undocumented `AVURLAssetHTTPHeaderFieldsKey` path exists only behind `BLUSION_UNDOCUMENTED_AV_HEADERS`, which release builds leave off. Do not set `NSAllowsArbitraryLoads`. `NSAllowsArbitraryLoadsForMedia` exempts only loads AVFoundation performs itself. Header-loader and download `URLSession` requests still follow ATS, so plain HTTP to a non-local host fails and the coordinator moves on.
+
+Picture in Picture starts only from a user action. mpv has no PiP and no video AirPlay. AetherEngine's PiP uses AVKit on the layer it draws.
 
 ## Engines
 
-| | AVPlayer (`AVEngine`) | mpv (`MPVBackend`, MPVKit 0.41 / mpv 0.40, iPhone and iPad only) |
-|---|---|---|
-| Containers | MP4, MOV, M4V, HLS | MKV/WebM, AVI, TS/M2TS, MPEG-PS, FLV, OGG, ASF, and the above |
-| Video | H.264, HEVC, AV1 on A17 Pro/M3+ | + AV1 (dav1d), VP9, MPEG-2, VC-1, MPEG-4 ASP; VideoToolbox first, FFmpeg software otherwise |
-| HDR | HDR10, HLG, Dolby Vision 5/8.1/8.4 by the system | HDR10, HLG, DV 5 and 8 via libplacebo + libdovi; DV 7 base layer + RPU (the enhancement layer, MEL or FEL, is **not** decoded). HDR10+ dynamic metadata is not used. EDR output through `target-colorspace-hint`; tone mapping curve and "always SDR" selectable |
-| Audio | AAC, AC-3, E-AC-3 (Atmos passes to the system's spatial renderer where the route supports it) | + TrueHD, DTS, DTS-HD MA, FLAC, Opus: decoded to multichannel PCM. **Atmos and DTS:X objects are not rendered**, only their channel bed |
-| Subtitles | embedded text tracks (styled through text style rules); files drawn by the app: SRT/VTT/ASS (styling simplified: no karaoke, motion, drawings) and PGS `.sup` pictures | embedded and file subtitles drawn by libass/FFmpeg with full ASS styling, PGS, VobSub, DVB; HDR subtitle brightness (`sub-hdr-peak`) |
-| Timing controls | the app's subtitle offset (files) | subtitle delay (all), audio delay |
-| Extra audio file | no | yes (Audio tab → Add File) |
-| Picture | fit/fill/stretch, zoom (pinch on iPhone), aspect override and crop (video surface) | fit/fill/stretch, zoom, aspect override, crop, Dolby Vision off, deinterlacing (auto/always/off) |
-| Upscaling | AI: VideoToolbox low-latency super resolution, SDR below screen resolution, steps aside on HDR, unsupported chips, embedded subtitles or when it cannot keep up | "High quality" EWA Lanczos (Spline36 in Low Power Mode); AI mode uses the same and says so |
-| PiP, video AirPlay | yes | **no** (see blockers) |
-| Ambient Mode | yes (edge colours from a 32×18 copy of the frame) | no (mpv draws straight to the screen) |
+Install scripts generate the project with `scripts/enable-fallback.sh`. The default `project.yml` does not link the fallback engine. Both apps pin the LGPL MPVKit build. `Packages/AetherPlayer` is its own dynamic framework so its FFmpeg binds to `AetherLib*`, not to MPVKit's static FFmpeg. Link the LGPL MPVKit product only.
 
-### AetherEngine (`AetherBackend`, AetherEngine 7.47, iPhone and iPad only; added 2026-10-24)
+AetherEngine is the default for streams AVPlayer cannot open (Settings → Fallback player → Engine). mpv is the other choice, and the one used for full ASS styling, an external audio file, deinterlacing and a tone-mapping choice. A stream AetherEngine cannot start is tried once in mpv at the same position.
 
-The default engine for streams AVPlayer can't open (Settings → Fallback player → Engine; mpv is the other choice). It demuxes with its own
-FFmpeg and gives AVPlayer what AVPlayer can play, so most MKVs keep the system's own Dolby Vision, HDR10 and E-AC-3 Atmos passthrough; the
-rest decodes in VideoToolbox (dav1d/libavcodec in software) and draws into a sample-buffer layer.
+| | AVPlayer | AetherEngine | mpv |
+|---|---|---|---|
+| Where | both | both; Mac slices are arm64, made by `scripts/aether-catalyst-slices.py` from the macOS binaries (platform tag only) | both, LGPL MPVKit |
+| Role | native containers | default fallback; demuxes with its FFmpeg and hands AVPlayer what it can play | backup, and full subtitle styling |
+| HDR | system HDR10, HLG, Dolby Vision | system HDR10, HDR10+, HLG, Dolby Vision. Profile 7 FEL can be composed in Metal (Settings, on by default); otherwise the base layer | HDR10, HLG, DV 5 and 8 via libplacebo. DV 7 enhancement layer is not decoded. HDR10+ metadata is unused |
+| Atmos | E-AC-3 objects pass through where the route supports them | TrueHD Atmos and DTS:X render to a 7.1.4 spatial bed (Settings, on by default). E-AC-3 objects pass through on the native route. An FEL title's E-AC-3 plays as its channel bed; turn FEL composition off to get the native route back | channel bed only |
+| Subtitles | embedded text; files drawn by the app (ASS styling simplified) | embedded text, PGS, VobSub, DVB with the app's style. "Show Full Styling" moves the stream to mpv | libass, full ASS, PGS, VobSub, DVB |
+| Not on this engine | external audio, deinterlace, tone-mapping choice | external audio, deinterlace, tone-mapping choice, upscaling, Ambient Mode | PiP, video AirPlay, Ambient Mode |
 
-| | AetherEngine |
-|---|---|
-| Containers | MKV/WebM, MP4/MOV, TS/M2TS, AVI, FLV, OGG, ASF/WMV, RealMedia, HLS |
-| HDR | HDR10, HDR10+, HLG, Dolby Vision 5/8.1/8.4/AV1 10 by the system. **Profile 7 FEL**: both layers decode in VideoToolbox, Metal composes them and every frame carries its RPU converted to 8.1 (Settings → "Compose Dolby Vision FEL", on by default). MEL, and FEL the device can't decode twice in real time, convert to 8.1 (enhancement layer dropped, lossless for MEL) |
-| Audio | AAC, AC-3, E-AC-3 (Atmos objects passed to the system), FLAC, ALAC copied; TrueHD, DTS, DTS-HD MA, Opus and others bridged to multichannel. **TrueHD Atmos and DTS:X**: objects and heights rendered into a 7.1.4 bed delivered as Apple spatial audio (Settings → "Spatial audio for TrueHD and DTS:X", on by default; lossy, 320 kbps per channel, instead of the lossless 7.1 bed) |
-| Subtitles | embedded text, PGS, VobSub and DVB drawn by `AetherSubtitleOverlay` with the app's subtitle style; files drawn by the app as on AVPlayer. ASS keeps colours, bold/italic and positions, not fonts, karaoke or motion: "Show Full Styling" moves the stream to mpv |
-| Timing controls | subtitle delay, audio delay (±2 s) |
-| Picture | fit/fill/stretch, zoom, aspect override and crop, Dolby Vision off |
-| Not here | external audio file, deinterlacing and tone-mapping choice, upscaling, PiP, Ambient Mode (all on mpv or AVPlayer) |
+AVPlayer upscaling is VideoToolbox super resolution for SDR below the screen's resolution. It steps aside for HDR, unsupported chips, embedded subtitles, or when it cannot keep up. mpv's "High quality" scale is EWA Lanczos (Spline36 in Low Power Mode). mpv has no AI scaler; its AI mode uses the same scale and says so.
 
-Trade-offs, all from AetherEngine's docs (`docs/dolby-vision-fel.md` there) and not yet watched on a device:
+On Mac, embedded E-AC-3 at normal speed is sent as encoded packets through an AVPlayer resource-loader asset so the system decoder receives the JOC extension. mpv keeps the picture and a null audio output. Other speeds and a native failure return to mpv's PCM path. Other Mac audio prefers mpv's AVFoundation sample-buffer output, with AudioUnit as the initialization fallback.
 
-- The FEL route runs on the software path, so an E-AC-3 Atmos track on an FEL title plays as its 5.1/7.1 bed without objects (TrueHD is
-  unaffected), AirPlay plays sound only, and there is no PiP. Turn FEL composition off for that title to get the native route back.
-- AetherEngine measured FEL with Dolby Vision display management on Apple TV only. On iPhone the composed picture is correct; whether iOS
-  applies Dolby Vision display mapping to it has not been verified.
-- Start-up: Blusion's play arrives before AetherEngine has a session, so `AetherSession` keeps it and plays once the load finishes (before
-  2026-10-24 every AetherEngine stream sat paused until the 20 s start timeout). Segments are served progressively
-  (`progressiveSegmentDelivery`), so the first frame shows on a segment's first fragments.
-- A stream AetherEngine can't start (format or engine error before the first frame) is tried once in mpv at the same position.
+Chapters, Skip Intro/Recap/Credits from chapter names, speed, tracks (language and name), delays, picture settings and engine-loaded files carry across an engine change.
 
-Both: chapters (Chapters tab, `[` and `]` on a keyboard), Skip Intro/Recap/Credits from chapter names, continuity of speed, tracks
-(matched by language and name), delays, picture settings and engine-loaded files when the coordinator changes engine (fallback retry, next
-stream, reconnect, "Play in Advanced Player"). A dropped connection mid-stream reloads the same stream once where it stopped before moving on;
-a buffer that is still filling is not treated as a stall.
+## Opening and gestures
 
-## Subtitles
+Until the first frame is on screen (`PlayerContent.isVideoReady`; AirPlay counts), the player shows a spinner on black and Close: no poster, play button, skip buttons, subtitles or scrubber. The next stream waits the same way. After that the spinner is only for a stall, with the controls hidden. Video views lay out with Core Animation actions off, so a new size or scaling mode does not slide the picture. A rotation applies its safe-area inset at once.
 
-- Defaults (Settings → Player): language, Always / Forced only / Off, prefer SDH. Embedded tracks win over files; a file picked first gives
-  way to an embedded track that appears later. Forced-only follows the audio language when no subtitle language is set.
-- Sources: the stream's own, addons (re-queried with each new stream's hash and file name when the stream changes), local files (SRT, VTT,
-  ASS/SSA, SUP), and OpenSubtitles.com (Settings → Player: the user's own free API key, optional login; results matched by moviehash, computed
-  with two range requests when the addon gives none).
-- A VobSub file on AVPlayer switches the stream to the fallback engine at the same position. A styled ASS file on AVPlayer offers
-  "Show Full Styling", which does the same.
+A stream Blusion plays opens only once `PlayerViewModel.prepare` has it ready: muted, paused on the first frame, not recording progress. The first listed stream starts readying when it arrives. Tapping another replaces it; tapping the spinning one cancels it; leaving the picker closes it. A muted start still takes the audio session. The picture can be drawn only once the player screen is up, so the spinner continues from the button until the first frame.
 
-## Mac/iPhone parity
+A single tap shows or hides controls immediately, with no haptic and no fade-in wait. A second tap skips or plays and pauses as configured.
 
-The Mac app has every control above that its engine supports, with the same options panel, Settings page and OpenSubtitles account (synced through
-iCloud Keychain). Both install scripts use `scripts/enable-fallback.sh`: AVPlayer handles native streams and mpv handles MKV, WebM, AVI,
-DTS/TrueHD and software AV1, styled ASS and bitmap subtitles, external audio, audio delay, deinterlacing and tone mapping. Both apps pin the
-LGPL MPVKit build to [1.0.0](https://github.com/mpvkit/MPVKit/releases/tag/1.0.0), whose Libuavs3d dependency uses the Catalyst-capable
-[1.2.1-fix build](https://github.com/mpvkit/libuavs3d-build/blob/1.2.1-fix/Sources/BuildScripts/XCFrameworkBuild/main.swift).
-The Aether adapter lives in the app, and its dynamic framework dependency is filtered to iOS, so Mac builds do not link its unsupported binaries.
-This packaging change has not been built or run on either device; the user does that validation.
+Holding the picture for 0.1 s plays at 2× (`SpeedHoldRules`, `PictureHoldGesture`). Dragging up adds 1× per 40 points and never steps down. Dragging down 40 points from that step locks the speed after the finger lifts; the same drag unlocks it. While a drag moves toward a lock change, the badge shows the lock that change would leave and how far the drag has gone. The ceiling is the engine's: mpv 4×; AVPlayer 4× when `canPlayFastForward` allows it, otherwise 2×; AetherEngine video 2×; AetherEngine audio-only 3×. During the hold there is no seek, brightness, volume, dismissal, controls or pinch. Lifting returns the previous speed, except a locked hold, which survives until one of those endings or an unlock drag. The UIKit delegate allows the SwiftUI swipe to track at the same time; ownership stays latched through release so the end of a hold cannot become a swipe or tap. iPhone and Mac share this.
 
-Intentionally iPhone/iPad-only:
+On iPhone and iPad a sideways swipe seeks live (`SwipeSeek`): five minutes across the width at the top of the picture, five seconds at the bottom, capped at the duration. Vertical movement alone does not jump the target. Once seeking starts it continues until release. Vertical swipes that start at the sides still control brightness (left) and system volume (right, through a mounted `MPVolumeView`, with no extra attenuation). A vertical swipe that starts upward in the centre can turn into a seek. A pinch stops further seeks at the last live position. The target time is a top glass pill. Picture dragging is off on Mac. Mac seeks with the timeline and with ← → (Settings → Player skip distance), sets volume with ↑ ↓ and M, and mutes per player. An app cannot set a Mac display's brightness. Pinch zoom is iPhone/iPad only; both platforms have Zoom in the Picture tab.
 
-- **Preloading.** It is AetherEngine's (`prewarm`), and the Mac has no AetherEngine; AVPlayer offers no way to hand it fetched bytes.
-- **AetherEngine.** Its FFmpegBuild, LibDovi and LibTrueHD xcframeworks ship iOS, tvOS, visionOS and macOS slices but no Mac Catalyst
-  slice, so the Catalyst app cannot link it either. FEL composition and TrueHD/DTS:X spatial audio are therefore iPhone/iPad-only.
-- **Brightness and volume swipes, swipe to seek, and pinch zoom.** No touch screen; the Mac's keyboard already sets the volume (↑ ↓ M) and
-  seeks 10 s (← →), the timeline can be dragged, and an app cannot set a Mac display's brightness. Zoom is in the Picture tab on both.
+The Picture tab is Fit / Fill / Stretch, Zoom, Aspect Ratio and Crop. mpv applies aspect and crop itself. AVPlayer and AetherEngine use `VideoGeometry`. Fit is remembered. Zoom, aspect and crop are per video. Dolby Vision off (Picture tab and Settings → Player → Picture) plays the HDR10/HLG base layer. It is shown only for Dolby Vision streams that have a base layer, on AetherEngine and mpv. AVPlayer always shows Dolby Vision.
 
-## Blockers and what would unblock them
+HDR brightness (same places; off by default) asks Core Animation for the display's whole HDR range (`preferredDynamicRange = .high`) on AVPlayer, AetherEngine and mpv. AVPlayer and AetherEngine show a switch. mpv also lifts HDR mid-tones with `gamma` (0 to +30), so it shows a slider; dragging applies live and saves on release. Settings uses a switch, where on means 100%.
 
-| Wanted | Why not now | Way forward |
-|---|---|---|
-| VVC/H.266 | No decoder: not in VideoToolbox, not enabled in MPVKit 0.41's FFmpeg (`ff_vvc_decoder` absent) | A custom FFmpeg/MPVKit build with `--enable-decoder=vvc` (FFmpeg 7.1+, software only, heavy at 4K) |
-| Dolby Vision 7 FEL in mpv | FFmpeg/libplacebo in MPVKit 0.41 apply the RPU to the base layer only | done in AetherEngine (above); mpv 0.42 + newer libplacebo would bring it to mpv |
-| Atmos / DTS:X objects in mpv | FFmpeg decodes the bed only. Passthrough (bitstream) is not available to apps on iOS | done in AetherEngine: rendered to spatial audio (TrueHD, DTS:X), passed through (E-AC-3) |
-| E-AC-3 Atmos objects on an FEL title | the FEL route has no AVPlayer, and only AVPlayer renders E-AC-3 objects | a second, audio-only engine kept in sync (not built) |
-| PiP and video AirPlay for mpv | PiP needs an `AVSampleBufferDisplayLayer` fed with frames; mpv renders through Vulkan into a CAMetalLayer with no frame export in libmpv's render API. AirPlay video needs an AVPlayer item the receiver can play, which MKV is not | a render path that copies mpv frames into sample buffers (costly at 4K), or remuxing to HLS through a local server |
-| HDR10+ dynamic metadata | not exposed by mpv; AVPlayer's handling is the system's | — |
-| AI upscaling in mpv | libmpv has no ML scaler and no frame export for VideoToolbox; bundling a CNN shader was ruled out (licence or content fit, see docs/licenses.md) | — |
-| Reliable intro/credits markers without chapters | free services (AniSkip, IntroDB) cover anime or few titles and need ID mappings; guessing from running time would skip real scenes | an opt-in community marker source later |
+## Subtitles and controls
 
-## Not yet checked on a device
+Settings → Player: language, Always / Forced only / Off, prefer SDH. Embedded tracks win over files. A file picked first gives way to an embedded track that appears later. Forced-only follows the audio language when no subtitle language is set. Sources are the stream, addons (re-queried when the stream's hash and file name change), local SRT, VTT, ASS/SSA and SUP, and OpenSubtitles.com with the user's own key. A VobSub file on AVPlayer, or "Show Full Styling" for a styled ASS file, switches to the fallback engine at the same position.
 
-HDR/EDR output through MoltenVK, DV profile 5/8 colours, multichannel PCM over HDMI/AirPlay, VideoToolbox super-resolution speed per chip,
-PGS placement against the picture, OpenSubtitles against the live API (needs a key), and mpv's `deinterlace=auto` on this build.
+Settings → Player → Controls, on both platforms: skip distance (transport buttons, double tap or double click on the side thirds, Mac arrow keys, lock screen and Control Center), whether a double tap skips at all, how long controls stay while playing, and the speed a video starts at. The coordinator keeps that speed for each engine it makes.
 
+The options bar opens one glass panel (side on a wide screen, bottom on a tall one) with Subtitles, Audio, Picture, Speed and Chapters. Choosing a track or a chapter closes it. A tap outside or Escape closes it too.
 
-## Downloaded playback (2026-10-29)
+## Buffering
 
-Library → Downloads opens a single local-file candidate, routed through the same built-in engines: native formats use AVPlayer;
-fallback formats use AetherEngine/mpv on iPhone and mpv on Catalyst. The file is not converted to another container. Session
-snapshots store a download UUID, and watch progress retains the original movie/episode identity. Saved subtitle files and embedded
-tracks work offline. The offline player disables addon/subtitle listing, OpenSubtitles, stream preloads and online episode selection.
-Cold relaunch restores by local UUID; Continue Watching opens a matching completed download directly. Missing files fail locally.
-Local fallback interoperability, background scheduling, subtitles and resume behavior require the manual download checklist in
-DEVICE_CHECKLIST.md; successful builds/installations do not establish these device behaviors.
+Startup hold is `StartCushion.standard`: 5 seconds of media, or 2 seconds when fill since the hold began is at least 2.5× playback. The hold waits at most 8 seconds, and 50 seconds including loading. The coordinator keeps its own startup timeout and retry. mpv reads ahead 120 seconds, with a 2 GiB demuxer cache ceiling and 64 MiB back cache; after starvation it waits for 10 seconds before resuming. Those limits are ceilings. AVPlayer keeps the system's buffering. Fully downloaded remaining media and a buffer that cannot be measured start without a hold.
+
+`PlaybackState.preparation` is the engine's stages. The selected card follows the candidate the coordinator moves to. Its buffer bar is buffered seconds over the startup target, never over the duration. Cancelling a selection clears the card and lets a muted preload finish. Leaving the picker or backgrounding the app cancels pending selection and preload work. Card errors never include engine messages, stream URLs, credentials or headers.
+
+AetherEngine prewarms the first stream when the player is created (`AetherEngine.prewarm`, 4 MB). `AetherSession.load` waits up to 4 seconds for a finished warm. AVPlayer and mpv are not warmed. Waiting on that prewarm is cancellable.
+
+## Downloaded playback
+
+Library → Downloads plays the local file through the same engines, without converting the container. The session stores a download UUID; watch progress keeps the movie or episode identity. Saved subtitle files and embedded tracks work offline. The offline player does not list addons or subtitles, call OpenSubtitles, preload streams, or offer online episode selection. A missing file fails locally.

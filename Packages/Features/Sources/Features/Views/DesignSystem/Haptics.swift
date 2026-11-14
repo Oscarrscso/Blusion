@@ -14,7 +14,7 @@ import UIKit
 /// own places are used instead so that the Haptics page reaches every tick.
 ///
 /// All of this respects the system's haptic settings. Nothing here is iPhone-only: the file is compiled for Mac Catalyst too, so the
-/// call sites stay identical on both platforms (see `docs/HAPTICS.md`).
+/// call sites stay identical on both platforms (see `docs/DESIGN_SPEC.md`). Catalyst plays none of them.
 @MainActor
 public enum Haptics {
     public typealias Place = HapticPreferences.Place

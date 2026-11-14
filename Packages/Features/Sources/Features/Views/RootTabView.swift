@@ -39,7 +39,7 @@ public struct RootTabView: View {
     }
     /// Home, the landscape panel, Search and Back keep this distance from the screen's sides: the corner gap plus 1.5% of the width, so
     /// they sit a little in from the far edges rather than against them. Their distance from the top and bottom stays the corner gap.
-    private var landscapeEdgeInset: CGFloat { LandscapeTabBarState.cornerInset + (windowWidth * 0.015).rounded() }
+    private var landscapeEdgeInset: CGFloat { LandscapeTabBarState.edgeInset(for: windowWidth) }
     /// Only category pages put a heading above the landscape controls. Root tabs and other pushed pages need no repeated context label.
     private var landscapeTitle: String { landscapeTabs.pageTitle ?? "" }
     /// A page pushed on a browsing tab's stack, other than a title's page, in phone landscape: its navigation bar is hidden there and

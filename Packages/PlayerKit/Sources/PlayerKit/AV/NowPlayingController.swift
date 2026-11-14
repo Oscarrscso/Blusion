@@ -3,7 +3,6 @@
 import Foundation
 
 /// Lock-screen and Control Center integration: Now Playing info plus play/pause/skip/seek remote commands.
-/// UNVERIFIED in the simulator (see docs/DEVICE_CHECKLIST.md).
 @MainActor
 public final class NowPlayingController {
     public struct Actions {

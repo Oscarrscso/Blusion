@@ -5,6 +5,22 @@ import StremioKit
 /// The subtitles that come on by themselves, from the Settings preferences. Embedded tracks win over files (they are timed to the media),
 /// files bundled with the stream over addon ones.
 enum SubtitleDefaults {
+    /// Nil means Off for Always, and the playing audio's language for Forced Only.
+    static func summary(language: String?, mode: SubtitleMode) -> String {
+        switch mode {
+        case .off: return "Subtitles Off"
+        case .always:
+            guard let language, !language.isEmpty else { return "Subtitles Off" }
+            return "\(languageName(language)) subtitles"
+        case .forcedOnly:
+            return "Forced Only · \(language.map(languageName) ?? "Audio language")"
+        }
+    }
+
+    private static func languageName(_ code: String) -> String {
+        LanguageCodes.all.first { LanguageCodes.matches($0.code, preferred: code) }?.name ?? code
+    }
+
     static func choice(embedded: [MediaTrack], external: [SubtitleOption], language: String?, audioLanguage: String?,
                        mode: SubtitleMode, prefersSDH: Bool) -> PlayerViewModel.SubtitleChoice? {
         switch mode {

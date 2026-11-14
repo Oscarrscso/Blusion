@@ -5,7 +5,9 @@
 #   scripts/one-click-install.sh mac
 #   BLUSION_IPHONE_UDID=<udid> scripts/one-click-install.sh iphone
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Shortcuts/SSH start with a minimal (sometimes mistyped) PATH: always include the standard system directories.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
 cd "$ROOT"
 TARGET="${1:-}"
 case "$TARGET" in

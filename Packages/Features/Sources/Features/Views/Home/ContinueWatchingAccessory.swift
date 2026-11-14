@@ -172,7 +172,7 @@ struct ContinueWatchingAccessory: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
-                    .font(Theme.Typography.mediumStrong)
+                    .appFont(.mediumStrong)
                     .lineLimit(1)
                 ProgressView(value: item.fraction)
                     .progressViewStyle(.linear)

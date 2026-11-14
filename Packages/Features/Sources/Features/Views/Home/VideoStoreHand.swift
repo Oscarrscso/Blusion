@@ -93,7 +93,7 @@ struct StoreHand: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.m) {
                     Text(details.name)
-                        .font(.title2.bold())
+                        .appFont(style: .title2, weight: .bold, role: .display)
                         .accessibilityAddTraits(.isHeader)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if showsRating, let ratings {
@@ -105,7 +105,7 @@ struct StoreHand: View {
                                 kind.spokenName].filter { !$0.isEmpty }.joined(separator: " · ")
                 if !metadata.isEmpty {
                     Text(metadata)
-                        .font(Theme.Typography.medium)
+                        .appFont(.medium)
                         .foregroundStyle(.secondary)
                 }
                 if isLoadingPrices {
@@ -118,7 +118,7 @@ struct StoreHand: View {
                                 LabeledContent("\(quality.label) \(kind.label)") {
                                     VStack(alignment: .trailing, spacing: 2) {
                                         Text(offer.priceText).fontWeight(.semibold).monospacedDigit()
-                                        Text(offer.store).font(Theme.Typography.caption).foregroundStyle(.secondary)
+                                        Text(offer.store).appFont(.caption).foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -130,7 +130,7 @@ struct StoreHand: View {
                 }
                 if let synopsis = details.description, !synopsis.isEmpty {
                     Text(synopsis)
-                        .font(Theme.Typography.large)
+                        .appFont(.large, role: .reading)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

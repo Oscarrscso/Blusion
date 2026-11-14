@@ -25,6 +25,8 @@ public actor TraktSync {
         /// Saved titles and watched items Trakt added or removed for the changes sent.
         public var savedSent = 0
         public var watchedSent = 0
+        public var playbackSent = 0
+        public var playbackRemoved = 0
 
         public init() {}
 
@@ -520,7 +522,10 @@ public actor TraktSync {
                 try await self.account.savePlayback(operation.watchedItem, progress: operation.progress ?? 0)
                 return 1
             }
-            if delivered != nil { sent = true }
+            if let delivered {
+                summary.playbackSent += delivered
+                sent = true
+            }
         }
         let removals = due.filter { $0.kind == .removePlayback }
         let cleared = try await deliver(removals) {
@@ -534,7 +539,10 @@ public actor TraktSync {
             }
             return count
         }
-        if cleared != nil { sent = true }
+        if let cleared {
+            summary.playbackRemoved += cleared
+            sent = true
+        }
         return sent
     }
 

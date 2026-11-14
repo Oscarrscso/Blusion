@@ -70,7 +70,7 @@ struct WidgetEditorView: View {
             case .unsupported:
                 Section {
                     Text("Blusion can't show this kind of row yet, so it has no settings here. It is kept so your layout stays intact.")
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -180,7 +180,7 @@ struct WidgetEditorView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(tile.title)
                         if let source = tile.sources.first {
-                            Text(model.describe(source)).font(Theme.Typography.caption).foregroundStyle(.secondary)
+                            Text(model.describe(source)).appFont(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }

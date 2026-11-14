@@ -89,9 +89,11 @@ final class LandscapeTabBarState {
     /// round button whose edge keeps an even 6-point gap from the curve of an iPhone's roughly 55-point screen corner. They sit out in the
     /// corners, past the safe area at the sides, rather than over the page.
     static let cornerInset: CGFloat = 14
+    static func edgeInset(for width: CGFloat) -> CGFloat { cornerInset + (width * 0.015).rounded() }
+    static let buttonDiameter: CGFloat = 44
     /// The landscape Back button's corner gap and 44-point height. A page whose navigation bar is hidden in phone landscape starts its
     /// content below this, so the button sits clear of the artwork at rest.
-    static let backClearance: CGFloat = cornerInset + 44
+    static let backClearance: CGFloat = cornerInset + buttonDiameter
 }
 
 private struct LandscapeTabScrollModifier: ViewModifier {
@@ -201,7 +203,7 @@ struct LandscapeTabControls: View {
             VStack(alignment: .leading, spacing: 0) {
                 if !hidesPageHeader {
                     Text(title)
-                        .font(Theme.Typography.smallStrong)
+                        .appFont(.smallStrong)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .truncationMode(.tail)

@@ -3,7 +3,7 @@ name: Blusion
 # Source of truth for the Xcode project. Never hand-edit or commit *.xcodeproj (PLAN §1).
 # Lines starting with `#fallback# ` are the opt-in fallback engine (ADR-006). scripts/enable-fallback.sh strips that marker into
 # project.fallback.generated.yml; the default build never sees the third-party player.
-# Bundle ID is generic. Configure your own signing team outside this public spec (docs/RELEASE.md).
+# Bundle ID is generic. Keep the signing team out of this file (Config/Signing.xcconfig.local or BLUSION_DEVELOPMENT_TEAM).
 options:
   bundleIdPrefix: app.blusion
   deploymentTarget:
@@ -74,10 +74,10 @@ targets:
       - package: Persistence
       - package: Features
       #fallback# - package: FallbackPlayer
-      # AetherPlayer is dynamic, so the installed app must carry its framework as well as link it.
+      # AetherPlayer is dynamic, so the installed app must carry its framework as well as link it. On Mac Catalyst its libraries
+      # link through the Catalyst slices scripts/aether-catalyst-slices.py makes from their macOS ones (arm64).
       #fallback# - package: AetherPlayer
       #fallback#   embed: true
-      #fallback#   platformFilter: iOS
     info:
       path: App/Info.plist
       properties:
@@ -174,9 +174,9 @@ schemes:
       targets:
         Blusion: all
       #fallback# preActions:
-      #fallback#   - name: Apply Aether Swift 6 compatibility fix
+      #fallback#   - name: Apply Aether Swift 6 compatibility fix and its Mac Catalyst slices
       #fallback#     settingsTarget: Blusion
-      #fallback#     script: 'if [ "$PLATFORM_NAME" != macosx ]; then bash "$BLUSION_REPO_ROOT/scripts/prepare-aether.sh" "$BUILD_DIR"; fi'
+      #fallback#     script: 'bash "$BLUSION_REPO_ROOT/scripts/prepare-aether.sh" "$BUILD_DIR"; if [ "$PLATFORM_NAME" = macosx ]; then /usr/bin/python3 "$BLUSION_REPO_ROOT/scripts/aether-catalyst-slices.py" "$BUILD_DIR"; fi'
     run:
       config: Debug
       # Run without LLDB attached: on Xcode 26 / iOS 26 the debugger attach leaves the app on a dark screen for a long time at launch.

@@ -557,7 +557,7 @@ struct StoreCaseBack: View, Equatable {
             }
             if !synopsis.isEmpty {
                 Text(synopsis)
-                    .font(.system(size: unit * 4.5))
+                    .appFont(size: unit * 4.5, role: .reading)
                     .lineSpacing(unit * 0.4)
                     .foregroundStyle(.white.opacity(0.9))
                     .multilineTextAlignment(.leading)

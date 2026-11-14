@@ -394,7 +394,7 @@ import StremioKitTestSupport
         entry.rottenTomatoes = 91
         entry.metacritic = 82
         entry.tmdb = 8.4
-        #expect(entry.posterSites == [.imdb, .letterboxd])
+        #expect(entry.posterSites == [.letterboxd, .imdb])
         entry.imdb = nil
         #expect(entry.posterSites == [.letterboxd, .rottenTomatoes])
         entry.letterboxd = nil

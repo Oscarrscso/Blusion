@@ -45,12 +45,12 @@ struct EmptyStateLayout<Action: View>: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(title)
-                .font(.title2.bold())
+                .appFont(style: .title2, weight: .bold, role: .display)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
             if let message {
                 Text(message)
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +79,7 @@ struct InlineErrorView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(text)
-                .font(Theme.Typography.small)
+                .appFont(.small)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let retry {

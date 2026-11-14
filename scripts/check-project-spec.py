@@ -76,15 +76,15 @@ def check(spec, label, fallback):
             errors.append(f"{label}: app name must not contain '{needle}' (PLAN §1 trademark rule)")
 
 
-# The fallback engine must use the LGPL build of MPVKit, never the GPL one (docs/licenses.md).
+# The fallback engine must use the LGPL build of MPVKit, never the GPL one.
 fallback_manifest = os.path.join(root, "Packages", "FallbackPlayer", "Package.swift")
 if os.path.isfile(fallback_manifest):
     manifest_text = open(fallback_manifest, encoding="utf-8").read()
     if "MPVKit-GPL" in manifest_text or "-GPL" in manifest_text:
-        errors.append("Packages/FallbackPlayer/Package.swift references a GPL product; only the LGPL build may be linked (docs/licenses.md)")
+        errors.append("Packages/FallbackPlayer/Package.swift references a GPL product; only the LGPL build may be linked")
 
 # AetherEngine lives in its own dynamic framework so its FFmpeg calls bind to its own (dynamic) FFmpeg, not to MPVKit's static one, and it
-# must not carry a second copy of Blusion's packages (docs/licenses.md, "AetherEngine").
+# must not carry a second copy of Blusion's packages.
 aether_manifest = os.path.join(root, "Packages", "AetherPlayer", "Package.swift")
 if os.path.isfile(aether_manifest):
     aether_text = open(aether_manifest, encoding="utf-8").read()

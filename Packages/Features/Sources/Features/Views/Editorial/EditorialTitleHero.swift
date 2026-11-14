@@ -31,11 +31,13 @@ struct EditorialTitleHero: View {
     @Environment(TitleActions.self) private var titleActions
     @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
     @Environment(\.appAppearance) private var appearance
+    @Environment(\.pageBackdrop) private var backdrop
     /// The film's best disc as the device knows it, for Highest Quality's mark, as the standard Play reads it.
     @State private var bestDisc: BestDiscFormat?
 
     /// The first screen, never shorter than the type set on it needs.
-    private var heroHeight: CGFloat { max(size.height, 600) }
+    private var heroHeight: CGFloat { Self.heroHeight(pageHeight: size.height) }
+    static func heroHeight(pageHeight: CGFloat) -> CGFloat { max(pageHeight, 600) }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -56,7 +58,8 @@ struct EditorialTitleHero: View {
             .accessibilityHidden(true)
     }
 
-    /// Darkened at the top for BACK and the still, lightly overall, and heavily at the foot, which ends in the page's own ground.
+    /// Darkened at the top for BACK and the still, lightly overall, and heavily at the foot, which ends in the page's own ground or its
+    /// Blurred background.
     private var scrims: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [.black.opacity(0.6), .black.opacity(0)], startPoint: .top, endPoint: .bottom)
@@ -65,8 +68,9 @@ struct EditorialTitleHero: View {
             LinearGradient(stops: [
                 .init(color: .black.opacity(0), location: 0),
                 .init(color: .black.opacity(0.55), location: 0.4),
-                .init(color: appearance.pageBackground, location: 1),
+                .init(color: backdrop == nil ? appearance.pageBackground : .black.opacity(0.55), location: 1),
             ], startPoint: .top, endPoint: .bottom)
+                .overlay { if backdrop != nil { BottomFade(length: 0.6) } }
                 .frame(height: heroHeight * 0.62)
         }
         .background(Color.black.opacity(0.14))
@@ -142,7 +146,7 @@ struct EditorialTitleHero: View {
             .accessibilityIdentifier("detail.trailerButton")
             if !stats.isEmpty {
                 Text(stats.joined(separator: "     "))
-                    .font(Editorial.font(.caption))
+                    .font(Editorial.font(.caption, weight: .regular))
                     .foregroundStyle(.white.opacity(0.9))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -270,7 +274,7 @@ struct EditorialTitleHero: View {
                 Text(genre.uppercased())
             }
         }
-        .font(Editorial.font(.caption2))
+        .font(Editorial.font(.caption2, weight: .regular))
         .lineLimit(1)
         .foregroundStyle(.white.opacity(0.85))
     }
@@ -341,7 +345,7 @@ struct EditorialTitleHero: View {
         } label: {
             HStack(spacing: Theme.Spacing.s) {
                 Text(title.uppercased())
-                    .font(Editorial.font(.body))
+                    .font(Editorial.font(.body, weight: .regular))
                 Image(systemName: systemImage)
                     .font(.system(size: 14, weight: .regular))
             }

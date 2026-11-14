@@ -22,9 +22,10 @@ import StremioKitTestSupport
         if catalog { _ = try await registry.install(from: server.catalogManifestURL(token: "off").absoluteString) }
         if streams { _ = try await registry.install(from: server.streamManifestURL(token: "off").absoluteString) }
         let down = makeClient(StubTransport { _, _ in throw URLError(.notConnectedToInternet) }, retries: 0)
-        return AppServices(registry: registry, client: client, browse: BrowseService(registry: registry, client: down),
-                           streams: StreamService(registry: registry, client: down),
-                           widgetContent: WidgetContentService(registry: registry, client: down, settings: InMemorySettingsStore()))
+        let settings = InMemorySettingsStore(PlaybackSettings(tmdbReadToken: "token"))
+        return AppServices(registry: registry, client: down, browse: BrowseService(registry: registry, client: down),
+                           streams: StreamService(registry: registry, client: down), settings: settings,
+                           widgetContent: WidgetContentService(registry: registry, client: down, settings: settings))
     }
 
     @Test func homeShowsOneBannerWhenEveryRowIsOffline() async throws {

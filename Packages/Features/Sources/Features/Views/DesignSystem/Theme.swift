@@ -126,6 +126,163 @@ enum Theme {
         static let body = medium
         /// A label inside a button.
         static let button = headline
+
+        /// One step of type, so a view can ask for it by role (display, interface, or reading) instead of a fixed face.
+        enum Token {
+            case large, largeStrong, headline, medium, mediumStrong, small, smallStrong
+            case caption, captionStrong, micro, microStrong
+            case shelfTitle, cardTitle, cardSubtitle, eyebrow, largeTitle, heroTitle, metaLine, body, button
+
+            var role: AppearancePreferences.TextRole {
+                switch self {
+                case .large, .largeStrong, .body: .reading
+                case .shelfTitle, .largeTitle, .heroTitle: .display
+                default: .interface
+                }
+            }
+
+            var style: Font.TextStyle {
+                switch self {
+                case .large, .largeStrong: .body
+                case .headline, .button: .headline
+                case .medium, .mediumStrong, .body: .subheadline
+                case .small, .smallStrong, .metaLine: .footnote
+                case .caption, .captionStrong, .cardTitle, .cardSubtitle: .caption
+                case .micro, .microStrong, .eyebrow: .caption2
+                case .shelfTitle: .title2
+                case .largeTitle, .heroTitle: .largeTitle
+                }
+            }
+
+            var weight: Font.Weight {
+                switch self {
+                case .large, .medium, .small, .caption, .micro, .cardSubtitle, .metaLine, .body: .regular
+                case .largeStrong, .headline, .mediumStrong, .smallStrong, .captionStrong, .microStrong, .cardTitle, .eyebrow, .button: .semibold
+                case .shelfTitle, .largeTitle, .heroTitle: .bold
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    /// Type from Settings → Appearance: the token's role picks the display, interface, or reading face.
+    func appFont(_ token: Theme.Typography.Token, monospacedDigits: Bool = false, weight: Font.Weight? = nil,
+                 role: AppearancePreferences.TextRole? = nil) -> some View {
+        modifier(AppFontModifier(token: token, monospacedDigits: monospacedDigits, weight: weight, role: role))
+    }
+
+    /// The same faces, for a text style that has no token. The first argument is labeled so it never collides with a token.
+    func appFont(style: Font.TextStyle, weight: Font.Weight = .regular, role: AppearancePreferences.TextRole = .interface,
+                 monospacedDigits: Bool = false) -> some View {
+        modifier(StyleAppFontModifier(style: style, weight: weight, role: role, monospacedDigits: monospacedDigits))
+    }
+
+    /// A fixed size on artwork, in the interface face, still following the text-size setting through `relativeTo`.
+    func appFont(size: CGFloat, weight: Font.Weight = .regular, role: AppearancePreferences.TextRole = .interface,
+                 relativeTo style: Font.TextStyle = .caption2) -> some View {
+        modifier(FixedAppFontModifier(size: size, weight: weight, role: role, style: style))
+    }
+}
+
+private struct StyleAppFontModifier: ViewModifier {
+    let style: Font.TextStyle
+    let weight: Font.Weight
+    let role: AppearancePreferences.TextRole
+    var monospacedDigits = false
+    @Environment(\.appAppearance) private var appearance
+
+    func body(content: Content) -> some View {
+        content
+            .font(monospacedDigits ? base.monospacedDigit() : base)
+            .roleTextChrome(role)
+    }
+
+    private var base: Font {
+        let resolved = appearance.resolvedText(for: role)
+        let sized = appearance.shifted(style, by: resolved.scale)
+        return appearance.font(style: sized, weight: appearance.fontWeight(for: role, token: weight), role: role)
+    }
+}
+
+private struct AppFontModifier: ViewModifier {
+    let token: Theme.Typography.Token
+    var monospacedDigits = false
+    var weight: Font.Weight?
+    var role: AppearancePreferences.TextRole?
+    @Environment(\.appAppearance) private var appearance
+
+    func body(content: Content) -> some View {
+        content
+            .font(monospacedDigits ? base.monospacedDigit() : base)
+            .roleTextChrome(role ?? token.role)
+    }
+
+    private var base: Font {
+        let resolvedRole = role ?? token.role
+        let resolved = appearance.resolvedText(for: resolvedRole)
+        let sized = appearance.shifted(token.style, by: resolved.scale)
+        return appearance.font(style: sized, weight: appearance.fontWeight(for: resolvedRole, token: weight ?? token.weight),
+                               role: resolvedRole)
+    }
+}
+
+private struct FixedAppFontModifier: ViewModifier {
+    let size: CGFloat
+    let weight: Font.Weight
+    let role: AppearancePreferences.TextRole
+    let style: Font.TextStyle
+    @Environment(\.appAppearance) private var appearance
+
+    func body(content: Content) -> some View {
+        let face = appearance.face(for: role)
+        let weight = appearance.fontWeight(for: role, token: self.weight)
+        let font: Font = if let family = face.familyName {
+            Font.custom(family, size: size, relativeTo: style).weight(weight)
+        } else {
+            Font.system(size: size, weight: weight, design: AppearancePreferences.systemDesign(face) ?? .default)
+        }
+        content
+            .font(font)
+            .roleTextChrome(role)
+    }
+}
+
+/// Apply the role's overrides inside the app-wide body style. Primary colour keeps the caller's usual contrast.
+private struct RoleTextChrome: ViewModifier {
+    let role: AppearancePreferences.TextRole
+    @Environment(\.appAppearance) private var appearance
+    @Environment(\.systemTextSize) private var systemTextSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let style = appearance.resolvedText(for: role)
+        let overrides = role != .reading
+        let shaped = content
+            .applying(overrides || style.font != .standard) {
+                $0.fontWidth(style.font == .standard ? style.width.fontWidth : .standard)
+            }
+            .applying(overrides && !style.followsWeight && appearance.reading.weight == .bold) { $0.bold(false) }
+            .applying(overrides && !style.followsItalic) { $0.italic(style.italic) }
+        let spaced = shaped
+            .applying(overrides && !style.followsLetterSpacing) { $0.tracking(style.letterSpacing.points) }
+            .applying(overrides && !style.followsLineSpacing) { $0.lineSpacing(style.lineSpacing.points) }
+        let sized = spaced
+            .applying(overrides && !style.followsTextSize) {
+                $0.dynamicTypeSize(style.textSize == .system ? systemTextSize : appearance.dynamicTypeRange(for: style.textSize).lowerBound)
+            }
+            .applying(style.capitals) { $0.textCase(.uppercase) }
+        switch style.colour {
+        case .primary: sized
+        case .secondary: sized.foregroundStyle(.secondary)
+        case .accent: sized.foregroundStyle(.tint)
+        }
+    }
+}
+
+private extension View {
+    func roleTextChrome(_ role: AppearancePreferences.TextRole) -> some View {
+        modifier(RoleTextChrome(role: role))
     }
 }
 
@@ -328,16 +485,31 @@ private struct PageTopBarModifier: ViewModifier {
 
 /// A fade from clear to the page's background (black unless Appearance chose another), eased so there is no visible edge where it
 /// starts. Hero artwork and the backdrops of title pages end in one. `length` is the share of the height the fade covers, measured from
-/// the bottom.
+/// the bottom. On a title page with a Blurred background, it fades into that instead (see `pageBackdrop`).
 struct BottomFade: View {
     var length: Double = 0.55
     var strength: Double = 1
     @Environment(\.appAppearance) private var appearance
+    @Environment(\.pageBackdrop) private var backdrop
 
     var body: some View {
+        ZStack {
+            if let backdrop {
+                Image(uiImage: backdrop)
+                    .resizable()
+                    .mask { gradient(.black) }
+                    .transition(.opacity)
+            } else {
+                gradient(appearance.pageBackground)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func gradient(_ colour: Color) -> LinearGradient {
         let start = max(0, 1 - length)
-        let colour = appearance.pageBackground
-        LinearGradient(stops: [
+        return LinearGradient(stops: [
             .init(color: colour.opacity(0), location: start),
             .init(color: colour.opacity(0.10 * strength), location: start + (1 - start) * 0.18),
             .init(color: colour.opacity(0.32 * strength), location: start + (1 - start) * 0.40),
@@ -345,8 +517,6 @@ struct BottomFade: View {
             .init(color: colour.opacity(0.88 * strength), location: start + (1 - start) * 0.85),
             .init(color: colour.opacity(strength), location: 1),
         ], startPoint: .top, endPoint: .bottom)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 #endif

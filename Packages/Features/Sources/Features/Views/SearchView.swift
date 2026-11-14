@@ -287,7 +287,7 @@ struct SearchView: View {
         if model.isDiscovery, model.scope != .people, model.aiPhase == .done, let issue = model.aiIssue {
             HStack {
                 Text(LocalizedStringKey(issue.text))
-                    .font(Theme.Typography.small)
+                    .appFont(.small)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Retry") { model.retryAI() }

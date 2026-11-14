@@ -14,11 +14,8 @@ extension AppearancePreferences.FontStyle: AppearanceOption {}
 extension AppearancePreferences.FontWidth: AppearanceOption {}
 extension AppearancePreferences.LetterSpacing: AppearanceOption {}
 extension AppearancePreferences.LineSpacing: AppearanceOption {}
-extension AppearancePreferences.HeadingFont: AppearanceOption {}
 extension AppearancePreferences.HeadingWeight: AppearanceOption {}
 extension AppearancePreferences.HeadingSize: AppearanceOption {}
-extension AppearancePreferences.HeadingWidth: AppearanceOption {}
-extension AppearancePreferences.HeadingSpacing: AppearanceOption {}
 extension AppearancePreferences.Outline: AppearanceOption {}
 extension AppearancePreferences.ArtworkTone: AppearanceOption {}
 extension AppearancePreferences.ProgressColour: AppearanceOption {}
@@ -44,10 +41,9 @@ private var isPhone: Bool {
 
 private func percent(_ value: Double) -> String { "\(Int((value * 100).rounded()))%" }
 
-/// Settings → Appearance, on iPhone and Mac: a live preview of the look, the presets, one row per part of the look (Colour, Text, Cards,
-/// Home, Title Pages, Motion & Navigation) that opens its page and reads what it is set to, the listener's own saved looks, a way to copy a
-/// look to another device, and Reset. Every choice is saved as it is made and the whole app follows at once (see `AppearancePreferences`).
-/// No page explains itself in words: each opens on the preview, which shows what its choices do.
+/// Settings → Appearance, on iPhone and Mac: the presets, one row per part of the look that opens its page and reads what it is set to,
+/// the listener's own saved looks (with Copy and Paste, to move a look to another device), and Reset. Every choice is saved as it is made
+/// and the whole app follows at once (see `AppearancePreferences`).
 struct AppearanceSettingsPage: View {
     let model: SettingsViewModel
     @AppStorage(AppearancePreferences.defaultsKey) private var appearance = AppearancePreferences()
@@ -55,6 +51,10 @@ struct AppearanceSettingsPage: View {
     @State private var confirmsReset = false
     @State private var namesLook = false
     @State private var lookName = ""
+    /// Temp Dev export: confirmation after writing the current look for baking into code defaults.
+    @State private var showsDefaultExport = false
+    @State private var defaultExportMessage = ""
+    @State private var defaultExportURL: URL?
 
     /// The preset the look is now, or nil for a look of the listener's own. Choosing one applies it.
     private var preset: Binding<AppearancePreferences.Preset?> {
@@ -75,11 +75,6 @@ struct AppearanceSettingsPage: View {
 
     var body: some View {
         SettingsList {
-            Section {
-                AppearancePreview(appearance: appearance)
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
             Section {
                 Picker("Preset", selection: preset) {
                     if appearance.preset == nil {
@@ -137,8 +132,6 @@ struct AppearanceSettingsPage: View {
                     namesLook = true
                 }
                 .accessibilityIdentifier("settings.appearance.saveLook")
-            }
-            Section {
                 Button("Copy Appearance") {
                     Haptics.play(.buttons)
                     UIPasteboard.general.string = appearance.rawValue
@@ -151,6 +144,19 @@ struct AppearanceSettingsPage: View {
                 Button("Reset Appearance", role: .destructive) { confirmsReset = true }
                     .disabled(appearance.isDefault && model.isPosterArtworkDefault)
                     .accessibilityIdentifier("settings.appearance.reset")
+            }
+            // TEMP: remove once the exported look is baked into AppearancePreferences defaults.
+            Section("Dev") {
+                Button("Export Look for Default") {
+                    exportLookForDefault()
+                }
+                .accessibilityIdentifier("settings.appearance.exportDefault")
+                if let url = defaultExportURL {
+                    ShareLink(item: url, preview: SharePreview("blusion-appearance-default.json")) {
+                        Text("Share Export File")
+                    }
+                    .accessibilityIdentifier("settings.appearance.shareDefaultExport")
+                }
             }
         }
         .scrollIndicators(.visible, axes: .vertical)
@@ -172,6 +178,35 @@ struct AppearanceSettingsPage: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .alert("Exported", isPresented: $showsDefaultExport) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(defaultExportMessage)
+        }
+    }
+
+    /// Writes the current Appearance + Cards poster-artwork settings as pretty JSON (clipboard, temp file, Desktop on Mac).
+    private func exportLookForDefault() {
+        Haptics.play(.buttons)
+        let text = AppearanceDefaultExport.makeJSON(appearance: appearance, settings: model.settings)
+        UIPasteboard.general.string = text
+
+        let fileName = "blusion-appearance-default.json"
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try? text.write(to: temp, atomically: true, encoding: .utf8)
+        defaultExportURL = temp
+
+        var places = ["Copied to clipboard"]
+        #if targetEnvironment(macCatalyst)
+        if let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first {
+            let desktopURL = desktop.appendingPathComponent(fileName)
+            if (try? text.write(to: desktopURL, atomically: true, encoding: .utf8)) != nil {
+                places.append("Desktop/\(fileName)")
+            }
+        }
+        #endif
+        defaultExportMessage = places.joined(separator: " · ")
+        showsDefaultExport = true
     }
 
     /// The corners' scale, and how many elements have one of their own.
@@ -220,29 +255,23 @@ struct AppearanceSettingsPage: View {
 
 // MARK: - A part of Appearance
 
-/// One part of Appearance on a page of its own: the preview on top, showing the look as it is being set, then the part's choices, then
-/// Restore Defaults for this part alone.
+/// One part of Appearance on a page of its own: the part's choices, with a preview (`AppearanceControls.preview`) where the page wants
+/// one, then Restore Defaults for this part alone.
 private struct AppearanceSectionPage<Content: View>: View {
     let title: String
     let section: AppearancePreferences.Section
-    let preview: AppearancePreview.Kind
     var extraIsDefault = true
     var onRestore: (() -> Void)?
     @ViewBuilder let content: (AppearanceControls) -> Content
     @AppStorage(AppearancePreferences.defaultsKey) private var appearance = AppearancePreferences()
-    /// A slider's value while it is dragged, shown in the preview and saved when the drag ends, so the whole app is not laid out again on
-    /// every step of a drag.
+    /// A slider's value while it is dragged, shown in the page's preview and saved when the drag ends, so the whole app is not laid out
+    /// again on every step of a drag.
     @State private var draft: AppearancePreferences?
     @State private var isSliding = false
 
     var body: some View {
         let controls = AppearanceControls(appearance: $appearance, draft: $draft, isSliding: $isSliding)
         SettingsList {
-            Section {
-                AppearancePreview(appearance: draft ?? appearance, kind: preview)
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
             content(controls)
             Section {
                 Button("Restore Defaults") {
@@ -269,6 +298,13 @@ private struct AppearanceControls {
 
     /// The look shown: a slider's value while it is dragged, otherwise what is saved.
     var current: AppearancePreferences { draft.wrappedValue ?? appearance.wrappedValue }
+
+    /// The look being set, drawn on the app's own `samples`, as a row of the page.
+    func preview(_ samples: [AppearanceSample], lightsOnePiece: Bool = false) -> some View {
+        AppearancePreview(appearance: current, samples: samples, lightsOnePiece: lightsOnePiece)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+    }
 
     func choice<Value: Equatable>(_ keyPath: WritableKeyPath<AppearancePreferences, Value>) -> Binding<Value> {
         let appearance = appearance
@@ -404,14 +440,76 @@ private struct AppearanceControls {
         }
         .accessibilityIdentifier("settings.appearance.\(id)")
     }
+
+    func textMenu<Option: AppearanceOption>(_ title: String, _ role: AppearancePreferences.TextRole,
+                                            _ value: WritableKeyPath<AppearancePreferences.TextStyle, Option>,
+                                            follow: WritableKeyPath<AppearancePreferences.TextStyle, Bool>? = nil,
+                                            id: String) -> some View {
+        Picker(title, selection: textChoice(role, value, follow: follow)) {
+            if role != .reading, follow != nil {
+                Text("Same as body text").tag(Optional<Option>.none)
+            }
+            ForEach(Option.allCases) { option in Text(option.label).tag(Optional(option)) }
+        }
+        .buttonCursor()
+        .accessibilityIdentifier(textID(role, id))
+    }
+
+    func textSlant(_ role: AppearancePreferences.TextRole) -> some View {
+        Picker("Italic", selection: textChoice(role, \.italic, follow: \.followsItalic)) {
+            Text("Same as body text").tag(Optional<Bool>.none)
+            Text("Off").tag(Optional(false))
+            Text("On").tag(Optional(true))
+        }
+        .buttonCursor()
+        .accessibilityIdentifier(textID(role, "italic"))
+    }
+
+    func textToggle(_ title: String, _ role: AppearancePreferences.TextRole,
+                    _ value: WritableKeyPath<AppearancePreferences.TextStyle, Bool>, id: String) -> some View {
+        let choice = textChoice(role, value, follow: nil)
+        return Toggle(title, isOn: Binding(get: { choice.wrappedValue ?? false }, set: { choice.wrappedValue = $0 }))
+            .accessibilityIdentifier(textID(role, id))
+    }
+
+    private func textID(_ role: AppearancePreferences.TextRole, _ id: String) -> String {
+        "settings.appearance.text.\(role.rawValue).\(id)"
+    }
+
+    /// A nil selection links this one attribute back to body text.
+    private func textChoice<Value: Equatable>(_ role: AppearancePreferences.TextRole,
+                                              _ value: WritableKeyPath<AppearancePreferences.TextStyle, Value>,
+                                              follow: WritableKeyPath<AppearancePreferences.TextStyle, Bool>?) -> Binding<Value?> {
+        let appearance = appearance
+        return Binding(get: {
+            let stored = appearance.wrappedValue.storedText(for: role)
+            if role != .reading, let follow, stored[keyPath: follow] { return nil }
+            return stored[keyPath: value]
+        }, set: { newValue in
+            var look = appearance.wrappedValue
+            var stored = look.storedText(for: role)
+            if let newValue {
+                stored[keyPath: value] = newValue
+            } else {
+                let defaults: AppearancePreferences.TextStyle = role == .display ? .headings() : .followingReading()
+                stored[keyPath: value] = defaults[keyPath: value]
+            }
+            if role != .reading, let follow { stored[keyPath: follow] = newValue == nil }
+            guard stored != look.storedText(for: role) else { return }
+            Haptics.play(.choices)
+            look.setStoredText(stored, for: role)
+            appearance.wrappedValue = look
+        })
+    }
 }
 
 // MARK: - The parts
 
 private struct AppearanceColourPage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Colour", section: .colour, preview: .cards) { controls in
-            Section("Accent") {
+        AppearanceSectionPage(title: "Colour", section: .colour) { controls in
+            Section { controls.preview([.playRow]) }
+            Section {
                 Picker("Accent", selection: controls.choice(\.accent)) {
                     ForEach(AppearancePreferences.Accent.allCases) { accent in
                         Label { Text(accent.label) } icon: { (accent.rgb ?? controls.current.customAccent).swatch }
@@ -425,8 +523,6 @@ private struct AppearanceColourPage: View {
                         .buttonCursor()
                         .accessibilityIdentifier("settings.appearance.customAccent")
                 }
-            }
-            Section("Background") {
                 Picker("Background", selection: controls.choice(\.background)) {
                     ForEach(AppearancePreferences.Background.allCases) { background in
                         Label { Text(background.label) } icon: { controls.current.backgroundSwatch(background).swatch }
@@ -455,26 +551,58 @@ private struct AppearanceColourPage: View {
 
 private struct AppearanceTextPage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Text", section: .text, preview: .cards) { controls in
-            Section("Body") {
-                controls.menu("Size", \.textSize, id: "textSize")
-                controls.menu("Font", \.font, id: "font")
-                controls.menu("Width", \.fontWidth, id: "fontWidth")
-                controls.toggle("Bold", \.boldText, id: "bold")
-                controls.toggle("Italic", \.italicText, id: "italic")
-                controls.segmented("Letter spacing", \.letterSpacing, id: "letterSpacing")
-                controls.segmented("Line spacing", \.lineSpacing, id: "lineSpacing")
+        AppearanceSectionPage(title: "Text", section: .text) { controls in
+            Section {
+                controls.menu("App text size", \.textSize, id: "text.reading.textSize")
             }
-            Section("Headings") {
-                controls.menu("Font", \.headingFont, id: "headingFont")
-                controls.menu("Weight", \.headingWeight, id: "headingWeight")
-                controls.menu("Width", \.headingWidth, id: "headingWidth")
-                controls.segmented("Size", \.headingSize, id: "headingSize")
-                controls.menu("Letter spacing", \.headingSpacing, id: "headingSpacing")
-                controls.menu("Colour", \.headingColour, id: "headingColour")
-                controls.toggle("All caps", \.uppercaseHeadings, id: "headingCaps")
+            Section {
+                ForEach(AppearancePreferences.TextRole.allCases) { role in
+                    DisclosureGroup {
+                        controls.preview([sample(for: role)])
+                        TextRoleOptions(role: role, controls: controls)
+                    } label: {
+                        LabeledContent(role.label, value: controls.current.textRoleSummary(role))
+                            .buttonCursor()
+                    }
+                    .accessibilityIdentifier("settings.appearance.text.\(role.rawValue)")
+                }
             }
         }
+    }
+
+    private func sample(for role: AppearancePreferences.TextRole) -> AppearanceSample {
+        switch role {
+        case .reading: .synopsis
+        case .interface: .filters
+        case .display: .heading
+        }
+    }
+}
+
+private struct TextRoleOptions: View {
+    let role: AppearancePreferences.TextRole
+    let controls: AppearanceControls
+
+    var body: some View {
+        // Older looks may have an independent Dynamic Type size. Keep it editable until linked again.
+        if role != .reading, !controls.current.storedText(for: role).followsTextSize {
+            controls.textMenu("Text size override", role, \.textSize, follow: \.followsTextSize, id: "textSize")
+        }
+        controls.textMenu("Relative size", role, \.scale, follow: \.followsScale, id: "size")
+        controls.textMenu("Font", role, \.font, follow: \.followsFont, id: "font")
+        if controls.current.face(for: role) == .standard {
+            controls.textMenu("Width", role, \.width, follow: \.followsWidth, id: "width")
+        }
+        controls.textMenu("Weight", role, \.weight, follow: \.followsWeight, id: "weight")
+        if role == .reading {
+            controls.textToggle("Italic", role, \.italic, id: "italic")
+        } else {
+            controls.textSlant(role)
+        }
+        controls.textMenu("Letter spacing", role, \.letterSpacing, follow: \.followsLetterSpacing, id: "letterSpacing")
+        controls.textMenu("Line spacing", role, \.lineSpacing, follow: \.followsLineSpacing, id: "lineSpacing")
+        controls.textMenu("Colour", role, \.colour, id: "colour")
+        controls.textToggle("All caps", role, \.capitals, id: "caps")
     }
 }
 
@@ -485,10 +613,10 @@ private struct AppearanceCardsPage: View {
         AppearanceSectionPage(
             title: "Cards",
             section: .cards,
-            preview: .cards,
             extraIsDefault: model.isPosterArtworkDefault,
             onRestore: { Task { await model.restorePosterArtworkDefaults() } }
         ) { controls in
+            Section { controls.preview([.continueWatching, .posters]) }
             Section("Size & Shape") {
                 controls.slider("Card size", \.cardScale, in: AppearancePreferences.cardScaleRange, step: 0.05,
                                 low: "rectangle.portrait", high: "rectangle.portrait", id: "cardSize")
@@ -566,7 +694,8 @@ private struct AppearanceCardsPage: View {
 
 private struct AppearanceCornersPage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Corners", section: .corners, preview: .corners) { controls in
+        AppearanceSectionPage(title: "Corners", section: .corners) { controls in
+            Section { controls.preview([.playRow, .posters]) }
             Section("All Corners") {
                 controls.slider("Roundness", \.cornerScale, in: AppearancePreferences.cornerScaleRange, step: 0.1,
                                 low: "square", high: "circle", id: "corners")
@@ -575,6 +704,7 @@ private struct AppearanceCornersPage: View {
             Section("Each Part") {
                 ForEach(AppearancePreferences.CornerGroup.allCases) { group in
                     DisclosureGroup {
+                        if let sample = AppearanceSample(corners: group) { controls.preview([sample]) }
                         Toggle("Same as all corners", isOn: Binding(get: {
                             controls.current.cornerOverrides[group.rawValue] == nil
                         }, set: { follows in
@@ -602,18 +732,16 @@ private struct AppearanceCornersPage: View {
 
 private struct AppearanceHomePage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Home", section: .home, preview: .home) { controls in
-            Section("Showcase") {
-                Picker("Turn pages", selection: controls.choice(\.heroAutoAdvance)) {
+        AppearanceSectionPage(title: "Home", section: .home) { controls in
+            Section {
+                Picker("Turn showcase pages", selection: controls.choice(\.heroAutoAdvance)) {
                     ForEach(AppearancePreferences.heroAutoAdvanceOptions, id: \.self) { seconds in
                         Text(seconds == 0 ? "Never" : "Every \(seconds) seconds").tag(seconds)
                     }
                 }
                 .buttonCursor()
                 .accessibilityIdentifier("settings.appearance.turnPages")
-            }
-            Section("Continue Watching") {
-                Stepper("Titles: \(controls.current.continueWatchingLimit)",
+                Stepper("Continue Watching: \(controls.current.continueWatchingLimit)",
                         value: controls.choice(\.continueWatchingLimit), in: 1...100)
                     .buttonCursor()
                     .accessibilityIdentifier("settings.appearance.continueWatchingLimit")
@@ -624,7 +752,7 @@ private struct AppearanceHomePage: View {
 
 private struct AppearanceTitlePagesPage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Title Pages", section: .titlePages, preview: .titlePage) { controls in
+        AppearanceSectionPage(title: "Title Pages", section: .titlePages) { controls in
             Section("Spoilers") {
                 controls.toggle("Hide spoilers", \.hidesSpoilers, id: "spoilers")
                 if controls.current.hidesSpoilers {
@@ -633,8 +761,15 @@ private struct AppearanceTitlePagesPage: View {
                     controls.toggle("Hide episode titles", \.spoilerTitles, id: "spoilerTitles")
                 }
             }
-            Section("Layout") {
+            if controls.current.hidesSpoilers {
+                Section { controls.preview([.episodes]) }
+            }
+            Section {
                 controls.toggle("Unfold synopsis", \.expandsSynopsis, id: "unfoldSynopsis")
+                controls.toggle("Blurred background", \.blursBackground, id: "blurredBackground")
+                if isPhone {
+                    controls.toggle("Tab bar on title pages", \.showsTitlePageTabBar, id: "titlePageTabBar")
+                }
             }
             Section("Section order") {
                 ForEach(controls.current.orderedTitleSections) { section in
@@ -683,7 +818,7 @@ private struct AppearanceTitlePagesPage: View {
 
 private struct AppearanceMotionPage: View {
     var body: some View {
-        AppearanceSectionPage(title: "Motion & Navigation", section: .motion, preview: .motion) { controls in
+        AppearanceSectionPage(title: "Motion & Navigation", section: .motion) { controls in
             Section("Motion") {
                 controls.menu("Animation speed", \.animationSpeed, id: "animationSpeed")
                 controls.toggle("Zoom transitions", \.zoomTransitions, id: "zoom")
@@ -705,11 +840,12 @@ private struct AppearanceHoverPage: View {
     private typealias Hover = AppearancePreferences.Hover
 
     var body: some View {
-        AppearanceSectionPage(title: "Hover", section: .hover, preview: .hover) { controls in
+        AppearanceSectionPage(title: "Hover", section: .hover) { controls in
             Section {
                 controls.toggle("Hover feedback", \.hover.isEnabled, id: "hover.enabled")
             }
             if controls.current.hover.isEnabled {
+                Section { controls.preview([.posters, .playRow, .filters], lightsOnePiece: true) }
                 Section("Buttons") {
                     controls.slider("Brightness", \.hover.brightness, in: Hover.brightnessRange, step: 0.01,
                                     low: "sun.min", high: "sun.max", id: "hover.brightness")
@@ -758,18 +894,32 @@ extension AppearancePreferences {
 
     var textSummary: String {
         var parts = [textSize == .system ? "System size" : textSize.label, font.label]
-        if fontWidth != .standard { parts.append(fontWidth.label) }
-        if boldText { parts.append("Bold") }
+        if reading.weight != .regular { parts.append(reading.weight.label) }
+        if font == .standard, fontWidth != .standard { parts.append(fontWidth.label) }
         if italicText { parts.append("Italic") }
-        if !isHeadingDefault { parts.append("Custom headings") }
+        if reading.capitals { parts.append("Caps") }
+        if !interface.followsReading { parts.append("Custom interface") }
+        if headings != TextStyle.headings() { parts.append("Custom headings") }
         return parts.joined(separator: " · ")
     }
 
-    private var isHeadingDefault: Bool {
-        let defaults = AppearancePreferences()
-        return headingFont == defaults.headingFont && headingWeight == defaults.headingWeight && headingSize == defaults.headingSize
-            && headingWidth == defaults.headingWidth && headingSpacing == defaults.headingSpacing
-            && uppercaseHeadings == defaults.uppercaseHeadings
+    /// What a kind of text is set to, on its row of the Text page.
+    func textRoleSummary(_ role: TextRole) -> String {
+        if role == .interface, interface.followsReading, reading.colour == .primary, !reading.capitals {
+            return "Same as body text"
+        }
+        let style = resolvedText(for: role)
+        var parts = [style.font.label]
+        if role != .reading, !style.followsTextSize { parts.append(style.textSize.label) }
+        if style.scale != .standard { parts.append(style.scale.label) }
+        if style.weight != .regular { parts.append(style.weight.label) }
+        if style.font == .standard, style.width != .standard { parts.append(style.width.label) }
+        if style.letterSpacing != .standard { parts.append("\(style.letterSpacing.label) letters") }
+        if style.lineSpacing != .standard { parts.append("\(style.lineSpacing.label) lines") }
+        if style.italic { parts.append("Italic") }
+        if style.capitals { parts.append("Caps") }
+        if style.colour != .primary { parts.append(style.colour.label) }
+        return parts.joined(separator: " · ")
     }
 
     var cardsSummary: String {
@@ -788,6 +938,8 @@ extension AppearancePreferences {
         if !titleSectionOrder.isEmpty { parts.append("Custom order") }
         else if sectionOrder == .castFirst { parts.append("Cast first") }
         if hidesSpoilers { parts.append("No spoilers") }
+        if blursBackground { parts.append("Blurred background") }
+        if showsTitlePageTabBar { parts.append("Tab bar") }
         return parts.joined(separator: " · ")
     }
 
@@ -805,6 +957,204 @@ extension AppearancePreferences {
         var parts = [hover == Hover() ? "Default" : "Custom"]
         if hover.speed != .standard { parts.append(hover.speed.label) }
         return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Temp default-look export
+
+/// Pretty JSON of the active look, one object per Appearance section (same fields as each page / Restore Defaults),
+/// with Cards' poster-artwork toggles nested under `cards`. For baking into code defaults.
+private enum AppearanceDefaultExport {
+    struct Payload: Encodable {
+        var version = 2
+        /// Preset-driven layout (no Appearance page of its own).
+        var layout: AppearancePreferences.Layout
+        var colour: Colour
+        var text: Text
+        var cards: Cards
+        var corners: Corners
+        var home: Home
+        var titlePages: TitlePages
+        var motion: Motion
+        var hover: AppearancePreferences.Hover
+    }
+
+    struct Colour: Encodable {
+        var accent: AppearancePreferences.Accent
+        var customAccent: AppearancePreferences.RGB
+        var background: AppearancePreferences.Background
+        var customBackground: AppearancePreferences.RGB
+        var tintStrength: Double
+        var playStyle: AppearancePreferences.PlayStyle
+        var buttonFinish: AppearancePreferences.ButtonFinish
+    }
+
+    struct Text: Encodable {
+        var reading: AppearancePreferences.TextStyle
+        var interface: AppearancePreferences.TextStyle
+        var headings: AppearancePreferences.TextStyle
+    }
+
+    struct Cards: Encodable {
+        var cardScale: Double
+        var spacingScale: Double
+        var shelfSpacingScale: Double?
+        var sideMarginScale: Double
+        var showsShelfDividers: Bool
+        var shelfDividerThickness: Double
+        var shelfDividerOpacity: Double
+        var shelfDividerFullWidth: Bool
+        var phoneGridColumns: Int
+        var phoneLandscapeGridColumns: Int
+        var showsPosterTitles: Bool
+        var captionLines: Int
+        var showsCaptionDetails: Bool
+        var uppercaseCaptions: Bool
+        var outline: AppearancePreferences.Outline
+        var outlinesButtons: Bool
+        var artworkTone: AppearancePreferences.ArtworkTone
+        var progressColour: AppearancePreferences.ProgressColour
+        var progressThickness: AppearancePreferences.ProgressThickness
+        var showsTimeLeft: Bool
+        var posterArtwork: PosterArtwork
+    }
+
+    struct PosterArtwork: Encodable {
+        var usesHeroPosters: Bool
+        var showsPosterRatings: Bool
+        var showsBestDiscOnPosters: Bool
+        var posterMarkPlacement: PosterMarkPlacement
+        var showsColouredRatingLogos: Bool
+    }
+
+    struct Corners: Encodable {
+        var cornerScale: Double
+        var cornerOverrides: [String: Double]
+        var includesCircularButtons: Bool
+    }
+
+    struct Home: Encodable {
+        var heroAutoAdvance: Int
+        var showsPageDots: Bool
+        var continueWatchingLimit: Int
+    }
+
+    struct TitlePages: Encodable {
+        var hidesSpoilers: Bool
+        var spoilerStills: Bool
+        var spoilerSynopses: Bool
+        var spoilerTitles: Bool
+        var expandsSynopsis: Bool
+        var blursBackground: Bool
+        var showsReviews: Bool
+        var showsCast: Bool
+        var showsInformation: Bool
+        var showsFranchise: Bool
+        var showsRelated: Bool
+        var showsWatchAnywhere: Bool
+        var sectionOrder: AppearancePreferences.SectionOrder
+        var titleSectionOrder: [AppearancePreferences.TitleSection]
+        var showsTitlePageTabBar: Bool
+    }
+
+    struct Motion: Encodable {
+        var startTab: AppearancePreferences.StartTab
+        var zoomTransitions: Bool
+        var animationSpeed: AppearancePreferences.AnimationSpeed
+        var phoneTabTitles: Bool
+        var minimisesTabBar: Bool
+        var showsContinueBar: Bool
+    }
+
+    static func makeJSON(appearance: AppearancePreferences, settings: PlaybackSettings) -> String {
+        let payload = Payload(
+            layout: appearance.layout,
+            colour: Colour(
+                accent: appearance.accent,
+                customAccent: appearance.customAccent,
+                background: appearance.background,
+                customBackground: appearance.customBackground,
+                tintStrength: appearance.tintStrength,
+                playStyle: appearance.playStyle,
+                buttonFinish: appearance.buttonFinish
+            ),
+            text: Text(
+                reading: appearance.reading,
+                interface: appearance.interface,
+                headings: appearance.headings
+            ),
+            cards: Cards(
+                cardScale: appearance.cardScale,
+                spacingScale: appearance.spacingScale,
+                shelfSpacingScale: appearance.shelfSpacingScale,
+                sideMarginScale: appearance.sideMarginScale,
+                showsShelfDividers: appearance.showsShelfDividers,
+                shelfDividerThickness: appearance.shelfDividerThickness,
+                shelfDividerOpacity: appearance.shelfDividerOpacity,
+                shelfDividerFullWidth: appearance.shelfDividerFullWidth,
+                phoneGridColumns: appearance.phoneGridColumns,
+                phoneLandscapeGridColumns: appearance.phoneLandscapeGridColumns,
+                showsPosterTitles: appearance.showsPosterTitles,
+                captionLines: appearance.captionLines,
+                showsCaptionDetails: appearance.showsCaptionDetails,
+                uppercaseCaptions: appearance.uppercaseCaptions,
+                outline: appearance.outline,
+                outlinesButtons: appearance.outlinesButtons,
+                artworkTone: appearance.artworkTone,
+                progressColour: appearance.progressColour,
+                progressThickness: appearance.progressThickness,
+                showsTimeLeft: appearance.showsTimeLeft,
+                posterArtwork: PosterArtwork(
+                    usesHeroPosters: settings.usesHeroPosters,
+                    showsPosterRatings: settings.showsPosterRatings,
+                    showsBestDiscOnPosters: settings.showsBestDiscOnPosters,
+                    posterMarkPlacement: settings.posterMarkPlacement,
+                    showsColouredRatingLogos: settings.showsColouredRatingLogos
+                )
+            ),
+            corners: Corners(
+                cornerScale: appearance.cornerScale,
+                cornerOverrides: appearance.cornerOverrides,
+                includesCircularButtons: appearance.includesCircularButtons
+            ),
+            home: Home(
+                heroAutoAdvance: appearance.heroAutoAdvance,
+                showsPageDots: appearance.showsPageDots,
+                continueWatchingLimit: appearance.continueWatchingLimit
+            ),
+            titlePages: TitlePages(
+                hidesSpoilers: appearance.hidesSpoilers,
+                spoilerStills: appearance.spoilerStills,
+                spoilerSynopses: appearance.spoilerSynopses,
+                spoilerTitles: appearance.spoilerTitles,
+                expandsSynopsis: appearance.expandsSynopsis,
+                blursBackground: appearance.blursBackground,
+                showsReviews: appearance.showsReviews,
+                showsCast: appearance.showsCast,
+                showsInformation: appearance.showsInformation,
+                showsFranchise: appearance.showsFranchise,
+                showsRelated: appearance.showsRelated,
+                showsWatchAnywhere: appearance.showsWatchAnywhere,
+                sectionOrder: appearance.sectionOrder,
+                titleSectionOrder: appearance.titleSectionOrder,
+                showsTitlePageTabBar: appearance.showsTitlePageTabBar
+            ),
+            motion: Motion(
+                startTab: appearance.startTab,
+                zoomTransitions: appearance.zoomTransitions,
+                animationSpeed: appearance.animationSpeed,
+                phoneTabTitles: appearance.phoneTabTitles,
+                minimisesTabBar: appearance.minimisesTabBar,
+                showsContinueBar: appearance.showsContinueBar
+            ),
+            hover: appearance.hover
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(payload), let text = String(data: data, encoding: .utf8) else {
+            return appearance.rawValue
+        }
+        return text
     }
 }
 #endif

@@ -350,13 +350,13 @@ struct WidgetsManagerView: View {
                 }
             }
             if model.catalogChoices.isEmpty {
-                Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").font(Theme.Typography.small).foregroundStyle(.secondary)
+                Text("Install an addon with catalogs, or use a Trakt list, to add more rows.").appFont(.small).foregroundStyle(.secondary)
             }
             shuffleSettings
             importAndExport
             if model.isCustomised { resetRow }
             if let message = model.message {
-                Text(message).font(Theme.Typography.small).foregroundStyle(model.messageIsError ? Color.orange : Color.secondary)
+                Text(message).appFont(.small).foregroundStyle(model.messageIsError ? Color.orange : Color.secondary)
                     .accessibilityIdentifier("widgets.message")
             }
         }

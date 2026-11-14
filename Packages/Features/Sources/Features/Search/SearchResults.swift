@@ -67,12 +67,12 @@ public struct SearchResultFilter: Equatable, Sendable {
         set { genres = newValue.map { [$0] } ?? [] }
     }
 
-    func matches(_ item: MetaPreview) -> Bool {
+    func matches(_ item: MetaPreview, rating: CatalogListFiltering.RatingLookup = JudgedRating.catalogue) -> Bool {
         if !genres.isEmpty, !genres.contains(where: { genre in
             MediaGenres.contains(genre, in: item.genres)
         }) { return false }
         if let year, SearchResults.year(of: item) != year { return false }
-        if let minimumRating, (item.imdbRating ?? -1) < Double(minimumRating) { return false }
+        if let minimumRating, (rating(item)?.score ?? -1) < Double(minimumRating) { return false }
         return true
     }
 }
@@ -208,23 +208,26 @@ enum SearchResults {
     /// The titles once each, filtered, best first. By relevance: how well the name (or its original name, from `aliases` by
     /// identity) answers the words, lifted by how many TMDb ratings it has (`votes`, by identity), then the order given. `semantic` keeps the order
     /// given, for titles found by what they are about and not by their names.
+    /// `rating` rates each title for the rating filter and the Rating sort (see `RatingSource.order(isAnime:)`).
     static func ranked(_ items: [MetaPreview], query: String, filter: SearchResultFilter, semantic: Bool = false,
-                       aliases: [String: String] = [:], votes: [String: Int] = [:], minimumRelevance: Int = 0) -> [MetaPreview] {
+                       aliases: [String: String] = [:], votes: [String: Int] = [:], minimumRelevance: Int = 0,
+                       rating: CatalogListFiltering.RatingLookup = JudgedRating.catalogue) -> [MetaPreview] {
         let query = normalised(query)
         let words = query.split(separator: " ").map(String.init)
-        let scored = merged(items).filter(filter.matches).enumerated().compactMap { index, item -> (index: Int, item: MetaPreview, rank: Int)? in
-            var relevance = score(normalised(item.name), query: query, words: words)
-            if let alias = aliases[item.identity] { relevance = max(relevance, score(normalised(alias), query: query, words: words)) }
-            guard relevance >= minimumRelevance else { return nil }
-            return (index: index, item: item, rank: relevance + likelihood(votes[item.identity]))
-        }
+        let scored = merged(items).filter { filter.matches($0, rating: rating) }.enumerated()
+            .compactMap { index, item -> (index: Int, item: MetaPreview, rank: Int, rating: Double)? in
+                var relevance = score(normalised(item.name), query: query, words: words)
+                if let alias = aliases[item.identity] { relevance = max(relevance, score(normalised(alias), query: query, words: words)) }
+                guard relevance >= minimumRelevance else { return nil }
+                return (index: index, item: item, rank: relevance + likelihood(votes[item.identity]),
+                        rating: filter.sort == .rating ? rating(item)?.score ?? -1 : -1)
+            }
         return scored.sorted { a, b in
             switch filter.sort {
             case .relevance:
                 if !semantic, a.rank != b.rank { return a.rank > b.rank }
             case .rating:
-                let left = a.item.imdbRating ?? -1, right = b.item.imdbRating ?? -1
-                if left != right { return left > right }
+                if a.rating != b.rating { return a.rating > b.rating }
             case .newest:
                 let left = year(of: a.item) ?? 0, right = year(of: b.item) ?? 0
                 if left != right { return left > right }

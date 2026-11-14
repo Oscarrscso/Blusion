@@ -87,13 +87,13 @@ private struct ParallaxCard: View {
             let details = layoutDetailLine(item, showsRating: showsRating)
             if !details.isEmpty {
                 Text(details)
-                    .font(Theme.Typography.metaLine.weight(.semibold))
+                    .appFont(.metaLine, weight: .semibold)
                     .foregroundStyle(.white.opacity(0.82))
                     .lineLimit(1)
             }
             if let synopsis {
                 Text(synopsis)
-                    .font(Theme.Typography.metaLine)
+                    .appFont(.metaLine, role: .reading)
                     .foregroundStyle(Theme.dimmerText)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)

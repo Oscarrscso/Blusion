@@ -210,15 +210,19 @@ private final class MPVEventPump: @unchecked Sendable {
     private let continuation: AsyncStream<FallbackEvent>.Continuation
     /// The video's size or format changed (a new file, a filter change): the crop and the Dolby Vision filter depend on it.
     private let onVideoReconfig: @Sendable () -> Void
+    private let onAudioUpdate: @Sendable () -> Void
     private let lock = NSLock()
     private var running = true
+    private var nativeAudioActive = false
     private let exited = DispatchSemaphore(value: 0)
 
-    init(handle: OpaquePointer, continuation: AsyncStream<FallbackEvent>.Continuation, onVideoReconfig: @escaping @Sendable () -> Void) {
+    init(handle: OpaquePointer, continuation: AsyncStream<FallbackEvent>.Continuation, onVideoReconfig: @escaping @Sendable () -> Void,
+         onAudioUpdate: @escaping @Sendable () -> Void) {
         self.handle = handle
         self.properties = MPVProperties(handle: handle)
         self.continuation = continuation
         self.onVideoReconfig = onVideoReconfig
+        self.onAudioUpdate = onAudioUpdate
     }
 
     func start() {
@@ -236,6 +240,8 @@ private final class MPVEventPump: @unchecked Sendable {
     }
 
     private var isRunning: Bool { lock.withLock { running } }
+
+    func setNativeAudioActive(_ active: Bool) { lock.withLock { nativeAudioActive = active } }
 
     private func run() {
         var lastPosition = -1.0
@@ -259,6 +265,7 @@ private final class MPVEventPump: @unchecked Sendable {
                 continuation.yield(.loaded(duration: duration, audio: tracks.audio, subtitles: tracks.subtitles,
                                            selectedAudio: tracks.selectedAudio, selectedSubtitle: tracks.selectedSubtitle))
                 continuation.yield(.chapters(properties.chapters()))
+                onAudioUpdate()
             case MPV_EVENT_END_FILE:
                 guard let data = event.data else { continue }
                 let end = data.assumingMemoryBound(to: mpv_event_end_file.self).pointee
@@ -276,6 +283,7 @@ private final class MPVEventPump: @unchecked Sendable {
                     let tracks = properties.tracks()
                     continuation.yield(.tracks(audio: tracks.audio, subtitles: tracks.subtitles, selectedAudio: tracks.selectedAudio,
                                                selectedSubtitle: tracks.selectedSubtitle))
+                    onAudioUpdate()
                     continue
                 }
                 if loaded, name == "chapter-list/count" {
@@ -305,9 +313,12 @@ private final class MPVEventPump: @unchecked Sendable {
                 case ("demuxer-cache-time", MPV_FORMAT_DOUBLE):
                     continuation.yield(.buffered(value.assumingMemoryBound(to: Double.self).pointee))
                 case ("pause", MPV_FORMAT_FLAG):
-                    continuation.yield(.paused(value.assumingMemoryBound(to: Int32.self).pointee != 0))
+                    if !lock.withLock({ nativeAudioActive }) {
+                        continuation.yield(.paused(value.assumingMemoryBound(to: Int32.self).pointee != 0))
+                    }
                 case ("paused-for-cache", MPV_FORMAT_FLAG):
                     continuation.yield(.buffering(value.assumingMemoryBound(to: Int32.self).pointee != 0))
+                    onAudioUpdate()
                 case ("duration", MPV_FORMAT_DOUBLE) where loaded && !hasDuration:
                     // A length mpv learns only after loading is filled in once.
                     let duration = value.assumingMemoryBound(to: Double.self).pointee
@@ -324,6 +335,8 @@ private final class MPVEventPump: @unchecked Sendable {
                 if loaded, (properties.int("video-out-params/w") ?? 0) > 0 {
                     continuation.yield(.videoFrameReady)
                 }
+            case MPV_EVENT_AUDIO_RECONFIG:
+                if loaded { onAudioUpdate() }
             case MPV_EVENT_VIDEO_RECONFIG:
                 onVideoReconfig()
             default:
@@ -364,6 +377,19 @@ public final class MPVBackend: FallbackBackend {
     private var dolbyVisionProfile: Int?
     private var downloads: [Task<Void, Never>] = []
     private var temporaryFiles: [URL] = []
+    #if targetEnvironment(macCatalyst)
+    private var nativeAudio: NativeDolbyAudio?
+    private var nativeAudioIndex: Int?
+    private var failedNativeAudioIndex: Int?
+    private var nativeAudioGeneration = 0
+    private var sourceURL: URL?
+    private var sourceHeaders: [String: String] = [:]
+    private var wantsPaused = true
+    private var playbackRate: Float = 1
+    private var audioVolume: Float = 1
+    private var audioMuted = false
+    private var audioDelay: Double = 0
+    #endif
 
     public var videoSurface: AnyObject { host }
 
@@ -437,6 +463,10 @@ public final class MPVBackend: FallbackBackend {
             ("video-crop", "0x0+0+0"),
         ]
         for (name, value) in options { mpv_set_option_string(handle, name, value) }
+        #if targetEnvironment(macCatalyst)
+        // Keep surround channels in Apple's sample-buffer renderer for AirPods spatial audio.
+        mpv_set_option_string(handle, "ao", "avfoundation,audiounit")
+        #endif
         var wid = Int64(Int(bitPattern: Unmanaged.passUnretained(host.metalLayer).toOpaque()))
         mpv_set_option(handle, "wid", MPV_FORMAT_INT64, &wid)
         guard mpv_initialize(handle) >= 0 else {
@@ -451,6 +481,10 @@ public final class MPVBackend: FallbackBackend {
         }
         let pump = MPVEventPump(handle: handle, continuation: continuation, onVideoReconfig: { [weak self] in
             Task { @MainActor in self?.applyPicture() }
+        }, onAudioUpdate: { [weak self] in
+            #if targetEnvironment(macCatalyst)
+            Task { @MainActor in self?.updateNativeAudio() }
+            #endif
         })
         self.pump = pump
         pump.start()
@@ -460,6 +494,13 @@ public final class MPVBackend: FallbackBackend {
 
     public func load(url: URL, headers: [String: String], startPosition: TimeInterval) {
         guard handle != nil else { return }
+        #if targetEnvironment(macCatalyst)
+        stopNativeAudio()
+        sourceURL = url
+        sourceHeaders = headers
+        failedNativeAudioIndex = nil
+        wantsPaused = true
+        #endif
         host.visiblePicture = nil
         appliedScale = nil
         appliedSubMarginY = nil
@@ -479,24 +520,67 @@ public final class MPVBackend: FallbackBackend {
     public func setPaused(_ paused: Bool) {
         // Activated whenever playback starts, as AVEngine does: the engine this one replaced deactivates the shared session as it shuts down.
         if !paused { Self.activateAudioSession() }
+        #if targetEnvironment(macCatalyst)
+        wantsPaused = paused
+        if let nativeAudio {
+            nativeAudio.setPaused(paused)
+            set("pause", paused || !nativeAudio.isReady ? "yes" : "no")
+            continuation.yield(.paused(paused))
+            if !paused && !nativeAudio.isReady { continuation.yield(.buffering(true)) }
+            return
+        }
+        #endif
         set("pause", paused ? "yes" : "no")
     }
 
     public func seek(to position: TimeInterval) async {
+        #if targetEnvironment(macCatalyst)
+        let hadNativeAudio = nativeAudio != nil
+        if hadNativeAudio { set("pause", "yes"); stopNativeAudio() }
+        #endif
         command(["seek", String(position), "absolute+exact"])
+        #if targetEnvironment(macCatalyst)
+        if hadNativeAudio { updateNativeAudio(position: position) }
+        #endif
     }
 
-    public func setRate(_ rate: Float) { set("speed", String(rate)) }
+    public func setRate(_ rate: Float) {
+        #if targetEnvironment(macCatalyst)
+        playbackRate = rate
+        if rate != 1 { stopNativeAudio(); set("pause", wantsPaused ? "yes" : "no") }
+        #endif
+        set("speed", String(rate))
+        #if targetEnvironment(macCatalyst)
+        if rate == 1 { updateNativeAudio() }
+        #endif
+    }
 
     /// The hold's ceiling. mpv's `speed` property accepts well above it; the pitch-corrected audio at 4× is not yet checked on a device.
     public var maximumRate: Float { 4 }
 
     /// mpv's volume runs 0 to 100.
-    public func setVolume(_ volume: Float) { set("volume", String(volume * 100)) }
+    public func setVolume(_ volume: Float) {
+        #if targetEnvironment(macCatalyst)
+        audioVolume = volume
+        nativeAudio?.setVolume(volume)
+        #endif
+        set("volume", String(volume * 100))
+    }
 
-    public func setMuted(_ muted: Bool) { set("mute", muted ? "yes" : "no") }
+    public func setMuted(_ muted: Bool) {
+        #if targetEnvironment(macCatalyst)
+        audioMuted = muted
+        nativeAudio?.setMuted(muted)
+        if nativeAudio != nil { set("mute", "yes"); return }
+        #endif
+        set("mute", muted ? "yes" : "no")
+    }
 
     public func selectAudio(id: String?) {
+        #if targetEnvironment(macCatalyst)
+        stopNativeAudio()
+        failedNativeAudioIndex = nil
+        #endif
         set("aid", id.flatMap { Int($0.dropFirst()) }.map(String.init) ?? "no")
     }
 
@@ -506,7 +590,13 @@ public final class MPVBackend: FallbackBackend {
 
     public func setSubtitleDelay(_ seconds: TimeInterval) { set("sub-delay", String(seconds)) }
 
-    public func setAudioDelay(_ seconds: TimeInterval) { set("audio-delay", String(seconds)) }
+    public func setAudioDelay(_ seconds: TimeInterval) {
+        #if targetEnvironment(macCatalyst)
+        audioDelay = seconds
+        if nativeAudio != nil { stopNativeAudio(); updateNativeAudio() }
+        #endif
+        set("audio-delay", String(seconds))
+    }
 
     /// Remote files are downloaded first with their own headers: mpv would send the media's request headers (which can carry tokens for
     /// the media host) to the subtitle host too.
@@ -662,12 +752,19 @@ public final class MPVBackend: FallbackBackend {
             let rate = read.int("audio-params/samplerate").map { ", \(Double($0) / 1000) kHz" } ?? ""
             stats.audioChannels = "\(MPVProperties.channelLayout(channels))\(rate)"
         }
-        if let out = read.int("audio-out-params/channel-count") {
+        #if targetEnvironment(macCatalyst)
+        let encodedAudio = nativeAudio?.isReady == true
+        #else
+        let encodedAudio = false
+        #endif
+        if encodedAudio {
+            stats.audioOutput = "E-AC-3 (AVPlayer, compressed)"
+        } else if let out = read.int("audio-out-params/channel-count") {
             stats.audioOutput = "PCM \(MPVProperties.channelLayout(out)) (\(read.string("current-ao") ?? "audiounit"))"
         }
         let profile = (read.string("current-tracks/audio/codec-profile") ?? "").lowercased()
         // FFmpeg names the object formats in the profile: "Dolby TrueHD + Dolby Atmos", "DTS-HD MA + DTS:X".
-        if profile.contains("atmos") || profile.contains("dts:x") {
+        if !encodedAudio && (profile.contains("atmos") || profile.contains("dts:x")) {
             stats.notes.append("Object audio (Atmos, DTS:X) is decoded to its PCM channel bed; the objects are not rendered.")
         }
         if processing.upscaling == .ai {
@@ -677,6 +774,10 @@ public final class MPVBackend: FallbackBackend {
     }
 
     public func shutdown() {
+        #if targetEnvironment(macCatalyst)
+        sourceURL = nil
+        stopNativeAudio()
+        #endif
         downloads.forEach { $0.cancel() }
         downloads = []
         pump?.stopAndWait()
@@ -690,6 +791,81 @@ public final class MPVBackend: FallbackBackend {
         temporaryFiles = []
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// An E-AC-3 track stays compressed until AVPlayer; the mpv copy remains silent for video timing.
+    private func updateNativeAudio(position: Double? = nil) {
+        guard let handle, let sourceURL else { return }
+        let read = MPVProperties(handle: handle)
+        guard let path = read.string("path"),
+              path == sourceURL.absoluteString || (sourceURL.isFileURL && path == sourceURL.path) else { return }
+        guard playbackRate == 1, read.string("current-tracks/audio/codec") == "eac3",
+              read.flag("current-tracks/audio/external") == false,
+              let index = read.int("aid"), index != failedNativeAudioIndex else {
+            if nativeAudio != nil { stopNativeAudio(); set("pause", wantsPaused ? "yes" : "no") }
+            return
+        }
+        if nativeAudioIndex == index, let nativeAudio {
+            nativeAudio.setPaused(wantsPaused || read.flag("paused-for-cache"))
+            return
+        }
+        let audioTracks = (0..<(read.int("track-list/count") ?? 0)).filter {
+            read.string("track-list/\($0)/type") == "audio" && !read.flag("track-list/\($0)/external")
+        }
+        guard let ordinal = audioTracks.firstIndex(where: { read.int("track-list/\($0)/id") == index }) else { return }
+        let ffIndex = read.int("current-tracks/audio/ff-index").flatMap { $0 >= 0 ? $0 : nil }
+        stopNativeAudio()
+        nativeAudioIndex = index
+        pump?.setNativeAudioActive(true)
+        let generation = nativeAudioGeneration
+        set("pause", "yes")
+        set("mute", "yes")
+        // A muted PCM renderer is still a system audio output. Keep only AVPlayer on the real route.
+        set("ao", "null")
+        nativeAudio = NativeDolbyAudio(url: sourceURL, headers: sourceHeaders, streamIndex: ffIndex, audioOrdinal: ordinal,
+                                      position: max(0, (position ?? read.double("time-pos") ?? 0) - audioDelay), onReady: { [weak self] in
+            guard let self, self.nativeAudioGeneration == generation else { return }
+            self.nativeAudio?.setVolume(self.audioVolume)
+            self.nativeAudio?.setMuted(self.audioMuted)
+            self.nativeAudio?.setPaused(self.wantsPaused)
+            self.set("pause", self.wantsPaused ? "yes" : "no")
+            self.continuation.yield(.buffering(false))
+        }, onFailure: { [weak self] in
+            guard let self, self.nativeAudioGeneration == generation else { return }
+            self.failedNativeAudioIndex = index
+            self.stopNativeAudio()
+            self.set("pause", self.wantsPaused ? "yes" : "no")
+            if let handle = self.handle {
+                self.continuation.yield(.buffering(MPVProperties(handle: handle).flag("paused-for-cache")))
+            }
+        }, onWaiting: { [weak self] waiting in
+            guard let self, self.nativeAudioGeneration == generation, !self.wantsPaused else { return }
+            let cached = self.handle.map { MPVProperties(handle: $0).flag("paused-for-cache") } ?? false
+            self.set("pause", waiting || cached ? "yes" : "no")
+            self.continuation.yield(.buffering(waiting || cached))
+        }, onPosition: { [weak self] audioPosition in
+            guard let self, self.nativeAudioGeneration == generation, !self.wantsPaused, let handle = self.handle else { return }
+            let read = MPVProperties(handle: handle)
+            guard !read.flag("seeking"), !read.flag("paused-for-cache"), let videoPosition = read.double("time-pos") else { return }
+            let target = max(0, audioPosition + self.audioDelay)
+            // A native-audio stall must not leave video running ahead after playback resumes.
+            if abs(videoPosition - target) > 0.35 {
+                self.command(["seek", String(target), "absolute+exact"])
+            }
+        })
+    }
+
+    private func stopNativeAudio() {
+        nativeAudioGeneration += 1
+        pump?.setNativeAudioActive(false)
+        let hadNativeAudio = nativeAudio != nil
+        nativeAudio?.stop()
+        nativeAudio = nil
+        nativeAudioIndex = nil
+        if hadNativeAudio { set("ao", "avfoundation,audiounit") }
+        set("mute", audioMuted ? "yes" : "no")
+    }
+    #endif
 
     // MARK: Helpers
 

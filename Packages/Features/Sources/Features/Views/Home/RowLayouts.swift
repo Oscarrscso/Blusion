@@ -187,7 +187,11 @@ struct LayoutLogo: View {
     /// Set once the spotlight's artwork lookup has answered, so a title with no logo falls back to its name.
     @State private var artworkChecked = false
 
-    private var logoURL: URL? { item.logo ?? heroArtwork?.logo }
+    private var logoCandidates: [URL] {
+        HeroLogos.candidates(preview: item.logo, artwork: heroArtwork, imdbID: item.id,
+                             artworkReady: artworkChecked || item.logo != nil)
+    }
+    private var logoURL: URL? { logoCandidates.first }
 
     var body: some View {
         Group {
@@ -200,7 +204,7 @@ struct LayoutLogo: View {
                 Color.clear
             case .none:
                 Text(item.name)
-                    .font(.title3.bold())
+                    .appFont(style: .title3, weight: .bold, role: .display)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
             }
@@ -215,8 +219,9 @@ struct LayoutLogo: View {
             guard !Task.isCancelled else { return }
             artworkChecked = true
         }
-        .task(id: logoURL) {
-            await hero.load(priority: .medium, picture: nil, pictureSize: 0, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
+        .task(id: logoCandidates.map(\.absoluteString).joined(separator: "|")) {
+            await hero.load(priority: .medium, picture: nil, pictureSize: 0, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                            logoFallbacks: Array(logoCandidates.dropFirst()))
         }
         .accessibilityHidden(true)
     }

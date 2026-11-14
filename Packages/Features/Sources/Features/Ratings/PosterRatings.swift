@@ -44,19 +44,24 @@ public final class TitleRatings: Identifiable {
         switch source {
         case .letterboxd: letterboxd
         case .imdb: imdb
-        case .rottenTomatoes: rottenTomatoes
-        case .metacritic: metacritic
+        case .myAnimeList: myAnimeList
+        case .tmdb: tmdb
         }
+    }
+
+    /// The title as the rating filters and the Rating sorts judge it (see `RatingSource.order(isAnime:)`); nil until a site has scored it.
+    public var judgedRating: JudgedRating? {
+        RatingSource.judge(isAnime: isAnime || myAnimeList != nil) { score(for: $0) }
     }
 
     /// Whole numbers out of 100, never a decimal: IMDb and TMDb are out of 10 and Letterboxd out of 5, so each is scaled to 100 first
     /// ("8.6" is 86, "4.2" is 84). Rotten Tomatoes and Metacritic already are.
     public var imdbText: String? { imdb.map { String(Int(($0 * 10).rounded())) } }
     public var letterboxdText: String? { letterboxd.map { String(Int(($0 * 20).rounded())) } }
-    /// The sites a poster prefers: Letterboxd and MyAnimeList for anime (IMDb standing in for Letterboxd, which has films only), else IMDb
-    /// and Letterboxd.
+    /// The sites a poster prefers: MyAnimeList and Letterboxd for anime (IMDb standing in for Letterboxd, which has films only), else
+    /// Letterboxd and IMDb.
     public var preferredPosterSites: [ReviewSite] {
-        isAnime || myAnimeList != nil ? [.letterboxd, .myAnimeList, .imdb] : [.imdb, .letterboxd]
+        isAnime || myAnimeList != nil ? [.myAnimeList, .letterboxd, .imdb] : [.letterboxd, .imdb]
     }
     /// The preferred sites, then fill either missing score from the other available sites.
     public var posterSites: [ReviewSite] {
@@ -172,6 +177,8 @@ public final class PosterRatingsStore {
     /// spend one failing request per poster.
     @ObservationIgnored private var omdbPausedUntil: Date?
     @ObservationIgnored private var isClearing = false
+    /// The last MyAnimeList lookup a discover list or a search asked for, which the next one waits for.
+    @ObservationIgnored private var listMyAnimeListTurn: Task<CachedRating?, Never>?
     @ObservationIgnored private let letterboxd: LetterboxdRatings?
     @ObservationIgnored private let myAnimeList: MyAnimeListRatings?
     @ObservationIgnored private var omdb: OMDbRatings?
@@ -218,18 +225,7 @@ public final class PosterRatingsStore {
     /// store's cases).
     public func ratings(for item: MetaPreview, includeReviews: Bool = false, source: RatingSource? = nil,
                         includeMarks: Bool = false) -> TitleRatings {
-        let entry: TitleRatings
-        if let known = entries[item.identity] {
-            entry = known
-            if let rating = item.imdbRating {
-                known.catalogIMDb = rating
-                let shown = known.datasetIMDb ?? rating
-                if known.imdb != shown { Task { known.imdb = known.datasetIMDb ?? known.catalogIMDb } }
-            }
-        } else {
-            entry = TitleRatings(id: item.identity, imdb: item.imdbRating, isAnime: ReviewSite.isAnime(item))
-            entries[item.identity] = entry
-        }
+        let entry = storedEntry(for: item)
         // MyAnimeList searches by name, so anime listed under its own databases' ids (Kitsu's, say) is looked up too.
         if !isClearing, myAnimeList != nil, entry.isAnime, isEnabled || includeReviews, source == nil {
             enqueue(item, provider: .myAnimeList, includeReviews: includeReviews)
@@ -252,10 +248,95 @@ public final class PosterRatingsStore {
         }
         // OMDb gives Rotten Tomatoes and Metacritic for a film. Only the title page asks: every poster card calls this on each redraw, so it
         // must not do any work here. The allowance and any refusal are checked when the lookup runs.
-        if includeReviews, omdb != nil, item.type == "movie", LetterboxdRatings.isIMDbID(item.id),
-           source == nil || source == .rottenTomatoes || source == .metacritic {
+        if includeReviews, omdb != nil, item.type == "movie", LetterboxdRatings.isIMDbID(item.id), source == nil {
             enqueue(item, provider: .omdb, includeReviews: includeReviews)
         }
+        return entry
+    }
+
+    /// The title as the rating filters and the Rating sorts judge it (see `RatingSource.order(isAnime:)`); nil until a site has scored it.
+    /// Asks for the scores it needs whatever the poster setting: IMDb's from the device at once, then Letterboxd's, TMDb's and, for
+    /// anime, MyAnimeList's, in turn with the posters' lookups. Reading it inside observation tracking re-runs that as each score arrives.
+    public func judgedRating(for item: MetaPreview) -> JudgedRating? {
+        let entry = storedEntry(for: item)
+        guard !isClearing else { return entry.judgedRating }
+        if myAnimeList != nil, entry.isAnime { enqueue(item, provider: .myAnimeList, includeReviews: false, forFilter: true) }
+        if LetterboxdRatings.isIMDbID(item.id) {
+            lookUpInDataset(item, entry: entry)
+            if letterboxd != nil, item.type == "movie" { enqueue(item, provider: .letterboxd, includeReviews: false, forFilter: true) }
+        }
+        return entry.judgedRating
+    }
+
+    /// A title's rating out of 10 for a discover list's or a search's score bounds, as the rating filters judge it (see
+    /// `RatingSource.order(isAnime:)`): IMDb's from the device, Letterboxd's and MyAnimeList's as kept on the device or else asked of the
+    /// site. `tmdbScore` is unused by the filter. Each answer is kept and shown on the title's posters. Nil when no site has scored it.
+    public func listRating(for item: MetaPreview, tmdbScore: Double?, isAnime: Bool) async -> Double? {
+        let entry = storedEntry(for: item)
+        if isAnime, !entry.isAnime { entry.isAnime = true }
+        for source in RatingSource.order(isAnime: entry.isAnime) {
+            if let score = await listScore(of: item, entry: entry, from: source, tmdbScore: tmdbScore) { return source.outOfTen(score) }
+        }
+        return nil
+    }
+
+    private func listScore(of item: MetaPreview, entry: TitleRatings, from source: RatingSource, tmdbScore: Double?) async -> Double? {
+        switch source {
+        case .imdb:
+            if let dataset, LetterboxdRatings.isIMDbID(item.id), let found = await dataset.rating(for: item.id) { return found.rating }
+            return entry.imdb
+        case .tmdb:
+            return tmdbScore ?? entry.tmdb
+        case .letterboxd:
+            if let known = entry.letterboxd { return known }
+            guard let letterboxd, item.type == "movie", LetterboxdRatings.isIMDbID(item.id) else { return nil }
+            return await keptAnswer(for: Lookup(item: item, provider: .letterboxd, includeReviews: false)) {
+                CachedRating(rating: try await letterboxd.rating(imdbID: item.id), fetchedAt: self.now())
+            }?.rating
+        case .myAnimeList:
+            if let known = entry.myAnimeList { return known }
+            guard let myAnimeList else { return nil }
+            // MyAnimeList is asked about one title at a time, as its search box would be: each list lookup waits for the one before.
+            let previous = listMyAnimeListTurn
+            let turn = Task { [self] () -> CachedRating? in
+                _ = await previous?.value
+                return await keptAnswer(for: Lookup(item: item, provider: .myAnimeList, includeReviews: false)) {
+                    CachedRating(rating: nil, fetchedAt: self.now(), reviews: try await myAnimeList.ratings(for: item))
+                }
+            }
+            listMyAnimeListTurn = turn
+            return await turn.value?.reviews?.myAnimeList
+        }
+    }
+
+    /// The site's kept answer while it is fresh, else a new one, kept and shown; the stale answer when asking fails. Nil when there is
+    /// neither, or while the data is being cleared.
+    private func keptAnswer(for lookup: Lookup, fetch: () async throws -> CachedRating) async -> CachedRating? {
+        let cached = await cache.value(for: lookup.cacheKey)
+        guard !isClearing else { return nil }
+        if let cached {
+            apply(cached, lookup: lookup)
+            if now() < cached.fetchedAt.addingTimeInterval(cacheLifetime(cached, provider: lookup.provider)) { return cached }
+        }
+        guard let answer = try? await fetch(), !isClearing else { return cached }
+        await cache.store(answer, for: lookup.cacheKey)
+        nextLookupAt[lookup.id] = answer.fetchedAt.addingTimeInterval(cacheLifetime(answer, provider: lookup.provider))
+        apply(answer, lookup: lookup)
+        return answer
+    }
+
+    /// The same object for a title every time, keeping its catalog's IMDb rating current.
+    private func storedEntry(for item: MetaPreview) -> TitleRatings {
+        if let known = entries[item.identity] {
+            if let rating = item.imdbRating {
+                known.catalogIMDb = rating
+                let shown = known.datasetIMDb ?? rating
+                if known.imdb != shown { Task { known.imdb = known.datasetIMDb ?? known.catalogIMDb } }
+            }
+            return known
+        }
+        let entry = TitleRatings(id: item.identity, imdb: item.imdbRating, isAnime: ReviewSite.isAnime(item))
+        entries[item.identity] = entry
         return entry
     }
 
@@ -424,8 +505,8 @@ public final class PosterRatingsStore {
         nextLookupAt.removeAll()
     }
 
-    private func enqueue(_ item: MetaPreview, provider: Provider, includeReviews: Bool) {
-        let lookup = Lookup(item: item, provider: provider, includeReviews: includeReviews)
+    private func enqueue(_ item: MetaPreview, provider: Provider, includeReviews: Bool, forFilter: Bool = false) {
+        let lookup = Lookup(item: item, provider: provider, includeReviews: includeReviews, forFilter: forFilter)
         if includeReviews, cacheTasks[lookup.id] != nil { cachePriorities.insert(lookup.id) }
         if includeReviews, let index = queue.firstIndex(where: { $0.id == lookup.id }) {
             var priority = queue.remove(at: index)
@@ -517,8 +598,10 @@ public final class PosterRatingsStore {
         case .bestBlurays: (showsBestDisc || lookup.includeReviews) && !tasks.keys.contains { $0.hasPrefix("\(Provider.bestBlurays.rawValue):") }
         case .streaming: showsBestDisc || lookup.includeReviews
         // MyAnimeList is asked about one title at a time, as its search box would be.
-        case .myAnimeList: (isEnabled || lookup.includeReviews) && !tasks.keys.contains { $0.hasPrefix("\(Provider.myAnimeList.rawValue):") }
-        case .letterboxd, .tmdb, .omdb: isEnabled || lookup.includeReviews
+        case .myAnimeList: (isEnabled || lookup.includeReviews || lookup.forFilter)
+            && !tasks.keys.contains { $0.hasPrefix("\(Provider.myAnimeList.rawValue):") }
+        case .letterboxd, .tmdb: isEnabled || lookup.includeReviews || lookup.forFilter
+        case .omdb: isEnabled || lookup.includeReviews
         }
     }
 
@@ -885,7 +968,9 @@ public final class PosterRatingsStore {
             // TMDb names Japanese animation listed under an IMDb id as anime: its MyAnimeList score is looked up next.
             if cached.reviews?.isAnime == true, !entry.isAnime {
                 entry.isAnime = true
-                if myAnimeList != nil { enqueue(lookup.item, provider: .myAnimeList, includeReviews: lookup.includeReviews) }
+                if myAnimeList != nil {
+                    enqueue(lookup.item, provider: .myAnimeList, includeReviews: lookup.includeReviews, forFilter: lookup.forFilter)
+                }
             }
             // The answer names the title's TMDb id, also when it was read from the cache: its page then asks only for its artwork.
             if let tmdb, let reviews = cached.reviews {
@@ -915,6 +1000,8 @@ public final class PosterRatingsStore {
         /// A screen asked for this title itself, so it goes ahead of the others and runs whatever the settings. For a mark: a screen built
         /// on marks asked (`includeMarks`).
         var includeReviews: Bool
+        /// A rating filter or Rating sort needs the score, so it runs whatever the poster setting, in its turn.
+        var forFilter = false
         var id: String { "\(provider.rawValue):\(item.identity)" }
         var cacheKey: String {
             switch provider {

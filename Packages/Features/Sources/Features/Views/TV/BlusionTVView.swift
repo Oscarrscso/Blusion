@@ -129,7 +129,7 @@ struct BlusionTVView: View {
             }
         } else if let issue = model.issues[channel.id] {
             HStack {
-                Text(issue).font(Theme.Typography.medium).foregroundStyle(.secondary)
+                Text(issue).appFont(.medium).foregroundStyle(.secondary)
                 Spacer(minLength: Theme.Spacing.s)
                 Button("Retry") { refresh(channel) }.buttonStyle(.hoverGlass)
             }
@@ -216,11 +216,11 @@ struct TVCardCaption: View {
 
     var body: some View {
         Text(caption.isEmpty ? " " : caption)
-            .font(Theme.Typography.mediumStrong)
+            .appFont(.mediumStrong)
             .foregroundStyle(.primary)
             .lineLimit(1)
         Text(detail.isEmpty ? " " : detail)
-            .font(Theme.Typography.caption)
+            .appFont(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
     }
@@ -372,7 +372,7 @@ private struct TVShowPicker: View {
                         ArtworkImage(url: show.poster, title: show.name).frame(width: 40, height: 60).clipped()
                         VStack(alignment: .leading) {
                             Text(show.name).foregroundStyle(.primary)
-                            if let year = show.releaseInfo { Text(year).font(Theme.Typography.caption).foregroundStyle(.secondary) }
+                            if let year = show.releaseInfo { Text(year).appFont(.caption).foregroundStyle(.secondary) }
                         }
                         Spacer()
                         Image(systemName: shows.contains(where: { $0.identity == show.identity }) ? "checkmark.circle.fill" : "plus.circle")

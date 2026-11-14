@@ -106,14 +106,14 @@ struct OpenSubtitlesSheet: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text(LanguageCodes.displayName(result.language)).font(Theme.Typography.headline)
+                                Text(LanguageCodes.displayName(result.language)).appFont(.headline)
                                 if result.matchesHash { tag("Matches this file", .green) }
                                 if result.isHearingImpaired { tag("SDH", .secondary) }
                                 if result.isForeignPartsOnly { tag("Forced", .secondary) }
                                 if result.isMachineTranslated { tag("Machine translated", .orange) }
                             }
-                            Text(result.release).font(Theme.Typography.small).foregroundStyle(.secondary).lineLimit(2)
-                            Text("\(result.downloadCount.formatted()) downloads").font(Theme.Typography.caption).foregroundStyle(.tertiary)
+                            Text(result.release).appFont(.small).foregroundStyle(.secondary).lineLimit(2)
+                            Text("\(result.downloadCount.formatted()) downloads").appFont(.caption).foregroundStyle(.tertiary)
                         }
                     }
                     .accessibilityIdentifier("opensubtitles.result")
@@ -134,7 +134,7 @@ struct OpenSubtitlesSheet: View {
     }
 
     private func tag(_ text: String, _ colour: Color) -> some View {
-        Text(text).font(Theme.Typography.microStrong).padding(.horizontal, 6).padding(.vertical, 2)
+        Text(text).appFont(.microStrong).padding(.horizontal, 6).padding(.vertical, 2)
             .background(colour.opacity(0.2), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls))).foregroundStyle(colour)
     }
 }

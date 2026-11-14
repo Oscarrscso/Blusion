@@ -29,7 +29,8 @@ struct SettingsView: View {
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     @Environment(LandscapeTabBarState.self) private var landscapeTabs: LandscapeTabBarState?
     @Environment(AppRouter.self) private var router
-    /// Ghost mode, kept between launches (see `GhostMode`). Pulling the page down and holding it for two seconds switches it.
+    /// Ghost mode, kept between launches (see `GhostMode`). Pulling the page down past the lock distance switches it, as the player's
+    /// drag down locks 2× (`GhostModePullRules`).
     @AppStorage(GhostMode.defaultsKey) private var ghostIsOn = false
     /// How far the page is pulled down past its top, in points.
     @State private var pull: CGFloat = 0
@@ -37,11 +38,10 @@ struct SettingsView: View {
     /// The page opened from the chosen page, shown to its right (see `SettingsDetailColumns`).
     @State private var sidePage = SettingsSidePage()
     #endif
-    /// How much of the two-second hold has run, 0...1, which the ring round the ghost draws.
+    /// How far the pull has got toward a toggle, 0...1, which the ring round the ghost draws (`GhostModePullRules.progress`).
     @State private var holdProgress: CGFloat = 0
-    /// The pull from which the hold counts, and how long it must last.
-    private static let holdPull: CGFloat = 70
-    private static let holdDuration: Double = 2
+    /// True after this overscroll has already toggled, so crossing the lock mark again before the list settles does not flip twice.
+    @State private var didToggleThisPull = false
 
     init(services: AppServices) {
         _model = State(initialValue: SettingsViewModel(services: services))
@@ -91,8 +91,8 @@ struct SettingsView: View {
             if ghostIsOn {
                 Section {
                     HStack(spacing: Theme.Spacing.m) {
-                        Text("👻").font(.title2).accessibilityHidden(true)
-                        Text("Ghost mode is on").font(Theme.Typography.mediumStrong)
+                        Text("👻").appFont(style: .title2, weight: .regular, role: .display).accessibilityHidden(true)
+                        Text("Ghost mode is on").appFont(.mediumStrong)
                         Spacer(minLength: 0)
                         Button("Turn Off") { setGhost(false) }
                             .buttonStyle(.glassCapsule)
@@ -109,8 +109,10 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.addons")
                 link(.server) {
-                    SettingsRow(title: "Streaming Server", summary: model.settings.streamingServerURL ?? "Not set", systemImage: "server.rack")
+                    SettingsRow(title: "Streaming Server", summary: serverSummary, systemImage: "server.rack")
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Streaming Server, \(serverSummary)")
                 .accessibilityIdentifier("settings.section.server")
             }
             Section("Playback") {
@@ -133,7 +135,7 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.section.appearance")
                 link(.widgets) {
-                    SettingsRow(title: "Widgets", summary: "Home rows and layout", systemImage: "rectangle.3.group")
+                    SettingsRow(title: "Widgets", systemImage: "rectangle.3.group")
                 }
                 .accessibilityIdentifier("settings.widgets")
                 // A Mac has no haptic hardware, so the page would be sliders it cannot demonstrate.
@@ -166,7 +168,7 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.section.optimisation")
                 link(.data) {
-                    SettingsRow(title: "Clear Data", summary: "History, library, settings", systemImage: "trash")
+                    SettingsRow(title: "Clear Data", systemImage: "trash")
                 }
                 .accessibilityIdentifier("settings.section.data")
             }
@@ -188,30 +190,25 @@ struct SettingsView: View {
         .macRootNavigation()
         .pageTabBar(hidden: isPhoneInLandscape)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.load() }
         // On iPhone, each return to the list: a page pushed from it may have changed what a summary reads.
         .onAppear { Task { await refreshSummaries() } }
         // The review services changed while Settings was open.
         .onChange(of: services.posterRatings.reviewServicesRevision) { model.refreshOMDbUsage() }
         .accessibilityIdentifier("settings.form")
-        // The pull past the top, which the ghost's indicator follows.
+        // The pull past the top fills the ghost's ring by distance, then toggles once it crosses the lock mark — the same approach as
+        // locking 2× by dragging down in the player (`GhostModePullRules` / `SpeedHoldRules`).
         .onScrollGeometryChange(for: CGFloat.self) { max(0, -($0.contentOffset.y + $0.contentInsets.top)) } action: { _, value in
             pull = value
+            holdProgress = GhostModePullRules.progress(pull: value)
+            if GhostModePullRules.locks(pull: value) {
+                guard !didToggleThisPull else { return }
+                didToggleThisPull = true
+                setGhost(!ghostIsOn)
+            } else if value < GhostModePullRules.armPull {
+                didToggleThisPull = false
+            }
         }
         .overlay(alignment: .top) { ghostPullIndicator }
-        // Held past the mark for two seconds, the pull switches ghost mode. Let go sooner and nothing happens.
-        .task(id: pull >= Self.holdPull) {
-            guard pull >= Self.holdPull else {
-                holdProgress = 0
-                return
-            }
-            withAnimation(.linear(duration: Self.holdDuration)) { holdProgress = 1 }
-            do { try await Task.sleep(for: .seconds(Self.holdDuration)) } catch {
-                holdProgress = 0
-                return
-            }
-            setGhost(!ghostIsOn)
-        }
     }
 
     /// Mac shows the chosen page beside the list; iPhone pushes it.
@@ -281,6 +278,7 @@ struct SettingsView: View {
 
     /// The summaries that read state other than the settings model's: Trakt's sign-in, the downloads on disk and the sync folder.
     private func refreshSummaries() async {
+        await model.load()
         syncFolderName = services.sharedFolder?.folderName
         downloadsBytes = services.downloads?.storageBytes
         traktConnected = await services.traktAccount.isSignedIn()
@@ -289,17 +287,18 @@ struct SettingsView: View {
     private func setGhost(_ isOn: Bool) {
         // A button's tap, not a switch's: Ghost mode changes what every screen shows, so it lands like a change of screen.
         Haptics.play(.buttons)
+        // Write through both the preference and the stores' reader, so a held pull applies even if AppStorage lags a frame.
+        GhostMode.isOn = isOn
         withAnimation(.snappy(duration: 0.3)) { ghostIsOn = isOn }
     }
 
-    /// Shown while the page is pulled down: a ghost in a ring that fills over the two seconds of the hold, and what letting it fill does.
+    /// Shown while the page is pulled down: a ghost in a ring that fills with pull distance, and what crossing the lock does.
     @ViewBuilder
     private var ghostPullIndicator: some View {
         if pull > 24 {
-            let isHolding = pull >= Self.holdPull
             HStack(spacing: Theme.Spacing.s) {
                 Text("👻")
-                    .font(.title3)
+                    .appFont(style: .title3, weight: .regular, role: .display)
                     .padding(8)
                     .background {
                         Circle().stroke(.white.opacity(0.2), lineWidth: 3)
@@ -308,8 +307,10 @@ struct SettingsView: View {
                             .rotationEffect(.degrees(-90))
                     }
                 Text(holdProgress >= 1 ? (ghostIsOn ? "Ghost mode on" : "Ghost mode off")
-                     : isHolding ? "Keep holding…" : (ghostIsOn ? "Pull and hold to leave ghost mode" : "Pull and hold for ghost mode"))
-                    .font(Theme.Typography.smallStrong)
+                     : holdProgress > 0
+                     ? (ghostIsOn ? "Keep pulling to leave ghost mode" : "Keep pulling for ghost mode")
+                     : (ghostIsOn ? "Pull further to leave ghost mode" : "Pull further for ghost mode"))
+                    .appFont(.smallStrong)
             }
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.vertical, Theme.Spacing.s)
@@ -338,11 +339,10 @@ struct SettingsView: View {
         case .infuse: "Infuse"
         case .infuseWhenNeeded: "Blusion, then Infuse"
         }
-        let subtitles = model.settings.subtitleLanguage.flatMap { code in
-            SettingsViewModel.languageOptions.first { $0.value == code }?.label
-        }
-        return "\(player) · " + (subtitles.map { "\($0) subtitles" } ?? "Subtitles off")
+        return "\(player) · \(model.subtitleSummary)"
     }
+
+    private var serverSummary: String { model.settings.serverURL.map(Redactor.displayHost) ?? "Not set" }
 
     private var downloadsSummary: String {
         guard let downloadsBytes else { return "" }
@@ -350,7 +350,8 @@ struct SettingsView: View {
     }
 
     private var traktSummary: String {
-        traktConnected.map { $0 ? "Connected" : "Not connected" } ?? ""
+        if ghostIsOn { return "Paused by Ghost Mode" }
+        return traktConnected.map { $0 ? "Connected" : "Not connected" } ?? ""
     }
 
     /// The preset in use, or what differs from the app's own look (accent, background, cards, text), then the poster switches that are on.
@@ -419,14 +420,17 @@ func lazyLoadLabel(_ level: Int) -> String {
 /// rows, one per place.
 struct SettingsRow: View {
     let title: String
-    let summary: String
+    /// What the area is set to now. A row with no state of its own to report has none.
+    var summary: String?
     let systemImage: String
 
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                Text(summary).font(Theme.Typography.caption).foregroundStyle(.secondary).lineLimit(1)
+                if let summary {
+                    Text(summary).appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
         } icon: {
             Image(systemName: systemImage)

@@ -98,7 +98,7 @@ struct WidgetRow: View {
                             IssueMessage(issue: issue)
                         } else {
                             Text("Nothing here yet")
-                                .font(Theme.Typography.medium)
+                                .appFont(.medium)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, metrics.pageMargin)
                         }
@@ -186,7 +186,7 @@ struct UnsupportedWidgetRow: View {
     var body: some View {
         RowFrame(title: widget.title, hideTitle: widget.hideTitle) {
             Text("Blusion can't show this kind of row yet.")
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, metrics.pageMargin)
         }
@@ -309,13 +309,13 @@ struct ContinueWatchingRow: View {
                 } else if !items.isEmpty {
                     // Hold the rail's height, so switching to an empty kind does not move the page below.
                     Text(kind == .all ? "Nothing in progress" : "Nothing in \(kind.title.lowercased()) in progress")
-                        .font(Theme.Typography.medium)
+                        .appFont(.medium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: metrics.continueCardWidth / CardAspect.wide.ratio, alignment: .top)
                         .padding(.horizontal, metrics.pageMargin)
                 } else {
                     emptyState
-                        .font(Theme.Typography.medium)
+                        .appFont(.medium)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                 }
@@ -416,7 +416,7 @@ struct IssueMessage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(text)
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if issue == .needsTraktClientID {

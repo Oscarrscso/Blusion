@@ -12,6 +12,7 @@ import UIKit
 /// With `isTruncated` it says whether the cut text leaves some out. Pass `lineLimit` zero (expanded) and it leaves the answer as it was.
 struct JustifiedText: UIViewRepresentable {
     let text: String
+    var role: AppearancePreferences.TextRole = .reading
     var textStyle: UIFont.TextStyle = .body
     var color: UIColor = .label
     /// Read as inline Markdown, as `Text(LocalizedStringKey)` reads it. Plain otherwise, as `Text(String)` shows it.
@@ -33,6 +34,7 @@ struct JustifiedText: UIViewRepresentable {
     /// Called with the link a tap lands on, or nil for a tap elsewhere on the text. Unset, the text takes no taps, so the views around it
     /// get them as before.
     var onTap: ((URL?) -> Void)?
+    @Environment(\.appAppearance) private var appearance
 
     func makeUIView(context: Context) -> JustifiedLabel {
         let label = JustifiedLabel(frame: .zero)
@@ -58,7 +60,16 @@ struct JustifiedText: UIViewRepresentable {
     }
 
     private func configure(_ label: JustifiedLabel) {
-        label.show(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown, showsLinks: showsLinks)
+        let style = appearance.resolvedText(for: role)
+        let shown = switch style.colour {
+        case .primary: color
+        case .secondary: UIColor.secondaryLabel
+        case .accent: UIColor(appearance.accentColour ?? .accentColor)
+        }
+        label.show(text: text, textStyle: appearance.shifted(textStyle, by: style.scale), color: shown,
+                   isMarkdown: isMarkdown, showsLinks: showsLinks, face: style.font.rawValue,
+                   weight: style.weight.uiWeight, italic: style.italic, width: style.font == .standard ? style.width : .standard,
+                   kern: style.letterSpacing.points, lineGap: style.lineSpacing.points, capitals: style.capitals)
         label.lineLimit = lineLimit
         label.minimumLineCharacters = minimumLineCharacters
         label.maximumLineCharacters = maximumLineCharacters
@@ -83,9 +94,19 @@ final class JustifiedLabel: UIView {
         let color: UIColor
         let isMarkdown: Bool
         let showsLinks: Bool
+        let face: String
+        let weight: UIFont.Weight
+        let italic: Bool
+        let width: AppearancePreferences.FontWidth
+        let kern: CGFloat
+        let lineGap: CGFloat
+        let capitals: Bool
         let category: UIContentSizeCategory
         let style: UIUserInterfaceStyle
     }
+
+    /// Extra space between lines, from Appearance's line spacing. Zero leaves the font's own leading.
+    private var lineGap: CGFloat = 0
 
     /// A word, ready to draw. Its attributes may change inside it (a bold part), and it keeps those of its last character for an ellipsis.
     /// It keeps its text as well, so a word wider than a line can be wrapped into pieces when the layout is made.
@@ -195,11 +216,15 @@ final class JustifiedLabel: UIView {
     }
 
     /// Sets the text and its look, when either differs from what is shown.
-    func show(text: String, textStyle: UIFont.TextStyle, color: UIColor, isMarkdown: Bool, showsLinks: Bool) {
-        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown, showsLinks: showsLinks,
+    func show(text: String, textStyle: UIFont.TextStyle, color: UIColor, isMarkdown: Bool, showsLinks: Bool, face: String,
+              weight: UIFont.Weight, italic: Bool, width: AppearancePreferences.FontWidth, kern: Double, lineGap: Double,
+              capitals: Bool) {
+        let next = Look(text: text, textStyle: textStyle, color: color, isMarkdown: isMarkdown, showsLinks: showsLinks, face: face,
+                        weight: weight, italic: italic, width: width, kern: CGFloat(kern), lineGap: CGFloat(lineGap), capitals: capitals,
                         category: traitCollection.preferredContentSizeCategory, style: traitCollection.userInterfaceStyle)
         guard next != look else { return }
         look = next
+        self.lineGap = CGFloat(lineGap)
         content = build(next)
         layouts = []
         accessibilityLabel = content?.plain
@@ -237,21 +262,28 @@ final class JustifiedLabel: UIView {
         guard let content else { return (0, 0, UIFont.preferredFont(forTextStyle: .body).lineHeight) }
         measuredWidth = width
         let layout = layout(forWidth: width)
-        return (layout.lines.count, layout.widestLine, content.font.lineHeight)
+        return (layout.lines.count, layout.widestLine, content.font.lineHeight + lineGap)
     }
 
     private func rebuildForTraits() {
         guard let look else { return }
         self.look = nil
-        show(text: look.text, textStyle: look.textStyle, color: look.color, isMarkdown: look.isMarkdown, showsLinks: look.showsLinks)
+        show(text: look.text, textStyle: look.textStyle, color: look.color, isMarkdown: look.isMarkdown, showsLinks: look.showsLinks,
+             face: look.face, weight: look.weight, italic: look.italic, width: look.width, kern: Double(look.kern),
+             lineGap: Double(look.lineGap), capitals: look.capitals)
     }
 
     // MARK: Building the words
 
     private func build(_ look: Look) -> Content {
-        let font = UIFont.preferredFont(forTextStyle: look.textStyle, compatibleWith: traitCollection)
+        let face = AppearancePreferences.FontStyle(rawValue: look.face) ?? .standard
+        var font = AppearancePreferences.font(face: face, style: look.textStyle, weight: look.weight, traits: traitCollection)
+        if look.italic || look.width != .standard {
+            font = styled(font, italic: look.italic, width: look.width, weight: look.weight)
+        }
         let color = look.color.resolvedColor(with: traitCollection)
-        let text = attributed(look, font: font, color: color)
+        let source = look.capitals && !look.isMarkdown ? look.text.uppercased() : look.text
+        let text = attributed(look, text: source, font: font, color: color)
         let string = text.string as NSString
         let space = CTLineCreateWithAttributedString(NSAttributedString(string: " ", attributes: attributes(font: font, color: color)))
         let spaceWidth = CGFloat(CTLineGetTypographicBounds(space, nil, nil, nil))
@@ -300,16 +332,34 @@ final class JustifiedLabel: UIView {
     }
 
     private func attributes(font: UIFont, color: UIColor) -> [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: color, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor]
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: color, NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.cgColor,
+        ]
+        if let look, look.kern != 0 { attributes[.kern] = look.kern }
+        return attributes
+    }
+
+    /// `font` with the reading text's slant and width. The weight stays the one the face was chosen for.
+    private func styled(_ font: UIFont, italic: Bool, width: AppearancePreferences.FontWidth, weight: UIFont.Weight) -> UIFont {
+        var descriptor = font.fontDescriptor.addingAttributes([
+            .traits: [
+                UIFontDescriptor.TraitKey.weight: weight,
+                UIFontDescriptor.TraitKey.width: width.uiFontWidth.rawValue,
+            ],
+        ])
+        if italic, let italicFont = descriptor.withSymbolicTraits(descriptor.symbolicTraits.union(.traitItalic)) {
+            descriptor = italicFont
+        }
+        return UIFont(descriptor: descriptor, size: font.pointSize)
     }
 
     /// The text in the base font and colour. Markdown keeps its bold and italic as traits of that font. With `showsLinks`, the links are
     /// given their link look; code is plain text.
-    private func attributed(_ look: Look, font: UIFont, color: UIColor) -> NSAttributedString {
+    private func attributed(_ look: Look, text source: String, font: UIFont, color: UIColor) -> NSAttributedString {
         let base = attributes(font: font, color: color)
         let result = NSMutableAttributedString()
         var markdownLinks: [TextLink] = []
-        if look.isMarkdown, let parsed = try? AttributedString(markdown: look.text,
+        if look.isMarkdown, let parsed = try? AttributedString(markdown: source,
                                                                options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
             for run in parsed.runs {
                 var traits: UIFontDescriptor.SymbolicTraits = []
@@ -330,7 +380,7 @@ final class JustifiedLabel: UIView {
                 result.append(NSAttributedString(string: piece, attributes: runAttributes))
             }
         } else {
-            result.append(NSAttributedString(string: look.text, attributes: base))
+            result.append(NSAttributedString(string: source, attributes: base))
         }
         // Bare URLs are found in the text as shown. A markdown link keeps its own target, and TextLinks drops any other scheme.
         if look.showsLinks {
@@ -451,7 +501,8 @@ final class JustifiedLabel: UIView {
             let line = layout.lines[index]
             let words = Array(layout.words[line.words])
             guard !words.isEmpty else { continue }
-            let baseline = ((CGFloat(index) * content.font.lineHeight + content.font.ascender) * scale).rounded() / scale
+            let step = content.font.lineHeight + lineGap
+            let baseline = ((CGFloat(index) * step + content.font.ascender) * scale).rounded() / scale
             let cut = isCut && index == shown - 1
             drawLine(words, in: context, content: content, width: width, baseline: baseline, scale: scale,
                      justified: !line.isParagraphEnd, ellipsis: cut)

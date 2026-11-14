@@ -308,7 +308,7 @@ private struct ServiceHeading: View {
         HStack(spacing: Theme.Spacing.m) {
             StreamProviderBox(provider: provider)
             Text(provider.name)
-                .font(Theme.Typography.largeTitle)
+                .appFont(.largeTitle)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }

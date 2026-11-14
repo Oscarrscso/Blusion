@@ -146,7 +146,7 @@ struct GlassCapsuleButtonStyle: PrimitiveButtonStyle {
             configuration.trigger()
         } label: {
             configuration.label
-                .font(Theme.Typography.mediumStrong)
+                .appFont(.mediumStrong)
                 .pointerFeedback()
         }
         .finishedButtonStyle(nil, finish: appearance.buttonFinish)

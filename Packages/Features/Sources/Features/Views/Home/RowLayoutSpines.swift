@@ -111,12 +111,12 @@ private struct SpineCard: View, Equatable {
             .padding(.vertical, 12)
             HStack(spacing: Theme.Spacing.s) {
                 Text(item.name)
-                    .font(.caption.weight(.bold))
+                    .appFont(.caption, weight: .bold, role: .interface)
                     .lineLimit(1)
                 Spacer(minLength: Theme.Spacing.s)
                 if let year = item.releaseInfo, !year.isEmpty {
                     Text(year)
-                        .font(Theme.Typography.microStrong)
+                        .appFont(.microStrong)
                         .foregroundStyle(Theme.dimText)
                         .lineLimit(1)
                 }

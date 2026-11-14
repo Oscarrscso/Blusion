@@ -67,7 +67,7 @@ struct PlayerOptionsPanel: View {
         VStack(spacing: 0) {
             HStack {
                 Text((tab ?? .subtitles).title)
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 12)
@@ -164,7 +164,7 @@ struct PlayerOptionsPanel: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
                 if let status = model.subtitleStatus {
-                    Text(status).font(Theme.Typography.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
+                    Text(status).appFont(.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
                 }
                 PanelGroup {
                     PanelOptionRow(title: "Off", symbol: "captions.bubble", selected: model.subtitleChoice == .off) { pickSubtitle(.off) }
@@ -279,7 +279,7 @@ struct PlayerOptionsPanel: View {
                     }
                 }
             } else {
-                Text("No alternate audio tracks").font(Theme.Typography.medium).foregroundStyle(.secondary)
+                Text("No alternate audio tracks").appFont(.medium).foregroundStyle(.secondary)
             }
             if model.capabilities.contains(.externalAudio) {
                 PanelButton("Add File", symbol: "doc.badge.plus") { closeThen(actions.openAudioFile) }
@@ -356,7 +356,7 @@ struct PlayerOptionsPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             Button { Haptics.play(.playerControls); videoMenu = nil } label: {
                 Label(PlayerPanelTab.picture.title, systemImage: "chevron.backward")
-                    .font(Theme.Typography.mediumStrong)
+                    .appFont(.mediumStrong)
                     .padding(.horizontal, 4)
                     .frame(minHeight: 36)
                     .contentShape(.rect)
@@ -434,7 +434,7 @@ struct PlayerOptionsPanel: View {
     @ViewBuilder
     private var chapters: some View {
         if model.chapters.isEmpty {
-            Text("This video has no chapter markers.").font(Theme.Typography.medium).foregroundStyle(.secondary)
+            Text("This video has no chapter markers.").appFont(.medium).foregroundStyle(.secondary)
         } else {
             let current = model.currentChapter
             PanelGroup {
@@ -471,11 +471,11 @@ struct PlayerOptionsPanel: View {
                     infoSection("Audio", rows: audioRows(stats))
                     infoSection("Playback", rows: Self.playbackRows(stats))
                     ForEach(stats.notes, id: \.self) { note in
-                        Text(note).font(Theme.Typography.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
+                        Text(note).appFont(.small).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
-                    Text("Nothing is playing yet.").font(Theme.Typography.medium).foregroundStyle(.secondary)
+                    Text("Nothing is playing yet.").appFont(.medium).foregroundStyle(.secondary)
                 }
             }
         }
@@ -552,7 +552,7 @@ private struct PlayerInfoMedia: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(infoModel.title)
-                .font(Theme.Typography.headline)
+                .appFont(.headline)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("player.info.title")
@@ -636,7 +636,7 @@ private struct PanelSection<Content: View>: View {
                         .foregroundStyle(Theme.dimmerText)
                 }
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .appFont(.headline, weight: .semibold, role: .interface)
                     .accessibilityAddTraits(.isHeader)
             }
             .padding(.horizontal, 4)
@@ -650,7 +650,7 @@ private struct PanelRowTitle: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text).font(Theme.Typography.smallStrong).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
+        Text(text).appFont(.smallStrong).foregroundStyle(Theme.faintText).padding(.horizontal, 4)
     }
 }
 
@@ -685,11 +685,11 @@ private struct PanelInfoRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label)
-                .font(.footnote.weight(.medium))
+                .appFont(style: .footnote, weight: .medium, role: .interface)
                 .foregroundStyle(Theme.faintText)
                 .frame(width: 104, alignment: .leading)
             Text(value)
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -730,14 +730,14 @@ private struct PanelOptionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if let subtitle {
                         Text(subtitle)
-                            .font(Theme.Typography.caption)
+                            .appFont(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !tags.isEmpty {
                         Text(tags.joined(separator: " · "))
-                            .font(.caption.weight(.medium))
+                            .appFont(.caption, weight: .medium, role: .interface)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -745,7 +745,7 @@ private struct PanelOptionRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if let detail {
                     Text(detail)
-                        .font(Theme.Typography.caption.monospacedDigit())
+                        .appFont(.caption, monospacedDigits: true)
                         .foregroundStyle(Theme.faintText)
                         .fixedSize()
                 }
@@ -776,10 +776,10 @@ private struct PanelMenuRow: View {
         Button { Haptics.play(.playerControls); action() } label: {
             HStack(spacing: 12) {
                 Text(title)
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(value)
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(Theme.faintText)
                     .lineLimit(1)
                 Image(systemName: "chevron.forward")
@@ -817,7 +817,7 @@ private struct PanelChips<Value: Hashable>: View {
                             if !selected { Haptics.play(.playerOptions) }
                             choose(option)
                         } label: {
-                            Text(label(option)).font(Theme.Typography.mediumStrong).lineLimit(1)
+                            Text(label(option)).appFont(.mediumStrong).lineLimit(1)
                                 .padding(.horizontal, 14).frame(minHeight: 36)
                                 .foregroundStyle(.white)
                                 .background(.white.opacity(selected ? 0.20 : 0.08), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -850,9 +850,9 @@ private struct PanelSlider: View {
         let shown = dragged ?? value
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title).font(Theme.Typography.largeStrong)
+                Text(title).appFont(.largeStrong)
                 Spacer()
-                Text(label(shown)).font(Theme.Typography.mediumStrong.monospacedDigit()).foregroundStyle(Theme.dimmerText)
+                Text(label(shown)).appFont(.mediumStrong, monospacedDigits: true).foregroundStyle(Theme.dimmerText)
             }
             CornerSlider(value: Binding(get: { shown }, set: { newValue in
                 dragged = newValue
@@ -883,7 +883,7 @@ private struct PanelStepper: View {
 
     var body: some View {
         HStack {
-            Text(title).font(Theme.Typography.largeStrong)
+            Text(title).appFont(.largeStrong)
             Spacer()
             HStack(spacing: 0) {
                 stepButton("minus", -step, label: "Earlier")
@@ -891,7 +891,7 @@ private struct PanelStepper: View {
                     if value != 0 { Haptics.play(.playerOptions) }
                     reset()
                 } label: {
-                    Text("\(String(format: "%+.\(digits)f", value)) s").font(Theme.Typography.mediumStrong.monospacedDigit())
+                    Text("\(String(format: "%+.\(digits)f", value)) s").appFont(.mediumStrong, monospacedDigits: true)
                         .frame(minWidth: 72, minHeight: 40)
                         .contentShape(.rect)
                 }
@@ -927,7 +927,7 @@ private struct PanelToggle: View {
             if value != isOn { Haptics.play(.playerOptions) }
             set(value)
         }))
-            .font(Theme.Typography.largeStrong)
+            .appFont(.largeStrong)
             .tint(.green)
             .padding(.horizontal, 16).frame(minHeight: 52)
             .background(.white.opacity(0.08), in: .rect(cornerRadius: 18 * metrics.cornerScale(for: .playerControls)))
@@ -948,7 +948,7 @@ private struct PanelButton: View {
 
     var body: some View {
         Button { Haptics.play(.playerControls); action() } label: {
-            Label(title, systemImage: symbol).font(Theme.Typography.mediumStrong).lineLimit(1)
+            Label(title, systemImage: symbol).appFont(.mediumStrong).lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(.white.opacity(0.1), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                 .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))

@@ -448,7 +448,7 @@ struct StreamPickerView: View {
                 NavigationStack {
                     ScrollView {
                         Text(item.stream.description ?? item.title)
-                            .font(Theme.Typography.small)
+                            .appFont(.small)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
@@ -529,7 +529,7 @@ struct StreamPickerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 if episodeHeading == nil, let year = model.request.year {
                     Text(year)
-                        .font(Theme.Typography.eyebrow)
+                        .appFont(.eyebrow)
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
                 }
@@ -537,7 +537,7 @@ struct StreamPickerView: View {
                     episodeLine(episodeHeading, lineLimit: 2)
                 } else {
                     Text(model.request.title)
-                        .font(Theme.Typography.headline)
+                        .appFont(.headline)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -608,7 +608,7 @@ struct StreamPickerView: View {
                 .accessibilityIdentifier("stream.previousEpisode")
             HStack(alignment: .center, spacing: Theme.Spacing.s) {
                 Text(heading)
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -640,7 +640,7 @@ struct StreamPickerView: View {
             step(request)
         } label: {
             Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
+                .font(.caption.bold())
                 .foregroundStyle(Theme.faintText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -675,7 +675,7 @@ struct StreamPickerView: View {
     private func episodeLine(_ heading: String, lineLimit: Int) -> some View {
         HStack(alignment: .center, spacing: Theme.Spacing.s) {
             Text(heading)
-                .font(Theme.Typography.headline)
+                .appFont(.headline)
                 .multilineTextAlignment(.leading)
                 .lineLimit(lineLimit)
                 .fixedSize(horizontal: false, vertical: true)
@@ -716,7 +716,7 @@ struct StreamPickerView: View {
                 Image(systemName: "star.fill").font(.system(size: 11, weight: .bold))
             }
             Text(score.text)
-                .font(Theme.Typography.headline)
+                .appFont(.headline)
                 .monospacedDigit()
         }
         .foregroundStyle(.secondary)
@@ -746,7 +746,7 @@ struct StreamPickerView: View {
                 onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.footnote.weight(.bold))
+                    .font(.footnote.bold())
                     .foregroundStyle(Theme.faintText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -828,7 +828,7 @@ struct StreamPickerView: View {
                     .accessibilityHint("Starts the best stream at once whenever you open a title's streams")
                     .accessibilityIdentifier("streams.autoPickAlways")
                 }
-                if let message = model.autoPickMessage { Text(message).font(Theme.Typography.caption).foregroundStyle(.secondary) }
+                if let message = model.autoPickMessage { Text(message).appFont(.caption).foregroundStyle(.secondary) }
             }
             .padding(.horizontal, streamMargin)
         }
@@ -1021,9 +1021,9 @@ struct StreamPickerView: View {
     private func sectionTitle(_ section: StreamPickerViewModel.AddonSection) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text(section.addon.name)
-                .font(Theme.Typography.headline)
+                .appFont(.headline)
             Text("\(section.streams.count)")
-                .font(Theme.Typography.captionStrong)
+                .appFont(.captionStrong)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 7)
@@ -1065,7 +1065,7 @@ struct StreamPickerView: View {
                 }
                 .id(Self.notesRevealID)
             }
-            .font(.subheadline.weight(.medium))
+            .appFont(style: .subheadline, weight: .medium, role: .interface)
             .padding(.horizontal, streamMargin)
         }
     }
@@ -1200,7 +1200,7 @@ struct StreamPickerView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 ForEach(model.listing.hidden) { note in
                     Label(note.text, systemImage: "eye.slash")
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.secondary)
                 }
             }

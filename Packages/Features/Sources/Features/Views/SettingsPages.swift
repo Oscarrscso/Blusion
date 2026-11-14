@@ -46,7 +46,7 @@ struct StreamsSettingsPage: View {
                     .accessibilityIdentifier("settings.autoPickSource")
                 }
                 SettingsSubpageLink(id: "streams.addonSpeed") {
-                    AddonSpeedSettingsPage(services: services, onChange: { Task { await model.load() } })
+                    AddonSpeedSettingsPage(services: services, settings: model, onChange: { Task { await model.load() } })
                 } label: {
                     LabeledContent("Waits for", value: waitSummary)
                 }
@@ -108,7 +108,7 @@ struct PerformanceSettingsPage: View {
                         Spacer()
                         Text(LazyLoadLookahead.levels[LazyLoadLookahead.levels.count - 1].label)
                     }
-                    .font(Theme.Typography.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 }
@@ -174,8 +174,6 @@ struct PerformanceSettingsPage: View {
                 }
             }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Posters and backdrops download again as you browse.")
         }
     }
 
@@ -249,12 +247,12 @@ struct RatingsSettingsPage: View {
                     .accessibilityIdentifier("settings.reviews.refresh")
                 if let error = services.posterRatings.omdbError ?? services.posterRatings.reviewServiceIssue {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.orange)
                         .accessibilityIdentifier("settings.reviews.error")
                 } else if let message = model.lastMessage {
                     Text(message)
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.reviews.message")
                 }
@@ -308,7 +306,7 @@ struct ServerSettingsPage: View {
                     .accessibilityIdentifier("settings.serverURL")
                 if let message = model.serverURLMessage {
                     Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.orange)
                         .accessibilityIdentifier("settings.serverURL.message")
                 }
@@ -330,15 +328,18 @@ struct DataSettingsPage: View {
     var body: some View {
         SettingsList {
             Section {
-                ForEach(DataResetService.Scope.allCases.filter { $0 != .everything }, id: \.self) { scope in clearButton(scope) }
+                ForEach(DataResetService.Scope.allCases.filter { $0 != .settings && $0 != .everything }, id: \.self) { scope in clearButton(scope) }
+            }
+            Section {
+                clearButton(.settings)
             }
             Section {
                 clearButton(.everything)
             }
             if let message = model.lastMessage {
                 Section {
-                    Label(message, systemImage: "checkmark.circle")
-                        .font(Theme.Typography.small)
+                    Text(message)
+                        .appFont(.small)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.clearMessage")
                 }
@@ -348,10 +349,11 @@ struct DataSettingsPage: View {
         .scrollIndicatorsFlash(onAppear: true)
         .settingsPage("Clear Data")
         .onAppear { model.clearMessage() }
-        .confirmationDialog(pendingScope.map { "Clear \($0.title.lowercased())?" } ?? "",
+        .disabled(model.isClearingData)
+        .confirmationDialog(pendingScope.map { "\($0.actionTitle)?" } ?? "",
                             isPresented: Binding(get: { pendingScope != nil }, set: { if !$0 { pendingScope = nil } }),
                             titleVisibility: .visible, presenting: pendingScope) { scope in
-            Button("Clear \(scope.title.lowercased())", role: .destructive) { Task { await model.clear(scope) } }
+            Button(scope.actionTitle, role: .destructive) { Task { await model.clear(scope) } }
                 .accessibilityIdentifier("settings.confirmClear")
             Button("Cancel", role: .cancel) {}
         } message: { scope in
@@ -388,7 +390,7 @@ struct SyncFolderSettingsPage: View {
                 }
                 if failed {
                     Label("That folder can't be used.", systemImage: "exclamationmark.triangle.fill")
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.orange)
                 }
             }
@@ -417,12 +419,14 @@ struct SyncFolderSettingsPage: View {
 private struct AddonSpeedSettingsPage: View {
     @Environment(\.layoutMetrics) private var metrics
     @State private var model: AddonSpeedViewModel
+    let settings: SettingsViewModel
     /// Tells Settings the choice changed, so its row's summary follows.
     let onChange: () -> Void
     @State private var isOnline = true
 
-    init(services: AppServices, onChange: @escaping () -> Void) {
+    init(services: AppServices, settings: SettingsViewModel, onChange: @escaping () -> Void) {
         _model = State(initialValue: AddonSpeedViewModel(services: services))
+        self.settings = settings
         self.onChange = onChange
     }
 
@@ -445,14 +449,14 @@ private struct AddonSpeedSettingsPage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.addon.name)
                             Text(AddonSpeedViewModel.detail(for: row.result))
-                                .font(Theme.Typography.small)
+                                .appFont(.small)
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
                         Spacer(minLength: 0)
                         if row.id == model.fastest {
                             Text("Fastest")
-                                .font(Theme.Typography.captionStrong)
+                                .appFont(.captionStrong)
                                 .padding(.horizontal, Theme.Spacing.s)
                                 .padding(.vertical, 3)
                                 .background(.tint.opacity(0.25), in: ScaledCapsule(scale: metrics.cornerScale(for: .settingsRows)))
@@ -475,7 +479,7 @@ private struct AddonSpeedSettingsPage: View {
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
         .settingsPage("Addon Speed")
-        .task { await model.load() }
+        .task(id: settings.settings.rankingPreferences.preferredResolution) { await model.load() }
         .task { for await path in NWPathMonitor() { isOnline = path.status == .satisfied } }
     }
 
@@ -536,10 +540,10 @@ struct AcknowledgementsView: View {
                                 .frame(width: 80, height: 35)
                                 .accessibilityLabel("TMDB")
                         }
-                        Text(item.name).font(Theme.Typography.headline)
-                        Text(item.license).font(Theme.Typography.medium).foregroundStyle(.secondary)
-                        Text(item.detail).font(Theme.Typography.small)
-                        if let url = item.sourceURL { Link("Source", destination: url).font(Theme.Typography.small).buttonCursor() }
+                        Text(item.name).appFont(.headline)
+                        Text(item.license).appFont(.medium).foregroundStyle(.secondary)
+                        Text(item.detail).appFont(.small)
+                        if let url = item.sourceURL { Link("Source", destination: url).appFont(.small).buttonCursor() }
                     }
                     .accessibilityElement(children: .contain)
                 }

@@ -132,7 +132,7 @@ struct EditorialTabBar: View {
         return HStack(spacing: 0) {
             Button { go(to: shown.tab) } label: {
                 Text(shown.title.uppercased())
-                    .font(Editorial.font(.body))
+                    .font(Editorial.font(.body, weight: .regular))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.leading, 40)
@@ -195,7 +195,7 @@ struct EditorialBackButton: View {
                 Image(systemName: "chevron.backward.circle.fill")
                     .font(.system(size: 14, weight: .regular))
                 Text("BACK")
-                    .font(Editorial.font(.subheadline))
+                    .font(Editorial.font(.subheadline, weight: .regular))
             }
             .foregroundStyle(ink)
             .padding(.vertical, Theme.Spacing.s)

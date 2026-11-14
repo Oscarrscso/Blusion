@@ -230,6 +230,11 @@ public final class SearchViewModel {
     /// The titles to show: every source merged, each title once, filtered and best first. People are apart, in `people`.
     public func results(in scope: SearchScope = .all) -> [MetaPreview] {
         guard scope != .people else { return [] }
+        // The rating filter and the Rating sort read each title's scores, some arriving later, so their list is worked out on each read:
+        // the view reading it draws again as each score arrives.
+        guard filter.minimumRating == nil, filter.sort != .rating else {
+            return scope == .all ? rankedTitles() : rankedTitles().filter(scope.includes)
+        }
         let inputs = RankInputs(query: query, filter: filter, resolvedGenres: resolvedGenres,
                                 requiredGenres: requiredGenres, excludedGenres: excludedGenres, sections: sections, titles: tmdbTitles, described: describedItems,
                                 aliases: aliases, votes: votes, isDiscovery: isDiscovery, pickSeed: isPickSearch ? pickSeed : nil,
@@ -246,7 +251,7 @@ public final class SearchViewModel {
             // Shown once they have all arrived, so the drawn order does not move cards about as batches come in. Each title's place
             // comes from the seed and its identity: a filter leaves the others where they were. A chosen sort takes the order's place.
             guard aiPhase == .done, !isResolvingGenres else { return [] }
-            let items = SearchResults.ranked(genreChecked(describedItems), query: query, filter: filter, semantic: true)
+            let items = SearchResults.ranked(genreChecked(describedItems), query: query, filter: filter, semantic: true, rating: ratingLookup)
             guard filter.sort == .relevance else { return items }
             let seed = pickSeed
             return items.map { item -> (place: Int, item: MetaPreview) in
@@ -259,7 +264,7 @@ public final class SearchViewModel {
         let named = genreChecked(groups.flatMap(\.items) + tmdbTitles)
         let described = genreChecked(describedItems)
         guard isDiscovery else {
-            return SearchResults.ranked(named + described, query: query, filter: filter, aliases: aliases, votes: votes)
+            return SearchResults.ranked(named + described, query: query, filter: filter, aliases: aliases, votes: votes, rating: ratingLookup)
         }
         // A description is answered by what was found for it, in the order found. A title whose own name holds the words keeps a
         // place: first when it is named outright, last otherwise. Titles that only came back for the words are left out.
@@ -267,7 +272,14 @@ public final class SearchViewModel {
                                            minimumRelevance: SearchResults.wordMatch)
         let outright = literal.filter { SearchResults.relevance($0.name, query: query) >= 800 }
         let rest = literal.filter { item in !outright.contains { $0.identity == item.identity } }
-        return SearchResults.ranked(outright + described + rest, query: query, filter: filter, semantic: true)
+        return SearchResults.ranked(outright + described + rest, query: query, filter: filter, semantic: true, rating: ratingLookup)
+    }
+
+    /// How the rating filter and the Rating sort rate a title: from the rating store, which looks up the scores a title lacks.
+    private var ratingLookup: CatalogListFiltering.RatingLookup {
+        guard filter.minimumRating != nil || filter.sort == .rating else { return JudgedRating.catalogue }
+        let store = services.posterRatings
+        return { item in store.judgedRating(for: item) ?? JudgedRating.catalogue(item) }
     }
 
     /// The people the search found: those TMDb has for the words as a name, best first, or those a described search names.

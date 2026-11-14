@@ -38,6 +38,9 @@ public final class SettingsViewModel {
     /// Each installed addon's name, for the Addon Speed row's summary.
     public private(set) var addonNames: [UUID: String] = [:]
     public private(set) var lastMessage: String?
+    public private(set) var isClearingData = false
+    public private(set) var isSigningInToOpenSubtitles = false
+    private var verifiedOpenSubtitlesCredentials: OpenSubtitlesCredentials?
     /// OMDb requests this device has sent today (UTC). `refreshOMDbUsage()` updates it.
     public private(set) var omdbRequestsToday = 0
     public static let omdbDailyLimit = OMDbUsage.dailyLimit
@@ -60,6 +63,46 @@ public final class SettingsViewModel {
 
     public var fallbackEngineLinked: Bool { services.fallbackEngineLinked }
     public var serverURLMessage: String? { PlaybackSettings.validationMessage(forServerURL: serverURLText) }
+
+    public var subtitleSummary: String {
+        SubtitleDefaults.summary(language: settings.subtitleLanguage, mode: settings.player.subtitleMode)
+    }
+
+    private var openSubtitlesCredentials: OpenSubtitlesCredentials? {
+        guard let key = settings.openSubtitlesAPIKey, !key.isEmpty else { return nil }
+        return OpenSubtitlesCredentials(apiKey: key, username: settings.openSubtitlesUsername, password: settings.openSubtitlesPassword)
+    }
+
+    public var openSubtitlesSummary: String {
+        guard let credentials = openSubtitlesCredentials else { return "Not set up" }
+        guard credentials.hasLogin else { return "Key saved" }
+        return credentials == verifiedOpenSubtitlesCredentials ? "Signed in" : "Credentials saved"
+    }
+
+    public var canSignInToOpenSubtitles: Bool {
+        guard let credentials = openSubtitlesCredentials else { return false }
+        return credentials.hasLogin
+            && credentials.apiKey == openSubtitlesAPIKeyText.trimmingCharacters(in: .whitespacesAndNewlines)
+            && credentials.username == openSubtitlesUsernameText.trimmingCharacters(in: .whitespacesAndNewlines)
+            && credentials.password == openSubtitlesPasswordText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func signInToOpenSubtitles() async {
+        guard canSignInToOpenSubtitles, !isSigningInToOpenSubtitles, let credentials = openSubtitlesCredentials else { return }
+        isSigningInToOpenSubtitles = true
+        verifiedOpenSubtitlesCredentials = nil
+        lastMessage = nil
+        defer { isSigningInToOpenSubtitles = false }
+        do {
+            try await OpenSubtitlesClient(client: services.client, credentials: credentials).signIn()
+            // A save or reset during the request must not verify different credentials.
+            guard credentials == openSubtitlesCredentials else { return }
+            verifiedOpenSubtitlesCredentials = credentials
+            lastMessage = "Signed in to OpenSubtitles."
+        } catch {
+            lastMessage = "Couldn’t sign in to OpenSubtitles. Check the saved key and credentials, then try again."
+        }
+    }
 
     public func load() async {
         settings = await services.settings.load()
@@ -124,8 +167,10 @@ public final class SettingsViewModel {
             $0.openSubtitlesPassword = password
         }
         let saved = await services.settings.load()
-        lastMessage = saved.openSubtitlesAPIKey == key
-            ? "OpenSubtitles saved." : "The OpenSubtitles key could not be saved to secure storage. Try again."
+        settings = saved
+        if openSubtitlesCredentials != verifiedOpenSubtitlesCredentials { verifiedOpenSubtitlesCredentials = nil }
+        lastMessage = saved.openSubtitlesAPIKey == key && saved.openSubtitlesUsername == username && saved.openSubtitlesPassword == password
+            ? "OpenSubtitles saved." : "Some OpenSubtitles credentials could not be saved to secure storage. Try again."
     }
 
     /// No "file's default": the player picks English when nothing else is chosen (`PlayerPreferences.defaultAudioLanguage`).
@@ -225,8 +270,11 @@ public final class SettingsViewModel {
     }
 
     public func clear(_ scope: DataResetService.Scope) async {
+        guard !isClearingData else { return }
+        isClearingData = true
+        defer { isClearingData = false }
         lastMessage = await reset.clear(scope)
-        if scope == .settings || scope == .everything { await load() }
+        await load()
     }
 
     public static var appVersion: String {

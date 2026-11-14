@@ -54,7 +54,7 @@ struct StreamRow: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 if isBest {
                     Label("Best match", systemImage: "sparkles")
-                        .font(Theme.Typography.eyebrow)
+                        .appFont(.eyebrow)
                         .textCase(.uppercase)
                         .foregroundStyle(Theme.dimmerText)
                         .lineLimit(1)
@@ -76,7 +76,7 @@ struct StreamRow: View {
                         StreamDiscBox(is4K: disc == .fourKDisc)
                     }
                     Text(Self.headline(for: item))
-                        .font(Theme.Typography.mediumStrong)
+                        .appFont(.mediumStrong)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
@@ -84,7 +84,7 @@ struct StreamRow: View {
                 }
                 if !facts.isEmpty {
                     Text(facts)
-                        .font(Theme.Typography.metaLine)
+                        .appFont(.metaLine)
                         .foregroundStyle(Theme.metaText)
                         .lineLimit(1)
                 }
@@ -93,7 +93,7 @@ struct StreamRow: View {
                 }
                 if let routeNote {
                     Label(routeNote.text, systemImage: routeNote.symbol)
-                        .font(.footnote.weight(.medium))
+                        .appFont(style: .footnote, weight: .medium, role: .interface)
                         .foregroundStyle(routeNote.isWarning ? Color.orange : Color.white.opacity(0.62))
                 }
             }
@@ -296,7 +296,7 @@ private struct StreamPreparationStatus: View {
                 .padding(.top, 2)
                 .accessibilityHidden(true)
         }
-        .font(.caption2.weight(.medium))
+        .appFont(style: .caption2, weight: .medium, role: .interface)
         .monospacedDigit()
         .lineLimit(1)
         .minimumScaleFactor(0.75)
@@ -440,7 +440,7 @@ struct StreamSaveButton: View {
             action()
         } label: {
             Image(systemName: isDownload ? "arrow.down" : (isSaved ? "bookmark.fill" : "bookmark"))
-                .font(.footnote.weight(.bold))
+                .font(.footnote.bold())
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: StreamCardMetrics.markSize, height: StreamCardMetrics.markSize)
@@ -488,12 +488,12 @@ struct StreamTechnicalDetails: View {
                     Text("Technical details")
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
+                        .font(.caption2.bold())
                         .foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .accessibilityHidden(true)
                 }
-                .font(Theme.Typography.smallStrong)
+                .appFont(.smallStrong)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, StreamCardMetrics.padding)
                 .padding(.vertical, Theme.Spacing.m)
@@ -520,7 +520,7 @@ struct StreamTechnicalDetails: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .font(Theme.Typography.small)
+        .appFont(.small)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, StreamCardMetrics.padding)

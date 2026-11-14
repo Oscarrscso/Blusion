@@ -7,7 +7,7 @@ import StremioKitTestSupport
 @testable import Features
 
 /// PLAN M8 leak pass, host half: every view model (and what it started) is released once its screen is gone, including its tasks.
-/// The simulator half is `scripts/leaks.sh` (docs/DEVICE_CHECKLIST.md).
+/// The simulator half is `scripts/leaks.sh`.
 @MainActor
 @Suite struct LeakTests {
     private let srt = "1\n00:00:01,000 --> 00:00:03,000\nFirst cue\n"

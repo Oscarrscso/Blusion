@@ -25,6 +25,11 @@ public actor TMDbIMDbIDCache {
     }
 }
 
+/// Rates a title for a discover list's score bounds, out of 10, as the app's rating filters do: Letterboxd, then IMDb; anime by
+/// MyAnimeList first. `tmdbScore` is TMDb's community score from the list (unused by the filter once Letterboxd or IMDb answers), and
+/// `isAnime` whether TMDb lists the title as Japanese animation. Nil when no site has scored the title.
+public typealias TitleRatingJudge = @Sendable (_ item: MetaPreview, _ tmdbScore: Double?, _ isAnime: Bool) async -> Double?
+
 /// One title on a TMDb discover or trending page, with the fields a row needs. Internal: the public result is `MetaPreview`.
 struct TMDbDiscoverEntry: Sendable, Equatable {
     let tmdbID: Int
@@ -106,9 +111,10 @@ extension TMDbRatings {
     /// query asks `discover` with each filter it sets and supports, and a date range from `dateRange`. With `scoresOnIMDb`, the score and
     /// votes are IMDb's and checked title by title: TMDb is asked only for scores within a point of the bounds, and for a hundredth of the
     /// votes, since TMDb counts far fewer, so a page holds the titles likely to meet them. Without that floor a list sorted by date would be
-    /// mostly titles nobody has rated. Pure: nothing is requested.
+    /// mostly titles nobody has rated. With `judgesScore`, the score is the app's rating (see `TitleRatingJudge`), checked title by title
+    /// too, so TMDb is asked within a point of it. Pure: nothing is requested.
     static func discoverRequest(_ query: TMDbDiscoverQuery, page: Int, defaultRegion: String, today: Date, calendar: Calendar,
-                                scoresOnIMDb: Bool = false) -> (path: [String], query: [URLQueryItem]) {
+                                scoresOnIMDb: Bool = false, judgesScore: Bool = false) -> (path: [String], query: [URLQueryItem]) {
         let isMovie = query.kind == .movie
         let kind = isMovie ? "movie" : "tv"
         if query.isTrending {
@@ -125,15 +131,19 @@ extension TMDbRatings {
         add("without_genres", query.effectiveExcludedGenres.isEmpty ? nil : joinedIDs(query.effectiveExcludedGenres, separator: ","))
         add("with_keywords", active(.keywords) ? joinedIDs(query.keywords, separator: "|") : nil)
         add("without_keywords", active(.excludedKeywords) ? joinedIDs(query.excludedKeywords, separator: ",") : nil)
-        if scoresOnIMDb {
-            add("vote_average.gte", active(.score) ? query.minimumScore.flatMap { $0 > 1 ? oneDecimal($0 - 1) : nil } : nil)
-            add("vote_average.lte", active(.score) ? query.maximumScore.flatMap { $0 < 9 ? oneDecimal($0 + 1) : nil } : nil)
-            add("vote_count.gte", active(.votes) ? query.minimumVotes.map { String(max(1, $0 / 100)) } : nil)
-        } else {
-            add("vote_average.gte", active(.score) ? query.minimumScore.map(oneDecimal) : nil)
-            add("vote_average.lte", active(.score) ? query.maximumScore.map(oneDecimal) : nil)
-            add("vote_count.gte", active(.votes) ? query.minimumVotes.map { String($0) } : nil)
+        // A score checked title by title (IMDb's, or the one `judgesScore` says the app judges) is asked of TMDb within a point.
+        let widened = scoresOnIMDb || judgesScore
+        let lowest: String? = query.minimumScore.flatMap { score in
+            guard widened else { return oneDecimal(score) }
+            return score > 1 ? oneDecimal(score - 1) : nil
         }
+        let highest: String? = query.maximumScore.flatMap { score in
+            guard widened else { return oneDecimal(score) }
+            return score < 9 ? oneDecimal(score + 1) : nil
+        }
+        add("vote_average.gte", active(.score) ? lowest : nil)
+        add("vote_average.lte", active(.score) ? highest : nil)
+        add("vote_count.gte", active(.votes) ? query.minimumVotes.map { String(scoresOnIMDb ? max(1, $0 / 100) : $0) } : nil)
         add("with_original_language", active(.language) ? query.language : nil)
         add("with_runtime.gte", active(.runtime) ? query.minimumRuntime.map { String($0) } : nil)
         add("with_runtime.lte", active(.runtime) ? query.maximumRuntime.map { String($0) } : nil)
@@ -171,11 +181,12 @@ extension TMDbRatings {
 
     /// Whether a trending entry meets the filters a trending list can use, which TMDb does not apply itself: every selected genre, the
     /// score and vote bounds, the language, and the release date range. An entry without a score, votes, language or date fails a bound it
-    /// is asked to meet. With `scoresOnIMDb`, the score and votes are left to IMDb's rating (`meetsIMDbBounds`).
+    /// is asked to meet. With `scoresOnIMDb`, the score and votes are left to IMDb's rating (`meetsIMDbBounds`); with `judgesScore`, the
+    /// score is left to the app's rating.
     static func matchesTrendingFilters(_ entry: TMDbDiscoverEntry, query: TMDbDiscoverQuery, today: Date, calendar: Calendar,
-                                       scoresOnIMDb: Bool = false) -> Bool {
+                                       scoresOnIMDb: Bool = false, judgesScore: Bool = false) -> Bool {
         guard query.genres.allSatisfy({ entry.genreIDs.contains($0.id) }) else { return false }
-        if query.isSet(.score), !scoresOnIMDb {
+        if query.isSet(.score), !scoresOnIMDb, !judgesScore {
             guard let score = entry.voteAverage else { return false }
             if let minimum = query.minimumScore, score < minimum { return false }
             if let maximum = query.maximumScore, score > maximum { return false }
@@ -195,12 +206,17 @@ extension TMDbRatings {
 extension TMDbRatings {
     /// Whether IMDb's rating of a title meets the query's score and vote bounds. A title without a rating fails a bound it is asked to meet.
     static func meetsIMDbBounds(_ rating: IMDbRating?, query: TMDbDiscoverQuery) -> Bool {
-        if query.isSet(.score) {
-            guard let score = rating?.rating else { return false }
-            if let minimum = query.minimumScore, score < minimum { return false }
-            if let maximum = query.maximumScore, score > maximum { return false }
-        }
+        guard meetsScoreBounds(rating?.rating, query: query) else { return false }
         if let minimum = query.minimumVotes, (rating?.votes ?? 0) < minimum { return false }
+        return true
+    }
+
+    /// Whether a score out of 10 meets the query's score bounds. A title without one fails a bound it is asked to meet.
+    static func meetsScoreBounds(_ score: Double?, query: TMDbDiscoverQuery) -> Bool {
+        guard query.isSet(.score) else { return true }
+        guard let score else { return false }
+        if let minimum = query.minimumScore, score < minimum { return false }
+        if let maximum = query.maximumScore, score > maximum { return false }
         return true
     }
 
@@ -212,10 +228,12 @@ extension TMDbRatings {
     /// One page of a discover or trending widget as `MetaPreview`s, from `skip` on, `limit` at most. Pages are read from TMDb until enough
     /// titles are found or the pages run out. Entries without an IMDb id are left out, since the addon's links need one. A widget's score
     /// and votes are IMDb's when `imdb` holds IMDb's ratings: each title is checked against its IMDb rating, and up to five more pages are
-    /// read to find enough. Throws `AddonError` for refusals and failures, and `CancellationError` when the caller is cancelled. Empty
+    /// read to find enough. With `judge`, a score bound is held to the app's rating of each title instead (see `TitleRatingJudge`), searches'
+    /// lists included. Throws `AddonError` for refusals and failures, and `CancellationError` when the caller is cancelled. Empty
     /// without a credential.
     public func discoverItems(_ query: TMDbDiscoverQuery, limit: Int, skip: Int, defaultRegion: String, today: Date = Date(),
-                              calendar: Calendar = .current, imdb: (any IMDbDataset)? = nil) async throws -> [MetaPreview] {
+                              calendar: Calendar = .current, imdb: (any IMDbDataset)? = nil,
+                              judge: TitleRatingJudge? = nil) async throws -> [MetaPreview] {
         guard limit > 0, credential != nil else { return [] }
         let query = StreamProvider.catalogRequest(for: query)
         if query.spansBothKinds {
@@ -232,9 +250,9 @@ extension TMDbRatings {
             }
             let needed = max(skip, 0) + limit
             let movieItems = try await discoverItems(films, limit: needed, skip: 0, defaultRegion: defaultRegion, today: today, calendar: calendar,
-                                                     imdb: imdb)
+                                                     imdb: imdb, judge: judge)
             let seriesItems = try await discoverItems(shows, limit: needed, skip: 0, defaultRegion: defaultRegion, today: today, calendar: calendar,
-                                                      imdb: imdb)
+                                                      imdb: imdb, judge: judge)
             var merged: [MetaPreview] = []
             for index in 0..<max(movieItems.count, seriesItems.count) {
                 if index < movieItems.count { merged.append(movieItems[index]) }
@@ -247,33 +265,37 @@ extension TMDbRatings {
         if let imdb, !query.usesTMDbScores, query.isSet(.score) || query.isSet(.votes), (await imdb.status()?.titleCount ?? 0) > 0 {
             scores = imdb
         }
+        // The app's rating, when it judges one, holds a score bound; votes stay IMDb's or TMDb's.
+        let scoreJudge = query.isSet(.score) ? judge : nil
+        let checks = scores != nil || scoreJudge != nil
         let offset = max(skip, 0)
         let needed = offset + limit
         let discoverPages = (needed + 19) / 20
-        let pageBudget = query.isTrending || scores != nil ? discoverPages + 5 : discoverPages
+        let pageBudget = query.isTrending || checks ? discoverPages + 5 : discoverPages
         let mediaType = query.kind == .movie ? "movie" : "tv"
         var entries: [TMDbDiscoverEntry] = []
-        // With IMDb's scores: the titles that met them, with their IMDb ids.
+        // With scores checked title by title: the titles that met them, with their IMDb ids.
         var rated: [(entry: TMDbDiscoverEntry, imdbID: String?)] = []
         var seen: Set<Int> = []
         var page = 1
-        while (scores == nil ? entries.count : rated.count) < needed, page <= pageBudget {
+        while (checks ? rated.count : entries.count) < needed, page <= pageBudget {
             try Task.checkCancellation()
             let (path, items) = Self.discoverRequest(query, page: page, defaultRegion: defaultRegion, today: today, calendar: calendar,
-                                                     scoresOnIMDb: scores != nil)
+                                                     scoresOnIMDb: scores != nil, judgesScore: scoreJudge != nil)
             let (url, headers) = try request(path: path, query: items)
             let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
             let answer = try TMDbDiscoverEntry.parsePage(result.data)
             var fresh: [TMDbDiscoverEntry] = []
             for entry in answer.entries where seen.insert(entry.tmdbID).inserted {
-                if query.isTrending,
-                   !Self.matchesTrendingFilters(entry, query: query, today: today, calendar: calendar, scoresOnIMDb: scores != nil) { continue }
+                if query.isTrending, !Self.matchesTrendingFilters(entry, query: query, today: today, calendar: calendar,
+                                                                  scoresOnIMDb: scores != nil, judgesScore: scoreJudge != nil) { continue }
                 // `without_genres` is asked of TMDb for discover lists, and each title is checked here too, trending lists included.
                 if Self.hasExcludedGenre(entry, query: query) { continue }
                 fresh.append(entry)
             }
-            if let scores {
-                rated += try await imdbRated(fresh, mediaType: mediaType, query: query, scores: scores, wanted: needed - rated.count)
+            if checks {
+                rated += try await checkedEntries(fresh, mediaType: mediaType, query: query, scores: scores, judge: scoreJudge,
+                                                  wanted: needed - rated.count)
             } else {
                 entries += fresh
             }
@@ -281,20 +303,24 @@ extension TMDbRatings {
             page += 1
         }
         let window: [(entry: TMDbDiscoverEntry, imdbID: String?)]
-        if scores != nil {
+        if checks {
             window = Array(rated.dropFirst(offset).prefix(limit))
         } else {
             let plain = Array(entries.dropFirst(offset).prefix(limit))
             window = Array(zip(plain, try await resolveIMDbIDs(for: plain, mediaType: mediaType)))
         }
         return window.compactMap { entry, imdbID in
-            guard let imdbID else { return nil }
-            return MetaPreview(id: imdbID, type: query.kind == .movie ? "movie" : "series", name: entry.title,
-                               poster: TMDbImage.url(entry.posterPath, size: "w500"),
-                                   background: TMDbImage.url(entry.backdropPath, size: "w1280"),
-                               description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: Self.releaseYear(entry.date),
-                               genres: Self.genreNames(entry.genreIDs, mediaType: mediaType))
+            imdbID.map { Self.preview(entry, imdbID: $0, kind: query.kind, mediaType: mediaType) }
         }
+    }
+
+    /// A discover entry as the card a row shows.
+    private static func preview(_ entry: TMDbDiscoverEntry, imdbID: String, kind: TMDbDiscoverQuery.Kind, mediaType: String) -> MetaPreview {
+        MetaPreview(id: imdbID, type: kind == .movie ? "movie" : "series", name: entry.title,
+                    poster: TMDbImage.url(entry.posterPath, size: "w500"),
+                    background: TMDbImage.url(entry.backdropPath, size: "w1280"),
+                    description: entry.overview.isEmpty ? nil : entry.overview, releaseInfo: releaseYear(entry.date),
+                    genres: genreNames(entry.genreIDs, mediaType: mediaType))
     }
 
     /// The titles and people one `/search/multi` request finds for a name such as "Dune" or "Tom Hanks", in TMDb's order. Titles carry
@@ -333,17 +359,41 @@ extension TMDbRatings {
         return hits
     }
 
-    /// The entries whose IMDb rating meets the query's score and vote bounds, in order, with their IMDb ids, at most `wanted`. Ids are asked
-    /// for six at a time, and only until enough titles are found. A title without an IMDb id or rating is left out.
-    private func imdbRated(_ entries: [TMDbDiscoverEntry], mediaType: String, query: TMDbDiscoverQuery, scores: any IMDbDataset,
-                           wanted: Int) async throws -> [(entry: TMDbDiscoverEntry, imdbID: String?)] {
+    /// The entries that meet the query's score and vote bounds, in order, with their IMDb ids, at most `wanted`. Votes are IMDb's from
+    /// `scores` when given; the score is `judge`'s when given, asked for six titles at once, else IMDb's. Ids are asked for six at a time,
+    /// and only until enough titles are found. A title without an IMDb id or a score is left out.
+    private func checkedEntries(_ entries: [TMDbDiscoverEntry], mediaType: String, query: TMDbDiscoverQuery, scores: (any IMDbDataset)?,
+                                judge: TitleRatingJudge?, wanted: Int) async throws -> [(entry: TMDbDiscoverEntry, imdbID: String?)] {
         var rated: [(entry: TMDbDiscoverEntry, imdbID: String?)] = []
         var start = 0
         while start < entries.count, rated.count < wanted {
             let batch = Array(entries[start..<min(start + 6, entries.count)])
             let ids = try await resolveIMDbIDs(for: batch, mediaType: mediaType)
-            for (entry, imdbID) in zip(batch, ids) {
-                guard let imdbID, Self.meetsIMDbBounds(await scores.rating(for: imdbID), query: query) else { continue }
+            var judged = [Double?](repeating: nil, count: batch.count)
+            if let judge {
+                judged = await withTaskGroup(of: (Int, Double?).self, returning: [Double?].self) { group in
+                    for (index, (entry, imdbID)) in zip(batch, ids).enumerated() {
+                        guard let imdbID else { continue }
+                        let item = Self.preview(entry, imdbID: imdbID, kind: query.kind, mediaType: mediaType)
+                        // TMDb's own sign of anime, as its ratings lookup reads it: Japanese animation.
+                        let isAnime = entry.originalLanguage?.lowercased() == "ja" && entry.genreIDs.contains(16)
+                        let tmdbScore = entry.voteAverage
+                        group.addTask { (index, await judge(item, tmdbScore, isAnime)) }
+                    }
+                    var answers = [Double?](repeating: nil, count: batch.count)
+                    for await (index, score) in group { answers[index] = score }
+                    return answers
+                }
+                try Task.checkCancellation()
+            }
+            for (index, (entry, imdbID)) in zip(batch, ids).enumerated() {
+                guard let imdbID else { continue }
+                if judge != nil {
+                    if let scores, let minimum = query.minimumVotes, (await scores.rating(for: imdbID)?.votes ?? 0) < minimum { continue }
+                    guard Self.meetsScoreBounds(judged[index], query: query) else { continue }
+                } else {
+                    guard let scores, Self.meetsIMDbBounds(await scores.rating(for: imdbID), query: query) else { continue }
+                }
                 rated.append((entry, imdbID))
             }
             start += 6
@@ -378,7 +428,7 @@ extension TMDbRatings {
         }
     }
 
-    private static func genreNames(_ ids: [Int], mediaType: String) -> [String] {
+    static func genreNames(_ ids: [Int], mediaType: String) -> [String] {
         let names = TMDbDiscoverQuery.genreClues.compactMap { mediaType == "movie" ? $0.movie : $0.series }
         return ids.compactMap { id in names.first(where: { $0.id == id })?.name }
     }
@@ -398,6 +448,14 @@ extension TMDbRatings {
         guard credential != nil else { return [] }
         let answer: RawGenreAnswer = try await lookup(["genre", kind == .movie ? "movie" : "tv", "list"])
         return Self.named(answer.genres)
+    }
+
+    /// The keywords TMDb tags a movie or series with, in TMDb's order. Movies list them under `keywords`, series under `results`.
+    /// Empty when TMDb does not know the title. Throws `AddonError` for refusals and failures.
+    public func titleKeywords(imdbID: String, type: String) async throws -> [TMDbDiscoverQuery.Named] {
+        guard let id = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
+        let answer: RawTitleKeywords = try await lookup([type == "movie" ? "movie" : "tv", String(id), "keywords"])
+        return Self.named(answer.keywords ?? answer.results ?? [])
     }
 
     /// The keywords that match the text, in TMDb's order, at most 30. Empty for blank text, which sends no request.
@@ -466,6 +524,10 @@ extension TMDbRatings {
 
     private struct RawGenreAnswer: Decodable { let genres: [RawNamed] }
     private struct RawSearchAnswer: Decodable { let results: [RawNamed] }
+    private struct RawTitleKeywords: Decodable {
+        let keywords: [RawNamed]?
+        let results: [RawNamed]?
+    }
 
     private struct RawProviderAnswer: Decodable { let results: [RawProvider] }
 

@@ -85,74 +85,190 @@ extension AppearancePreferences {
     }
 
     /// The text sizes the app may use: the whole range when it follows the system, otherwise the one size chosen.
-    var dynamicTypeRange: ClosedRange<DynamicTypeSize> {
-        let size: DynamicTypeSize
-        switch textSize {
+    var dynamicTypeRange: ClosedRange<DynamicTypeSize> { dynamicTypeRange(for: textSize) }
+
+    func dynamicTypeRange(for size: TextSize) -> ClosedRange<DynamicTypeSize> {
+        let chosen: DynamicTypeSize
+        switch size {
         case .system: return DynamicTypeSize.xSmall...DynamicTypeSize.accessibility5
-        case .xSmall: size = .xSmall
-        case .small: size = .small
-        case .medium: size = .medium
-        case .large: size = .large
-        case .xLarge: size = .xLarge
-        case .xxLarge: size = .xxLarge
-        case .xxxLarge: size = .xxxLarge
-        case .accessibility1: size = .accessibility1
-        case .accessibility2: size = .accessibility2
-        case .accessibility3: size = .accessibility3
-        case .accessibility4: size = .accessibility4
-        case .accessibility5: size = .accessibility5
+        case .xSmall: chosen = .xSmall
+        case .small: chosen = .small
+        case .medium: chosen = .medium
+        case .large: chosen = .large
+        case .xLarge: chosen = .xLarge
+        case .xxLarge: chosen = .xxLarge
+        case .xxxLarge: chosen = .xxxLarge
+        case .accessibility1: chosen = .accessibility1
+        case .accessibility2: chosen = .accessibility2
+        case .accessibility3: chosen = .accessibility3
+        case .accessibility4: chosen = .accessibility4
+        case .accessibility5: chosen = .accessibility5
         }
-        return size...size
+        return chosen...chosen
     }
 
-    var fontDesign: Font.Design? { Self.design(font) }
+    var fontDesign: Font.Design? { Self.systemDesign(font) }
 
-    static func design(_ font: FontStyle) -> Font.Design? {
+    static func systemDesign(_ font: FontStyle) -> Font.Design? {
         switch font {
         case .standard: nil
         case .rounded: .rounded
         case .serif: .serif
         case .monospaced: .monospaced
+        default: nil
         }
     }
 
-    var systemFontWidth: Font.Width? {
-        switch fontWidth {
-        case .compressed: .compressed
-        case .condensed: .condensed
-        case .standard: nil
-        case .expanded: .expanded
+    static func design(_ font: FontStyle) -> Font.Design? { systemDesign(font) }
+
+    func face(for role: TextRole) -> FontStyle { resolvedText(for: role).font }
+
+    /// The token's own weight, unless this role has been given one. Reading's Bold keeps it too: the root's `bold()` makes that text
+    /// bold, as the Bold Text switch did.
+    func fontWeight(for role: TextRole, token: Font.Weight) -> Font.Weight {
+        switch role {
+        case .display: resolvedText(for: .display).weight.fontWeight
+        case .reading: Self.readingWeight(reading.weight, token: token)
+        case .interface: interface.followsWeight ? Self.readingWeight(reading.weight, token: token) : interface.weight.fontWeight
         }
     }
 
-    /// Headings' width: their own, or the text's.
-    var headingFontWidth: Font.Width? {
-        switch headingWidth.width {
-        case nil: systemFontWidth
-        case .compressed: .compressed
-        case .condensed: .condensed
-        case .standard: .standard
-        case .expanded: .expanded
+    private static func readingWeight(_ weight: HeadingWeight, token: Font.Weight) -> Font.Weight {
+        weight == .regular || weight == .bold ? token : weight.fontWeight
+    }
+
+    /// `style`, stepped by a text style's size. Standard leaves it where it is.
+    func shifted(_ style: Font.TextStyle, by scale: HeadingSize) -> Font.TextStyle {
+        guard scale != .standard else { return style }
+        // Body and headline share a point size. Count them as one step.
+        let ladder: [Font.TextStyle] = [
+            .caption2, .caption, .footnote, .subheadline, .callout, .body, .title3, .title2, .title, .largeTitle,
+        ]
+        let steps = switch scale {
+        case .small: -1
+        case .standard: 0
+        case .large: 1
+        case .huge: 2
+        }
+        guard let index = ladder.firstIndex(of: style == .headline ? .body : style) else { return style }
+        return ladder[min(max(index + steps, 0), ladder.count - 1)]
+    }
+
+    /// `style` stepped the same way, for text laid out in UIKit.
+    func shifted(_ style: UIFont.TextStyle, by scale: HeadingSize) -> UIFont.TextStyle {
+        Self.uiTextStyle(shifted(Self.swiftTextStyle(style), by: scale))
+    }
+
+    private static func swiftTextStyle(_ style: UIFont.TextStyle) -> Font.TextStyle {
+        switch style {
+        case .largeTitle: .largeTitle
+        case .title1: .title
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .body: .body
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption1: .caption
+        case .caption2: .caption2
+        default: .body
         }
     }
 
-    /// Headings' letter spacing in points: their own, or the text's.
-    var headingTracking: CGFloat { CGFloat((headingSpacing.spacing ?? letterSpacing).points) }
-
-    /// The font of shelf and section headings. The default is the app's own, `Theme.Typography.shelfTitle`: Title 2, bold.
-    var headingTypeface: Font { headingTypeface(isSubheading: false) }
-
-    /// A heading inside a section (a year of credits, a group of rows): the heading's own font, one size down.
-    var subheadingTypeface: Font { headingTypeface(isSubheading: true) }
-
-    private func headingTypeface(isSubheading: Bool) -> Font {
-        let style: Font.TextStyle = switch headingSize {
-        case .small: isSubheading ? .headline : .title3
-        case .standard: isSubheading ? .title3 : .title2
-        case .large: isSubheading ? .title2 : .title
-        case .huge: isSubheading ? .title : .largeTitle
+    /// The face for `role` at a text style. A named face scales with Dynamic Type; a system design keeps the system's own.
+    func font(style: Font.TextStyle, weight: Font.Weight, role: TextRole) -> Font {
+        let face = face(for: role)
+        if let family = face.familyName {
+            let size = UIFont.preferredFont(forTextStyle: Self.uiTextStyle(style),
+                                            compatibleWith: UITraitCollection(preferredContentSizeCategory: .large)).pointSize
+            return Font.custom(family, size: size, relativeTo: style).weight(weight)
         }
-        let weight: Font.Weight = switch headingWeight {
+        return Font.system(style, design: Self.systemDesign(face), weight: weight)
+    }
+
+    /// The same face as `font(style:weight:role:)`, for text laid out in UIKit.
+    func uiFont(style: UIFont.TextStyle, weight: UIFont.Weight = .regular, role: TextRole, traits: UITraitCollection? = nil) -> UIFont {
+        Self.font(face: face(for: role), style: style, weight: weight, traits: traits)
+    }
+
+    /// `face` at `style`, scaled for Dynamic Type. A missing named face falls back to the system font.
+    static func font(face: FontStyle, style: UIFont.TextStyle, weight: UIFont.Weight = .regular, traits: UITraitCollection? = nil) -> UIFont {
+        let size = UIFont.preferredFont(forTextStyle: style, compatibleWith: UITraitCollection(preferredContentSizeCategory: .large)).pointSize
+        let base: UIFont
+        if let family = face.familyName, let named = namedFont(family: family, size: size, weight: weight) {
+            base = named
+        } else if let design = uiDesign(face),
+                  let descriptor = UIFont.systemFont(ofSize: size, weight: weight).fontDescriptor.withDesign(design) {
+            base = UIFont(descriptor: descriptor, size: size)
+        } else {
+            base = UIFont.systemFont(ofSize: size, weight: weight)
+        }
+        return UIFontMetrics(forTextStyle: style).scaledFont(for: base, compatibleWith: traits)
+    }
+
+    private static func uiTextStyle(_ style: Font.TextStyle) -> UIFont.TextStyle {
+        switch style {
+        case .largeTitle: .largeTitle
+        case .title: .title1
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .body: .body
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption: .caption1
+        case .caption2: .caption2
+        default: .body
+        }
+    }
+
+    private static func uiDesign(_ face: FontStyle) -> UIFontDescriptor.SystemDesign? {
+        switch face {
+        case .rounded: .rounded
+        case .serif: .serif
+        case .monospaced: .monospaced
+        default: nil
+        }
+    }
+
+    /// The face in `family` nearest `weight`. Nil when the family is not installed.
+    private static func namedFont(family: String, size: CGFloat, weight: UIFont.Weight) -> UIFont? {
+        let names = UIFont.fontNames(forFamilyName: family)
+        guard !names.isEmpty else { return UIFont(name: family, size: size) }
+        let want = weightRank(weight)
+        let chosen = names.min { lhs, rhs in
+            abs(rank(of: lhs) - want) < abs(rank(of: rhs) - want)
+        }
+        return chosen.flatMap { UIFont(name: $0, size: size) }
+    }
+
+    private static func weightRank(_ weight: UIFont.Weight) -> Int {
+        if weight < .light { return 0 }
+        if weight < .regular { return 1 }
+        if weight < .medium { return 2 }
+        if weight < .semibold { return 3 }
+        if weight < .bold { return 4 }
+        if weight < .heavy { return 5 }
+        return 6
+    }
+
+    private static func rank(of name: String) -> Int {
+        let lower = name.lowercased()
+        if lower.contains("ultralight") || lower.contains("thin") { return 0 }
+        if lower.contains("light") { return 1 }
+        if lower.contains("medium") { return 3 }
+        if lower.contains("semibold") || lower.contains("demibold") { return 4 }
+        if lower.contains("heavy") || lower.contains("black") { return 6 }
+        if lower.contains("bold") { return 5 }
+        return 2
+    }
+}
+
+extension AppearancePreferences.HeadingWeight {
+    var fontWeight: Font.Weight {
+        switch self {
         case .regular: .regular
         case .medium: .medium
         case .semibold: .semibold
@@ -160,7 +276,50 @@ extension AppearancePreferences {
         case .heavy: .heavy
         case .black: .black
         }
-        return Font.system(style, design: Self.design(headingFont.font ?? font), weight: weight)
+    }
+
+    var uiWeight: UIFont.Weight {
+        switch self {
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        case .bold: .bold
+        case .heavy: .heavy
+        case .black: .black
+        }
+    }
+}
+
+extension AppearancePreferences.FontWidth {
+    /// A set width, including Default, so one role can leave the condensed letters of another.
+    var fontWidth: Font.Width {
+        switch self {
+        case .compressed: .compressed
+        case .condensed: .condensed
+        case .standard: .standard
+        case .expanded: .expanded
+        }
+    }
+
+    var uiFontWidth: UIFont.Width {
+        switch self {
+        case .compressed: .compressed
+        case .condensed: .condensed
+        case .standard: .standard
+        case .expanded: .expanded
+        }
+    }
+}
+
+extension AppearancePreferences {
+    var systemFontWidth: Font.Width? {
+        guard font == .standard else { return nil }
+        return switch fontWidth {
+        case .compressed: .compressed
+        case .condensed: .condensed
+        case .standard: nil
+        case .expanded: .expanded
+        }
     }
 
     /// The progress line's colour on Continue cards.
@@ -178,6 +337,9 @@ extension CardAspect {
 }
 
 extension EnvironmentValues {
+    /// Device Dynamic Type before Appearance applies the app size.
+    @Entry var systemTextSize: DynamicTypeSize = .large
+
     /// Settings → Appearance, as the root read it (see `appliesAppearance()`).
     @Entry var appAppearance = AppearancePreferences()
 }
@@ -196,40 +358,55 @@ extension View {
 
     /// A shelf or section heading in Appearance's heading style: its font, size, weight, width, letter spacing and case.
     func headingStyle() -> some View {
-        modifier(HeadingStyleModifier())
+        appFont(.shelfTitle)
     }
 
     /// A heading inside a section, in the same style one size down.
     func subheadingStyle() -> some View {
-        modifier(HeadingStyleModifier(isSubheading: true))
+        appFont(style: .title3, weight: .bold, role: .display)
     }
 
     /// Posters, cards and stills in Appearance's artwork tone. Natural changes nothing.
     func artworkTone(_ tone: AppearancePreferences.ArtworkTone) -> some View {
         modifier(ArtworkToneModifier(tone: tone))
     }
+
+    /// `transform` applied when `condition` holds; otherwise the view as it is, so it keeps what it inherits.
+    @ViewBuilder
+    func applying<Modified: View>(_ condition: Bool, _ transform: (Self) -> Modified) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
 }
 
 private struct AppearanceModifier: ViewModifier {
     @AppStorage(AppearancePreferences.defaultsKey) private var appearance = AppearancePreferences()
+    @Environment(\.dynamicTypeSize) private var systemTextSize
 
     func body(content: Content) -> some View {
         content.appearanceLook(appearance)
+            .environment(\.systemTextSize, systemTextSize)
     }
 }
 
 private struct AppearanceLookModifier: ViewModifier {
     let appearance: AppearancePreferences
     let motion: Bool
+    @Environment(\.systemTextSize) private var systemTextSize
 
     func body(content: Content) -> some View {
         let speed = motion ? appearance.animationSpeed.factor : 1
         content
             .tint(appearance.accentColour)
-            .dynamicTypeSize(appearance.dynamicTypeRange)
+            .dynamicTypeSize(appearance.textSize == .system ? systemTextSize : appearance.dynamicTypeRange.lowerBound)
+            .font(appearance.font(style: appearance.shifted(.body, by: appearance.reading.scale),
+                                  weight: appearance.fontWeight(for: .reading, token: .regular), role: .reading))
             .fontDesign(appearance.fontDesign)
             .fontWidth(appearance.systemFontWidth)
-            .bold(appearance.boldText)
+            .bold(appearance.reading.weight == .bold)
             .italic(appearance.italicText)
             .tracking(appearance.letterSpacing.points)
             .lineSpacing(appearance.lineSpacing.points)
@@ -243,25 +420,6 @@ private struct AppearanceLookModifier: ViewModifier {
                     transaction.animation = transaction.animation?.speed(speed)
                 }
             }
-    }
-}
-
-private struct HeadingStyleModifier: ViewModifier {
-    var isSubheading = false
-    @Environment(\.appAppearance) private var appearance
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        let styled = content
-            .font(isSubheading ? appearance.subheadingTypeface : appearance.headingTypeface)
-            .fontWidth(appearance.headingFontWidth)
-            .tracking(appearance.headingTracking)
-            .textCase(appearance.uppercaseHeadings ? .uppercase : nil)
-        switch appearance.headingColour {
-        case .primary: styled
-        case .secondary: styled.foregroundStyle(.secondary)
-        case .accent: styled.foregroundStyle(.tint)
-        }
     }
 }
 

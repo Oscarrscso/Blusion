@@ -94,7 +94,7 @@ struct EditorialSearchPage: View {
     private var field: some View {
         HStack(spacing: Theme.Spacing.s) {
             TextField("Search", text: $model.query, prompt: Text("SEARCH").foregroundStyle(ink.opacity(0.9)))
-                .font(Editorial.font(.body))
+                .font(Editorial.font(.body, weight: .regular))
                 .foregroundStyle(ink)
                 .tint(ink)
                 .autocorrectionDisabled()
@@ -148,7 +148,7 @@ struct EditorialSearchPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
                     Text("Genres")
-                        .font(Editorial.font(.body))
+                        .font(Editorial.font(.body, weight: .regular))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     genreList
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -189,7 +189,7 @@ struct EditorialSearchPage: View {
                     withAnimation(.smooth(duration: 0.35)) { showsAllGenres = true }
                 } label: {
                     Text("+ \(hidden)")
-                        .font(Editorial.font(.footnote))
+                        .font(Editorial.font(.footnote, weight: .regular))
                         .foregroundStyle(Theme.faintText)
                         .padding(.vertical, Theme.Spacing.s)
                         .contentShape(Rectangle())
@@ -216,7 +216,7 @@ struct EditorialSearchPage: View {
                         .multilineTextAlignment(.leading)
                     Text(Editorial.captionLine(year: item.releaseInfo, certification: ratingsStore?.cachedCertification(for: item),
                                                runtime: item.runtime))
-                        .font(Editorial.font(.caption))
+                        .font(Editorial.font(.caption, weight: .regular))
                         .foregroundStyle(.white.opacity(0.8))
                 }
             }
@@ -290,7 +290,7 @@ struct EditorialSearchPage: View {
                     Task { await model.applyCorrection() }
                 } label: {
                     Text("DID YOU MEAN \(correction.uppercased())?")
-                        .font(Editorial.font(.body))
+                        .font(Editorial.font(.body, weight: .regular))
                         .underline()
                         .contentShape(Rectangle())
                 }
@@ -423,7 +423,7 @@ struct EditorialSearchPage: View {
     private func tagLabel(_ tag: Tag, systemImage: String) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text(tag.title.uppercased())
-                .font(Editorial.font(.body))
+                .font(Editorial.font(.body, weight: .regular))
                 .lineLimit(1)
             Spacer(minLength: 0)
             Image(systemName: systemImage)
@@ -456,7 +456,7 @@ struct EditorialSearchPage: View {
     private var genresMenu: some View {
         Menu { filterOptions } label: {
             HStack {
-                Text("GENRES LIST").font(Editorial.font(.body))
+                Text("GENRES LIST").font(Editorial.font(.body, weight: .regular))
                 Spacer()
                 Image(systemName: "chevron.down").font(.system(size: 13, weight: .regular))
             }
@@ -544,7 +544,7 @@ private struct EditorialPersonCard: View {
                     .multilineTextAlignment(.leading)
                 if let role = person.roleText {
                     Text(role.uppercased())
-                        .font(Editorial.font(.caption))
+                        .font(Editorial.font(.caption, weight: .regular))
                         .opacity(0.75)
                 }
             }
@@ -584,7 +584,7 @@ private struct EditorialResultCard: View {
                     .multilineTextAlignment(.leading)
                 Text(Editorial.captionLine(year: item.releaseInfo, certification: ratingsStore?.cachedCertification(for: item),
                                            runtime: item.runtime))
-                    .font(Editorial.font(.caption))
+                    .font(Editorial.font(.caption, weight: .regular))
                     .opacity(0.75)
             }
             .frame(width: Self.width, alignment: .leading)

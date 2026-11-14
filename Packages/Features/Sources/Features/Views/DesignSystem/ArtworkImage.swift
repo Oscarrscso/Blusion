@@ -1,4 +1,6 @@
 #if canImport(UIKit)
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 import UIKit
 
@@ -53,7 +55,7 @@ struct ArtworkImage: View {
     /// Tried once, at the same size, when `url` fails to load. Nil, or the same URL as `url`, means no second try.
     let fallbackURL: URL?
     let imageAlignment: Alignment
-    /// Keeps a sharp 16:9 top image and continues its bottom edge into a diffused lower section, using the same decoded image.
+    /// Keeps a sharp 16:9 top image and continues a lower band of it down the frame, blurring progressively towards the bottom.
     let extendsArtworkDownward: Bool
     /// True for a stand-in: a picture of `url` that is decoded at another size is shown as it is, so one the user has just seen is there
     /// in the first frame and nothing is loaded for it.
@@ -179,66 +181,10 @@ struct ArtworkImage: View {
     @ViewBuilder
     private func picture(_ image: UIImage) -> some View {
         if extendsArtworkDownward {
-            GeometryReader { geometry in
-                let artworkHeight = geometry.size.width / (16.0 / 9.0)
-                let fadeStart = 0.82
-                let extensionHeight = max(0, geometry.size.height - artworkHeight)
-                ZStack(alignment: .top) {
-                    if let edge = bottomEdge(of: image) {
-                        // Blur the continuation itself, so sharp streaks cannot show behind the text.
-                        // Overscan keeps the blur opaque at the card's edges; the sharp artwork fades over it.
-                        Image(uiImage: edge).resizable()
-                            .frame(width: geometry.size.width + 160, height: geometry.size.height + 160)
-                            .blur(radius: 40, opaque: true)
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .clipped()
-                            .overlay {
-                                BottomFade(length: Double(min(1, (extensionHeight + 12) / max(1, geometry.size.height))), strength: 0.85)
-                            }
-                    }
-                    Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: geometry.size.width, height: artworkHeight)
-                        .clipped()
-                        .mask {
-                            LinearGradient(stops: [
-                                .init(color: .black, location: 0),
-                                .init(color: .black, location: fadeStart),
-                                .init(color: .black.opacity(0.6), location: 0.9),
-                                .init(color: .black.opacity(0.2), location: 0.96),
-                                .init(color: .clear, location: 1),
-                            ], startPoint: .top, endPoint: .bottom)
-                        }
-                }
-            }
+            ExtendedArtwork(image: image)
         } else {
             Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode)
         }
-    }
-
-    /// One source-pixel row from the visible bottom edge, accounting for the top image's centred crop and orientation.
-    private func bottomEdge(of image: UIImage) -> UIImage? {
-        guard let pixels = image.cgImage else { return nil }
-        let rotated = [.left, .leftMirrored, .right, .rightMirrored].contains(image.imageOrientation)
-        let ratio: CGFloat = rotated ? 9.0 / 16.0 : 16.0 / 9.0
-        let width = CGFloat(pixels.width)
-        let height = CGFloat(pixels.height)
-        let cropWidth = min(width, height * ratio)
-        let cropHeight = min(height, width / ratio)
-        let visible = CGRect(x: (width - cropWidth) / 2, y: (height - cropHeight) / 2,
-                             width: cropWidth, height: cropHeight).integral
-        let row: CGRect
-        switch image.imageOrientation {
-        case .down, .downMirrored:
-            row = CGRect(x: visible.minX, y: visible.minY, width: visible.width, height: 1)
-        case .left, .rightMirrored:
-            row = CGRect(x: visible.minX, y: visible.minY, width: 1, height: visible.height)
-        case .right, .leftMirrored:
-            row = CGRect(x: visible.maxX - 1, y: visible.minY, width: 1, height: visible.height)
-        default:
-            row = CGRect(x: visible.minX, y: visible.maxY - 1, width: visible.width, height: 1)
-        }
-        guard let edge = pixels.cropping(to: row) else { return nil }
-        return UIImage(cgImage: edge, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// Flat grey like the TV app's loading cards. No gradient: it is drawn once per card and must be cheap.
@@ -247,7 +193,7 @@ struct ArtworkImage: View {
             if contentMode == .fit { appearance.pageBackground } else { Theme.placeholder }
             if !title.isEmpty && (url == nil || hasFinishedLoading) {
                 Text(title)
-                    .font(Theme.Typography.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
@@ -314,6 +260,238 @@ struct ArtworkImage: View {
             guard !Task.isCancelled, let fallbackURL, fallbackURL != url else { throw error }
             return (try await ImagePipeline.shared.image(for: fallbackURL, maxPixelSize: maxPixelSize,
                                                          priority: artworkPriority, order: artworkOrder), true)
+        }
+    }
+}
+
+/// The still in a sharp 16:9 frame, continued down the card by a lower band of its own colours: one picture that stays sharp through
+/// most of the still while the blur grows near its foot and into the text. Rendered off the main thread once per still and size, and
+/// kept for scrolling back.
+private struct ExtendedArtwork: View {
+    let image: UIImage
+    @Environment(\.displayScale) private var displayScale
+    /// The latest rendering. It stands in, stretched, while a new size renders.
+    @State private var rendered: UIImage?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let key = Self.key(image, size: size, scale: displayScale)
+            ZStack {
+                if let picture = Self.cached(image, key: key) ?? rendered {
+                    Image(uiImage: picture).resizable()
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .task(id: key) { await render(size: size, key: key) }
+        }
+    }
+
+    private func render(size: CGSize, key: NSString) async {
+        guard size.width >= 1, size.height >= 1, Self.cached(image, key: key) == nil else { return }
+        // A card being resized waits for its size to settle, so an animated width does not render every frame.
+        if rendered != nil {
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+        }
+        let source = image, scale = displayScale
+        guard let picture = await Task.detached(priority: .userInitiated, operation: {
+            ExtendedArtworkRenderer.render(source, size: size, scale: scale)
+        }).value else { return }
+        // Kept even when the card has scrolled away, so coming back finds it.
+        let bytes = picture.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        Self.cache.setObject(Rendering(source: source, picture: picture), forKey: key, cost: bytes)
+        guard !Task.isCancelled else { return }
+        if rendered == nil {
+            withAnimation(.easeOut(duration: 0.2)) { rendered = picture }
+        } else {
+            rendered = picture
+        }
+    }
+
+    private static let cache: NSCache<NSString, Rendering> = {
+        let cache = NSCache<NSString, Rendering>()
+        cache.totalCostLimit = 96 << 20
+        return cache
+    }()
+
+    private static func key(_ image: UIImage, size: CGSize, scale: CGFloat) -> NSString {
+        "\(UInt(bitPattern: ObjectIdentifier(image)))-\(Int((size.width * scale).rounded()))x\(Int((size.height * scale).rounded()))" as NSString
+    }
+
+    private static func cached(_ image: UIImage, key: NSString) -> UIImage? {
+        guard let rendering = cache.object(forKey: key), rendering.source === image else { return nil }
+        return rendering.picture
+    }
+
+    private final class Rendering {
+        /// Weak, so a later picture at the same address is not taken for this one.
+        weak var source: UIImage?
+        let picture: UIImage
+        init(source: UIImage, picture: UIImage) {
+            self.source = source
+            self.picture = picture
+        }
+    }
+}
+
+/// Builds `ExtendedArtwork`'s picture. Positions are shares of the still's height from the card's top, so the ramp sits on the still
+/// whatever the text below it measures.
+private enum ExtendedArtworkRenderer {
+    /// Gamma-encoded, as UIKit composites, so the veil reads as its numbers say.
+    private static let context = CIContext(options: [
+        .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedSRGB) as Any,
+        .cacheIntermediates: false,
+    ])
+    /// Sharp above `blurStart`, so hands and props low in the still keep their detail; the blur eases in to its full radius at `blurEnd`.
+    /// Shares of the still's height from the card's top.
+    private static let blurStart = 0.8, blurEnd = 1.45, blurRadius = 0.18
+    /// The thin strip at the still's foot whose colours run down the card, so hands and shirts carry on as soft streaks behind the text.
+    private static let band = 0.08
+    /// A veil of mid-grey behind the text, apart from the blur: it pulls whites down and lifts darks, as the TV app's cards do, so
+    /// the text reads on both. It starts late, so the still's lightest colours run on past its edge first.
+    private static let veilStart = 0.8, veilEnd = 1.7, veilAmount = 0.68, veilGrey = 0.3
+
+    static func render(_ image: UIImage, size: CGSize, scale: CGFloat) -> UIImage? {
+        let width = (size.width * scale).rounded(), height = (size.height * scale).rounded()
+        guard width >= 1, height >= 1, var source = image.cgImage.map({ CIImage(cgImage: $0) }) ?? image.ciImage else { return nil }
+        source = source.oriented(CGImagePropertyOrientation(image.imageOrientation))
+        source = source.transformed(by: CGAffineTransform(translationX: -source.extent.minX, y: -source.extent.minY))
+        guard source.extent.width >= 1, source.extent.height >= 1 else { return nil }
+
+        // Core Image counts up from the bottom: the still fills the top `still` pixels, down to `seam`.
+        let still = (width * 9 / 16).rounded()
+        let seam = height - still
+        let scaler = CIFilter.lanczosScaleTransform()
+        scaler.inputImage = source
+        scaler.scale = Float(max(width / source.extent.width, still / source.extent.height))
+        scaler.aspectRatio = 1
+        guard let scaled = scaler.outputImage else { return nil }
+        let frame = scaled
+            .transformed(by: CGAffineTransform(translationX: -scaled.extent.minX - (scaled.extent.width - width) / 2,
+                                               y: seam - scaled.extent.minY - (scaled.extent.height - still) / 2))
+            .cropped(to: CGRect(x: 0, y: seam, width: width, height: still))
+
+        // The still's lower band, mirrored at its edge and stretched to the card's foot: the colours meet the still without a seam
+        // and each stays under the column it came from.
+        var canvas = frame
+        if seam >= 1 {
+            let bandHeight = max(1, (still * band).rounded())
+            let stretch = seam / bandHeight
+            let below = frame.cropped(to: CGRect(x: 0, y: seam, width: width, height: bandHeight))
+                .transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -stretch, tx: 0, ty: seam * (1 + stretch)))
+            canvas = frame.composited(over: below)
+        }
+
+        let blur = CIFilter.maskedVariableBlur()
+        blur.inputImage = canvas.clampedToExtent()
+        blur.mask = ramp(blurStart, blurEnd, still: still, height: height,
+                         from: CIColor(red: 0, green: 0, blue: 0), to: CIColor(red: 1, green: 1, blue: 1))
+        blur.radius = Float(still * blurRadius)
+
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        guard let blurred = blur.outputImage,
+              let shade = ramp(veilStart, veilEnd, still: still, height: height,
+                               from: CIColor(red: veilGrey, green: veilGrey, blue: veilGrey, alpha: 0),
+                               to: CIColor(red: veilGrey, green: veilGrey, blue: veilGrey, alpha: veilAmount)),
+              let pixels = context.createCGImage(shade.composited(over: blurred).cropped(to: bounds), from: bounds) else { return nil }
+        return UIImage(cgImage: pixels, scale: scale, orientation: .up)
+    }
+
+    /// A vertical ramp, eased at both ends, from `from` at `start` to `to` at `end`: shares of the still's height from the card's top.
+    private static func ramp(_ start: Double, _ end: Double, still: CGFloat, height: CGFloat, from: CIColor, to: CIColor) -> CIImage? {
+        let gradient = CIFilter.smoothLinearGradient()
+        gradient.point0 = CGPoint(x: 0, y: height - still * start)
+        gradient.point1 = CGPoint(x: 0, y: height - still * end)
+        gradient.color0 = from
+        gradient.color1 = to
+        return gradient.outputImage
+    }
+
+    /// One row of `TitleBackdropRequest`'s backdrop: the band at the picture's foot, averaged down, set under the columns it came from, then
+    /// given the card's blur and veil. The row's edges carry on across the page where the picture does not reach.
+    static func backdropRow(_ request: TitleBackdropRequest) -> UIImage? {
+        let scale = request.scale
+        let pageWidth = (request.pageWidth * scale).rounded()
+        let frameWidth = request.frame.width * scale, frameHeight = request.frame.height * scale
+        guard pageWidth >= 1, frameWidth >= 1, frameHeight >= 1,
+              var picture = request.image.cgImage.map({ CIImage(cgImage: $0) }) ?? request.image.ciImage else { return nil }
+        picture = picture.oriented(CGImagePropertyOrientation(request.image.imageOrientation))
+        picture = picture.transformed(by: CGAffineTransform(translationX: -picture.extent.minX, y: -picture.extent.minY))
+        let imageWidth = picture.extent.width, imageHeight = picture.extent.height
+        guard imageWidth >= 1, imageHeight >= 1 else { return nil }
+
+        // The picture as the hero draws it: filling its frame, centred across it, from the frame's top or its middle. Core Image counts
+        // up from the bottom.
+        let fill = max(frameWidth / imageWidth, frameHeight / imageHeight)
+        let left = (frameWidth - imageWidth * fill) / 2
+        let top = request.alignsTop ? 0 : (frameHeight - imageHeight * fill) / 2
+        let bottom = min(max(1, request.visibleBottom * scale), frameHeight)
+        let bandHeight = max(1, bottom * band)
+        let bandRect = CGRect(x: -left / fill, y: imageHeight - (bottom - top) / fill, width: frameWidth / fill, height: bandHeight / fill)
+            .intersection(picture.extent)
+        guard bandRect.width >= 1, bandRect.height >= 1 else { return nil }
+
+        let scaler = CIFilter.lanczosScaleTransform()
+        scaler.inputImage = picture.cropped(to: bandRect)
+            .transformed(by: CGAffineTransform(translationX: -bandRect.minX, y: -bandRect.minY))
+            .clampedToExtent()
+        scaler.scale = Float(1 / bandRect.height)
+        scaler.aspectRatio = Float(frameWidth / bandRect.width * bandRect.height)
+        guard let row = scaler.outputImage?.cropped(to: CGRect(x: 0, y: 0, width: frameWidth, height: 1)) else { return nil }
+
+        let blur = CIFilter.gaussianBlur()
+        blur.inputImage = row
+            .transformed(by: CGAffineTransform(translationX: pageWidth + request.trailingOverhang * scale - frameWidth, y: 0))
+            .clampedToExtent()
+        blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
+
+        let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: 1)
+        let veil = CIImage(color: CIColor(red: veilGrey, green: veilGrey, blue: veilGrey, alpha: veilAmount)).cropped(to: bounds)
+        guard let blurred = blur.outputImage,
+              let pixels = context.createCGImage(veil.composited(over: blurred).cropped(to: bounds), from: bounds) else { return nil }
+        return UIImage(cgImage: pixels, scale: scale, orientation: .up)
+    }
+}
+
+/// Appearance's Blurred background on a title page: the hero picture's foot run down the whole page, with an episode card's blur and veil.
+/// It is one row the page's width, stretched to the page's height, so it is the same behind every part of the page however far it has
+/// scrolled, and the hero's fade (see `BottomFade`) ends in exactly what is under it.
+struct TitleBackdropRequest: Equatable, Sendable {
+    let image: UIImage
+    /// The frame the hero fills with the picture, and how far down it the picture shows.
+    let frame: CGSize
+    let visibleBottom: CGFloat
+    /// The picture sits at its frame's top (portrait) rather than its middle.
+    let alignsTop: Bool
+    /// How far the frame's trailing edge runs past the page's.
+    var trailingOverhang: CGFloat = 0
+    var pageWidth: CGFloat = 0
+    var scale: CGFloat = 1
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.image === rhs.image && lhs.frame == rhs.frame && lhs.visibleBottom == rhs.visibleBottom && lhs.alignsTop == rhs.alignsTop
+            && lhs.trailingOverhang == rhs.trailingOverhang && lhs.pageWidth == rhs.pageWidth && lhs.scale == rhs.scale
+    }
+
+    func render() -> UIImage? { ExtendedArtworkRenderer.backdropRow(self) }
+}
+
+extension EnvironmentValues {
+    /// The title page's Blurred background, while it has one. `BottomFade` fades into it in place of the page's colour.
+    @Entry var pageBackdrop: UIImage? = nil
+}
+
+private extension CGImagePropertyOrientation {
+    init(_ orientation: UIImage.Orientation) {
+        switch orientation {
+        case .upMirrored: self = .upMirrored
+        case .down: self = .down
+        case .downMirrored: self = .downMirrored
+        case .left: self = .left
+        case .leftMirrored: self = .leftMirrored
+        case .right: self = .right
+        case .rightMirrored: self = .rightMirrored
+        default: self = .up
         }
     }
 }

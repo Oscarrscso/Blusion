@@ -29,9 +29,9 @@ struct BestEditionView: View {
                             .font(Theme.Typography.medium)
                             .foregroundStyle(.secondary)
                         Text("Best Blu-ray")
-                            .font(Theme.Typography.mediumStrong)
+                            .appFont(.mediumStrong)
                         Text(summary)
-                            .font(Theme.Typography.caption)
+                            .appFont(.caption)
                             .foregroundStyle(summaryColor)
                             .lineLimit(1)
                         Spacer(minLength: Theme.Spacing.s)
@@ -97,7 +97,7 @@ struct BestEditionView: View {
             HStack(spacing: Theme.Spacing.m) {
                 Spinner()
                 Text("Checking Best Blurays for \(model.request.title)…")
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
@@ -117,18 +117,18 @@ struct BestEditionView: View {
     private func found(_ edition: BestBlurayEdition) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(edition.heading)
-                .font(Theme.Typography.eyebrow)
+                .appFont(.eyebrow)
                 .textCase(.uppercase)
                 .foregroundStyle(.secondary)
             Text(edition.release)
-                .font(Theme.Typography.mediumStrong)
+                .appFont(.mediumStrong)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("bestEdition.release")
             HStack(spacing: Theme.Spacing.s) {
                 if edition.is4K { Badge("4K", style: .quality) }
                 if let tier = edition.uhdTier { Badge("\(tier) 4K tier") }
                 if let updated = edition.updated {
-                    Text(updated).font(Theme.Typography.caption).foregroundStyle(.secondary)
+                    Text(updated).appFont(.caption).foregroundStyle(.secondary)
                 }
             }
             if let notes = edition.videoNotes {
@@ -149,9 +149,9 @@ struct BestEditionView: View {
 
     private func labelled(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(title).font(Theme.Typography.mediumStrong)
+            Text(title).appFont(.mediumStrong)
             Text(text)
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .foregroundStyle(.secondary)
                 .lineLimit(12)
                 .fixedSize(horizontal: false, vertical: true)
@@ -161,7 +161,7 @@ struct BestEditionView: View {
     private func message(_ text: String, link: URL, linkTitle: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Text(text)
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button { openURL(link) } label: {

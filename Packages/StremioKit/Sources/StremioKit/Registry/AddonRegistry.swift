@@ -14,6 +14,9 @@ public actor AddonRegistry {
     /// later save doesn't drop them.
     private var unreadable: [AddonRecord] = []
 
+    /// Includes records whose saved URL is temporarily unavailable, so Clear Data can remove or report them too.
+    public var installedIDs: [UUID] { addons.map(\.id) + unreadable.map(\.id) }
+
     public init(store: any AddonStore, secrets: any SecretStore, client: AddonClient, logger: AddonLogger = .silent) {
         self.store = store
         self.secrets = secrets
@@ -84,13 +87,33 @@ public actor AddonRegistry {
     }
 
     public func remove(id: UUID) async throws {
+        if let index = unreadable.firstIndex(where: { $0.id == id }) {
+            let removed = unreadable.remove(at: index)
+            do { try await persist() } catch {
+                unreadable.insert(removed, at: min(index, unreadable.count))
+                throw error
+            }
+            do { try await secrets.remove(Self.secretKey(id)) } catch {
+                unreadable.insert(removed, at: min(index, unreadable.count))
+                try? await persist()
+                throw RegistryError.storage("remove secret")
+            }
+            publish()
+            return
+        }
         guard let index = addons.firstIndex(where: { $0.id == id }) else { throw RegistryError.notFound }
         let removed = addons.remove(at: index)
         do { try await persist() } catch {
             addons.insert(removed, at: min(index, addons.count))
             throw error
         }
-        try? await secrets.remove(Self.secretKey(id))
+        do { try await secrets.remove(Self.secretKey(id)) } catch {
+            // Keep a failed removal available to retry instead of orphaning its saved secret.
+            addons.insert(removed, at: min(index, addons.count))
+            try? await persist()
+            publish()
+            throw RegistryError.storage("remove secret")
+        }
         logger.log(.info, "removed addon “\(removed.name)”")
         publish()
     }

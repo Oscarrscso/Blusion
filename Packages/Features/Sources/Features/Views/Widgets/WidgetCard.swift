@@ -31,7 +31,7 @@ struct WidgetCard: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
                 Text(styleName)
-                    .font(Theme.Typography.large)
+                    .appFont(.large)
                     .foregroundStyle(Theme.dimmerText)
             }
             .padding(16)

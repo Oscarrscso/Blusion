@@ -20,7 +20,7 @@ enum AVAssetFactory {
     }
 }
 
-/// Fetches media for AVPlayer through URLSession with extra request headers. UNVERIFIED on device (see docs/DEVICE_CHECKLIST.md).
+/// Fetches media for AVPlayer through URLSession with extra request headers.
 /// ATS applies to these URLSession loads: plain-http streams to non-local hosts fail by design (ADR-005).
 final class HeaderResourceLoader: NSObject, AVAssetResourceLoaderDelegate, URLSessionDataDelegate, @unchecked Sendable {
     let queue = DispatchQueue(label: "app.blusion.resource-loader")

@@ -33,8 +33,6 @@ struct DetailEpisodes: View {
     @State private var showsShuffleNext = false
     /// The name's size: a little under `caption2`, and scaled with the text size.
     @ScaledMetric(relativeTo: .caption2) private var shuffleNextSize: CGFloat = 10
-    /// A loading card's information height, scaled as the episode cards' own is.
-    @ScaledMetric(relativeTo: .caption) private var episodeInformationHeight: CGFloat = EpisodeRow.informationHeightAtDefaultSize
     /// Handed on to an episode's menu preview, which is drawn outside the page and does not get the page's environment.
     @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
 
@@ -90,14 +88,15 @@ struct DetailEpisodes: View {
                                         .padding(.top, setsShortCardText ? 0 : -Theme.Spacing.xs)
                                     DetailSkeletonParagraph(style: setsShortCardText ? .footnote : .body, lines: 2)
                                     Rectangle().fill(Theme.separator).frame(height: 0.5)
-                                    DetailSkeletonParagraph(style: setsShortCardText ? .caption1 : .body, lines: 3)
+                                    DetailSkeletonParagraph(style: setsShortCardText ? .caption1 : .body, lines: 5)
                                         .frame(minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                                         .clipped()
                                     Rectangle().fill(Theme.separator).frame(height: 0.5)
                                     DetailSkeletonLine(font: .caption2, width: width * 0.65)
                                 }
                                 .padding(Theme.Spacing.s + EpisodeRow.overlayInset(stillRadius: Theme.Radius.card))
-                                .frame(width: width, height: episodeInformationHeight, alignment: .topLeading)
+                                .modifier(EpisodeInformationFrame(isShortWidth: !model.matchesEpisodeWidthToText))
+                                .frame(width: width)
                             }
                             .frame(width: width)
                             .background(Theme.placeholder)
@@ -159,7 +158,7 @@ struct DetailEpisodes: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").font(Theme.Typography.mediumStrong)
+                Text(model.selectedSeason == 0 ? "Specials" : "Season \(model.selectedSeason ?? 1)").appFont(.mediumStrong)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
@@ -301,7 +300,7 @@ struct DetailEpisodes: View {
             .overlay(alignment: .topLeading) {
                 if hasNoStreams {
                     Text("No streams")
-                        .font(Theme.Typography.caption).foregroundStyle(.white)
+                        .appFont(.caption).foregroundStyle(.white)
                         .padding(Theme.Spacing.s)
                         .background(.black.opacity(0.5), in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
                         .padding(Theme.Spacing.s)
@@ -522,8 +521,43 @@ enum EpisodeIMDbReviews {
     }
 }
 
+/// The shelf reserves its original information height plus two more lines in the synopsis's actual font.
+private struct EpisodeInformationFrame: ViewModifier {
+    let isShortWidth: Bool
+    var expands = false
+    @ScaledMetric(relativeTo: .caption) private var originalHeight: CGFloat = 140
+    @Environment(\.appAppearance) private var appearance
+
+    static func synopsisFont(isShortWidth: Bool) -> Theme.Typography.Token {
+        #if targetEnvironment(macCatalyst)
+        isShortWidth ? .caption : .large
+        #else
+        .caption
+        #endif
+    }
+
+    func body(content: Content) -> some View {
+        if expands {
+            content
+        } else {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: originalHeight)
+                Text(verbatim: "Ag\nAg")
+                    .appFont(Self.synopsisFont(isShortWidth: isShortWidth), role: .reading)
+                    .fixedSize()
+                    // The second gap joins the new lines to the existing synopsis.
+                    .padding(.bottom, appearance.reading.lineSpacing.points)
+            }
+            .hidden()
+            .accessibilityHidden(true)
+            .overlay(alignment: .topLeading) { content }
+        }
+    }
+}
+
 /// One episode's sharp 16:9 artwork continues downward into a diffused background behind its independently sized information stack.
-private struct EpisodeRow: View {
+/// Appearance's Title Pages preview draws it too.
+struct EpisodeRow: View {
     @Environment(\.layoutMetrics) private var metrics
     let video: Video
     let fraction: Double?
@@ -540,9 +574,6 @@ private struct EpisodeRow: View {
         runtimeMinutes.map { Duration.seconds($0 * 60).formatted(.units(allowed: [.hours, .minutes], width: .wide)) }
     }
     let width: CGFloat
-    /// The information block's height at the default text size; it scales with Dynamic Type.
-    static let informationHeightAtDefaultSize: CGFloat = 140
-    @ScaledMetric(relativeTo: .caption) private var informationHeight: CGFloat = EpisodeRow.informationHeightAtDefaultSize
     @State private var overviewTextHeight: CGFloat = 0
     @State private var overviewFrameHeight: CGFloat = 0
     /// Menu previews show all the text; shelf cards let the synopsis absorb title wrapping inside a fixed height.
@@ -586,7 +617,8 @@ private struct EpisodeRow: View {
             text
                 .fixedSize(horizontal: false, vertical: showsWholeOverview)
                 .padding(Theme.Spacing.s + overlayInset)
-                .frame(width: width, height: showsWholeOverview ? nil : informationHeight, alignment: .topLeading)
+                .modifier(EpisodeInformationFrame(isShortWidth: isShortWidth, expands: showsWholeOverview))
+                .frame(width: width, alignment: .topLeading)
         }
         .frame(width: width, alignment: .topLeading)
         .background { still }
@@ -654,7 +686,7 @@ private struct EpisodeRow: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             if let episode = video.episode {
-                Text("EPISODE \(episode)").font(Theme.Typography.eyebrow).foregroundStyle(Theme.dimText)
+                Text("EPISODE \(episode)").appFont(.eyebrow).foregroundStyle(Theme.dimText)
                     #if targetEnvironment(macCatalyst)
                     .padding(.top, isShortWidth ? 0 : -Theme.Spacing.xs)
                     #endif
@@ -668,9 +700,9 @@ private struct EpisodeRow: View {
                 }
             }
             #if targetEnvironment(macCatalyst)
-            .font((isShortWidth ? Font.footnote : .body).weight(.medium))
+            .appFont(isShortWidth ? .small : .large, weight: .medium, role: .display)
             #else
-            .font(.footnote.weight(.medium))
+            .appFont(.small, weight: .medium, role: .display)
             #endif
             .allowsTightening(true)
             .foregroundStyle(.white)
@@ -682,13 +714,8 @@ private struct EpisodeRow: View {
     @ViewBuilder
     private var overview: some View {
         if let overview = video.overview, !overview.isEmpty {
-            // Preserve the original line budget. Measuring before padding lets the divider move without resizing the text.
             Text(overview)
-                #if targetEnvironment(macCatalyst)
-                .font(isShortWidth ? .caption : .body)
-                #else
-                .font(Theme.Typography.caption)
-                #endif
+                .appFont(EpisodeInformationFrame.synopsisFont(isShortWidth: isShortWidth), role: .reading)
                 .foregroundStyle(.white.opacity(0.85))
                 .redacted(reason: hidesSynopsis ? .placeholder : [])
                 .accessibilityHidden(hidesSynopsis)
@@ -706,7 +733,7 @@ private struct EpisodeRow: View {
 
     private var checkmark: some View {
         Image(systemName: "checkmark")
-            .font(.caption2.weight(.bold))
+            .font(.caption2.bold())
             .foregroundStyle(.white)
             .frame(width: 20, height: 20)
             .background(.black.opacity(0.6), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
@@ -754,7 +781,7 @@ private struct EpisodeRow: View {
                     if !score.isIMDb, video.ratingSource == .tmdb { Text("TMDb") }
                 }
             }
-            .font(Theme.Typography.micro)
+            .appFont(.micro)
             .foregroundStyle(Theme.dimText)
             .lineLimit(1)
             .minimumScaleFactor(0.8)

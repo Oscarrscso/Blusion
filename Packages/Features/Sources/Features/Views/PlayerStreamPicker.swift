@@ -51,7 +51,7 @@ struct PlayerStreamPicker: View {
     private var header: some View {
         HStack {
             Text("Streams")
-                .font(Theme.Typography.headline)
+                .appFont(.headline)
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 12)
@@ -83,18 +83,18 @@ struct PlayerStreamPicker: View {
                         badges(for: candidate)
                     }
                     Text(primaryTitle(for: candidate))
-                        .font(Theme.Typography.mediumStrong)
+                        .appFont(.mediumStrong)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if let release = secondaryRelease(for: candidate) {
                         Text(release)
-                            .font(Theme.Typography.caption)
+                            .appFont(.caption)
                             .foregroundStyle(.white.opacity(0.72))
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                     Text(metaLine(for: candidate))
-                        .font(Theme.Typography.metaLine)
+                        .appFont(.metaLine)
                         .foregroundStyle(Theme.metaText)
                         .lineLimit(1)
                         .truncationMode(.tail)

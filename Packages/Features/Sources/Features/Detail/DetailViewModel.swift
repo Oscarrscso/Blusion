@@ -3,6 +3,22 @@ import Observation
 import PlayerKit
 import StremioKit
 
+/// A title's logos, best first. The catalogue logo, then TMDb, then its alternates, then Metahub once the artwork lookup has finished.
+enum HeroLogos {
+    static func candidates(preview: URL?, artwork: TMDbArtwork?, imdbID: String, artworkReady: Bool) -> [URL] {
+        var urls: [URL] = []
+        func add(_ url: URL?) {
+            guard let url, !urls.contains(url) else { return }
+            urls.append(url)
+        }
+        add(preview)
+        add(artwork?.logo)
+        for url in artwork?.alternateLogos ?? [] { add(url) }
+        if artworkReady { add(MetahubArtwork.logo(imdbID: imdbID)) }
+        return urls
+    }
+}
+
 /// Detail: starts from the catalog preview, upgrades to the addon's full `meta` when it arrives.
 @MainActor
 @Observable
@@ -821,6 +837,23 @@ public final class DetailViewModel {
         return "\(verb) S\(season) · E\(episode)"
     }
 
+    /// Minutes left on the title Play will resume, for Play's second line on a partly watched page. Nil when there is no resumable
+    /// progress with a known length.
+    public var primaryRemainingTimeLabel: String? {
+        let identity: String?
+        if isSeries, let next = nextUp {
+            identity = episodeIdentity(next)
+        } else if !isSeries {
+            identity = movieIdentity
+        } else {
+            identity = nil
+        }
+        guard let identity, let record = savedProgress[identity], progressFractions[identity] != nil,
+              record.duration > 0, record.position.isFinite, record.duration.isFinite else { return nil }
+        let minutes = max(1, ((record.duration - record.position) / 60).rounded(.up))
+        return "\(minutes.formatted(.number.precision(.fractionLength(0))))m left"
+    }
+
     /// What the main action plays: a movie itself, or a series' next episode once it has aired. Nil while a series' episodes are still
     /// arriving, and while the next episode has not aired: nothing is played then, and the button shows `unairedAirLabel` instead.
     public var primaryRequest: StreamRequest? {
@@ -881,8 +914,13 @@ public final class DetailViewModel {
         tmdbArtwork?.portrait ?? (isLoadingArtwork ? nil : preview.background ?? MetahubArtwork.background(imdbID: preview.id))
     }
 
-    /// The title's logo (a transparent image), when the preview or the TMDb lookup has one.
-    public var logoURL: URL? { preview.logo ?? tmdbArtwork?.logo }
+    /// The title's logos, best first. Metahub is included once the TMDb lookup has finished.
+    public var logoCandidates: [URL] {
+        HeroLogos.candidates(preview: preview.logo, artwork: tmdbArtwork, imdbID: preview.id, artworkReady: !isLoadingArtwork)
+    }
+
+    /// The title's logo (a transparent image), when the preview or the TMDb lookup has one. A later candidate stands in when this one fails.
+    public var logoURL: URL? { logoCandidates.first }
 
     /// Whether the portrait picture already carries the title, so the separate logo is not shown in portrait.
     public var portraitHidesLogo: Bool { tmdbArtwork?.portraitHidesLogo ?? false }

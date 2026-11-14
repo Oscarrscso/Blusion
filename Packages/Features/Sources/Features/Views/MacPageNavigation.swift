@@ -21,9 +21,11 @@ struct MacPageNavigation: View {
     var body: some View {
         #if targetEnvironment(macCatalyst)
         GeometryReader { geometry in
-            let segmentWidth = geometry.size.width / CGFloat(LaunchRoute.Tab.allCases.count)
-            CornerSegmentedPicker("Navigation", options: [.home, .discover, .library, .settings, .widgets, .search],
-                                  selection: Binding(get: { router.tab }, set: { router.tapTab($0) })) { tab in
+            let tabs: [LaunchRoute.Tab] = [.home, .discover, .library, .settings, .widgets, .search]
+            let segmentWidth = geometry.size.width / CGFloat(tabs.count)
+            // The segmented control draws the selection; clear hit targets above it always call `tapTab`, including a re-tap of Home
+            // from a title page (a segmented picker does not set its binding when the chosen segment is tapped again).
+            CornerSegmentedPicker("Navigation", options: tabs, selection: .constant(router.tab)) { tab in
                 switch tab {
                 case .home: "Home"
                 case .discover: "Discover"
@@ -34,8 +36,30 @@ struct MacPageNavigation: View {
                 }
             }
             .controlSize(.regular)
-            .font(Theme.Typography.large)
+            .appFont(.large)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .overlay {
+                HStack(spacing: 0) {
+                    ForEach(tabs, id: \.self) { tab in
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { router.tapTab(tab) }
+                            .accessibilityAddTraits(tab == router.tab ? [.isButton, .isSelected] : .isButton)
+                            .accessibilityLabel({
+                                switch tab {
+                                case .home: "Home"
+                                case .discover: "Discover"
+                                case .library: "Library"
+                                case .settings: "Settings"
+                                case .widgets: "Widgets"
+                                case .search: "Search"
+                                }
+                            }())
+                    }
+                }
+            }
             .overlay {
                 if let hoveredSegment {
                     ScaledCapsule(scale: metrics.cornerScale(for: .filters))
@@ -55,7 +79,7 @@ struct MacPageNavigation: View {
                         hoveredSegment = nil
                         return
                     }
-                    hoveredSegment = min(LaunchRoute.Tab.allCases.count - 1, Int(location.x / segmentWidth))
+                    hoveredSegment = min(tabs.count - 1, Int(location.x / segmentWidth))
                 case .ended:
                     hoveredSegment = nil
                 }

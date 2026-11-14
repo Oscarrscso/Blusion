@@ -160,6 +160,17 @@ private func externalIDRequests(_ transport: StubTransport) -> Int {
                 "a list sorted by date keeps a vote floor, so it is not filled with titles nobody rated")
     }
 
+    @Test func theAppsRatingHoldsAScoreBoundOnASearchsListToo() async throws {
+        let transport = stub(total: 40)
+        // The app rates the even titles 8 and the odd ones 6, whatever TMDb's score of 5 says.
+        let judge: TitleRatingJudge = { item, _, _ in (Int(item.id.dropFirst(2)) ?? 0) % 2 == 0 ? 8 : 6 }
+        let query = TMDbDiscoverQuery(kind: .movie, minimumScore: 7, usesTMDbScores: true)
+        let found = try await ratings(transport).discoverItems(query, limit: 5, skip: 0, defaultRegion: "US", today: testToday,
+                                                               calendar: utc, judge: judge).map(\.id)
+        #expect(found == [2, 4, 6, 8, 10].map(imdbID))
+        #expect(listItems(transport).contains("vote_average.gte=6.0"), "TMDb is asked within a point of the bound")
+    }
+
     @Test func theTMDbFlagIsWrittenOnlyWhenSetAndASearchSetsIt() throws {
         let widget = TMDbDiscoverQuery(minimumScore: 7)
         #expect(!String(decoding: try JSONEncoder().encode(widget), as: UTF8.self).contains("usesTMDbScores"))

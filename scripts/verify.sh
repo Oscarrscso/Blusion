@@ -141,7 +141,7 @@ print(pick["udid"])
     echo "SKIPPED (no iOS simulator runtime installed)"
     SKIPPED+=("simulator-tests")
     for target in device catalyst; do
-      # The Mac build has no fallback engine (docs/CLAUDE_HANDOFF.md, iOS-only exceptions), so its leg runs only without FALLBACK=1.
+      # This leg skips Catalyst when FALLBACK=1. Run without FALLBACK=1 for the Mac build.
       if [[ "$target" == "catalyst" && -n "${FALLBACK:-}" ]]; then
         echo "SKIPPED (Mac Catalyst is built without the fallback engine; run without FALLBACK=1 for the Mac build)"
         SKIPPED+=("build:catalyst:fallback")
@@ -197,7 +197,7 @@ print(pick["udid"])
   fi
 else
   log "3-4/6 xcodegen + xcodebuild"
-  echo "SKIPPED (no Xcode on this host: $OS). Apple-only code is verified by the macOS CI job (ADR-002)."
+  echo "SKIPPED (no Xcode on this host: $OS). Apple-only code is verified on a Mac."
   SKIPPED+=("xcodegen" "xcodebuild")
   if [[ "$MODE" == "milestone" && "${ALLOW_HOST_ONLY:-}" != "1" ]]; then
     fail "milestone run needs Xcode (set ALLOW_HOST_ONLY=1 for a host-layer-only run)"

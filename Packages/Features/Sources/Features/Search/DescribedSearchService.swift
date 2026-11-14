@@ -39,6 +39,8 @@ public struct DescribedSearchService: Sendable {
     let watched: @Sendable () async -> Set<String>
     /// TMDb's people for a name, to check whether words of the search name someone.
     let people: @Sendable (String) async -> [TMDbTitlePerson]
+    /// A title's rating out of 10, as the rating filters judge it, from its TMDb score and the other sites; a minimum score is held to it.
+    let titleRating: @Sendable (MetaPreview, Double?) async -> Double?
 
     public init(interpreter: any DescriptionInterpreting, keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named],
                 titles: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview],
@@ -50,7 +52,9 @@ public struct DescribedSearchService: Sendable {
                 watched: @escaping @Sendable () async -> Set<String> = { [] },
                 pageTitles: (@Sendable (TMDbDiscoverQuery, Int) async throws -> [MetaPreview])? = nil,
                 people: @escaping @Sendable (String) async -> [TMDbTitlePerson] = { _ in [] },
-                resolveGenres: @escaping @Sendable ([MetaPreview]) async -> [MetaPreview] = { $0 }) {
+                resolveGenres: @escaping @Sendable ([MetaPreview]) async -> [MetaPreview] = { $0 },
+                titleRating: @escaping @Sendable (MetaPreview, Double?) async -> Double? = { _, tmdbScore in tmdbScore }) {
+        self.titleRating = titleRating
         self.interpreter = interpreter
         self.keywords = keywords
         self.titles = titles
@@ -333,11 +337,15 @@ public struct DescribedSearchService: Sendable {
                 let candidates = zip(list.found, checked).map { candidate, item in
                     AISearchCandidate(item: item, evidence: candidate.evidence, metadata: candidate.metadata)
                 }
+                var scores: [String: Double] = [:]
+                if plan.filters.minimumScore != nil { scores = await ratings(of: candidates) }
+                guard !Task.isCancelled else { return }
                 let fresh = candidates.filter { candidate in
                     let item = candidate.item
                     guard !excluded.contains(item.identity), !plan.watchedOnly || history.contains(item.identity),
                           Self.fits(item, filters: plan.filters),
-                          Self.fitsMetadata(candidate, plan: plan), considered.count < Self.candidateLimit else { return false }
+                          Self.fitsMetadata(candidate, plan: plan, score: scores[item.identity]),
+                          considered.count < Self.candidateLimit else { return false }
                     return considered.insert(item.identity).inserted
                 }
                 for start in stride(from: 0, to: fresh.count, by: Self.batchSize) {
@@ -656,7 +664,7 @@ public struct DescribedSearchService: Sendable {
         if let value = query.releasedTo { parts.append("Released through: \(value)") }
         if let value = query.minimumRuntime { parts.append("Runtime at least \(value) minutes") }
         if let value = query.maximumRuntime { parts.append("Runtime at most \(value) minutes") }
-        if let value = query.minimumScore { parts.append("TMDb score at least \(value)/10") }
+        if let value = query.minimumScore { parts.append("Rated at least \(value)/10") }
         if !query.companies.isEmpty { parts.append(query.companies.map(\.name).joined(separator: ", ")) }
         if !query.keywords.isEmpty { parts.append("At least one database topic: " + query.keywords.map(\.name).joined(separator: ", ")) }
         return parts.filter { !$0.isEmpty }.joined(separator: "; ")
@@ -672,11 +680,32 @@ public struct DescribedSearchService: Sendable {
             + (evidence.isEmpty ? "" : ". Database evidence: " + String(evidence.prefix(320)))
     }
 
-    private static func fitsMetadata(_ candidate: AISearchCandidate, plan: AISearchPlan) -> Bool {
+    /// Each candidate's rating out of 10 by identity (see `titleRating`), asked for six at a time; one no site has scored is left out.
+    private func ratings(of candidates: [AISearchCandidate]) async -> [String: Double] {
+        var scores: [String: Double] = [:]
+        for start in stride(from: 0, to: candidates.count, by: 6) {
+            let batch = candidates[start..<min(start + 6, candidates.count)]
+            let found = await withTaskGroup(of: (String, Double?).self, returning: [String: Double].self) { group in
+                for candidate in batch {
+                    let item = candidate.item, tmdbScore = candidate.metadata?.score
+                    group.addTask { (item.identity, await titleRating(item, tmdbScore)) }
+                }
+                var answers: [String: Double] = [:]
+                for await (identity, score) in group { if let score { answers[identity] = score } }
+                return answers
+            }
+            scores.merge(found) { first, _ in first }
+            if Task.isCancelled { break }
+        }
+        return scores
+    }
+
+    /// `score` is the candidate's rating out of 10 (see `titleRating`), which a minimum score is held to.
+    private static func fitsMetadata(_ candidate: AISearchCandidate, plan: AISearchPlan, score: Double?) -> Bool {
         guard let metadata = candidate.metadata else { return true }
         guard fitsGenres(candidate.item, filters: plan.filters, requireKnown: true) else { return false }
         if let language = plan.language, metadata.language != language { return false }
-        if let score = plan.filters.minimumScore, (metadata.score ?? -1) < (score > 10 ? score / 10 : score) { return false }
+        if let minimum = plan.filters.minimumScore, (score ?? -1) < (minimum > 10 ? minimum / 10 : minimum) { return false }
         return plan.companies.allSatisfy { name in metadata.companies.contains { $0.caseInsensitiveCompare(name) == .orderedSame } }
     }
 

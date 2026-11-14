@@ -42,7 +42,7 @@ public final class LibraryViewModel {
         self.services = services
     }
 
-    /// Lets the rating filter look up Letterboxd, Rotten Tomatoes and Metacritic scores. Titles re-filter as each score arrives.
+    /// Lets the rating filter and the Rating sort look up Letterboxd, MyAnimeList and TMDb scores. Titles re-filter as each score arrives.
     public func attachRatings(_ store: PosterRatingsStore?) {
         ratings = store
         applyFilter()
@@ -209,12 +209,9 @@ public final class LibraryViewModel {
     }
 
     /// Every site's score for a title comes from the rating store, which starts a lookup for it if it has none yet. Without a
-    /// threshold no score is needed, so nothing is looked up.
+    /// threshold or the Rating sort no score is needed, so nothing is looked up.
     private func scoreLookup(for filter: LibraryFilter) -> LibraryFiltering.ScoreLookup {
-        guard filter.minimumRating != nil, let store = ratings else { return LibraryFiltering.catalogueScores }
-        return { entry, source in
-            if source == .imdb, let rating = entry.preview.imdbRating { return rating }
-            return store.ratings(for: entry.preview, source: source).score(for: source)
-        }
+        guard filter.minimumRating != nil || filter.sort == .rating, let store = ratings else { return LibraryFiltering.catalogueScores }
+        return { entry in store.judgedRating(for: entry.preview) ?? LibraryFiltering.catalogueScores(entry) }
     }
 }

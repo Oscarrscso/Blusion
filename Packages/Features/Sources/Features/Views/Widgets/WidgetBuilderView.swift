@@ -140,7 +140,7 @@ struct WidgetBuilderView: View {
     /// The notice that a TMDB list cannot be read until a TMDB token is saved in Settings.
     private var tokenNotice: some View {
         Text("TMDB lists need a TMDB Read Access Token. Add one in Settings › Ratings, or choose another source.")
-            .font(Theme.Typography.medium)
+            .appFont(.medium)
             .foregroundStyle(.secondary)
             .padding(Theme.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -248,7 +248,7 @@ private struct SentenceCard: View {
             switch piece.content {
             case .word(let word):
                 Text(word)
-                    .font(.title2.weight(.semibold))
+                    .appFont(style: .title2, weight: .semibold, role: .display)
                     .foregroundStyle(.secondary)
             case .kind(let kind):
                 kindMenu(kind)
@@ -257,7 +257,7 @@ private struct SentenceCard: View {
             }
             if let trailing = piece.trailing {
                 Text(trailing)
-                    .font(.title2.weight(.semibold))
+                    .appFont(style: .title2, weight: .semibold, role: .display)
                     .foregroundStyle(.secondary)
             }
         }
@@ -268,7 +268,7 @@ private struct SentenceCard: View {
         HStack(spacing: 0) {
             Button { model.select(token.field) } label: {
                 Text(token.text)
-                    .font(.title3.weight(.semibold))
+                    .appFont(style: .title3, weight: .semibold, role: .display)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
             }
@@ -279,7 +279,7 @@ private struct SentenceCard: View {
                     model.remove(token)
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
+                        .font(.caption.bold())
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 28, minHeight: 28)
                         .contentShape(Rectangle())
@@ -310,9 +310,9 @@ private struct SentenceCard: View {
             HStack(spacing: 4) {
                 Text(kind.noun)
                 Image(systemName: "chevron.down")
-                    .font(.caption.weight(.bold))
+                    .font(.caption.bold())
             }
-            .font(.title3.weight(.semibold))
+            .appFont(style: .title3, weight: .semibold, role: .display)
             .foregroundStyle(.primary)
             .tokenCapsule(scale: metrics.cornerScale(for: .panels))
             .glassHover(ScaledCapsule(scale: metrics.cornerScale(for: .panels)))
@@ -341,7 +341,7 @@ private struct PillList: View {
         Group(title: "List", tint: .blue, fields: [.source, .ordering, .catalogGenre, .traktSort]),
         // What the titles are about: purple.
         Group(title: "Content", tint: .purple, fields: [.genres, .keywords, .excludedKeywords, .language, .runtime]),
-        // Scores: the yellow of a star. They are IMDb's (see `TMDbDiscoverQuery.usesTMDbScores`).
+        // Scores: the yellow of a star. Each title's rating as the rating filters judge it (see `TitleRatingJudge`).
         Group(title: "IMDb Ratings", tint: .yellow, fields: [.score, .votes]),
         // When and where a title can be watched: green, as for something that is available.
         Group(title: "Dates and availability", tint: .green, fields: [.period, .release, .region, .providers]),
@@ -382,7 +382,7 @@ private struct PillList: View {
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
                 Text(title)
-                    .font(Theme.Typography.eyebrow)
+                    .appFont(.eyebrow)
                     .textCase(.uppercase)
                     .foregroundStyle(.secondary)
             }
@@ -477,17 +477,17 @@ private struct PillRow: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.subheadline.weight(.bold))
+                    .appFont(style: .subheadline, weight: .bold, role: .interface)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(value)
-                    .font(Theme.Typography.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: chevron)
-                .font(.caption2.weight(.bold))
+                .font(.caption2.bold())
                 .foregroundStyle(.tertiary)
         }
         .foregroundStyle(.primary)

@@ -79,7 +79,7 @@ struct WidgetSourcePicker: View {
     private func label(_ choice: WidgetsManagerViewModel.CatalogChoice) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(choice.title)
-            Text(choice.addonName).font(Theme.Typography.caption).foregroundStyle(.secondary)
+            Text(choice.addonName).appFont(.caption).foregroundStyle(.secondary)
         }
     }
 }

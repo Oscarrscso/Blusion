@@ -9,6 +9,8 @@ import UIKit
 struct PlayerSettingsPage: View {
     let model: SettingsViewModel
     var aetherEngineLinked = false
+    enum Detail: String, CaseIterable { case subtitles = "Subtitles", picture = "Picture", controls = "Controls" }
+    var detail: Detail? = nil
     @State private var infuseInstalled = true
     @Environment(\.scenePhase) private var scenePhase
 
@@ -23,119 +25,158 @@ struct PlayerSettingsPage: View {
 
     var body: some View {
         SettingsList {
-            engineSection
-
-            Section("Subtitles") {
-                Picker("Language", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in
-                    Haptics.play(.choices)
-                    Task { await model.setSubtitleLanguage(value) }
-                })) {
-                    ForEach(SettingsViewModel.languageOptions) { Text($0.label).tag($0.value) }
+            if let detail {
+                switch detail {
+                case .subtitles: subtitlesContent
+                case .picture: pictureSection
+                case .controls: controlsSection
                 }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.subtitleLanguage")
-                Picker("Show", selection: binding(\.subtitleMode)) {
-                    ForEach(SubtitleMode.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.subtitleMode")
-                Toggle("Prefer SDH", isOn: binding(\.prefersSDH))
-                    .accessibilityIdentifier("settings.player.sdh")
-                SettingsSubpageLink(id: "player.openSubtitles") { OpenSubtitlesSettingsPage(model: model) } label: {
-                    LabeledContent("OpenSubtitles", value: openSubtitlesSummary)
-                }
-                .accessibilityIdentifier("settings.player.openSubtitles")
-            }
-
-            Section("Subtitle Style") {
-                LabeledContent("Size") {
-                    CornerSlider(value: Binding(get: { player.subtitleStyle.scale }, set: { value in
-                        Task { await model.updatePlayer { $0.subtitleStyle.scale = value } }
-                    }), in: SubtitleStyle.scaleRange, step: 0.1, onEditingChanged: { editing in
-                        if !editing { Haptics.play(.sliders) }
-                    })
-                        .frame(maxWidth: 220)
-                        .accessibilityValue("\(Int(player.subtitleStyle.scale * 100)) percent")
-                }
-                Picker("Colour", selection: binding(\.subtitleStyle.colour)) {
-                    ForEach(SubtitleColour.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .buttonCursor()
-                Picker("Background", selection: binding(\.subtitleStyle.background)) {
-                    ForEach(SubtitleBackground.allCases, id: \.self) { Text($0.label).tag($0) }
-                }
-                .buttonCursor()
-                LabeledContent("Position") {
-                    CornerSlider(value: Binding(get: { player.subtitleStyle.bottomMargin }, set: { value in
-                        Task { await model.updatePlayer { $0.subtitleStyle.bottomMargin = value } }
-                    }), in: SubtitleStyle.positionRange, step: 1, onEditingChanged: { editing in
-                        if !editing { Haptics.play(.sliders) }
-                    })
-                        .frame(maxWidth: 220)
-                        .accessibilityValue("\(Int(player.subtitleStyle.bottomMargin)) percent from the bottom")
-                }
-                Toggle("Apply to styled (ASS) subtitles", isOn: binding(\.subtitleStyle.overridesFileStyles))
-                Stepper("HDR brightness: \(player.subtitleStyle.hdrPeakNits) nits", value: binding(\.subtitleStyle.hdrPeakNits),
-                        in: SubtitleStyle.hdrPeakRange, step: 20)
-                    .buttonCursor()
-                    .accessibilityIdentifier("settings.player.subtitleHDR")
-            }
-
-            Section("Audio") {
-                // Nothing saved reads as English, the language the player picks then.
-                Picker("Language", selection: Binding<String?>(get: { player.audioLanguage ?? PlayerPreferences.defaultAudioLanguage }, set: { value in
-                    Haptics.play(.choices)
-                    Task { await model.updatePlayer { $0.audioLanguage = value } }
-                })) {
-                    ForEach(SettingsViewModel.audioLanguageOptions) { Text($0.label).tag($0.value) }
-                }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.audioLanguage")
-            }
-
-            pictureSection
-
-            Section("Controls") {
-                Picker("Skip back", selection: binding(\.skipBackSeconds)) {
-                    ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
-                }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.skipBack")
-                Picker("Skip forward", selection: binding(\.skipForwardSeconds)) {
-                    ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
-                }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.skipForward")
-                Toggle("Double-tap to skip", isOn: binding(\.doubleTapSkips))
-                    .accessibilityIdentifier("settings.player.doubleTapSkips")
-                Picker("Hide controls", selection: binding(\.controlsHideSeconds)) {
-                    ForEach(PlayerPreferences.controlsHideOptions, id: \.self) { seconds in
-                        Text(seconds == 0 ? "Never" : "After \(Self.secondsLabel(seconds))").tag(seconds)
+            } else {
+                engineSection
+                commonDefaults
+                Section {
+                    ForEach(Detail.allCases, id: \.self) { page in
+                        SettingsSubpageLink(id: "player.\(page.rawValue)") {
+                            PlayerSettingsPage(model: model, aetherEngineLinked: aetherEngineLinked, detail: page)
+                        } label: {
+                            LabeledContent(page.rawValue, value: detailSummary(page))
+                        }
+                        .accessibilityIdentifier("settings.player.\(page.rawValue.lowercased())")
                     }
                 }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.hideControls")
-                Picker("Starting speed", selection: binding(\.playbackSpeed)) {
-                    ForEach(PlayerPreferences.playbackSpeedOptions, id: \.self) { Text(Self.speedLabel($0)).tag($0) }
-                }
-                .buttonCursor()
-                .accessibilityIdentifier("settings.player.speed")
-                Toggle("Skip Intro & Credits buttons", isOn: binding(\.showsSkipButtons))
-                Toggle("Skip intros automatically", isOn: binding(\.skipsIntrosAutomatically))
-                    .disabled(!player.showsSkipButtons)
-                #if !targetEnvironment(macCatalyst)
-                // Brightness has no app control on the Mac, and its keyboard already sets the volume.
-                Toggle("Swipe for brightness", isOn: binding(\.swipeGestures))
-                #endif
             }
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .settingsPage("Player")
+        .settingsPage(detail?.rawValue ?? "Player")
         // Checked again on return to the app: Get Infuse leaves it for the App Store.
         .task(id: scenePhase) {
-            guard scenePhase == .active, let url = URL(string: "infuse://") else { return }
+            guard detail == nil, scenePhase == .active, let url = URL(string: "infuse://") else { return }
             infuseInstalled = UIApplication.shared.canOpenURL(url)
+        }
+    }
+
+    @ViewBuilder
+    private var subtitlesContent: some View {
+        Section("Subtitles") {
+            Picker("Language", selection: Binding(get: { model.settings.subtitleLanguage }, set: { value in
+                Haptics.play(.choices)
+                Task { await model.setSubtitleLanguage(value) }
+            })) {
+                ForEach(SettingsViewModel.languageOptions) {
+                    Text($0.value == nil && player.subtitleMode == .forcedOnly ? "Audio language" : $0.label).tag($0.value)
+                }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.subtitleLanguage")
+            .disabled(player.subtitleMode == .off)
+            Picker("Show", selection: binding(\.subtitleMode)) {
+                ForEach(SubtitleMode.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.subtitleMode")
+            Toggle("Prefer SDH", isOn: binding(\.prefersSDH))
+                .accessibilityIdentifier("settings.player.sdh")
+            SettingsSubpageLink(id: "player.openSubtitles") { OpenSubtitlesSettingsPage(model: model) } label: {
+                LabeledContent("OpenSubtitles", value: model.openSubtitlesSummary)
+            }
+            .accessibilityIdentifier("settings.player.openSubtitles")
+        }
+
+        Section("Subtitle Style") {
+            LabeledContent("Size") {
+                CornerSlider(value: Binding(get: { player.subtitleStyle.scale }, set: { value in
+                    Task { await model.updatePlayer { $0.subtitleStyle.scale = value } }
+                }), in: SubtitleStyle.scaleRange, step: 0.1, onEditingChanged: { editing in
+                    if !editing { Haptics.play(.sliders) }
+                })
+                    .frame(maxWidth: 220)
+                    .accessibilityValue("\(Int(player.subtitleStyle.scale * 100)) percent")
+            }
+            Picker("Colour", selection: binding(\.subtitleStyle.colour)) {
+                ForEach(SubtitleColour.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .buttonCursor()
+            Picker("Background", selection: binding(\.subtitleStyle.background)) {
+                ForEach(SubtitleBackground.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .buttonCursor()
+            LabeledContent("Position") {
+                CornerSlider(value: Binding(get: { player.subtitleStyle.bottomMargin }, set: { value in
+                    Task { await model.updatePlayer { $0.subtitleStyle.bottomMargin = value } }
+                }), in: SubtitleStyle.positionRange, step: 1, onEditingChanged: { editing in
+                    if !editing { Haptics.play(.sliders) }
+                })
+                    .frame(maxWidth: 220)
+                    .accessibilityValue("\(Int(player.subtitleStyle.bottomMargin)) percent from the bottom")
+            }
+            Toggle("Apply to styled (ASS) subtitles", isOn: binding(\.subtitleStyle.overridesFileStyles))
+            Stepper("HDR brightness: \(player.subtitleStyle.hdrPeakNits) nits", value: binding(\.subtitleStyle.hdrPeakNits),
+                    in: SubtitleStyle.hdrPeakRange, step: 20)
+                .buttonCursor()
+                .accessibilityIdentifier("settings.player.subtitleHDR")
+        }
+    }
+
+    private var commonDefaults: some View {
+        Section("Defaults") {
+            // Nothing saved reads as English, the language the player picks then.
+            Picker("Audio language", selection: Binding<String?>(get: { player.audioLanguage ?? PlayerPreferences.defaultAudioLanguage }, set: { value in
+                Haptics.play(.choices)
+                Task { await model.updatePlayer { $0.audioLanguage = value } }
+            })) {
+                ForEach(SettingsViewModel.audioLanguageOptions) { Text($0.label).tag($0.value) }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.audioLanguage")
+            if aetherEngineLinked, model.settings.fallbackEngineEnabled, player.advancedEngine == .aether {
+                Toggle("Spatial audio for TrueHD and DTS:X", isOn: binding(\.rendersObjectAudio))
+                    .accessibilityIdentifier("settings.aether.objectAudio")
+            }
+            Picker("Starting speed", selection: binding(\.playbackSpeed)) {
+                ForEach(PlayerPreferences.playbackSpeedOptions, id: \.self) { Text(Self.speedLabel($0)).tag($0) }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.speed")
+        }
+    }
+
+    private var controlsSection: some View {
+        Section("Controls") {
+            Picker("Skip back", selection: binding(\.skipBackSeconds)) {
+                ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.skipBack")
+            Picker("Skip forward", selection: binding(\.skipForwardSeconds)) {
+                ForEach(PlayerPreferences.skipIntervalOptions, id: \.self) { Text(Self.secondsLabel($0)).tag($0) }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.skipForward")
+            Toggle("Double-tap to skip", isOn: binding(\.doubleTapSkips))
+                .accessibilityIdentifier("settings.player.doubleTapSkips")
+            Picker("Hide controls", selection: binding(\.controlsHideSeconds)) {
+                ForEach(PlayerPreferences.controlsHideOptions, id: \.self) { seconds in
+                    Text(seconds == 0 ? "Never" : "After \(Self.secondsLabel(seconds))").tag(seconds)
+                }
+            }
+            .buttonCursor()
+            .accessibilityIdentifier("settings.player.hideControls")
+            Toggle("Skip Intro & Credits buttons", isOn: binding(\.showsSkipButtons))
+            Toggle("Skip intros automatically", isOn: binding(\.skipsIntrosAutomatically))
+                .disabled(!player.showsSkipButtons)
+            #if !targetEnvironment(macCatalyst)
+            // Brightness has no app control on the Mac, and its keyboard already sets the volume.
+            Toggle("Swipe for brightness", isOn: binding(\.swipeGestures))
+            #endif
+        }
+    }
+
+    private func detailSummary(_ page: Detail) -> String {
+        switch page {
+        case .subtitles: model.subtitleSummary
+        case .picture: player.zoomMode.onThisDevice.label
+        case .controls: "\(player.skipBackSeconds)s back · \(player.skipForwardSeconds)s forward"
         }
     }
 
@@ -152,7 +193,7 @@ struct PlayerSettingsPage: View {
             .accessibilityIdentifier("settings.player")
             if model.settings.playerPreference.externalPlayer != nil && !infuseInstalled {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Infuse isn’t installed on this device.").font(Theme.Typography.small).foregroundStyle(.secondary)
+                    Text("Infuse isn’t installed on this device.").appFont(.small).foregroundStyle(.secondary)
                     if let url = ExternalPlayer.infuse.appStoreURL { Link("Get Infuse", destination: url).buttonCursor() }
                 }
                 .accessibilityIdentifier("settings.player.missing")
@@ -170,20 +211,9 @@ struct PlayerSettingsPage: View {
                     }
                     .buttonCursor()
                     .accessibilityIdentifier("settings.fallbackEngine")
-                    if player.advancedEngine == .aether {
-                        Toggle("Compose Dolby Vision FEL", isOn: binding(\.composesDolbyVisionFEL))
-                            .accessibilityIdentifier("settings.aether.fel")
-                        Toggle("Spatial audio for TrueHD and DTS:X", isOn: binding(\.rendersObjectAudio))
-                            .accessibilityIdentifier("settings.aether.objectAudio")
-                    }
                 }
             }
         }
-    }
-
-    private var openSubtitlesSummary: String {
-        guard model.settings.openSubtitlesAPIKey != nil else { return "Not set up" }
-        return model.settings.openSubtitlesUsername == nil ? "Key saved" : "Signed in"
     }
 
     /// "10 seconds", "1 minute".
@@ -199,6 +229,10 @@ struct PlayerSettingsPage: View {
     /// The picture's defaults, then upscaling: whether this device can run AI upscaling, and what it did on the last video played with it.
     private var pictureSection: some View {
         Section("Picture") {
+            if aetherEngineLinked, model.settings.fallbackEngineEnabled, player.advancedEngine == .aether {
+                Toggle("Compose Dolby Vision FEL", isOn: binding(\.composesDolbyVisionFEL))
+                    .accessibilityIdentifier("settings.aether.fel")
+            }
             Picker("Zoom", selection: Binding(get: { player.zoomMode.onThisDevice }, set: { value in
                 Haptics.play(.choices)
                 Task { await model.updatePlayer { $0.zoomMode = value.onThisDevice } }
@@ -249,7 +283,7 @@ struct PlayerSettingsPage: View {
                         }
                     }
                     Text(lastReport.isEmpty ? "Nothing played with AI upscaling yet." : lastReport)
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(lastReport.hasPrefix("Ran") ? Color.green : Color.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -277,6 +311,8 @@ private struct OpenSubtitlesSettingsPage: View {
     var body: some View {
         SettingsList {
             Section {
+                LabeledContent("Status", value: model.openSubtitlesSummary)
+                    .accessibilityIdentifier("settings.opensubtitles.status")
                 SecureField("API key", text: Binding(get: { model.openSubtitlesAPIKeyText }, set: { model.openSubtitlesAPIKeyText = $0 }))
                     .textContentType(.password)
                     .accessibilityIdentifier("settings.opensubtitles.key")
@@ -292,14 +328,19 @@ private struct OpenSubtitlesSettingsPage: View {
             Section {
                 Button("Save") { Task { await model.commitOpenSubtitles() } }
                     .accessibilityIdentifier("settings.opensubtitles.save")
+                Button("Sign In") { Task { await model.signInToOpenSubtitles() } }
+                    .disabled(!model.canSignInToOpenSubtitles)
+                    .accessibilityIdentifier("settings.opensubtitles.signIn")
+                if model.isSigningInToOpenSubtitles { ProgressView() }
                 if let message = model.lastMessage {
-                    Text(message).font(Theme.Typography.small).foregroundStyle(.secondary)
+                    Text(message).appFont(.small).foregroundStyle(.secondary)
                         .accessibilityIdentifier("settings.opensubtitles.message")
                 }
             }
         }
         .scrollIndicators(.visible, axes: .vertical)
         .settingsPage("OpenSubtitles")
+        .disabled(model.isSigningInToOpenSubtitles)
         .onAppear { model.clearMessage() }
     }
 }

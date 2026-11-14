@@ -416,7 +416,7 @@ public final class StreamPickerViewModel {
         let enabled = await services.registry.addons.filter(\.isEnabled).map(\.id)
         let current = await services.addonSpeed.autoPick()
         let target = AddonSpeedChoice.target(for: settings.autoPickWait, enabled: enabled, results: await services.addonSpeed.results(),
-                                             preferredResolution: settings.preferredResolution, current: current)
+                                             preferredResolution: rankingPreferences.preferredResolution, current: current)
         // Auto's pick is kept, so the next load only moves from it to an addon that is clearly faster.
         if settings.autoPickWait == .fastest, target != current { await services.addonSpeed.setAutoPick(target) }
         return target
@@ -622,4 +622,3 @@ public final class StreamPickerViewModel {
         return item.stream.subtitles.first { LanguageCodes.matches($0.lang, preferred: language) }?.url
     }
 }
-

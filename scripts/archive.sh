@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Unsigned release archive of the app (PLAN M8: "xcodebuild archive succeeds"), then checks on what was archived.
-# Signing, provisioning and upload are the human's steps: docs/RELEASE.md. macOS + Xcode + xcodegen only.
+# Unsigned release archive, then checks on what was archived.
+# Signing, provisioning and upload stay manual. macOS + Xcode + xcodegen only.
 #   ./scripts/archive.sh                 # default build
 #   SPEC=project.fallback.generated.yml ./scripts/archive.sh   # with the opt-in fallback engine
 set -euo pipefail

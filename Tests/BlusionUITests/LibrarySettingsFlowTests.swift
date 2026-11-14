@@ -227,9 +227,8 @@ final class LibrarySettingsFlowTests: XCTestCase {
         var swipes = 0
         while !row.isHittable && swipes < 6 { app.swipeUp(); swipes += 1 }
         row.tap()
-        // The page opens on its preview; the preset menu is below it.
         let picker = app.buttons["settings.appearance.preset"].firstMatch
-        XCTAssertTrue(app.buttons["settings.appearance.preview"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
         for name in ["Netflix", "Apple TV", "Disney+", "Prime Video", "Letterboxd", "Plex", "Arthouse", "Original"] {
             swipes = 0
             while !(picker.exists && picker.isHittable) && swipes < 4 { app.swipeUp(); swipes += 1 }
@@ -238,7 +237,6 @@ final class LibrarySettingsFlowTests: XCTestCase {
             let choice = app.buttons[name].firstMatch
             XCTAssertTrue(choice.waitForExistence(timeout: 5), "no \(name) preset")
             choice.tap()
-            // A look can make the preview taller, so the menu may now sit below the screen.
             swipes = 0
             while !picker.waitForExistence(timeout: 2) && swipes < 4 { app.swipeUp(); swipes += 1 }
             XCTAssertTrue(picker.exists, "the preset menu went missing after \(name)")
@@ -249,7 +247,7 @@ final class LibrarySettingsFlowTests: XCTestCase {
         }
     }
 
-    /// Pulling Settings down and holding it for two seconds turns Ghost mode on; its banner's Turn Off turns it off.
+    /// Pulling Settings down past the lock distance turns Ghost mode on; its banner's Turn Off turns it off.
     @MainActor
     func testGhostModeTurnsOnAndOffFromSettings() throws {
         let app = launch()
@@ -257,10 +255,10 @@ final class LibrarySettingsFlowTests: XCTestCase {
         let banner = app.descendants(matching: .any)["settings.ghost"].firstMatch
         if banner.exists { app.buttons["settings.ghost.off"].tap() }
         XCTAssertFalse(banner.waitForExistence(timeout: 2))
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
-        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 3)
-        XCTAssertTrue(banner.waitForExistence(timeout: 5), "the held pull did not turn Ghost mode on")
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow)
+        XCTAssertTrue(banner.waitForExistence(timeout: 5), "the pull past the lock distance did not turn Ghost mode on")
         captureScreenshot(app, named: "ghost-on")
         app.buttons["settings.ghost.off"].tap()
         XCTAssertTrue(banner.waitForNonExistence(timeout: 5), "Turn Off did not turn Ghost mode off")

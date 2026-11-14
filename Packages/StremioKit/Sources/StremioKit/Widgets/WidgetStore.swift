@@ -6,11 +6,15 @@ public protocol WidgetStore: Sendable {
     func load() async -> [HomeWidget]?
     /// nil goes back to the automatic layout.
     func save(_ widgets: [HomeWidget]?) async
+    /// Resets the layout, waiting for the shared write when one is configured.
+    func resetLayout() async throws
     /// Takes in a layout saved on the user's other device since this one last looked. True when the layout here changed.
     func takeInSharedLayout() async -> Bool
 }
 
 public extension WidgetStore {
+    func resetLayout() async throws { await save(nil) }
+
     /// A layout kept on this device only never changes from elsewhere.
     func takeInSharedLayout() async -> Bool { false }
 }

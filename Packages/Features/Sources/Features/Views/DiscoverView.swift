@@ -12,7 +12,7 @@ struct DiscoverView: View {
     /// The id of the page's content, which its scroll goes back to when its tab's item is tapped.
     private static let topID = "discover.top"
 
-    init(services: AppServices, onOpenAddons: @escaping () -> Void) {
+    init(services: AppServices, onOpenAddons: @escaping () -> Void = {}) {
         _model = State(initialValue: DiscoverViewModel(services: services))
         self.onOpenAddons = onOpenAddons
     }
@@ -20,7 +20,7 @@ struct DiscoverView: View {
     var body: some View {
         Group {
             #if targetEnvironment(macCatalyst)
-            if model.hasSources { macPage } else { scrollPage }
+            macPage
             #else
             scrollPage
             #endif
@@ -59,13 +59,9 @@ struct DiscoverView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     heading
-                    if model.hasSources {
-                        filters
-                        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                            results
-                        }
-                    } else {
-                        EmptyAddonsView(onOpenAddons: onOpenAddons)
+                    filters
+                    VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+                        results
                     }
                 }
                 .padding(.bottom, Theme.Spacing.l)
@@ -106,8 +102,7 @@ struct DiscoverView: View {
         #else
         // The same large title as the category pages, without the empty navigation bar row above it.
         Text("Discover")
-            // The navigation bar's large title: a fixed 34pt bold at its 16pt inset, as on the category pages.
-            .font(.system(size: 34, weight: .bold))
+            .appFont(.largeTitle)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, isPhoneInLandscape ? metrics.pageMargin : Theme.Spacing.l)
             .padding(.bottom, isPhoneInLandscape ? Theme.Spacing.l : Theme.Spacing.m)

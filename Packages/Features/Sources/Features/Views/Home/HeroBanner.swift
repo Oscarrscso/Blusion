@@ -55,7 +55,7 @@ struct HeroBannerSection: View {
                     IssueMessage(issue: issue)
                 } else {
                     Text("Nothing here yet")
-                        .font(Theme.Typography.medium)
+                        .appFont(.medium)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, metrics.pageMargin)
                 }
@@ -159,7 +159,10 @@ private struct BannerFeature: View {
     @State private var hero = HeroLoader()
 
     /// The spotlight's logo for the title: the catalog's, else TMDb's from the same lookup as the backdrop.
-    private var logoURL: URL? { item.logo ?? heroArtwork?.logo }
+    private var logoCandidates: [URL] {
+        HeroLogos.candidates(preview: item.logo, artwork: heroArtwork, imdbID: item.id, artworkReady: artworkChecked)
+    }
+    private var logoURL: URL? { logoCandidates.first }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
 
     var body: some View {
@@ -210,8 +213,9 @@ private struct BannerFeature: View {
                 heroArtwork = loaded
                 artworkChecked = true
             }
-            .task(id: logoURL) {
-                await hero.load(picture: nil, pictureSize: 0, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
+            .task(id: logoCandidates.map(\.absoluteString).joined(separator: "|")) {
+                await hero.load(picture: nil, pictureSize: 0, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                                logoFallbacks: Array(logoCandidates.dropFirst()))
             }
     }
 
@@ -236,11 +240,11 @@ private struct BannerFeature: View {
                 Color.clear.frame(width: logoBox.width, height: logoBox.height)
             case .none:
                 Text(item.name)
-                    .font(.title2.bold())
+                    .appFont(style: .title2, weight: .bold, role: .display)
                     .lineLimit(2)
             }
             Text([item.releaseInfo, rating].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .foregroundStyle(Theme.dimText)
         }
         .foregroundStyle(.white)

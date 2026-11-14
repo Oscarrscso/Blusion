@@ -21,7 +21,7 @@ struct DownloadProgressGlyph: View {
                     .font(.system(size: 10, weight: .bold))
             } else {
                 Image(systemName: item?.state == .complete ? "checkmark" : "arrow.down")
-                    .font(.subheadline.weight(.bold))
+                    .font(.subheadline.bold())
             }
         }
         .foregroundStyle(colour)

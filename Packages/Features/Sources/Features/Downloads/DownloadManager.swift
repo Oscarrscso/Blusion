@@ -302,7 +302,18 @@ public final class DownloadManager {
         } catch { errorMessage = "Could not delete download" }
         await pump()
     }
-    public func deleteAll() async { for id in items.map(\.id) { await delete(id) } }
+    @discardableResult
+    public func deleteAll() async -> (failed: Int, pending: Int) {
+        var failed = 0
+        var pending = 0
+        for id in items.map(\.id) {
+            errorMessage = nil
+            await delete(id)
+            if errorMessage != nil { failed += 1 }
+            else if index(id) != nil { pending += 1 }
+        }
+        return (failed, pending)
+    }
     public func preferencesChanged() async {
         // A new request is required because cellular access belongs to the request, including resumed system requests.
         let ids = items.filter { $0.state == .downloading || $0.state == .queued }.map(\.id)

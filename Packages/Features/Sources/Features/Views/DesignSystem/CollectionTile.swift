@@ -103,7 +103,7 @@ struct CollectionTile: View {
     private var label: some View {
         if provider == nil, imageURL == nil || !hideTitle {
             Text(title)
-                .font(.title3.bold())
+                .appFont(style: .title3, weight: .bold, role: .display)
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)

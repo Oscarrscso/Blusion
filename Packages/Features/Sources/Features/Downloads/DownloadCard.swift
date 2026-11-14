@@ -55,7 +55,7 @@ struct DownloadCard: View {
                 info
             }
             DisclosureGroup("Details") { details }
-                .font(.subheadline)
+                .appFont(style: .subheadline, weight: .regular, role: .interface)
                 .tint(.white)
         }
         .foregroundStyle(.white)
@@ -85,18 +85,18 @@ struct DownloadCard: View {
     /// The text beside the thumbnail. Its controls sit in the status row, so the card is as tall as its text and no taller.
     private var info: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(item.request.title).font(.headline).lineLimit(2).multilineTextAlignment(.leading)
+            Text(item.request.title).appFont(.headline, weight: .regular, role: .interface).lineLimit(2).multilineTextAlignment(.leading)
             if let episodeLine {
-                Text(episodeLine).font(.subheadline).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
+                Text(episodeLine).appFont(style: .subheadline, weight: .regular, role: .interface).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
             }
             if !summary.isEmpty {
-                Text(summary).font(.caption).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
+                Text(summary).appFont(.caption, weight: .regular, role: .interface).foregroundStyle(.white.opacity(0.7)).lineLimit(1)
             }
             Spacer(minLength: Theme.Spacing.xs)
             if item.state != .complete { progressRow }
             if item.state == .downloading { speedRow }
             if let failure = item.failure {
-                Text(failure).font(.caption).foregroundStyle(.orange).lineLimit(2)
+                Text(failure).appFont(.caption, weight: .regular, role: .interface).foregroundStyle(.orange).lineLimit(2)
             }
             statusRow
         }
@@ -107,10 +107,10 @@ struct DownloadCard: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: Theme.Spacing.s) {
                 ProgressView(value: item.fraction).tint(.white)
-                if item.expected > 0 { Text("\(Int(item.fraction * 100))%").font(.caption).monospacedDigit() }
+                if item.expected > 0 { Text("\(Int(item.fraction * 100))%").appFont(.caption, weight: .regular, role: .interface).monospacedDigit() }
             }
             Text(item.expected > 0 ? "\(bytes(item.received)) / \(bytes(item.expected))" : bytes(item.received))
-                .font(.caption).foregroundStyle(.white.opacity(0.7)).monospacedDigit().lineLimit(1)
+                .appFont(.caption, weight: .regular, role: .interface).foregroundStyle(.white.opacity(0.7)).monospacedDigit().lineLimit(1)
         }
     }
 
@@ -118,7 +118,7 @@ struct DownloadCard: View {
     private var speedRow: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             Text(speedText(manager.speed(for: item.id, at: context.date)))
-                .font(.caption).foregroundStyle(.white.opacity(0.7)).monospacedDigit().lineLimit(1)
+                .appFont(.caption, weight: .regular, role: .interface).foregroundStyle(.white.opacity(0.7)).monospacedDigit().lineLimit(1)
         }
     }
 
@@ -132,7 +132,7 @@ struct DownloadCard: View {
     private var statusRow: some View {
         HStack(spacing: Theme.Spacing.s) {
             Label(statusLine, systemImage: item.state == .complete ? "checkmark.circle.fill" : "arrow.down.circle")
-                .font(.subheadline.weight(.medium))
+                .appFont(style: .subheadline, weight: .medium, role: .interface)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             Spacer(minLength: Theme.Spacing.s)
@@ -187,7 +187,7 @@ struct DownloadCard: View {
                 Array(Set(item.subtitles.map(\.language))).sorted().map { LanguageCodes.displayName($0) }.joined(separator: ", "))
             if item.retries > 0 { LabeledContent("Retries", value: String(item.retries)) }
         }
-        .font(.subheadline)
+        .appFont(style: .subheadline, weight: .regular, role: .interface)
         .padding(.top, Theme.Spacing.s)
     }
 

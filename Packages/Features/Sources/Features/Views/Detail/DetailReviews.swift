@@ -80,7 +80,7 @@ struct DetailReviews: View {
                     } else if let summaryError {
                         Button(action: { summaryRetry += 1 }) {
                             Label(summaryError, systemImage: "arrow.clockwise")
-                                .font(Theme.Typography.medium)
+                                .appFont(.medium)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.leading)
                         }
@@ -90,7 +90,7 @@ struct DetailReviews: View {
                             .accessibilityIdentifier("detail.reviews.consensus")
                     } else if ReviewConsensusReader.available() == nil {
                         Text("On-device AI summary is unavailable.")
-                            .font(Theme.Typography.medium)
+                            .appFont(.medium)
                             .foregroundStyle(.secondary)
                     } else {
                         // Covers the short interval before the background summarisation task starts.
@@ -193,11 +193,11 @@ struct DetailReviews: View {
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text("AI Review Summary")
-                    .font(.headline.weight(.semibold))
+                    .appFont(.headline, weight: .semibold, role: .interface)
                     .foregroundStyle(.primary)
                 Spacer(minLength: Theme.Spacing.s)
                 Text("On-device")
-                    .font(Theme.Typography.caption)
+                    .appFont(.caption)
                     .foregroundStyle(.secondary)
             }
             content()
@@ -242,14 +242,14 @@ struct DetailReviews: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             if let overall {
                 Text(overall)
-                    .font(Theme.Typography.large)
+                    .appFont(.large)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             } else if praised == nil && criticised == nil {
                 // Sparse or older plain-text summaries still have a readable primary line.
                 ForEach(other.indices, id: \.self) { index in
                     Text(other[index])
-                        .font(Theme.Typography.large)
+                        .appFont(.large)
                         .foregroundStyle(.primary)
                 }
             }
@@ -266,7 +266,7 @@ struct DetailReviews: View {
             if praised != nil || criticised != nil || overall != nil {
                 ForEach(other.indices, id: \.self) { index in
                     Text(other[index])
-                        .font(Theme.Typography.caption)
+                        .appFont(.caption)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -281,10 +281,10 @@ struct DetailReviews: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .appFont(.headline, weight: .semibold, role: .interface)
                     .foregroundStyle(.primary)
                 Text(text)
-                    .font(Theme.Typography.large)
+                    .appFont(.large)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -495,7 +495,7 @@ struct ReviewCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     // Short cards cut a long name to one line; an expanded card has the width, so the name wraps in full.
-                    Text(review.author).font(Theme.Typography.headline).lineLimit(isExpanded ? nil : 1)
+                    Text(review.author).appFont(.headline).lineLimit(isExpanded ? nil : 1)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     if let rating = review.rating {
@@ -506,7 +506,7 @@ struct ReviewCard: View {
                                         stars >= Double(index) + 0.5 ? "star.leadinghalf.filled" : "star")
                             }
                         }
-                        .font(Theme.Typography.captionStrong)
+                        .appFont(.captionStrong)
                         .foregroundStyle(.white)
                         // The stars keep their width; the name takes what is left, and wraps or cuts before the stars are squeezed.
                         .fixedSize()

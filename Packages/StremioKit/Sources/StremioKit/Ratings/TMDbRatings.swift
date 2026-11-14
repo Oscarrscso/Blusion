@@ -9,6 +9,8 @@ public struct TMDbArtwork: Sendable, Hashable {
     /// The best backdrop that carries no words in any language, at original size. Nil when TMDb has none: `backdrop` may then be one
     /// with English or other wording on it.
     public var textlessBackdrop: URL?
+    /// Other logos to try when `logo` does not load, best first.
+    public var alternateLogos: [URL] = []
 }
 
 public struct TMDbReview: Decodable, Sendable, Equatable, Identifiable {
@@ -195,14 +197,15 @@ public struct TMDbRatings: Sendable {
         let images: Images
         do { images = try JSONDecoder().decode(Images.self, from: result.data) } catch { throw AddonError.invalidJSON }
         let logos = images.logos ?? []
-        let english = logos.filter { $0.language == "en" }
+        let logoChoices = Self.logoChoices(logos)
         let backdrops = images.backdrops ?? []
         let portrait = Self.portraitPick(posters: images.posters ?? [], backdrops: backdrops)
         return TMDbArtwork(backdrop: BackdropPicker.best(Self.backdropCandidates(backdrops)),
                            portrait: portrait?.url,
-                           logo: Self.popular(english.isEmpty ? logos : english)?.url(size: "original"),
+                           logo: logoChoices.primary,
                            portraitHidesLogo: portrait?.hidesLogo ?? false,
-                           textlessBackdrop: BackdropPicker.best(Self.backdropCandidates(backdrops.filter(\.isTextless))))
+                           textlessBackdrop: BackdropPicker.best(Self.backdropCandidates(backdrops.filter(\.isTextless))),
+                           alternateLogos: logoChoices.alternates)
     }
 
     /// The portrait hero, in this order: the best textless poster; else the best textless backdrop, which the view fills and crops;
@@ -304,6 +307,32 @@ public struct TMDbRatings: Sendable {
         struct Release: Decodable { let certification: String? }
     }
 
+    /// The logo most likely to draw, then a few others to try when that file fails. Raster files come before SVGs, which many
+    /// decoders cannot read, and English before any other language.
+    private static func logoChoices(_ logos: [Image]) -> (primary: URL?, alternates: [URL]) {
+        let usable = logos.filter { $0.file_path.hasPrefix("/") }
+        let english = usable.filter { $0.language == "en" }
+        let rest = english.isEmpty ? [] : usable.filter { $0.language != "en" }
+        let ordered = ranked(english.filter { !$0.isSVG }) + ranked(english.filter(\.isSVG))
+            + ranked(rest.filter { !$0.isSVG }) + ranked(rest.filter(\.isSVG))
+            + (english.isEmpty ? ranked(usable.filter { !$0.isSVG }) + ranked(usable.filter(\.isSVG)) : [])
+        var urls: [URL] = []
+        for image in ordered {
+            guard let url = image.logoURL, !urls.contains(url) else { continue }
+            urls.append(url)
+            if urls.count == 5 { break }
+        }
+        return (urls.first, Array(urls.dropFirst()))
+    }
+
+    private static func ranked(_ images: [Image]) -> [Image] {
+        images.sorted { lhs, rhs in
+            if (lhs.vote_count ?? 0) != (rhs.vote_count ?? 0) { return (lhs.vote_count ?? 0) > (rhs.vote_count ?? 0) }
+            if (lhs.vote_average ?? 0) != (rhs.vote_average ?? 0) { return (lhs.vote_average ?? 0) > (rhs.vote_average ?? 0) }
+            return (lhs.width ?? 0) > (rhs.width ?? 0)
+        }
+    }
+
     private static func popular(_ images: [Image]) -> Image? {
         images.filter { $0.file_path.hasPrefix("/") }.max {
             if $0.vote_count != $1.vote_count { return ($0.vote_count ?? 0) < ($1.vote_count ?? 0) }
@@ -334,6 +363,9 @@ public struct TMDbRatings: Sendable {
             return tag?.isEmpty == false ? tag : nil
         }
         var isTextless: Bool { language == nil }
+        var isSVG: Bool { file_path.lowercased().hasSuffix(".svg") }
+        /// A size TMDb can rasterize. SVGs stay vectors at `original`, so those are asked for at `w500`.
+        var logoURL: URL? { url(size: isSVG ? "w500" : "original") }
         func url(size: String) -> URL? { URL(string: "https://image.tmdb.org/t/p/\(size)\(file_path)") }
     }
 

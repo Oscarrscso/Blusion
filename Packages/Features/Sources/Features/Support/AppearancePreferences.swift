@@ -1,9 +1,9 @@
 import Foundation
 
-/// How the app looks, as the listener sets it on Settings → Appearance: colour (accent, page background), text (size, font, width,
-/// weight, slant, spacing, and a style of its own for headings), cards (size, corners, spacing, columns, captions, outline, artwork tone,
-/// progress bars), Home's spotlight, title pages (sections, their order, spoilers) and motion and navigation (start tab, transitions,
-/// animation speed, the iPhone's tab bar).
+/// How the app looks, as the listener sets it on Settings → Appearance: colour (accent, page background), text (reading, interface and
+/// headings, each with the same size, face, width, weight, slant, spacing, colour and case), cards (size, corners, spacing, columns,
+/// captions, outline, artwork tone, progress bars), Home's spotlight, title pages (sections, their order, spoilers) and motion and
+/// navigation (start tab, transitions, animation speed, the iPhone's tab bar).
 ///
 /// Saved as one JSON string under `defaultsKey` in the standard defaults, so screens read it with `@AppStorage` and follow a change at
 /// once. The root applies it (`appliesAppearance()`); cards and grids read it through `LayoutMetrics`. Every field decodes on its own, so
@@ -44,20 +44,174 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
 
     // MARK: - Text
 
-    public var textSize: TextSize = .system
-    public var font: FontStyle = .standard
-    public var boldText = false
-    public var italicText = false
-    public var fontWidth: FontWidth = .standard
-    public var letterSpacing: LetterSpacing = .standard
-    public var lineSpacing: LineSpacing = .standard
-    public var headingFont: HeadingFont = .matchText
-    public var headingWeight: HeadingWeight = .bold
-    public var headingSize: HeadingSize = .standard
-    public var headingWidth: HeadingWidth = .matchText
-    public var headingSpacing: HeadingSpacing = .matchText
-    public var uppercaseHeadings = false
-    public var headingColour: HeadingColour = .primary
+    /// Prose: synopses and other reading. Its text size is the listener's own and a preset leaves it.
+    public var reading = TextStyle()
+    /// Buttons, metadata, captions and other interface text. Each choice follows reading until it is set.
+    public var interface = TextStyle.followingReading()
+    /// Shelf and section headings. The face, width, spacing, slant and text size follow reading; weight and size are their own.
+    public var headings = TextStyle.headings()
+
+    public func storedText(for role: TextRole) -> TextStyle {
+        switch role {
+        case .reading: reading
+        case .interface: interface
+        case .display: headings
+        }
+    }
+
+    public mutating func setStoredText(_ style: TextStyle, for role: TextRole) {
+        switch role {
+        case .reading: reading = style
+        case .interface: interface = style
+        case .display: headings = style
+        }
+    }
+
+    /// `role`'s choices, with any it still borrows filled in from reading.
+    public func resolvedText(for role: TextRole) -> TextStyle {
+        let stored = storedText(for: role)
+        guard role != .reading else { return stored }
+        var resolved = stored
+        if stored.followsTextSize { resolved.textSize = reading.textSize }
+        if stored.followsFont { resolved.font = reading.font }
+        if stored.followsWidth { resolved.width = reading.width }
+        if stored.followsWeight { resolved.weight = reading.weight }
+        if stored.followsItalic { resolved.italic = reading.italic }
+        if stored.followsLetterSpacing { resolved.letterSpacing = reading.letterSpacing }
+        if stored.followsLineSpacing { resolved.lineSpacing = reading.lineSpacing }
+        if stored.followsScale { resolved.scale = reading.scale }
+        return resolved
+    }
+
+    public var textSize: TextSize {
+        get { reading.textSize }
+        set { reading.textSize = newValue }
+    }
+
+    public var font: FontStyle {
+        get { reading.font }
+        set { reading.font = newValue }
+    }
+
+    /// Reading in a heavy weight. Kept so earlier saves, which stored a switch, still read.
+    public var boldText: Bool {
+        get { reading.weight == .bold || reading.weight == .heavy || reading.weight == .black }
+        set {
+            reading.weight = newValue ? .bold : .regular
+            reading.followsWeight = false
+        }
+    }
+
+    public var italicText: Bool {
+        get { reading.italic }
+        set { reading.italic = newValue }
+    }
+
+    public var fontWidth: FontWidth {
+        get { reading.width }
+        set { reading.width = newValue }
+    }
+
+    public var letterSpacing: LetterSpacing {
+        get { reading.letterSpacing }
+        set { reading.letterSpacing = newValue }
+    }
+
+    public var lineSpacing: LineSpacing {
+        get { reading.lineSpacing }
+        set { reading.lineSpacing = newValue }
+    }
+
+    public var headingFont: HeadingFont {
+        get { headings.followsFont ? .matchText : (HeadingFont(rawValue: headings.font.rawValue) ?? .matchText) }
+        set {
+            if let font = newValue.font {
+                headings.font = font
+                headings.followsFont = false
+            } else {
+                headings.followsFont = true
+            }
+        }
+    }
+
+    /// Buttons, metadata, captions and other interface text. `matchText` uses the reading face.
+    public var interfaceFont: HeadingFont {
+        get { interface.followsFont ? .matchText : (HeadingFont(rawValue: interface.font.rawValue) ?? .matchText) }
+        set {
+            if let font = newValue.font {
+                interface.font = font
+                interface.followsFont = false
+            } else {
+                interface.followsFont = true
+            }
+        }
+    }
+
+    public var headingWeight: HeadingWeight {
+        get { headings.weight }
+        set {
+            headings.weight = newValue
+            headings.followsWeight = false
+        }
+    }
+
+    public var headingSize: HeadingSize {
+        get { headings.scale }
+        set {
+            headings.scale = newValue
+            headings.followsScale = false
+        }
+    }
+
+    public var headingWidth: HeadingWidth {
+        get {
+            guard !headings.followsWidth else { return .matchText }
+            switch headings.width {
+            case .compressed: return .compressed
+            case .condensed: return .condensed
+            case .standard: return .standard
+            case .expanded: return .expanded
+            }
+        }
+        set {
+            if let width = newValue.width {
+                headings.width = width
+                headings.followsWidth = false
+            } else {
+                headings.followsWidth = true
+            }
+        }
+    }
+
+    public var headingSpacing: HeadingSpacing {
+        get {
+            guard !headings.followsLetterSpacing else { return .matchText }
+            switch headings.letterSpacing {
+            case .tight: return .tight
+            case .standard: return .standard
+            case .wide: return .wide
+            case .wider: return .wider
+            }
+        }
+        set {
+            if let spacing = newValue.spacing {
+                headings.letterSpacing = spacing
+                headings.followsLetterSpacing = false
+            } else {
+                headings.followsLetterSpacing = true
+            }
+        }
+    }
+
+    public var uppercaseHeadings: Bool {
+        get { headings.capitals }
+        set { headings.capitals = newValue }
+    }
+
+    public var headingColour: HeadingColour {
+        get { headings.colour }
+        set { headings.colour = newValue }
+    }
 
     // MARK: - Cards
 
@@ -127,6 +281,8 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     public var spoilerTitles = false
     /// The synopsis opens unfolded.
     public var expandsSynopsis = false
+    /// The hero picture runs down the whole page as an episode card's still runs under its text, in place of the fade to the page's colour.
+    public var blursBackground = false
     /// The title page's sections below Play, synopsis and ratings.
     public var showsReviews = true
     public var showsCast = true
@@ -138,6 +294,8 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     public var sectionOrder: SectionOrder = .reviewsFirst
     /// Empty keeps the earlier Reviews First / Cast First choice, including existing saved looks and presets.
     public var titleSectionOrder: [TitleSection] = []
+    /// On iPhone held upright, a title page keeps the tab bar so Home can be tapped from it. Off by default; landscape still hides it.
+    public var showsTitlePageTabBar = false
 
     public var orderedTitleSections: [TitleSection] {
         let saved = titleSectionOrder.isEmpty && sectionOrder == .castFirst
@@ -189,19 +347,19 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         tintStrength = look.tintStrength
         playStyle = look.playStyle
         buttonFinish = look.buttonFinish
-        font = look.font
-        boldText = look.boldText
-        italicText = look.italicText
-        fontWidth = look.fontWidth
-        letterSpacing = look.letterSpacing
-        lineSpacing = look.lineSpacing
-        headingFont = look.headingFont
-        headingWeight = look.headingWeight
-        headingSize = look.headingSize
-        headingWidth = look.headingWidth
-        headingSpacing = look.headingSpacing
-        uppercaseHeadings = look.uppercaseHeadings
-        headingColour = look.headingColour
+        let readingSize = reading.textSize
+        let interfaceSize = interface.textSize
+        let interfaceFollowsSize = interface.followsTextSize
+        let keptHeadingTextSize = headings.textSize
+        let headingFollowsSize = headings.followsTextSize
+        reading = look.reading
+        interface = look.interface
+        headings = look.headings
+        reading.textSize = readingSize
+        interface.textSize = interfaceSize
+        interface.followsTextSize = interfaceFollowsSize
+        headings.textSize = keptHeadingTextSize
+        headings.followsTextSize = headingFollowsSize
         cardScale = look.cardScale
         cornerScale = look.cornerScale
         cornerOverrides = look.cornerOverrides
@@ -229,8 +387,10 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         heroAutoAdvance = look.heroAutoAdvance
         showsPageDots = look.showsPageDots
         expandsSynopsis = look.expandsSynopsis
+        blursBackground = look.blursBackground
         sectionOrder = look.sectionOrder
         titleSectionOrder = look.titleSectionOrder
+        showsTitlePageTabBar = look.showsTitlePageTabBar
         zoomTransitions = look.zoomTransitions
         phoneTabTitles = look.phoneTabTitles
         minimisesTabBar = look.minimisesTabBar
@@ -262,20 +422,45 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         playStyle = read(.playStyle, playStyle)
         buttonFinish = read(.buttonFinish, buttonFinish)
 
-        textSize = read(.textSize, textSize)
-        font = read(.font, font)
-        boldText = read(.boldText, boldText)
-        italicText = read(.italicText, italicText)
-        fontWidth = read(.fontWidth, fontWidth)
-        letterSpacing = read(.letterSpacing, letterSpacing)
-        lineSpacing = read(.lineSpacing, lineSpacing)
-        headingFont = read(.headingFont, headingFont)
-        headingWeight = read(.headingWeight, headingWeight)
-        headingSize = read(.headingSize, headingSize)
-        headingWidth = read(.headingWidth, headingWidth)
-        headingSpacing = read(.headingSpacing, headingSpacing)
-        uppercaseHeadings = read(.uppercaseHeadings, uppercaseHeadings)
-        headingColour = read(.headingColour, headingColour)
+        if container.contains(.reading) {
+            reading = read(.reading, reading)
+            interface = read(.interfaceText, interface)
+            headings = read(.headingText, headings)
+        } else {
+            reading.textSize = read(.textSize, reading.textSize)
+            reading.font = read(.font, reading.font)
+            reading.weight = read(.boldText, false) ? .bold : .regular
+            reading.italic = read(.italicText, reading.italic)
+            reading.width = read(.fontWidth, reading.width)
+            reading.letterSpacing = read(.letterSpacing, reading.letterSpacing)
+            reading.lineSpacing = read(.lineSpacing, reading.lineSpacing)
+            let savedInterface = read(.interfaceFont, HeadingFont.matchText)
+            if let font = savedInterface.font {
+                interface.font = font
+                interface.followsFont = false
+            }
+            let savedHeading = read(.headingFont, HeadingFont.matchText)
+            if let font = savedHeading.font {
+                headings.font = font
+                headings.followsFont = false
+            }
+            headings.weight = read(.headingWeight, headings.weight)
+            headings.followsWeight = false
+            headings.scale = read(.headingSize, headings.scale)
+            headings.followsScale = false
+            let savedWidth = read(.headingWidth, HeadingWidth.matchText)
+            if let width = savedWidth.width {
+                headings.width = width
+                headings.followsWidth = false
+            }
+            let savedSpacing = read(.headingSpacing, HeadingSpacing.matchText)
+            if let spacing = savedSpacing.spacing {
+                headings.letterSpacing = spacing
+                headings.followsLetterSpacing = false
+            }
+            headings.capitals = read(.uppercaseHeadings, headings.capitals)
+            headings.colour = read(.headingColour, headings.colour)
+        }
 
         // Card size, corners and spacing were fixed steps saved by name; a save from then reads the step's value.
         cardScale = clamp(read(.cardSize, legacy(.legacyCardScale, Self.legacyCardScales) ?? 1), Self.cardScaleRange, 1)
@@ -323,6 +508,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         spoilerSynopses = read(.spoilerSynopses, spoilerSynopses)
         spoilerTitles = read(.spoilerTitles, spoilerTitles)
         expandsSynopsis = read(.expandsSynopsis, expandsSynopsis)
+        blursBackground = read(.blursBackground, blursBackground)
         showsReviews = read(.showsReviews, showsReviews)
         showsCast = read(.showsCast, showsCast)
         showsInformation = read(.showsInformation, showsInformation)
@@ -331,6 +517,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         showsRelated = read(.showsRelated, showsRelated)
         sectionOrder = read(.sectionOrder, sectionOrder)
         titleSectionOrder = read(.titleSectionOrder, [String]()).compactMap(TitleSection.init(rawValue:))
+        showsTitlePageTabBar = read(.showsTitlePageTabBar, showsTitlePageTabBar)
 
         startTab = read(.startTab, startTab)
         zoomTransitions = read(.zoomTransitions, zoomTransitions)
@@ -352,6 +539,9 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(playStyle, forKey: .playStyle)
         try container.encode(buttonFinish, forKey: .buttonFinish)
 
+        try container.encode(reading, forKey: .reading)
+        try container.encode(interface, forKey: .interfaceText)
+        try container.encode(headings, forKey: .headingText)
         try container.encode(textSize, forKey: .textSize)
         try container.encode(font, forKey: .font)
         try container.encode(boldText, forKey: .boldText)
@@ -360,6 +550,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(letterSpacing, forKey: .letterSpacing)
         try container.encode(lineSpacing, forKey: .lineSpacing)
         try container.encode(headingFont, forKey: .headingFont)
+        try container.encode(interfaceFont, forKey: .interfaceFont)
         try container.encode(headingWeight, forKey: .headingWeight)
         try container.encode(headingSize, forKey: .headingSize)
         try container.encode(headingWidth, forKey: .headingWidth)
@@ -401,6 +592,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(spoilerSynopses, forKey: .spoilerSynopses)
         try container.encode(spoilerTitles, forKey: .spoilerTitles)
         try container.encode(expandsSynopsis, forKey: .expandsSynopsis)
+        try container.encode(blursBackground, forKey: .blursBackground)
         try container.encode(showsReviews, forKey: .showsReviews)
         try container.encode(showsCast, forKey: .showsCast)
         try container.encode(showsInformation, forKey: .showsInformation)
@@ -409,6 +601,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         try container.encode(showsWatchAnywhere, forKey: .showsWatchAnywhere)
         try container.encode(sectionOrder, forKey: .sectionOrder)
         try container.encode(titleSectionOrder, forKey: .titleSectionOrder)
+        try container.encode(showsTitlePageTabBar, forKey: .showsTitlePageTabBar)
 
         try container.encode(startTab, forKey: .startTab)
         try container.encode(zoomTransitions, forKey: .zoomTransitions)
@@ -422,7 +615,8 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
 
     private enum CodingKeys: String, CodingKey {
         case accent, customAccent, background, customBackground, tintStrength, playStyle, buttonFinish
-        case textSize, font, boldText, italicText, fontWidth, letterSpacing, lineSpacing, headingFont, headingWeight, headingSize,
+        case reading, interfaceText, headingText
+        case textSize, font, boldText, italicText, fontWidth, letterSpacing, lineSpacing, headingFont, interfaceFont, headingWeight, headingSize,
              headingWidth, headingSpacing, uppercaseHeadings, headingColour
         case cornerOverrides, includesCircularButtons
         case shelfSpacing, sideMargin, showsShelfDividers, shelfDividerThickness, shelfDividerOpacity, shelfDividerFullWidth
@@ -431,8 +625,8 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         case phoneLandscapeGridColumns
         case layout
         case heroAutoAdvance, showsPageDots, continueWatchingLimit
-        case hidesSpoilers, spoilerStills, spoilerSynopses, spoilerTitles, expandsSynopsis, showsReviews, showsCast, showsInformation,
-             showsFranchise, showsRelated, showsWatchAnywhere, sectionOrder, titleSectionOrder
+        case hidesSpoilers, spoilerStills, spoilerSynopses, spoilerTitles, expandsSynopsis, blursBackground, showsReviews, showsCast,
+             showsInformation, showsFranchise, showsRelated, showsWatchAnywhere, sectionOrder, titleSectionOrder, showsTitlePageTabBar
         case startTab, zoomTransitions, animationSpeed, phoneTabTitles, minimisesTabBar, showsContinueBar
         case hover
         /// The fixed steps saved before the sliders, read once and never written.
@@ -449,13 +643,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         let colours: Bool = lhs.accent == rhs.accent && lhs.customAccent == rhs.customAccent && lhs.background == rhs.background
             && lhs.customBackground == rhs.customBackground && lhs.tintStrength == rhs.tintStrength
             && lhs.playStyle == rhs.playStyle && lhs.buttonFinish == rhs.buttonFinish
-        let text: Bool = lhs.textSize == rhs.textSize && lhs.font == rhs.font && lhs.boldText == rhs.boldText
-            && lhs.italicText == rhs.italicText && lhs.fontWidth == rhs.fontWidth
-        let spacing: Bool = lhs.letterSpacing == rhs.letterSpacing && lhs.lineSpacing == rhs.lineSpacing
-        let headings: Bool = lhs.headingFont == rhs.headingFont && lhs.headingWeight == rhs.headingWeight
-            && lhs.headingSize == rhs.headingSize && lhs.uppercaseHeadings == rhs.uppercaseHeadings
-        let headingShape: Bool = lhs.headingWidth == rhs.headingWidth && lhs.headingSpacing == rhs.headingSpacing
-            && lhs.headingColour == rhs.headingColour
+        let text: Bool = lhs.reading == rhs.reading && lhs.interface == rhs.interface && lhs.headings == rhs.headings
         let sizes: Bool = lhs.cardScale == rhs.cardScale && lhs.cornerScale == rhs.cornerScale && lhs.spacingScale == rhs.spacingScale
             && lhs.phoneGridColumns == rhs.phoneGridColumns
             && lhs.phoneLandscapeGridColumns == rhs.phoneLandscapeGridColumns
@@ -472,17 +660,18 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             && lhs.continueWatchingLimit == rhs.continueWatchingLimit
         let spoilers: Bool = lhs.hidesSpoilers == rhs.hidesSpoilers && lhs.spoilerStills == rhs.spoilerStills
             && lhs.spoilerSynopses == rhs.spoilerSynopses && lhs.spoilerTitles == rhs.spoilerTitles
-        let sections: Bool = lhs.expandsSynopsis == rhs.expandsSynopsis && lhs.showsReviews == rhs.showsReviews
+        let sections: Bool = lhs.expandsSynopsis == rhs.expandsSynopsis && lhs.blursBackground == rhs.blursBackground
+            && lhs.showsReviews == rhs.showsReviews
             && lhs.showsCast == rhs.showsCast && lhs.showsInformation == rhs.showsInformation
             && lhs.showsFranchise == rhs.showsFranchise && lhs.showsRelated == rhs.showsRelated
             && lhs.showsWatchAnywhere == rhs.showsWatchAnywhere && lhs.sectionOrder == rhs.sectionOrder
-            && lhs.titleSectionOrder == rhs.titleSectionOrder
+            && lhs.titleSectionOrder == rhs.titleSectionOrder && lhs.showsTitlePageTabBar == rhs.showsTitlePageTabBar
         let navigation: Bool = lhs.startTab == rhs.startTab && lhs.zoomTransitions == rhs.zoomTransitions
             && lhs.animationSpeed == rhs.animationSpeed
         let tabs: Bool = lhs.phoneTabTitles == rhs.phoneTabTitles && lhs.minimisesTabBar == rhs.minimisesTabBar
             && lhs.showsContinueBar == rhs.showsContinueBar
         let hover: Bool = lhs.hover == rhs.hover && lhs.layout == rhs.layout
-        return colours && text && spacing && headings && headingShape && sizes && captions && artwork && progress && home && spoilers
+        return colours && text && sizes && captions && artwork && progress && home && spoilers
             && sections && navigation && tabs && hover
     }
 
@@ -530,20 +719,9 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             result.playStyle = defaults.playStyle
             result.buttonFinish = defaults.buttonFinish
         case .text:
-            result.textSize = defaults.textSize
-            result.font = defaults.font
-            result.boldText = defaults.boldText
-            result.italicText = defaults.italicText
-            result.fontWidth = defaults.fontWidth
-            result.letterSpacing = defaults.letterSpacing
-            result.lineSpacing = defaults.lineSpacing
-            result.headingFont = defaults.headingFont
-            result.headingWeight = defaults.headingWeight
-            result.headingSize = defaults.headingSize
-            result.headingWidth = defaults.headingWidth
-            result.headingSpacing = defaults.headingSpacing
-            result.uppercaseHeadings = defaults.uppercaseHeadings
-            result.headingColour = defaults.headingColour
+            result.reading = defaults.reading
+            result.interface = defaults.interface
+            result.headings = defaults.headings
         case .cards:
             result.cardScale = defaults.cardScale
             result.spacingScale = defaults.spacingScale
@@ -579,6 +757,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             result.spoilerSynopses = defaults.spoilerSynopses
             result.spoilerTitles = defaults.spoilerTitles
             result.expandsSynopsis = defaults.expandsSynopsis
+            result.blursBackground = defaults.blursBackground
             result.showsReviews = defaults.showsReviews
             result.showsCast = defaults.showsCast
             result.showsInformation = defaults.showsInformation
@@ -587,6 +766,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
             result.showsWatchAnywhere = defaults.showsWatchAnywhere
             result.sectionOrder = defaults.sectionOrder
             result.titleSectionOrder = defaults.titleSectionOrder
+            result.showsTitlePageTabBar = defaults.showsTitlePageTabBar
         case .motion:
             result.startTab = defaults.startTab
             result.zoomTransitions = defaults.zoomTransitions
@@ -606,9 +786,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     /// this changes.
     public var layoutKey: String {
         let numbers = [cardScale, spacingScale, cornerScale, effectiveShelfSpacingScale, sideMarginScale, shelfDividerThickness, shelfDividerOpacity].map { String(format: "%.3f", $0) }
-        let text = [textSize.rawValue, font.rawValue, "\(boldText)", "\(italicText)", fontWidth.rawValue, letterSpacing.rawValue,
-                    lineSpacing.rawValue, headingFont.rawValue, headingWeight.rawValue, headingSize.rawValue, headingWidth.rawValue,
-                    headingSpacing.rawValue, "\(uppercaseHeadings)"]
+        let text = [reading.layoutKey, interface.layoutKey, headings.layoutKey]
         let captions = ["\(showsPosterTitles)", "\(captionLines)", "\(showsCaptionDetails)", "\(uppercaseCaptions)", "\(phoneGridColumns)", "\(phoneLandscapeGridColumns)", "\(showsShelfDividers)", "\(shelfDividerFullWidth)"]
         return (numbers + text + captions).joined(separator: "|")
     }

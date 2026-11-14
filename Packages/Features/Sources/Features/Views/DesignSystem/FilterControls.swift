@@ -46,7 +46,7 @@ struct FilterMenuLabel: View {
             Spacer(minLength: 0)
             Image(systemName: "chevron.down").font(Theme.Typography.microStrong)
         }
-        .font(Theme.Typography.mediumStrong)
+        .appFont(.mediumStrong)
         .foregroundStyle(tint)
         .padding(.horizontal, Theme.Spacing.m)
         .frame(maxWidth: .infinity, minHeight: minHeight)
@@ -75,7 +75,7 @@ struct ActiveFilterChips: View {
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        FlowLayout(spacing: metrics.controlSpacing) {
+        FlowLayout(spacing: metrics.cardSpacing) {
             ForEach(chips) { chip in
                 GlassChip(chip.label, systemImage: "xmark", isCompact: true, action: chip.remove)
                     .accessibilityIdentifier("\(identifier).chip.\(chip.id)")
@@ -117,45 +117,36 @@ struct BrowseFilterBar<Menus: View>: View {
     static var menuHeight: CGFloat { 34 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: sectionSpacing) {
+        VStack(alignment: .leading, spacing: metrics.cardSpacing) {
             if let kinds {
                 QualitySelector(titles: kinds.titles, selection: kinds.selection, symbols: kinds.symbols,
                                 accessibilityID: kinds.identifier)
-                    .navigationAlignedWidth(margin: metrics.pageMargin)
+                    .navigationAlignedWidth(margin: metrics.gridPageMargin)
             }
-            VStack(alignment: .leading, spacing: metrics.controlSpacing) {
-                #if targetEnvironment(macCatalyst)
-                macRow
-                #else
-                GlassEffectContainer(spacing: metrics.cardSpacing) {
-                    ViewThatFits(in: .horizontal) {
-                        menuGrid(columns: 4)
-                            .frame(minWidth: 4 * 140 + 3 * metrics.controlSpacing)
-                        menuGrid(columns: 2)
-                    }
-                    // Match the floating landscape Back button's row so the shorter menu capsules share its vertical centreline.
-                    .frame(minHeight: 44, alignment: .center)
+            #if targetEnvironment(macCatalyst)
+            // As wide as the type selector above it, so the heading starts under "All" and the menus end under the selector's trailing edge.
+            macRow
+                .navigationAlignedWidth(margin: metrics.gridPageMargin)
+            #else
+            GlassEffectContainer(spacing: metrics.cardSpacing) {
+                ViewThatFits(in: .horizontal) {
+                    menuGrid(columns: 4)
+                        .frame(minWidth: 4 * 140 + 3 * metrics.cardSpacing)
+                    menuGrid(columns: 2)
                 }
-                #endif
-                if !chips.isEmpty {
-                    ActiveFilterChips(chips: chips, identifier: identifier, clearAll: clearAll)
-                }
+                // Match the floating landscape Back button's row so the shorter menu capsules share its vertical centreline.
+                .frame(minHeight: 44, alignment: .center)
             }
-            .padding(.horizontal, metrics.pageMargin)
+            .padding(.horizontal, metrics.gridPageMargin)
+            #endif
+            if !chips.isEmpty {
+                ActiveFilterChips(chips: chips, identifier: identifier, clearAll: clearAll)
+                    .padding(.horizontal, metrics.gridPageMargin)
+            }
         }
-        .padding(.bottom, sectionSpacing)
+        .padding(.bottom, metrics.cardSpacing)
         .buttonStyle(.hoverPlain)
         .buttonBorderShape(.roundedRectangle(radius: Self.menuHeight / 2 * metrics.cornerScale(for: .filters)))
-    }
-
-    /// The gaps around the menus' row: the filter controls' own on iPhone. On Mac the row heads the grid, so it keeps a shelf header's gap
-    /// from the selector above and the cards below.
-    private var sectionSpacing: CGFloat {
-        #if targetEnvironment(macCatalyst)
-        metrics.headerSpacing
-        #else
-        metrics.controlSpacing
-        #endif
     }
 
     #if targetEnvironment(macCatalyst)
@@ -172,7 +163,7 @@ struct BrowseFilterBar<Menus: View>: View {
                 }
                 macMenus
             }
-            VStack(alignment: .leading, spacing: metrics.controlSpacing) {
+            VStack(alignment: .leading, spacing: metrics.cardSpacing) {
                 macHeading
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 0) {
@@ -211,8 +202,8 @@ struct BrowseFilterBar<Menus: View>: View {
     #endif
 
     private func menuGrid(columns: Int) -> some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: metrics.controlSpacing), count: columns),
-                  alignment: .leading, spacing: metrics.controlSpacing) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: metrics.cardSpacing), count: columns),
+                  alignment: .leading, spacing: metrics.cardSpacing) {
             menus
         }
     }

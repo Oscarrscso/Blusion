@@ -162,13 +162,11 @@ struct FlowLayoutRow: View {
             // A tap or a chevron moves the row without a gesture: it is put back once that move has had time to finish.
             if !motion.isMoving { recentre(after: .milliseconds(600)) }
         }
-        // `init` seeds the middle poster only the first time the row is made, often before its titles have loaded: without this the
-        // scroll view rests on a poster other than the one marked as in the middle, and its first tap only brings it to the middle.
+        // `init` seeds the middle poster only the first time the row is made, often before its titles have loaded. LazyHStack also
+        // fails to honour the first `scrollPosition` until the middle copy has been built: re-apply after a frame so the caption and
+        // the centred poster match on the first tap.
         .onChange(of: items, initial: true) {
-            guard position(of: centredID) == nil, let first = items.first else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { centredID = Self.entryID(copy: middleCopy, item: first) }
+            syncCentre(force: position(of: centredID) == nil)
         }
         #if targetEnvironment(macCatalyst)
         .onHover { isHovering = $0 }
@@ -185,6 +183,28 @@ struct FlowLayoutRow: View {
             guard !motion.isMoving, centredID == id, position(of: target) != nil else { return }
             var transaction = Transaction()
             transaction.disablesAnimations = true
+            withTransaction(transaction) { centredID = target }
+        }
+    }
+
+    /// Puts the chosen (or first) title on the middle copy and re-applies `scrollPosition` after layout so the visible centre matches
+    /// the caption before the first tap.
+    private func syncCentre(force: Bool) {
+        guard let item = (force ? nil : position(of: centredID).map { entries[$0].item }) ?? items.first else {
+            centredID = nil
+            return
+        }
+        let target = Self.entryID(copy: middleCopy, item: item)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { centredID = target }
+        Task { @MainActor in
+            await Task.yield()
+            guard !motion.isMoving, position(of: target) != nil else { return }
+            // Clearing then restoring forces LazyHStack to scroll to an id it may not have built on the first pass.
+            withTransaction(transaction) { centredID = nil }
+            await Task.yield()
+            guard !motion.isMoving else { return }
             withTransaction(transaction) { centredID = target }
         }
     }
@@ -219,17 +239,17 @@ struct FlowLayoutRow: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.m) {
                 Text(name)
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
                     .layoutPriority(1)
                 Text(details)
-                    .font(Theme.Typography.metaLine)
+                    .appFont(.metaLine)
                     .foregroundStyle(Theme.metaText)
                     .lineLimit(1, reservesSpace: true)
             }
             Text(synopsis)
-                .font(Theme.Typography.medium)
+                .appFont(.medium, role: .reading)
                 .foregroundStyle(.secondary)
                 .lineLimit(2, reservesSpace: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

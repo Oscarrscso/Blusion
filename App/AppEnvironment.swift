@@ -121,7 +121,6 @@ final class AppEnvironment {
                 return engine
             case .fallback(_, let reason):
                 #if BLUSION_FALLBACK_ENGINE
-                #if !targetEnvironment(macCatalyst)
                 // AetherEngine first (native Dolby Vision, profile 7 FEL, Atmos), unless the listener chose mpv; mpv for full subtitle
                 // styling and as the backup when AetherEngine can't start a stream (`.fullFeaturedEngine`, PlaybackCoordinator).
                 let player = Self.playerPreferences(settingsDefaults)
@@ -130,7 +129,6 @@ final class AppEnvironment {
                                               preferredAudioLanguages: player.audioLanguage.map { [$0] } ?? []) {
                     return FallbackEngine(backend: aether)
                 }
-                #endif
                 return FallbackEngine(backend: MPVBackend())
                 #else
                 return nil
@@ -142,7 +140,7 @@ final class AppEnvironment {
         // The stream a player is opening on starts downloading at once, while its screen animates in. AetherEngine can take such bytes;
         // AVPlayer and mpv fetch their own, so only AetherEngine's streams warm.
         let preloadStream: StreamPreloader = { candidate in
-            #if BLUSION_FALLBACK_ENGINE && !targetEnvironment(macCatalyst)
+            #if BLUSION_FALLBACK_ENGINE
             guard case .fallback(_, let reason) = candidate.route, reason != .fullFeaturedEngine, let url = candidate.url,
                   Self.playerPreferences(settingsDefaults).advancedEngine == .aether else { return }
             AetherBackend.prewarm(url: url, headers: candidate.headers)
@@ -153,12 +151,13 @@ final class AppEnvironment {
         #else
         let fallbackLinked = false
         #endif
-        #if BLUSION_FALLBACK_ENGINE && !targetEnvironment(macCatalyst)
+        #if BLUSION_FALLBACK_ENGINE
         let aetherLinked = true
         #else
         let aetherLinked = false
         #endif
-        // The Home layout is a preference, not a secret: it names addons by manifest id and host, never by URL.
+        // The Home layout is a preference, not a secret: it names addons by manifest id and host, never by URL. It is shared with the
+        // user's other devices through a folder they choose in Settings (see `SyncedWidgetStore`).
         let sharedFolder = SharedFolder(defaults: settingsDefaults)
         let widgets: any WidgetStore = uiTesting ? InMemoryWidgetStore() : SyncedWidgetStore(defaults: settingsDefaults, shared: sharedFolder)
         // Streams handed to Infuse and not yet called back, so a stop recorded after a relaunch still counts.
@@ -188,8 +187,9 @@ final class AppEnvironment {
         // IMDb's ratings dataset, downloaded in the background once a day and read offline. UI tests never touch the network or the disk.
         var imdbDataset: IMDbRatingsService?
         if !uiTesting, let directory = IMDbRatingsService.standardDirectory() { imdbDataset = IMDbRatingsService(directory: directory) }
-        let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt, account: traktAccount,
-                                                 snapshots: snapshots, imdb: imdbDataset)
+        let genreFile = uiTesting ? nil : FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("title-genres.json")
+        let browse = BrowseService(registry: registry, client: client, genreFile: genreFile)
         let ratingsCache: any RatingsCache
         var marksFile: URL?
         if !uiTesting, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
@@ -201,7 +201,13 @@ final class AppEnvironment {
         let marks = TitleMarksCache(fileURL: marksFile, region: Locale.current.region?.identifier ?? "US")
         let posterRatings = PosterRatingsStore(letterboxd: uiTesting ? nil : LetterboxdRatings(client: client), cache: ratingsCache,
                                                dataset: imdbDataset, bestBlurays: uiTesting ? nil : BestBluraysClient(client: client),
-                                               marks: marks, logger: logger)
+                                               marks: marks, myAnimeList: uiTesting ? nil : MyAnimeListRatings(client: client), logger: logger)
+        // A TMDB list's score bounds hold each title to its rating as the rating filters judge it (Letterboxd, then IMDb).
+        let widgetContent = WidgetContentService(registry: registry, client: client, settings: settings, trakt: trakt, account: traktAccount,
+                                                 snapshots: snapshots, imdb: imdbDataset, browse: browse,
+                                                 ratingJudge: { item, tmdbScore, isAnime in
+                                                     await posterRatings.listRating(for: item, tmdbScore: tmdbScore, isAnime: isAnime)
+                                                 })
         let searchHistory: any SearchHistoryStore = uiTesting ? InMemorySearchHistoryStore() : DefaultsSearchHistoryStore(defaults: settingsDefaults)
         let streamService = StreamService(registry: registry, client: client, timings: addonSpeed)
         let subtitleService = SubtitleService(registry: registry, client: client)
@@ -210,7 +216,7 @@ final class AppEnvironment {
                                               hardwareAV1: AVHardware.decodesAV1InHardware, persistent: !uiTesting)
         DownloadBackgroundEvents.manager = downloadManager
         Task { await downloadManager.start() }
-        let services = AppServices(registry: registry, client: client, streams: streamService, subtitles: subtitleService, settings: settings, progress: progress, library: library,
+        let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService, settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, preloadStream: preloadStream, fallbackEngineLinked: fallbackLinked, aetherEngineLinked: aetherLinked,
                                    decodesAV1InHardware: AVHardware.decodesAV1InHardware,
                                    widgets: widgets, widgetContent: widgetContent,

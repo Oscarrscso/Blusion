@@ -76,7 +76,8 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     public var genres: [Named]
     public var keywords: [Named]
     public var excludedKeywords: [Named]
-    /// The rating, 0 to 10: IMDb's for a widget once IMDb's dataset is on the device, else TMDb's community score (see `usesTMDbScores`).
+    /// The rating, 0 to 10: the app's rating of each title when it judges one (see `TitleRatingJudge`), else IMDb's for a widget once
+    /// IMDb's dataset is on the device, else TMDb's community score (see `usesTMDbScores`).
     public var minimumScore: Double?
     public var maximumScore: Double?
     /// The number of votes behind the rating, IMDb's or TMDb's as for the score.
@@ -103,8 +104,8 @@ public struct TMDbDiscoverQuery: Sendable, Codable, Equatable, Hashable {
     /// True when the title names neither films nor shows: the list then holds both, interleaved, so a show such as The Simpsons is in an
     /// animation list as a film is. Written only when set, so a saved list keeps its encoding.
     public var spansBothKinds: Bool
-    /// True for a search's list, whose score and vote bounds are always TMDb's own; a widget's are IMDb's. Written only when set, so a
-    /// saved widget keeps its encoding.
+    /// True for a search's list, whose vote bound, and score bound without the app's rating, are TMDb's own; a widget's are IMDb's.
+    /// Written only when set, so a saved widget keeps its encoding.
     public var usesTMDbScores: Bool
 
     public init(kind: Kind = .movie, ordering: Ordering = .popular, period: Period? = nil, genres: [Named] = [], keywords: [Named] = [],

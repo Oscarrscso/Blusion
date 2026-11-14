@@ -58,7 +58,7 @@ private struct SavedHUDBadge: View {
             Image(systemName: "checkmark")
                 .font(.system(size: 44, weight: .semibold))
             Text(message)
-                .font(Theme.Typography.mediumStrong)
+                .appFont(.mediumStrong)
         }
         .foregroundStyle(.primary)
         .padding(.horizontal, 30)

@@ -134,7 +134,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     @ViewBuilder
     private var overview: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
-            JustifiedText(text: description, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
+            JustifiedText(text: description, role: .reading, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("detail.overview")
         } else if model.isLoading {

@@ -43,7 +43,21 @@ public final class SyncedWidgetStore: WidgetStore, @unchecked Sendable {
 
     public func save(_ widgets: [HomeWidget]?) async {
         await local.save(widgets)
-        queue.async { self.share() }
+        queue.async { try? self.share() }
+    }
+
+    public func resetLayout() async throws {
+        await local.save(nil)
+        // With no chosen folder the layout is device-local.
+        if let folder = shared as? SharedFolder, !folder.isConfigured { return }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async {
+                do {
+                    try self.share()
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
     }
 
     public func takeInSharedLayout() async -> Bool {
@@ -56,7 +70,7 @@ public final class SyncedWidgetStore: WidgetStore, @unchecked Sendable {
         let copy: Shared?
         do { copy = try readShared() } catch { return false }
         guard let copy else {
-            if local.storedData != nil { share() }
+            if local.storedData != nil { try? share() }
             return false
         }
         guard copy.stamp != defaults.string(forKey: Self.stampKey) else { return false }
@@ -68,10 +82,10 @@ public final class SyncedWidgetStore: WidgetStore, @unchecked Sendable {
     }
 
     /// Writes this device's layout to the shared copy with a new stamp, unless the shared copy holds it already.
-    private func share() {
+    private func share() throws {
         let mine = local.storedData
         let current: Shared?
-        do { current = try readShared() } catch { return }
+        current = try readShared()
         if let current, current.layoutData == mine {
             defaults.set(current.stamp, forKey: Self.stampKey)
             return
@@ -82,8 +96,8 @@ public final class SyncedWidgetStore: WidgetStore, @unchecked Sendable {
             layout = text
         }
         let next = Shared(stamp: UUID().uuidString, layout: layout)
-        guard let data = try? JSONEncoder().encode(next) else { return }
-        do { try shared.write(data) } catch { return }
+        let data = try JSONEncoder().encode(next)
+        try shared.write(data)
         defaults.set(next.stamp, forKey: Self.stampKey)
     }
 
@@ -109,6 +123,8 @@ public final class SharedFolder: SharedLayoutCopy, @unchecked Sendable {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
+
+    public var isConfigured: Bool { defaults.data(forKey: Self.bookmarkKey) != nil }
 
     /// The chosen folder's name as the Files app shows it, or nil when none is chosen or it is gone.
     public var folderName: String? {

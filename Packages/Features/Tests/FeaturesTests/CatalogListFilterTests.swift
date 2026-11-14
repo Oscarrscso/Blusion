@@ -81,4 +81,22 @@ struct CatalogListFilterTests {
         #expect(CatalogListFilter(minimumYear: 1990, maximumYear: 1999).yearLabel(now: now) == "1990s")
         #expect(CatalogListFilter().yearLabel(now: now) == nil)
     }
+
+    @Test func ratingsJudgeByLetterboxdThenIMDbAndAnimeByMyAnimeListFirst() {
+        let scores: [RatingSource: Double] = [.letterboxd: 4, .imdb: 7, .myAnimeList: 9, .tmdb: 6]
+        #expect(RatingSource.judge(isAnime: false) { scores[$0] } == JudgedRating(score: 8, hasIMDb: true))
+        #expect(RatingSource.judge(isAnime: true) { scores[$0] } == JudgedRating(score: 9, hasIMDb: true))
+        #expect(RatingSource.judge(isAnime: false) { $0 == .tmdb ? 6 : nil } == nil, "TMDb is not a rating filter")
+        #expect(RatingSource.judge(isAnime: false) { $0 == .imdb ? 7 : nil } == JudgedRating(score: 7, hasIMDb: true))
+        #expect(RatingSource.judge(isAnime: false) { $0 == .myAnimeList ? 9 : nil } == nil, "MyAnimeList rates anime only")
+    }
+
+    @Test func underARatingFilterIMDbRatedTitlesKeepTheirOrderAmongTheLateOnes() {
+        let items = (0..<60).map { preview("tt\($0)", rating: $0 % 3 == 0 ? nil : 8) }
+        let shown = CatalogListFiltering.apply(CatalogListFilter(minimumRating: 7), to: items, rating: { item in
+            JudgedRating.catalogue(item) ?? JudgedRating(score: 8, hasIMDb: false)
+        })
+        #expect(Set(shown.map(\.id)) == Set(items.map(\.id)))
+        #expect(shown.filter { $0.imdbRating != nil }.map(\.id) == items.filter { $0.imdbRating != nil }.map(\.id))
+    }
 }

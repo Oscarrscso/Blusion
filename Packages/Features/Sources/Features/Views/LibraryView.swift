@@ -154,8 +154,7 @@ struct LibraryView: View {
         #else
         // The same large title as the category pages, without the empty navigation bar row above it.
         Text("Library")
-            // The navigation bar's large title: a fixed 34pt bold at its 16pt inset, as on the category pages.
-            .font(.system(size: 34, weight: .bold))
+            .appFont(.largeTitle)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, isPhoneInLandscape ? metrics.pageMargin : Theme.Spacing.l)
             .padding(.bottom, isPhoneInLandscape ? Theme.Spacing.l : Theme.Spacing.m)

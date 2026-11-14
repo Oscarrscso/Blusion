@@ -73,7 +73,7 @@ struct PlayerEpisodePicker: View {
                 seasonMenu
             } else {
                 Text("Episodes")
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                     .lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -101,7 +101,7 @@ struct PlayerEpisodePicker: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 24)
         } else if let failure = model.failure {
-            Text(failure).font(Theme.Typography.medium).foregroundStyle(Theme.dimmerText)
+            Text(failure).appFont(.medium).foregroundStyle(Theme.dimmerText)
                 .padding(.horizontal, 4)
         } else {
             LazyVStack(spacing: 0) {
@@ -125,7 +125,7 @@ struct PlayerEpisodePicker: View {
         } label: {
             HStack(spacing: 6) {
                 Text(model.selectedSeason.map(PlayerEpisodePickerModel.seasonName) ?? "Season")
-                    .font(Theme.Typography.headline)
+                    .appFont(.headline)
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(Theme.Typography.captionStrong)
@@ -162,9 +162,9 @@ struct PlayerEpisodePicker: View {
                             .accessibilityLabel("IMDb rating \(score, format: .number.precision(.fractionLength(1))) out of 10")
                         }
                     }
-                    .font(.caption.weight(.medium))
+                    .appFont(.caption, weight: .medium, role: .interface)
                     .foregroundStyle(Theme.faintText)
-                    Text(video.title).font(Theme.Typography.mediumStrong).lineLimit(2)
+                    Text(video.title).appFont(.mediumStrong).lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 8)

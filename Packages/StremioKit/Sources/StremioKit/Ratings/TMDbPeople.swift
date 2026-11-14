@@ -312,11 +312,16 @@ public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
     public let poster: URL?
     /// A 780 pt wide backdrop. Nil when TMDb has none.
     public let backdrop: URL?
+    /// TMDb's genre ids from the recommendation payload.
+    public let genreIDs: [Int]
 
     public var id: String { "\(mediaType)/\(tmdbID)" }
 
+    /// The genre names TMDb's `genre_ids` stand for on this kind of title.
+    public var genres: [String] { TMDbRatings.genreNames(genreIDs, mediaType: mediaType) }
+
     public init(mediaType: String, tmdbID: Int, title: String, releaseDate: String?, poster: URL?, backdrop: URL?,
-                overview: String? = nil) {
+                overview: String? = nil, genreIDs: [Int] = []) {
         self.mediaType = mediaType
         self.tmdbID = tmdbID
         self.title = title
@@ -324,23 +329,26 @@ public struct TMDbRelatedTitle: Sendable, Equatable, Identifiable {
         self.overview = overview
         self.poster = poster
         self.backdrop = backdrop
+        self.genreIDs = genreIDs
     }
 
-    static func parse(_ data: Data) throws -> [TMDbRelatedTitle] {
+    static func parse(_ data: Data, defaultMediaType: String = "movie") throws -> [TMDbRelatedTitle] {
         let response: RawRecommendations
         do { response = try JSONDecoder().decode(RawRecommendations.self, from: data) } catch { throw AddonError.invalidJSON }
-        return titles(response.results ?? [])
+        return titles(response.results ?? [], defaultMediaType: defaultMediaType)
     }
 
-    /// The entries that have a name. An entry without a media type is a movie.
-    fileprivate static func titles(_ entries: [RawRecommendations.RawRecommendation]) -> [TMDbRelatedTitle] {
+    /// The entries that have a name. An entry without a media type takes `defaultMediaType`.
+    fileprivate static func titles(_ entries: [RawRecommendations.RawRecommendation],
+                                   defaultMediaType: String = "movie") -> [TMDbRelatedTitle] {
         entries.compactMap { entry in
             let title = [entry.title, entry.name].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty }
             guard let title else { return nil }
             let date = [entry.releaseDate, entry.firstAirDate].compactMap { $0 }.first { !$0.isEmpty }
-            return TMDbRelatedTitle(mediaType: entry.mediaType ?? "movie", tmdbID: entry.id, title: title, releaseDate: date,
+            return TMDbRelatedTitle(mediaType: entry.mediaType ?? defaultMediaType, tmdbID: entry.id, title: title, releaseDate: date,
                                     poster: TMDbImage.url(entry.posterPath, size: "w342"),
-                                    backdrop: TMDbImage.url(entry.backdropPath, size: "w780"), overview: entry.overview)
+                                    backdrop: TMDbImage.url(entry.backdropPath, size: "w780"), overview: entry.overview,
+                                    genreIDs: entry.genreIDs ?? [])
         }
     }
 }
@@ -405,11 +413,13 @@ extension TMDbRatings {
 
     /// Titles TMDb recommends alongside the given one, in TMDb's order. Empty when TMDb does not know the title. Throws `AddonError`
     /// for refusals and failures.
-    public func relatedTitles(imdbID: String, type: String) async throws -> [TMDbRelatedTitle] {
-        guard let id = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
-        let (url, headers) = try request(path: [type == "movie" ? "movie" : "tv", String(id), "recommendations"])
+    public func relatedTitles(imdbID: String, type: String, page: Int = 1) async throws -> [TMDbRelatedTitle] {
+        guard page > 0, let id = try await tmdbID(imdbID: imdbID, type: type) else { return [] }
+        let mediaType = type == "movie" ? "movie" : "tv"
+        let query = page == 1 ? [] : [URLQueryItem(name: "page", value: String(page))]
+        let (url, headers) = try request(path: [mediaType, String(id), "recommendations"], query: query)
         let result = try await client.get(url, headers: headers, limits: FetchLimits(maxBytes: 1024 * 1024), timeout: 8)
-        return try TMDbRelatedTitle.parse(result.data)
+        return try TMDbRelatedTitle.parse(result.data, defaultMediaType: mediaType)
     }
 
     /// The franchise a movie belongs to, by its collection's id (`TMDbTitleFacts.collectionID`). Throws `AddonError` for refusals and
@@ -548,6 +558,7 @@ private struct RawRecommendations: Decodable {
         let firstAirDate: String?
         let posterPath: String?
         let backdropPath: String?
+        let genreIDs: [Int]?
 
         enum CodingKeys: String, CodingKey {
             case id, title, name, overview
@@ -556,6 +567,7 @@ private struct RawRecommendations: Decodable {
             case firstAirDate = "first_air_date"
             case posterPath = "poster_path"
             case backdropPath = "backdrop_path"
+            case genreIDs = "genre_ids"
         }
     }
 }

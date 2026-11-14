@@ -62,7 +62,7 @@ struct DetailActions: View {
                         .downloadErrors(model.downloadManager)
                     if model.isFallback && !model.isLoading {
                         Label("Only basic details are available for this title.", systemImage: "info.circle")
-                            .font(Theme.Typography.small)
+                            .appFont(.small)
                             .foregroundStyle(.secondary)
                             .lineLimit(leadsText ? nil : 1)
                             .accessibilityIdentifier("detail.fallbackNote")
@@ -109,9 +109,8 @@ struct DetailActions: View {
                 // The label keeps its place under the spinner, so the button keeps its size.
                 HStack(spacing: Theme.Spacing.s) {
                     Image(systemName: "play.fill")
-                    if !hasNoStreams, model.isSeries, title.hasPrefix("Resume"),
-                       let next = model.nextUp, let season = next.season, let episode = next.episode {
-                        labelWithDetail("Resume", "S\(season)E\(episode)")
+                    if !hasNoStreams, let detail = resumeDetail {
+                        labelWithDetail("Resume", detail)
                     } else if !hasNoStreams, let openedInPlayer {
                         labelWithDetail(title.hasPrefix("Play") ? "Play" : title, "Opened in \(openedInPlayer.displayName)")
                     } else if !hasNoStreams, let bestDisc {
@@ -141,7 +140,7 @@ struct DetailActions: View {
                     .animation(Theme.Motion.standard, value: bestDisc)
                     .animation(Theme.Motion.standard, value: openedInPlayer)
             }
-            .buttonStyle(PrimaryActionButtonStyle(glass: playGlass, height: CircleActionButton.diameter, tint: playColour))
+            .buttonStyle(.titlePlay(colour: playColour))
             .contextMenu {
                 Button("Stream Selector", systemImage: "arrow.up.right.square") {
                     Haptics.play(.buttons)
@@ -164,7 +163,7 @@ struct DetailActions: View {
             Button {} label: {
                 Label(airs, systemImage: "calendar")
             }
-            .buttonStyle(PrimaryActionButtonStyle(glass: playGlass, height: CircleActionButton.diameter, tint: playColour))
+            .buttonStyle(.titlePlay(colour: playColour))
             .disabled(true)
             .accessibilityIdentifier("detail.playButton")
         } else if model.isLoading {
@@ -183,10 +182,25 @@ struct DetailActions: View {
                     }
                     .animation(Theme.Motion.quick, value: playsWhenLoaded)
             }
-            .buttonStyle(PrimaryActionButtonStyle(glass: playGlass, height: CircleActionButton.diameter, tint: playColour))
+            .buttonStyle(.titlePlay(colour: playColour))
             .allowsHitTesting(!blocksPlay)
             .accessibilityLabel(playsWhenLoaded ? "Play, loading" : "Play")
             .accessibilityIdentifier("detail.playButton")
+        }
+    }
+
+    /// Resume's second line. A series puts the episode in front of the time still to play: "S2E4 | 23m left".
+    private var resumeDetail: String? {
+        guard model.primaryActionTitle.hasPrefix("Resume") else { return nil }
+        let code: String? = {
+            guard model.isSeries, let next = model.nextUp, let season = next.season, let episode = next.episode else { return nil }
+            return "S\(season)E\(episode)"
+        }()
+        switch (code, model.primaryRemainingTimeLabel) {
+        case let (code?, time?): return "\(code) | \(time)"
+        case let (code?, nil): return code
+        case let (nil, time?): return time
+        case (nil, nil): return nil
         }
     }
 
@@ -198,14 +212,14 @@ struct DetailActions: View {
         HStack(spacing: Theme.Spacing.s) {
             Text(label)
             Text(detail)
-                .font(Theme.Typography.caption)
+                .appFont(.caption)
                 .opacity(detailOpacity)
         }
         #else
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
             Text(detail)
-                .font(Theme.Typography.caption)
+                .appFont(.caption)
                 .opacity(detailOpacity)
         }
         #endif
@@ -214,19 +228,14 @@ struct DetailActions: View {
     /// The glass Play dims its detail line; a solid fill keeps it at full strength so it stays black on white.
     private var detailOpacity: Double { appearance.playStyle == .artwork ? 0.6 : 1 }
 
-    /// Fixed circles reserve their natural width; Play uses all remaining space.
     private var actionRow: some View {
-        GlassEffectContainer(spacing: TitleHero.actionGap) {
-            HStack(alignment: .center, spacing: TitleHero.actionGap) {
-                primaryAction
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: .infinity)
-                downloadAction.fixedSize()
-                saveAction.fixedSize()
-                watchedAction.fixedSize()
-                trailerAction.fixedSize()
-            }
+        TitleActionRow {
+            primaryAction
+        } circles: {
+            downloadAction
+            saveAction
+            watchedAction
+            trailerAction
         }
         .frame(maxWidth: .infinity, alignment: leadsText ? .leading : .center)
     }
@@ -248,8 +257,6 @@ struct DetailActions: View {
     /// The Play button's own colour, from the same value it is drawn with; nil for the plain button. Saved, Watched and the Trailer button
     /// take it while on, and take it too when the page's read decides it after opening.
     private var playColour: Color? { Theme.playControlColour(hex: model.playColourHex) }
-    /// Use the shared Play-derived control colour without applying another opacity reduction.
-    private var playGlass: Glass { .regular.interactive().tint(playColour ?? .clear) }
 
     private var saveAction: some View {
         CircleActionButton(title: "Save", systemImage: "bookmark", isOn: model.isInLibrary, onTitle: "Saved", onSystemImage: "bookmark.fill",
@@ -324,6 +331,37 @@ struct DetailActions: View {
         .disabled(!model.canPlayTrailer)
         .opacity(model.canPlayTrailer ? 1 : 0.4)
         .accessibilityIdentifier("detail.trailerButton")
+    }
+}
+
+/// The title page's Play row: Play takes the room the round actions leave, with one gap (`TitleHero.actionGap`) throughout and the glass
+/// composed once. Appearance's previews draw this same row.
+struct TitleActionRow<Play: View, Circles: View>: View {
+    private let play: Play
+    private let circles: Circles
+
+    init(@ViewBuilder play: () -> Play, @ViewBuilder circles: () -> Circles) {
+        self.play = play()
+        self.circles = circles()
+    }
+
+    var body: some View {
+        GlassEffectContainer(spacing: TitleHero.actionGap) {
+            HStack(alignment: .center, spacing: TitleHero.actionGap) {
+                play
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity)
+                Group { circles }.fixedSize()
+            }
+        }
+    }
+}
+
+extension PrimitiveButtonStyle where Self == PrimaryActionButtonStyle {
+    /// A title's Play: glass tinted with its Play colour (`Theme.playControlColour`), level with the round actions beside it.
+    static func titlePlay(colour: Color?) -> PrimaryActionButtonStyle {
+        PrimaryActionButtonStyle(glass: .regular.interactive().tint(colour ?? .clear), height: CircleActionButton.diameter, tint: colour)
     }
 }
 #endif

@@ -76,10 +76,10 @@ struct DetailCredits: View {
                             ForEach(model.detail.cast, id: \.self) { name in
                                 VStack(spacing: 8) {
                                     Text(name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined())
-                                        .font(.title2.weight(.medium))
+                                        .appFont(style: .title2, weight: .medium, role: .display)
                                         .frame(width: metrics.avatarSize, height: metrics.avatarSize)
                                         .background(Theme.surfaceStrong, in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
-                                    Text(name).font(Theme.Typography.caption).lineLimit(2).multilineTextAlignment(.center)
+                                    Text(name).appFont(.caption).lineLimit(2).multilineTextAlignment(.center)
                                 }
                                 .frame(width: metrics.avatarSize + 12)
                                 .accessibilityElement(children: .ignore)
@@ -149,7 +149,7 @@ private struct CreditGroupMenu: View {
         let shape = RoundedRectangle(cornerRadius: Self.cornerRadius * metrics.circularButtonScale(for: .actionButtons), style: .continuous)
         return HStack(spacing: 4) {
             Text(shown.title)
-                .font(Theme.Typography.mediumStrong)
+                .appFont(.mediumStrong)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             if groups.count > 1 {

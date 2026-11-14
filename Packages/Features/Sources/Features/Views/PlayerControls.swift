@@ -304,10 +304,10 @@ struct PlayerControls: View {
     private var titleRow: some View {
         HStack(alignment: .bottom, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(headline).font(.title3.weight(.bold)).lineLimit(1)
+                Text(headline).appFont(style: .title3, weight: .bold, role: .display).lineLimit(1)
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("player.title")
                 if let episodeLine {
-                    Text(episodeLine).font(Theme.Typography.mediumStrong).foregroundStyle(Theme.dimmerText).lineLimit(1)
+                    Text(episodeLine).appFont(.mediumStrong).foregroundStyle(Theme.dimmerText).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -316,7 +316,7 @@ struct PlayerControls: View {
                     Haptics.play(.playerControls)
                     onNextEpisode()
                 } label: {
-                    Label("Next Episode", systemImage: "forward.end.fill").font(Theme.Typography.mediumStrong)
+                    Label("Next Episode", systemImage: "forward.end.fill").appFont(.mediumStrong)
                         .padding(.horizontal, 16).frame(height: 40)
                         .buttonSurface(.regular.interactive(), in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
                         .contentShape(ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
@@ -381,9 +381,7 @@ struct PlayerControls: View {
             #endif
             }
         }
-        .font(Theme.Typography.largeStrong)
-        .padding(4)
-        .buttonSurface(.regular, in: ScaledCapsule(scale: metrics.cornerScale(for: .playerControls)))
+        .playerMenuBarSurface(cornerScale: metrics.cornerScale(for: .playerControls))
     }
 
     /// The menus this film has: Audio only with a choice to make in it, Chapters only with chapter markers.
@@ -421,5 +419,14 @@ struct PlayerControls: View {
         return model.volume < 0.5 ? "speaker.fill" : "speaker.wave.2"
     }
     #endif
+}
+
+extension View {
+    /// The glass round the player's menu bar. Appearance's Corners preview draws the bar in the same glass.
+    func playerMenuBarSurface(cornerScale: CGFloat) -> some View {
+        font(Theme.Typography.largeStrong)
+            .padding(4)
+            .buttonSurface(.regular, in: ScaledCapsule(scale: cornerScale))
+    }
 }
 #endif

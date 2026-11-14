@@ -31,7 +31,7 @@ struct DetailInformation: View {
                                 .transition(.opacity)
                         }
                     }
-                    .font(Theme.Typography.small)
+                    .appFont(.small)
                 }
                 if folds {
                     Image(systemName: "chevron.down")

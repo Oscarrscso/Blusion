@@ -97,6 +97,84 @@ extension AppearancePreferences {
 
     // MARK: - Text
 
+    /// Where a piece of text sits. Display is shelf and section headings, interface is controls and metadata, reading is prose.
+    public enum TextRole: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+        case reading, interface, display
+
+        public var id: String { rawValue }
+
+        public var label: String {
+            switch self {
+            case .reading: "Body text"
+            case .interface: "Buttons & labels"
+            case .display: "Titles & headings"
+            }
+        }
+    }
+
+    /// One kind of text: its size, face, width, weight, slant, spacing, colour and case. Interface and headings leave a choice unset
+    /// (`follows…`) to use reading's until the listener sets that choice on its own.
+    public struct TextStyle: Sendable, Equatable, Codable {
+        public var textSize: TextSize = .system
+        public var followsTextSize = false
+        public var font: FontStyle = .standard
+        public var followsFont = false
+        public var width: FontWidth = .standard
+        public var followsWidth = false
+        public var weight: HeadingWeight = .regular
+        public var followsWeight = false
+        public var italic = false
+        public var followsItalic = false
+        public var letterSpacing: LetterSpacing = .standard
+        public var followsLetterSpacing = false
+        public var lineSpacing: LineSpacing = .standard
+        public var followsLineSpacing = false
+        public var colour: HeadingColour = .primary
+        public var capitals = false
+        public var scale: HeadingSize = .standard
+        public var followsScale = false
+
+        public init() {}
+
+        /// Every choice follows reading, until the listener sets one.
+        public static func followingReading() -> TextStyle {
+            var style = TextStyle()
+            style.followsTextSize = true
+            style.followsFont = true
+            style.followsWidth = true
+            style.followsWeight = true
+            style.followsItalic = true
+            style.followsLetterSpacing = true
+            style.followsLineSpacing = true
+            style.followsScale = true
+            return style
+        }
+
+        /// Headings follow the reading face, width, spacing, slant and text size, and keep a bold Title 2 of their own.
+        public static func headings() -> TextStyle {
+            var style = followingReading()
+            style.followsWeight = false
+            style.weight = .bold
+            style.followsScale = false
+            return style
+        }
+
+        /// True when this style has no choice of its own besides colour and capitals, which stay at their defaults.
+        public var followsReading: Bool {
+            followsTextSize && followsFont && followsWidth && followsWeight && followsItalic
+                && followsLetterSpacing && followsLineSpacing && followsScale
+                && colour == .primary && !capitals
+        }
+
+        /// What a layout depends on, so a shelf measures its cards again when the type changes.
+        public var layoutKey: String {
+            [textSize.rawValue, "\(followsTextSize)", font.rawValue, "\(followsFont)", width.rawValue, "\(followsWidth)",
+             weight.rawValue, "\(followsWeight)", "\(italic)", "\(followsItalic)", letterSpacing.rawValue, "\(followsLetterSpacing)",
+             lineSpacing.rawValue, "\(followsLineSpacing)", colour.rawValue, "\(capitals)", scale.rawValue, "\(followsScale)"]
+                .joined(separator: ",")
+        }
+    }
+
     /// A fixed text size for the whole app, or the system's own. The accessibility sizes go past the largest ordinary size.
     public enum TextSize: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case system, xSmall, small, medium, large, xLarge, xxLarge, xxxLarge
@@ -123,12 +201,60 @@ extension AppearancePreferences {
         }
     }
 
-    /// The design of the system font throughout the app.
+    /// A typeface. The first four are system designs; the rest are faces that ship with iOS, used for reading, interface, or display.
     public enum FontStyle: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case standard, rounded, serif, monospaced
+        case avenir, avenirNext, futura, gillSans, helveticaNeue
+        case baskerville, charter, georgia, palatino, iowan, hoefler
+        case didot, bodoni, optima, typewriter
 
         public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+
+        public var label: String {
+            switch self {
+            case .standard: "Default"
+            case .serif: "New York"
+            case .monospaced: "Mono"
+            case .avenir: "Avenir"
+            case .avenirNext: "Avenir Next"
+            case .futura: "Futura"
+            case .gillSans: "Gill Sans"
+            case .helveticaNeue: "Helvetica Neue"
+            case .baskerville: "Baskerville"
+            case .charter: "Charter"
+            case .georgia: "Georgia"
+            case .palatino: "Palatino"
+            case .iowan: "Iowan Old Style"
+            case .hoefler: "Hoefler Text"
+            case .didot: "Didot"
+            case .bodoni: "Bodoni"
+            case .optima: "Optima"
+            case .typewriter: "Typewriter"
+            default: rawValue.capitalized
+            }
+        }
+
+        /// The font family, for a face that is not a system design.
+        public var familyName: String? {
+            switch self {
+            case .avenir: "Avenir"
+            case .avenirNext: "Avenir Next"
+            case .futura: "Futura"
+            case .gillSans: "Gill Sans"
+            case .helveticaNeue: "Helvetica Neue"
+            case .baskerville: "Baskerville"
+            case .charter: "Charter"
+            case .georgia: "Georgia"
+            case .palatino: "Palatino"
+            case .iowan: "Iowan Old Style"
+            case .hoefler: "Hoefler Text"
+            case .didot: "Didot"
+            case .bodoni: "Bodoni 72"
+            case .optima: "Optima"
+            case .typewriter: "American Typewriter"
+            default: nil
+            }
+        }
     }
 
     /// How wide the system font's letters are.
@@ -172,30 +298,22 @@ extension AppearancePreferences {
         }
     }
 
-    /// The design of shelf and section headings ("Continue Watching", "TMDb Reviews"): the text's own, or one of their own.
+    /// A reading face, or the reading face itself. Headings and interface text each have one.
     public enum HeadingFont: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case matchText, standard, rounded, serif, monospaced
+        case avenir, avenirNext, futura, gillSans, helveticaNeue
+        case baskerville, charter, georgia, palatino, iowan, hoefler
+        case didot, bodoni, optima, typewriter
 
         public var id: String { rawValue }
 
         public var label: String {
-            switch self {
-            case .matchText: "Same as Text"
-            case .standard: "Default"
-            default: rawValue.capitalized
-            }
+            if self == .matchText { return "Same as body text" }
+            return font?.label ?? rawValue.capitalized
         }
 
-        /// The design, or nil to follow the text's.
-        public var font: FontStyle? {
-            switch self {
-            case .matchText: nil
-            case .standard: .standard
-            case .rounded: .rounded
-            case .serif: .serif
-            case .monospaced: .monospaced
-            }
-        }
+        /// The face, or nil to follow the reading text.
+        public var font: FontStyle? { FontStyle(rawValue: rawValue) }
     }
 
     public enum HeadingWeight: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
@@ -268,7 +386,7 @@ extension AppearancePreferences {
     // MARK: - Cards
 
     public enum CornerGroup: String, Sendable, Codable, CaseIterable, Identifiable {
-        case artwork, playButton, actionButtons, filters, reviews, panels, playerControls, settingsPreview, settingsRows
+        case artwork, playButton, actionButtons, filters, reviews, panels, playerControls, settingsRows
 
         public var id: String { rawValue }
         /// What the group rounds, in the words the listener sees it by.
@@ -281,7 +399,6 @@ extension AppearancePreferences {
             case .reviews: "Review Cards"
             case .panels: "Stream Cards & Panels"
             case .playerControls: "Player Controls"
-            case .settingsPreview: "Appearance Preview"
             case .settingsRows: "Settings Rows"
             }
         }
@@ -402,7 +519,7 @@ extension AppearancePreferences {
         public var id: String { rawValue }
         public var label: String {
             switch self {
-            case .primary: "White"
+            case .primary: "Default"
             case .secondary: "Grey"
             case .accent: "Accent"
             }

@@ -14,6 +14,19 @@ public struct RankedStream: Sendable, Equatable, Identifiable {
     public let addonIndex: Int
     public let indexInAddon: Int
 
+    public init(id: String, stream: AddonStream, addon: AddonSummary, alsoProvidedBy: [AddonSummary] = [], quality: StreamQuality,
+                container: MediaContainer? = nil, route: PlaybackRoute, addonIndex: Int = 0, indexInAddon: Int = 0) {
+        self.id = id
+        self.stream = stream
+        self.addon = addon
+        self.alsoProvidedBy = alsoProvidedBy
+        self.quality = quality
+        self.container = container
+        self.route = route
+        self.addonIndex = addonIndex
+        self.indexInAddon = indexInAddon
+    }
+
     public var title: String { stream.displayName }
     public var bingeContext: BingeContext? { stream.behaviorHints.bingeGroup.map { BingeContext(bingeGroup: $0, addonID: addon.id) } }
 

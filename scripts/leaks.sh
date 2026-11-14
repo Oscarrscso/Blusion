@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Simulator half of the M8 leak pass (the host half is the LeakTests suites in PlayerKit and Features).
 # Runs the UI flows while sampling the app with the macOS `leaks` tool (simulator processes are ordinary host processes),
-# then fails if any sample reports leaked objects from Blusion's own code. macOS + Xcode only. UNVERIFIED until a Mac runs it
-# (docs/MAC_FIRST_RUN.md). Apple framework internals show up as leaks too: the report keeps the stacks so a person can judge.
+# then fails if any sample reports leaked objects from Blusion's own code. macOS + Xcode only.
+# Apple framework internals show up as leaks too: the report keeps the stacks so a person can judge.
 #   ./scripts/leaks.sh [interval-seconds]
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

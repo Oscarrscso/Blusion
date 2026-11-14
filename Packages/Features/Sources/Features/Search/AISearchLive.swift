@@ -38,6 +38,7 @@ extension DescribedSearchService {
     static func live(_ services: AppServices) -> DescribedSearchService {
         let content = services.widgetContent
         let progress = services.progress
+        let ratings = services.posterRatings
         let search = TMDbSearch(services)
         let tmdb: @Sendable () async -> TMDbRatings? = { await search.api() }
         return DescribedSearchService(interpreter: OnDeviceDescriptionInterpreter.availableInterpreter(), keywords: { text in
@@ -141,6 +142,8 @@ extension DescribedSearchService {
             await search.people(named: name)
         }, resolveGenres: { items in
             await services.browse.resolvingGenres(in: items)
+        }, titleRating: { item, tmdbScore in
+            await ratings.listRating(for: item, tmdbScore: tmdbScore, isAnime: false)
         })
     }
 

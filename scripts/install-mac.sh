@@ -32,7 +32,9 @@ remove_bundle() {
 }
 mkdir -p "$WORK"
 
-# Use the same advanced-player spec as iPhone. mpv supports Catalyst; AetherPlayer is linked only on iPhone/iPad.
+# Use the same advanced-player spec as iPhone: mpv and AetherEngine. AetherEngine's libraries have no Catalyst slice of their own; the
+# arm64 ones are made from their macOS slices below (scripts/aether-catalyst-slices.py).
+[[ "$(uname -m)" == arm64 ]] || fail "AetherEngine's Mac Catalyst libraries are made for Apple silicon (arm64) only"
 ./scripts/enable-fallback.sh >/dev/null || fail "could not generate the advanced-player Xcode project"
 # A throwaway signing overlay, built without a provisioning profile.
 cat > "$WORK/project.install.yml" <<YAML
@@ -52,6 +54,12 @@ xcodegen generate --spec "$WORK/project.install.yml" --project "$WORK" --quiet |
 REVISION="$(git rev-parse HEAD)"
 TAG="$(git rev-parse --short HEAD)"
 [[ -z "$(git status --porcelain --untracked-files=normal)" ]] || TAG="$TAG-dirty"
+# Resolve the packages first, then apply AetherEngine's Swift 6 fix and add its Catalyst slices. The scheme's pre-action does the same,
+# but on a clean checkout it runs before the packages are resolved and has nothing to change yet.
+xcodebuild -project "$WORK/Blusion.xcodeproj" -scheme Blusion -derivedDataPath "$WORK/DerivedData" -resolvePackageDependencies \
+  >"$WORK/resolve.log" 2>&1 || fail "package resolution failed (log: $WORK/resolve.log)"
+bash scripts/prepare-aether.sh "$ROOT/$WORK/DerivedData/Build" || fail "could not prepare AetherEngine"
+python3 scripts/aether-catalyst-slices.py "$ROOT/$WORK/DerivedData/Build" || fail "could not make AetherEngine's Mac Catalyst slices"
 echo "install-mac: building $TAG ($REVISION; log: $LOG)"
 # This Mac's architecture only: a Release build is otherwise universal and compiles everything twice (arm64 and x86_64). No index
 # store either: Xcode's editor never reads this DerivedData. Run at lower CPU priority so the Mac stays usable while it builds.

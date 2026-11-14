@@ -1,7 +1,7 @@
 import XCTest
 
-/// M5 acceptance in the simulator: the mock's MP4 and HLS play, time advances, seeks land within 1 s, subtitles appear at their cue times.
-/// (Picture in Picture, AirPlay, lock-screen controls and background audio are device-only: docs/DEVICE_CHECKLIST.md.)
+/// The mock's MP4 and HLS play, time advances, seeks land within 1 s, and subtitles appear at their cue times.
+/// Picture in Picture, AirPlay, lock-screen controls and background audio need a device.
 final class PlaybackFlowTests: XCTestCase {
     private var catalogURL: String { ProcessInfo.processInfo.environment["MOCK_ADDON_CATALOG_URL"] ?? "" }
     private var streamURL: String { ProcessInfo.processInfo.environment["MOCK_ADDON_STREAM_URL"] ?? "" }

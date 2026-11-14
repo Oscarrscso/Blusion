@@ -43,6 +43,10 @@ struct DetailView: View {
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
     @State private var hero: HeroLoader
     @State private var fullResolutionHero: (url: URL, image: UIImage)?
+    /// Appearance's Blurred background, once rendered from the hero picture, and the width the page draws it at.
+    @State private var backdrop: UIImage?
+    @State private var backdropWidth: CGFloat = 0
+    @Environment(\.displayScale) private var displayScale
     @AppStorage(DefaultsSettingsStore.Keys.usesHeroPosters) private var globalHeroPosters = false
     private let heroPostersOverride: Bool?
     private let heroHandoff: HeroHandoff?
@@ -101,6 +105,11 @@ struct DetailView: View {
         #if targetEnvironment(macCatalyst)
         return Self.desktopMargin
         #else
+        if isPhoneInLandscape {
+            // Start the details at the inner edge of the Back and Home buttons.
+            let controlsEdge = LandscapeTabBarState.edgeInset(for: layoutWidth) + LandscapeTabBarState.buttonDiameter
+            return max(controlsEdge, max(sideInset, windowSideInset) + Theme.Spacing.xs)
+        }
         // Just clear of the notch and rounded corners: the side inset plus a small gap, never less than a slim margin.
         return max(max(sideInset, windowSideInset) + Theme.Spacing.xs, Theme.Spacing.m)
         #endif
@@ -231,7 +240,8 @@ struct DetailView: View {
                                 TitleSectionLine(contentMargin: contentMargin)
                                     // The hero already reserves space below its rating pills. Account for that inset, then use the
                                     // same section gap on both sides so the divider actually sits between the two sections.
-                                    .padding(.top, isLandscape
+                                    // Landscape with reviews open: the panel is the hero's last part, so nothing of the inset lies below it.
+                                    .padding(.top, isLandscape && model.openedReviews == nil
                                         ? metrics.titleRatingsGap - TitleHero.landscapeContentBottomInset
                                         : metrics.titleRatingsGap)
                                 // Each section below has a faint line above it, as far from it as the one under the ratings.
@@ -328,6 +338,7 @@ struct DetailView: View {
                     scrollBottom = value
                     refreshBottomExtra()
                 }
+                .task(id: backdropRequest(in: geometry.size)) { [request = backdropRequest(in: geometry.size)] in await renderBackdrop(request) }
                 // A panel that appears may be below the fold. The page moves only as far as it needs to, and not at all when the panel is
                 // already in view. The short wait lets the panel's own appearance start first, so the page moves to where it ends up.
                 .onChange(of: model.trailer.showsPanel) { _, shows in
@@ -373,6 +384,9 @@ struct DetailView: View {
         }
         // The settle scales the whole visible page about the screen's centre; the background behind it stays put.
         .heroSettle(trigger: hasSettled)
+        // The Blurred background stays put behind the page, as its colour does, and the hero's fade ends in it.
+        .background { backdropLayer }
+        .environment(\.pageBackdrop, backdrop)
         .environment(\.heroPosterOverride, usesHeroPosters)
         .screenBackground(reservesNavigationSpace: false)
         #if targetEnvironment(macCatalyst)
@@ -404,7 +418,7 @@ struct DetailView: View {
             landscapeTabs?.reset()
         }
         .task { await model.load(afterHero: { await loadHero() }, priorityStream: pendingStreams, prefetchOnOpen: true) }
-        .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoURL?.absoluteString ?? "-")|\(model.isLoadingArtwork)|\(showsBackdrop)") {
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(logoCandidates.map(\.absoluteString).joined(separator: "|"))|\(model.isLoadingArtwork)|\(showsBackdrop)") {
             await loadHero()
         }
         .task(id: "\(heroURL?.absoluteString ?? "-")|\(usesHeroPosters)") {
@@ -652,6 +666,61 @@ struct DetailView: View {
         }
     }
 
+    /// Appearance's Blurred background: one row stretched to the page's height, so it reads the same however far the page has scrolled.
+    private var backdropLayer: some View {
+        ZStack {
+            if let backdrop {
+                Image(uiImage: backdrop).resizable().transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { backdropWidth = $0 }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// What the Blurred background is drawn from: the hero picture on show, where this layout puts it. Nil while it is off or the picture
+    /// is still loading.
+    private func backdropRequest(in size: CGSize) -> TitleBackdropRequest? {
+        guard appearance.blursBackground, backdropWidth > 0, case .ready(let image) = pictureSlot else { return nil }
+        var request: TitleBackdropRequest
+        #if targetEnvironment(macCatalyst)
+        let height = TitleHero.macHeight(pageHeight: size.height)
+        request = TitleBackdropRequest(image: image, frame: CGSize(width: size.width, height: height), visibleBottom: height, alignsTop: false)
+        #else
+        if showsEditorialHero {
+            let height = EditorialTitleHero.heroHeight(pageHeight: size.height)
+            request = TitleBackdropRequest(image: image, frame: CGSize(width: size.width, height: height), visibleBottom: height, alignsTop: true)
+        } else if isLandscape {
+            let height = TitleHero.landscapeHeroHeight(pageHeight: size.height)
+            let width = TitleHero.landscapeArtWidth(heroHeight: height, pageWidth: size.width)
+            request = TitleBackdropRequest(image: image, frame: CGSize(width: width, height: height), visibleBottom: height, alignsTop: false,
+                                           trailingOverhang: TitleHero.landscapeBackdropShift)
+        } else {
+            let height = TitleHero.height(width: size.width, metrics: metrics)
+            let logo = TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: size.width - contentMargin * 2)
+            request = TitleBackdropRequest(image: image, frame: CGSize(width: size.width, height: TitleHero.pictureHeight(height)),
+                                           visibleBottom: TitleHero.visibleHeight(height, logoHeight: logo), alignsTop: true)
+        }
+        #endif
+        request.pageWidth = backdropWidth
+        request.scale = displayScale
+        return request
+    }
+
+    /// Renders the Blurred background off the main thread. A picture that is still loading keeps the one before it on the page.
+    private func renderBackdrop(_ request: TitleBackdropRequest?) async {
+        guard appearance.blursBackground else {
+            if backdrop != nil { withAnimation(Theme.Motion.fade) { backdrop = nil } }
+            return
+        }
+        guard let request else { return }
+        let rendered = await Task.detached(priority: .userInitiated) { request.render() }.value
+        guard !Task.isCancelled, let rendered else { return }
+        withAnimation(Theme.Motion.fade) { backdrop = rendered }
+    }
+
     /// The trailer's panel is the page's width less its margins. In landscape it is also kept to the screen's height at 16:9, so the panel
     /// never runs off the bottom of a short screen.
     private func trailerWidth(in size: CGSize) -> CGFloat {
@@ -682,7 +751,8 @@ struct DetailView: View {
 
     /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
     private var hidesLogo: Bool { !showsBackdrop && model.portraitHidesLogo }
-    private var logoURL: URL? { hidesLogo ? nil : model.logoURL }
+    private var logoCandidates: [URL] { hidesLogo ? [] : model.logoCandidates }
+    private var logoURL: URL? { logoCandidates.first }
     private var pictureSlot: HeroSlot {
         if usesHeroPosters, let fullResolutionHero, fullResolutionHero.url == heroURL {
             return .ready(fullResolutionHero.image)
@@ -695,7 +765,8 @@ struct DetailView: View {
 
     /// The title page's own picture and logo are urgent: they skip the queue behind Home's posters, since the user is waiting on them.
     private func loadHero() async {
-        await hero.load(urgent: true, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
+        await hero.load(urgent: true, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                        logoFallbacks: Array(logoCandidates.dropFirst()))
     }
 
     /// A shelf of TMDb titles at the bottom of the page: the movie's franchise, or the titles TMDb recommends (More Like This). Each opens

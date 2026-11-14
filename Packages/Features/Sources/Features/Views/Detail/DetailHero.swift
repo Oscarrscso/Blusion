@@ -88,8 +88,6 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
     private static var landscapeTopClearance: CGFloat { 60 }
     /// Moves the whole landscape page upward without changing spacing within the hero.
     private static var landscapePageLift: CGFloat { Theme.Spacing.xl }
-    /// Bias the landscape backdrop toward the trailing edge so its focal area sits farther from the text.
-    private static var landscapeBackdropShift: CGFloat { 24 }
 
     /// The ground, an optional wash of the title's colour on the text side, and the backdrop pinned to the trailing edge. It runs to the
     /// top of the screen and under the side safe areas, so no strip of ground shows above it or beside the notch. As in portrait, a pull
@@ -119,7 +117,7 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
                         .init(color: .black, location: 0.45),
                     ], startPoint: .leading, endPoint: .trailing)
                 }
-                .offset(x: Self.landscapeBackdropShift)
+                .offset(x: TitleHero.landscapeBackdropShift)
             BottomFade(length: 0.42)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -141,7 +139,9 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
             DetailReviewsPanel(reviews: reviews, shown: model.shownReviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
                 .padding(.horizontal, contentMargin)
-                .padding(.top, Theme.Spacing.s)
+                // The hero's bottom inset already sits between the rating buttons and this panel. Without a trailer, the gap above
+                // the panel is the page's section gap less that inset, so it matches the gap below the panel.
+                .padding(.top, model.trailer.showsPanel ? Theme.Spacing.s : metrics.titleRatingsGap - TitleHero.landscapeContentBottomInset)
         }
     }
 

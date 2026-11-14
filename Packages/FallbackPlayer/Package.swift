@@ -2,7 +2,7 @@
 import PackageDescription
 
 // OPT-IN (ADR-006). Not part of the default app build: `scripts/enable-fallback.sh` adds it to the generated Xcode project.
-// AetherPlayer is linked separately by the iPhone/iPad app: its binaries do not contain Mac Catalyst slices.
+// AetherPlayer is linked separately by the app, on Mac Catalyst through the slices scripts/aether-catalyst-slices.py makes.
 let package = Package(
     name: "FallbackPlayer",
     platforms: [.iOS("26.0")],

@@ -75,12 +75,12 @@ struct PersonView: View {
     private var header: some View {
         VStack(alignment: leading ? .leading : .center, spacing: Theme.Spacing.xs) {
             Text(name)
-                .font(Theme.Typography.heroTitle)
+                .appFont(.heroTitle)
                 .multilineTextAlignment(leading ? .leading : .center)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("person.name")
             if let line = summaryLine {
-                Text(line).font(Theme.Typography.metaLine).foregroundStyle(Theme.metaText)
+                Text(line).appFont(.metaLine).foregroundStyle(Theme.metaText)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
@@ -95,7 +95,7 @@ struct PersonView: View {
             }
             if let reason = model.unavailableReason {
                 Text(reason)
-                    .font(Theme.Typography.small)
+                    .appFont(.small)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(leading ? .leading : .center)
                     .accessibilityIdentifier("person.unavailable")
@@ -196,7 +196,7 @@ struct PersonView: View {
                     .padding(.vertical, Theme.Spacing.l)
             } else if model.sections.isEmpty {
                 Text(model.credits.isEmpty ? "No credits yet." : "No credits match these filters.")
-                    .font(Theme.Typography.medium)
+                    .appFont(.medium)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, Theme.Spacing.s)
                     .accessibilityIdentifier("person.noCredits")
@@ -299,15 +299,15 @@ private struct CreditRow: View {
                     .mediaArtwork(cornerRadius: Theme.Radius.poster)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(credit.title.isEmpty ? "Untitled" : credit.title)
-                        .font(Theme.Typography.mediumStrong)
+                        .appFont(.mediumStrong)
                         .foregroundStyle(.primary)
                         .lineLimit(2)
                     Text(kindLine)
-                        .font(Theme.Typography.cardSubtitle)
+                        .appFont(.cardSubtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Text(credit.roleText)
-                        .font(Theme.Typography.small)
+                        .appFont(.small)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     footer
@@ -340,7 +340,7 @@ private struct CreditRow: View {
             Badge("Unreleased", style: .neutral)
         } else if let average = credit.voteAverage {
             Label(ScoreText.wholeScore(average), systemImage: "star.fill")
-                .font(Theme.Typography.captionStrong)
+                .appFont(.captionStrong)
                 .foregroundStyle(.secondary)
         }
     }
@@ -363,11 +363,11 @@ struct PersonCardLink: View {
                     .mediaArtwork(cornerRadius: Theme.Radius.poster)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(person.name)
-                        .font(isNarrow ? .caption.weight(.semibold) : Theme.Typography.cardTitle)
+                        .appFont(isNarrow ? .captionStrong : .cardTitle)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                     Text(person.roleText ?? (person.isCast ? "Actor" : "Crew"))
-                        .font(isNarrow ? .caption2 : Theme.Typography.cardSubtitle)
+                        .appFont(isNarrow ? .micro : .cardSubtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }

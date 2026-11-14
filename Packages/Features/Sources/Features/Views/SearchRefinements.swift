@@ -27,7 +27,9 @@ struct SearchRefinements: View {
             active.append(ActiveFilterChip(id: "year", label: String(year)) { model.filter.year = nil })
         }
         if let rating = model.filter.minimumRating {
-            active.append(ActiveFilterChip(id: "rating", label: "IMDb \(rating)+") { model.filter.minimumRating = nil })
+            active.append(ActiveFilterChip(id: "rating", label: "Rating \(LibraryFiltering.minimumRatingText(Double(rating)))") {
+                model.filter.minimumRating = nil
+            })
         }
         return BrowseFilterBar(kinds: .init(titles: scopes.map(\.title), selection: Binding {
             scopes.firstIndex(of: model.scope) ?? 0
@@ -60,9 +62,9 @@ struct SearchRefinements: View {
                 FilterMenuLabel("Year", systemImage: "calendar", isActive: model.filter.year != nil, minHeight: height)
             }
             FilterMenu(minHeight: height) {
-                Picker("Minimum IMDb rating", selection: $model.filter.minimumRating) {
+                Picker("Minimum rating", selection: $model.filter.minimumRating) {
                     Text("Any").tag(Int?.none)
-                    ForEach(5...9, id: \.self) { Text("\($0)+").tag(Int?.some($0)) }
+                    ForEach(5...9, id: \.self) { Text(LibraryFiltering.minimumRatingText(Double($0))).tag(Int?.some($0)) }
                 }
             } label: {
                 FilterMenuLabel("Rating", systemImage: "star.fill", isActive: model.filter.minimumRating != nil, minHeight: height)
@@ -113,11 +115,11 @@ struct SearchRefinements: View {
                     }
                 } label: { Text(model.filter.year.map(String.init) ?? "Year") }
                 Menu {
-                    Picker("Minimum IMDb rating", selection: $model.filter.minimumRating) {
+                    Picker("Minimum rating", selection: $model.filter.minimumRating) {
                         Text("Any rating").tag(Int?.none)
-                        ForEach(5...9, id: \.self) { Text("\($0)+").tag(Int?.some($0)) }
+                        ForEach(5...9, id: \.self) { Text(LibraryFiltering.minimumRatingText(Double($0))).tag(Int?.some($0)) }
                     }
-                } label: { Text(model.filter.minimumRating.map { "IMDb \($0)+" } ?? "IMDb") }
+                } label: { Text(model.filter.minimumRating.map { "Rating \(LibraryFiltering.minimumRatingText(Double($0)))" } ?? "Rating") }
                 if model.filter.isActive || model.filter.sort != .relevance {
                     Button("Clear", systemImage: "xmark.circle") { model.clearFilters() }
                 }
@@ -186,37 +188,35 @@ struct PickControls: View {
     @State private var pick = SearchPick()
 
     var body: some View {
-        #if targetEnvironment(macCatalyst)
-        HStack(spacing: metrics.controlSpacing) {
-            Button { expanded.toggle() } label: {
-                Label("Pick for me", systemImage: "sparkles")
-            }
-            .buttonStyle(PointingHandButtonStyle(style: .bordered))
-            .popover(isPresented: $expanded, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: metrics.controlSpacing) {
-                    heading
-                    controls
+        VStack(alignment: .leading, spacing: metrics.controlSpacing) {
+            HStack(spacing: metrics.controlSpacing) {
+                Button { expanded.toggle() } label: {
+                    FilterMenuLabel("Pick for me", systemImage: "sparkles", isActive: expanded,
+                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
                 }
-                .padding(Theme.Spacing.l)
-                .frame(width: 360)
-            }
-            .accessibilityIdentifier("search.pick")
-            if model.isPickSearch {
-                Button("Pick again", systemImage: "shuffle") { model.shufflePick() }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(PointingHandButtonStyle(style: .bordered))
+                .buttonStyle(.hoverPlain)
+                .accessibilityIdentifier("search.pick")
+                if model.isPickSearch {
+                    Button { model.shufflePick() } label: {
+                        FilterMenuLabel("Again", systemImage: "shuffle", isActive: true,
+                                        minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+                    }
+                    .buttonStyle(.hoverPlain)
                     .accessibilityIdentifier("search.pick.again")
+                }
+                if model.isUsingAI {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Spinner().controlSize(.mini)
+                        Text("AI").appFont(.captionStrong)
+                    }
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("AI searching")
+                    .accessibilityIdentifier("search.ai.active")
+                }
             }
+            if expanded { controls }
         }
-        #else
-        DisclosureGroup(isExpanded: $expanded) {
-            controls
-                .padding(.top, metrics.controlSpacing)
-        } label: {
-            heading
-        }
-        .accessibilityIdentifier("search.pick")
-        #endif
     }
 
     /// True while the results are this very pick's: the button then draws them again.
@@ -240,17 +240,13 @@ struct PickControls: View {
             }
             .buttonStyle(.hoverPlain)
             Button {
-                #if targetEnvironment(macCatalyst)
-                expanded = false
-                #endif
                 onChoose()
                 model.pick(pick)
             } label: {
-                Label(showsPick ? "Pick again" : "Pick", systemImage: showsPick ? "shuffle" : "sparkles")
-                    .frame(maxWidth: .infinity)
+                FilterMenuLabel(showsPick ? "Pick again" : "Pick", systemImage: showsPick ? "shuffle" : "sparkles",
+                                isActive: true, minHeight: BrowseFilterBar<EmptyView>.menuHeight)
             }
-            .buttonStyle(PointingHandButtonStyle(style: .borderedProminent))
-            .controlSize(.large)
+            .buttonStyle(.hoverPlain)
             .disabled(showsPick && model.aiPhase == .searching)
             .accessibilityIdentifier("search.pick.go")
         }
@@ -259,39 +255,18 @@ struct PickControls: View {
             if let genre = pick.genre, !SearchPick.genres(for: kind).contains(genre) { pick.genre = nil }
         }
     }
-
-    /// One choice as a menu: "Any" first, then its values. The label names the choice until a value is chosen.
     private func menu<Value: Hashable>(_ title: String, selection: Binding<Value?>, options: [Value],
                                        name: @escaping (Value) -> String) -> some View {
-        FilterMenu {
+        FilterMenu(minHeight: BrowseFilterBar<EmptyView>.menuHeight) {
             Picker(title, selection: selection) {
                 Text("Any \(title.lowercased())").tag(Value?.none)
                 ForEach(options, id: \.self) { Text(name($0)).tag(Value?.some($0)) }
             }
         } label: {
-            FilterMenuLabel(selection.wrappedValue.map(name) ?? title, isActive: selection.wrappedValue != nil)
+            FilterMenuLabel(selection.wrappedValue.map(name) ?? title, isActive: selection.wrappedValue != nil,
+                            minHeight: BrowseFilterBar<EmptyView>.menuHeight)
         }
         .accessibilityIdentifier("search.pick.\(title.lowercased())")
-    }
-
-    private var heading: some View {
-        HStack {
-            Text("Pick for me")
-                .font(Theme.Typography.mediumStrong)
-                .foregroundStyle(.primary)
-            Spacer(minLength: Theme.Spacing.s)
-            if model.isUsingAI {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Spinner().controlSize(.mini)
-                    Text("AI").font(Theme.Typography.captionStrong)
-                }
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("AI searching")
-                .accessibilityIdentifier("search.ai.active")
-            }
-        }
-        .buttonCursor()
     }
 }
 #endif

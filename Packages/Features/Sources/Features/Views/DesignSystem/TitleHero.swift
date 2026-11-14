@@ -73,6 +73,8 @@ enum TitleHero {
     static func landscapeArtWidth(heroHeight: CGFloat, pageWidth: CGFloat) -> CGFloat {
         max(0, min(heroHeight * 16 / 9, pageWidth))
     }
+    /// Bias the landscape backdrop toward the trailing edge so its focal area sits farther from the text.
+    static let landscapeBackdropShift: CGFloat = 24
     /// The width of the landscape hero's text column, so Play has room and the overview's lines stay readable.
     static func landscapeTextWidth(pageWidth: CGFloat) -> CGFloat {
         max(0, min(pageWidth * 0.46, 480))
@@ -189,6 +191,7 @@ final class HeroHandoff: Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
 }
 
+/// The logo URLs for a title, best first: the catalogue's, TMDb's, then Metahub once the TMDb lookup has finished.
 /// Loads the hero picture and the logo together and answers from the image cache, so a decoded one is there in the first frame.
 /// It also holds what it has shown, so the shared cache evicting a large picture never sends a shown hero back to loading, and every
 /// logo lives in a process-wide store, so a title's logo is there in the first frame for the rest of the session.
@@ -296,27 +299,28 @@ final class HeroLoader {
     /// Starts the picture and the logo as soon as each one's URL is known, and returns when both have finished. Neither waits for the other, so a
     /// logo the addon supplies starts while the picture's lookup is still running. The reveal still needs both (`isRevealed`), so a logo that
     /// arrives first is not shown early. `urgent` lets the picture and logo skip the pipeline's queue (see `ImagePipeline.image`).
-    func load(priority: TaskPriority = .high, urgent: Bool = false, picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat) async {
-        let wanted = [(picture, pictureSize), (logo, logoSize)].compactMap { url, size in
-            url.map { ($0, size) }
-        }
+    /// `logoFallbacks` are tried, in order, when `logo` is missing or fails, so one bad file does not leave the title without a logo.
+    func load(priority: TaskPriority = .high, urgent: Bool = false, picture: URL?, pictureSize: CGFloat, logo: URL?, logoSize: CGFloat,
+              logoFallbacks: [URL] = []) async {
+        let wanted = [picture.map { ($0, pictureSize) }].compactMap { $0 }
         var pending: [(URL, CGFloat)] = []
         for (url, size) in wanted {
-            if size == Self.logoPixelSize, Self.storedLogo(url) != nil || heldLogo?.key == Self.key(url, size) { continue }
             if held[Self.key(url, size)] != nil { continue }
-            if size != Self.logoPixelSize, let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: size) {
+            if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: size) {
                 remember(cached, url: url, size: size)
                 continue
             }
             pending.append((url, size))
         }
-        guard !pending.isEmpty else { return }
+        let logoCandidates = Self.unique([logo] + logoFallbacks)
+        let needsLogo = logo.map { Self.storedLogo($0) == nil && heldLogo?.key != Self.key($0, logoSize) } ?? false
+        guard !pending.isEmpty || needsLogo else { return }
+        async let resolvedLogo: UIImage? = loadLogo(needsLogo, candidates: logoCandidates, priority: priority, urgent: urgent)
         let results = await withTaskGroup(of: (URL, CGFloat, UIImage?, Bool).self, returning: [(URL, CGFloat, UIImage?, Bool)].self) { group in
             for (url, size) in pending {
-                let isLogo = size == Self.logoPixelSize
                 group.addTask {
                     do {
-                        let image = try await Self.download(url, size: size, isLogo: isLogo, priority: priority, urgent: urgent)
+                        let image = try await Self.download(url, size: size, isLogo: false, priority: priority, urgent: urgent)
                         return (url, size, image, false)
                     } catch { return (url, size, nil, !Task.isCancelled) }
                 }
@@ -325,15 +329,103 @@ final class HeroLoader {
             for await result in group { all.append(result) }
             return all
         }
+        let logoImage = await resolvedLogo
         // Kept even when this load was cancelled: a logo that finished is stored, and the revision moves so the page shows it.
         var failures: [String] = []
         for (url, size, image, didFail) in results {
             if let image { remember(image, url: url, size: size) } else if didFail { failures.append(Self.key(url, size)) }
         }
+        if let logo {
+            let key = Self.key(logo, logoSize)
+            if let logoImage {
+                failed.remove(key)
+                remember(logoImage, url: logo, size: logoSize)
+            } else if !Task.isCancelled {
+                failures.append(key)
+            }
+        }
         withAnimation(.easeOut(duration: 0.25)) {
             failed.formUnion(failures)
             revision += 1
         }
+    }
+
+    /// Runs the logo lookup only when one is still needed, so `async let` can start it beside the picture.
+    private func loadLogo(_ needed: Bool, candidates: [URL], priority: TaskPriority, urgent: Bool) async -> UIImage? {
+        guard needed else { return nil }
+        return await resolveLogo(candidates: candidates, priority: priority, urgent: urgent)
+    }
+
+    /// Logos that will not decode, so the next candidate is tried without waiting on them again.
+    private static var rejectedLogos: Set<String> = []
+
+    private nonisolated enum LogoFailure: Error { case timedOut }
+
+    /// The first candidate that loads. The first is tried twice; each later one once. A file that is missing or cannot be decoded is skipped.
+    private func resolveLogo(candidates: [URL], priority: TaskPriority, urgent: Bool) async -> UIImage? {
+        for (index, candidate) in candidates.enumerated() {
+            if Task.isCancelled { return nil }
+            if let stored = Self.storedLogo(candidate) { return stored }
+            if Self.rejectedLogos.contains(candidate.absoluteString) || ImagePipeline.shared.isKnownMissing(candidate) { continue }
+            let attempts = index == 0 ? 2 : 1
+            for attempt in 0..<attempts {
+                if Task.isCancelled { return nil }
+                do {
+                    return try await Self.withTimeout(seconds: 5) {
+                        try await Self.download(candidate, size: Self.logoPixelSize, isLogo: true, priority: priority, urgent: urgent)
+                    }
+                } catch is CancellationError {
+                    return nil
+                } catch is LogoFailure {
+                    if attempt + 1 == attempts { break }
+                    try? await Task.sleep(for: .milliseconds(300))
+                } catch {
+                    if Self.isPermanentLogoFailure(error) {
+                        Self.rejectedLogos.insert(candidate.absoluteString)
+                        break
+                    }
+                    if attempt + 1 == attempts { break }
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func isPermanentLogoFailure(_ error: Error) -> Bool {
+        guard let error = error as? ImagePipelineError else { return false }
+        switch error {
+        case .undecodable, .unsupportedURL: return true
+        case .httpStatus(let code): return code == 404 || code == 400 || code == 410
+        }
+    }
+
+    private static func withTimeout<T: Sendable>(seconds: Double, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(seconds))
+                throw LogoFailure.timedOut
+            }
+            do {
+                guard let value = try await group.next() else { throw CancellationError() }
+                group.cancelAll()
+                return value
+            } catch is LogoFailure {
+                group.cancelAll()
+                throw LogoFailure.timedOut
+            } catch is CancellationError {
+                group.cancelAll()
+                if Task.isCancelled { throw CancellationError() }
+                throw LogoFailure.timedOut
+            }
+        }
+    }
+
+    private static func unique(_ urls: [URL?]) -> [URL] {
+        var seen: [URL] = []
+        for case let url? in urls where !seen.contains(url) { seen.append(url) }
+        return seen
     }
 
     /// Downloads one picture or logo. A picture belongs to the load that asked for it, so cancelling the load stops it. A logo runs in a task of
@@ -512,7 +604,7 @@ struct HeroTitleArt: View {
                 .transition(.identity)
             } else {
                 Text(name)
-                    .font(compact ? .title2.bold() : .largeTitle.bold())
+                    .appFont(compact ? .shelfTitle : .heroTitle)
                     .multilineTextAlignment(alignment == .center ? .center : .leading)
                     .foregroundStyle(.white)
                     .lineLimit(compact ? 2 : 3)

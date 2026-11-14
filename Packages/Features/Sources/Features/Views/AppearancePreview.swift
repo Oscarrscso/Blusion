@@ -2,336 +2,259 @@
 import SwiftUI
 import StremioKit
 
-/// Settings → Appearance's live preview: a small page in the look being set, drawn with the app's own pieces (`mediaArtwork`, the
-/// progress overlay, `headingStyle()`, `LayoutMetrics`) at their real sizes, so every choice shows what it does as it is made, a slider's
-/// included while it is still being dragged. It stands in for help text: the page explains itself by showing the result.
-///
-/// Each part of Appearance shows the part of the app it changes: cards and text on most pages, the spotlight on Home's, an episode and
-/// the sections' order on Title Pages', a moving dot on Motion & Navigation's, and the pieces the pointer lights on Hover's.
+/// A preview on one of Appearance's pages: the app's own views (`AppearanceSample`) with sample titles, on the chosen background, in the
+/// look being set, a slider's value included while it is dragged. The samples are the real views, not copies, so a preview follows any
+/// change made to them. A page shows only the views its choices change, and none where a choice reads plainly from its name.
 struct AppearancePreview: View {
-    @Environment(\.layoutMetrics) private var metrics
-    enum Kind {
-        case cards, corners, home, titlePage, motion, hover
-    }
-
     let appearance: AppearancePreferences
-    var kind: Kind = .cards
+    let samples: [AppearanceSample]
+    /// Hover's preview: one piece of each sample is drawn lit, beside unlit ones.
+    var lightsOnePiece = false
+    @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
-        AppearancePreviewContent(kind: kind)
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.customised(by: appearance).cornerScale(for: .settingsRows),
+                                     style: .continuous)
+        SampleStack(samples: samples)
             .padding(.vertical, Theme.Spacing.l)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.previewLightsOnePiece, lightsOnePiece)
             .background(appearance.pageBackground)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.customised(by: appearance).cornerScale(for: .settingsPreview), style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.surface * metrics.customised(by: appearance).cornerScale(for: .settingsPreview), style: .continuous)
-                    .strokeBorder(Theme.separator, lineWidth: 1)
-                    .allowsHitTesting(false)
-            }
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Theme.separator, lineWidth: 1).allowsHitTesting(false) }
             // The root's animation speed already reaches the preview; applying it again would square it.
             .appearanceLook(appearance, motion: false)
-            .accessibilityIdentifier("settings.appearance.preview")
+            // A picture of the app, not a working part of it; only Hover's answers the pointer.
+            .allowsHitTesting(lightsOnePiece)
+            .accessibilityHidden(true)
     }
 }
 
-private struct AppearancePreviewContent: View {
-    let kind: AppearancePreview.Kind
+/// The samples one under another, a shelf's spacing apart with Appearance's shelf divider between them, as Home lays out its shelves.
+/// Inside the preview's look, so the spacing is the one being set.
+private struct SampleStack: View {
+    let samples: [AppearanceSample]
     @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.appAppearance) private var appearance
-    @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
 
     var body: some View {
-        switch kind {
-        case .cards: cards
-        case .corners: corners
-        case .home: home
-        case .titlePage: titlePage
-        case .motion: MotionPreview()
-        case .hover: hover
+        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
+            ForEach(samples.indices, id: \.self) { index in
+                samples[index].modifier(ShelfDivider(metrics: metrics, isShown: index < samples.count - 1))
+            }
+        }
+    }
+}
+
+/// One of the app's views as Appearance previews it.
+enum AppearanceSample: View {
+    /// A shelf of poster cards under its heading (`MediaRow`, `MediaCard`).
+    case posters
+    /// Continue Watching's cards, with their progress (`ProgressCard`).
+    case continueWatching
+    /// The title page's Play row (`TitleActionRow`).
+    case playRow
+    /// A heading over a title's synopsis (`SectionHeader`, `DetailSynopsis`).
+    case text
+    /// A shelf heading on its own (`SectionHeader`).
+    case heading
+    /// A title's synopsis on its own (`DetailSynopsis`).
+    case synopsis
+    /// The browse filter bar (`BrowseFilterBar`).
+    case filters
+    /// A review (`ReviewCard`).
+    case review
+    /// A stream's card (`StreamRow`).
+    case stream
+    /// The player's menu bar in its glass (`PlayerMenuBar`).
+    case playerBar
+    /// A watched episode beside one not yet started (`EpisodeRow`), as Hide spoilers shows them.
+    case episodes
+
+    /// What one part of Corners rounds. Nil for Settings Rows, which the page is itself made of.
+    init?(corners group: AppearancePreferences.CornerGroup) {
+        switch group {
+        case .artwork: self = .posters
+        case .playButton, .actionButtons: self = .playRow
+        case .filters: self = .filters
+        case .reviews: self = .review
+        case .panels: self = .stream
+        case .playerControls: self = .playerBar
+        case .settingsRows: return nil
         }
     }
 
-    // MARK: Cards and text
+    var body: some View {
+        switch self {
+        case .posters: PosterShelfSample()
+        case .continueWatching: ContinueShelfSample()
+        case .playRow: PlayRowSample()
+        case .text: TextSample()
+        case .heading: HeadingSample()
+        case .synopsis: SynopsisSample()
+        case .filters: FilterBarSample()
+        case .review: ReviewSample()
+        case .stream: StreamSample()
+        case .playerBar: PlayerBarSample()
+        case .episodes: EpisodesSample()
+        }
+    }
+}
 
-    private var cards: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            BrowseFilterBar(kinds: .init(titles: ["All", "Movies", "Series"], selection: .constant(1),
-                                        identifier: "settings.appearance.preview.type"),
-                            chips: [], identifier: "settings.appearance.preview.filters", clearAll: {}) {
-                Button {} label: {
-                    FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down",
-                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
-                }
-                Button {} label: {
-                    FilterMenuLabel("Genre", systemImage: "tag",
-                                    minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+extension EnvironmentValues {
+    /// Set by Hover's preview (`AppearancePreview.lightsOnePiece`): each sample draws one piece lit (`showsHover`).
+    @Entry var previewLightsOnePiece = false
+}
+
+// MARK: - Samples
+
+private struct PosterShelfSample: View {
+    @Environment(\.previewLightsOnePiece) private var lightsOne
+
+    var body: some View {
+        MediaRow("Top Picks") {
+            ForEach(Samples.items.indices, id: \.self) { index in
+                Button {} label: { MediaCard(item: Samples.items[index]) }
+                    .buttonStyle(PressableCardStyle.poster)
+                    .environment(\.showsHover, lightsOne && index == 1)
+            }
+        }
+    }
+}
+
+private struct ContinueShelfSample: View {
+    @Environment(\.layoutMetrics) private var metrics
+
+    var body: some View {
+        MediaRow("Continue Watching", aspect: .wide, cardWidth: metrics.continueCardWidth) {
+            ForEach(Samples.items.indices, id: \.self) { index in
+                let item = Samples.items[index]
+                ProgressCard(title: item.name, artwork: item.background, logo: item.logo, fraction: Samples.progress[index], duration: 2580)
+            }
+        }
+    }
+}
+
+private struct PlayRowSample: View {
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.previewLightsOnePiece) private var lightsOne
+
+    var body: some View {
+        TitleActionRow {
+            Button {} label: {
+                HStack(spacing: Theme.Spacing.s) {
+                    Image(systemName: "play.fill")
+                    Text("Play")
                 }
             }
-            .buttonStyle(.plain)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                    heading("Continue Watching")
-                    shelf {
-                        ForEach(0..<3, id: \.self) { index in
-                            Button {} label: { continueCard(index) }
-                                .buttonStyle(PressableCardStyle.poster)
-                        }
-                    }
-                    .scrollClipDisabled()
-                }
-                .modifier(ShelfDivider(metrics: metrics, isShown: true))
-                VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                    heading("Top Picks")
-                    shelf {
-                        ForEach(0..<4, id: \.self) { index in
-                            Button {} label: { poster(index) }
-                                .buttonStyle(PressableCardStyle.poster)
-                        }
-                    }
-                    .scrollClipDisabled()
-                }
-            }
-            .accessibilityHidden(true)
-            Text(Samples.synopsis)
-                .font(Theme.Typography.body)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .padding(.horizontal, metrics.pageMargin)
-                .padding(.top, Theme.Spacing.xs)
-            actionButtons
-            accentControls
-                .padding(.horizontal, metrics.pageMargin)
-                .padding(.top, Theme.Spacing.xs)
-        }
-    }
-
-    private func heading(_ title: String) -> some View {
-        Text(title)
-            .headingStyle()
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .padding(.horizontal, metrics.pageMargin)
-    }
-
-    private func shelf<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: metrics.cardSpacing) { content() }
-                .padding(.horizontal, metrics.pageMargin)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func continueCard(_ index: Int) -> some View {
-        let item = Samples.items[index % Samples.items.count]
-        return ProgressCard(title: item.name, artwork: item.background,
-                            logo: item.logo, fraction: 0.62, duration: 2580)
-    }
-
-    private func poster(_ index: Int) -> some View {
-        MediaCard(item: Samples.items[index % Samples.items.count])
-    }
-
-    /// The accent where the app uses it: a prominent button, a switch and a link.
-    private var accentControls: some View {
-        HStack(spacing: Theme.Spacing.m) {
-            Button {} label: { Label("Add", systemImage: "plus") }
-                .finishedProminentButtonStyle(appearance.buttonFinish)
-            Toggle("Switch", isOn: .constant(true))
-                .labelsHidden()
-            Button("See All") {}
-                .buttonStyle(.hoverPlain)
-                .foregroundStyle(.tint)
-            Spacer(minLength: 0)
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var actionButtons: some View {
-        GlassEffectContainer(spacing: TitleHero.actionGap) {
-            HStack(spacing: TitleHero.actionGap) {
-                Button {} label: { Label("Play", systemImage: "play.fill") }
-                    .buttonStyle(PrimaryActionButtonStyle(height: CircleActionButton.diameter))
-                CircleActionButton(title: "Save", systemImage: "bookmark", exactSize: true) {}
-                CircleActionButton(title: "Watched", systemImage: "eye", exactSize: true) {}
-                CircleActionButton(title: "Trailer", systemImage: "play.rectangle", exactSize: true) {}
-            }
+            .buttonStyle(.titlePlay(colour: Samples.playColour))
+        } circles: {
+            NativeDownloadButton(manager: nil, item: nil, glass: .regular.interactive(),
+                                 progressColour: Samples.playColour ?? .accentColor) {}
+            CircleActionButton(title: "Save", systemImage: "bookmark", onColour: Samples.playColour, exactSize: true) {}
+                .environment(\.showsHover, lightsOne)
+            CircleActionButton(title: "Watched", systemImage: "eye", isOn: true, onColour: Samples.playColour, exactSize: true) {}
+            CircleActionButton(title: "Trailer", systemImage: "play.rectangle", onColour: Samples.playColour, exactSize: true) {}
         }
         .padding(.horizontal, metrics.pageMargin)
     }
+}
 
-    private var corners: some View {
+private struct TextSample: View {
+    @Environment(\.layoutMetrics) private var metrics
+
+    var body: some View {
         VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            actionButtons
-            shelf {
-                ForEach(0..<3, id: \.self) { index in
-                    Button {} label: { poster(index) }
-                        .buttonStyle(PressableCardStyle.poster)
-                }
-            }
-            .scrollClipDisabled()
-            BrowseFilterBar(kinds: nil, chips: [], identifier: "settings.appearance.preview.cornerFilters", clearAll: {}) {
-                Button {} label: { FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down") }
-                Button {} label: { FilterMenuLabel("Genre", systemImage: "tag") }
-            }
-            .buttonStyle(.plain)
-            if let review = Samples.review {
-                shelf {
-                    ReviewCard(review: review, isExpanded: false, foldedWidth: metrics.reviewCardWidth,
-                               expandedWidth: metrics.reviewCardWidth, onToggle: {})
-                }
-            }
-            HStack {
-                Label("Auto Pick", systemImage: "sparkles")
-                Spacer()
-                Image(systemName: "chevron.down")
-            }
-            .padding()
-            .glassCardSurface()
-            .padding(.horizontal, metrics.pageMargin)
-            HStack {
-                Button {} label: { Image(systemName: "backward.end.fill") }
-                    .glassCircleButton(group: .playerControls)
-                Spacer()
-                Button {} label: { Image(systemName: "play.fill") }
-                    .glassCircleButton(group: .playerControls)
-                Spacer()
-                Button {} label: { Image(systemName: "forward.end.fill") }
-                    .glassCircleButton(group: .playerControls)
-            }
-            .padding()
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24 * metrics.cornerScale(for: .playerControls)))
-            .padding(.horizontal, metrics.pageMargin)
-            VStack(spacing: 4) {
-                Toggle("Ratings on posters", isOn: .constant(ratingsStore?.isEnabled ?? false))
-                    .padding()
-                    .background(SettingsRowBackground())
-                HStack {
-                    SettingsRow(title: "Playback", summary: "Auto", systemImage: "play.circle")
-                    Spacer()
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                }
-                .padding()
-                .background(SettingsRowBackground())
-            }
-            .padding(.horizontal, metrics.pageMargin)
+            HeadingSample()
+            SynopsisSample()
         }
     }
+}
 
-    // MARK: Hover
+private struct HeadingSample: View {
+    var body: some View {
+        SectionHeader("Top Picks")
+            .padding(.horizontal, layoutMetrics.pageMargin)
+    }
 
-    /// What the Mac's hover lights, each piece answering the pointer at the chosen speed: the navigation control's segments, poster
-    /// cards, Play and the glass buttons, filter menus and a link. The second of each is drawn lit as well, so a value shows while its
-    /// slider is dragged and the pointer is on the slider.
-    private var hover: some View {
-        VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-            HoverSegmentsPreview()
+    @Environment(\.layoutMetrics) private var layoutMetrics
+}
+
+private struct SynopsisSample: View {
+    var body: some View {
+        DetailSynopsis(description: Samples.synopsis, isExpanded: .constant(false), isTruncated: .constant(false))
+            .padding(.horizontal, layoutMetrics.pageMargin)
+    }
+
+    @Environment(\.layoutMetrics) private var layoutMetrics
+}
+
+private struct FilterBarSample: View {
+    @Environment(\.previewLightsOnePiece) private var lightsOne
+
+    var body: some View {
+        BrowseFilterBar(kinds: .init(titles: ["All", "Movies", "Series"], selection: .constant(1),
+                                     identifier: "settings.appearance.preview.type"),
+                        chips: [], identifier: "settings.appearance.preview.filters", clearAll: {}) {
+            Button {} label: {
+                FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down", minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+            }
+            Button {} label: {
+                FilterMenuLabel("Genre", systemImage: "tag", minHeight: BrowseFilterBar<EmptyView>.menuHeight)
+            }
+            .environment(\.showsHover, lightsOne)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ReviewSample: View {
+    @Environment(\.layoutMetrics) private var metrics
+
+    var body: some View {
+        if let review = Samples.review {
+            ReviewCard(review: review, isExpanded: false, foldedWidth: metrics.reviewCardWidth, expandedWidth: metrics.reviewCardWidth,
+                       onToggle: {})
                 .padding(.horizontal, metrics.pageMargin)
-            heading("Top Picks")
-                .padding(.top, metrics.controlSpacing)
-            shelf {
-                ForEach(0..<4, id: \.self) { index in
-                    Button {} label: { poster(index) }
-                        .buttonStyle(PressableCardStyle.poster)
-                        .environment(\.showsHover, index == 1)
-                }
-            }
-            // A lifted card and its shadow reach past the shelf's edges.
-            .scrollClipDisabled()
-            .accessibilityHidden(true)
-            GlassEffectContainer(spacing: TitleHero.actionGap) {
-                HStack(spacing: TitleHero.actionGap) {
-                    Button {} label: { Label("Play", systemImage: "play.fill") }
-                        .buttonStyle(PrimaryActionButtonStyle(height: CircleActionButton.diameter))
-                    CircleActionButton(title: "Save", systemImage: "bookmark", exactSize: true) {}
-                        .environment(\.showsHover, true)
-                    CircleActionButton(title: "Watched", systemImage: "eye", exactSize: true) {}
-                    CircleActionButton(title: "Trailer", systemImage: "play.rectangle", exactSize: true) {}
-                }
-            }
-            .padding(.horizontal, metrics.pageMargin)
-            .padding(.top, Theme.Spacing.xs)
-            .accessibilityHidden(true)
-            HStack(spacing: metrics.controlSpacing) {
-                Button {} label: {
-                    FilterMenuLabel("Sort", systemImage: "arrow.up.arrow.down", minHeight: BrowseFilterBar<EmptyView>.menuHeight)
-                }
-                Button {} label: {
-                    FilterMenuLabel("Genre", systemImage: "tag", minHeight: BrowseFilterBar<EmptyView>.menuHeight)
-                }
-                .environment(\.showsHover, true)
-                Button("See All") {}
-                    .buttonStyle(.hoverPlain)
-                    .foregroundStyle(.tint)
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, metrics.pageMargin)
-            .accessibilityHidden(true)
         }
     }
+}
 
-    // MARK: Home
+private struct StreamSample: View {
+    @Environment(\.layoutMetrics) private var metrics
 
-    private var home: some View {
-        VStack(alignment: .leading, spacing: metrics.shelfSpacing) {
-            SpotlightPreview()
-            VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                heading("Continue Watching")
-                shelf {
-                    ForEach(0..<3, id: \.self) { index in
-                        Button {} label: { continueCard(index) }
-                            .buttonStyle(PressableCardStyle.poster)
-                    }
-                }
-                .scrollClipDisabled()
-                .accessibilityHidden(true)
-            }
-            .modifier(ShelfDivider(metrics: metrics, isShown: true))
-            VStack(alignment: .leading, spacing: metrics.headerSpacing) {
-                heading("Top Picks")
-                shelf {
-                    ForEach(0..<4, id: \.self) { index in
-                        Button {} label: { poster(index) }
-                            .buttonStyle(PressableCardStyle.poster)
-                    }
-                }
-                .scrollClipDisabled()
-                .accessibilityHidden(true)
-            }
-        }
-        // The spotlight runs to the preview's top edge, as it runs to the screen's on Home.
-        .padding(.top, -Theme.Spacing.l)
+    var body: some View {
+        StreamRow(item: Samples.stream, isBest: true, isRemux: Samples.stream.quality.isRemux)
+            .padding(.horizontal, metrics.pageMargin)
     }
+}
 
-    // MARK: Title page
+private struct PlayerBarSample: View {
+    @Environment(\.layoutMetrics) private var metrics
 
-    private var titlePage: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            actionButtons
-            Text(Samples.synopsis + " " + Samples.synopsisMore)
-                .font(Theme.Typography.body)
-                .foregroundStyle(.secondary)
-                .lineLimit(appearance.expandsSynopsis ? nil : 2)
-                .padding(.horizontal, metrics.pageMargin)
-            ForEach(appearance.orderedTitleSections.filter(appearance.showsTitleSection)) { section in
-                if section == .episodes {
-                    heading("Season 1")
-                    EpisodePreview(watched: true)
-                    EpisodePreview(watched: false)
-                } else {
-                    Text(section.label)
-                        .font(Theme.Typography.captionStrong)
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.vertical, Theme.Spacing.xs + 2)
-                        .background(Theme.surface, in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
-                        .padding(.horizontal, metrics.pageMargin)
-                }
+    var body: some View {
+        let corners = metrics.cornerScale(for: .playerControls)
+        PlayerMenuBar(tabs: [.subtitles, .audio, .speed, .picture, .info], selection: .constant(nil), cornerScale: corners)
+            .fixedSize()
+            .playerMenuBarSurface(cornerScale: corners)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+private struct EpisodesSample: View {
+    @Environment(\.layoutMetrics) private var metrics
+
+    var body: some View {
+        MediaRow("Episodes", hideTitle: true) {
+            ForEach(Samples.episodes.indices, id: \.self) { index in
+                EpisodeRow(video: Samples.episodes[index], fraction: nil, watched: index == 0, artwork: Samples.items[0].background,
+                           score: nil, runtimeMinutes: 49, width: metrics.episodeWidth)
             }
         }
     }
 }
 
-/// Fixed titles keep every Appearance page showing the same artwork.
+/// Fixed titles keep every preview showing the same artwork.
+@MainActor
 private enum Samples {
     static let items: [MetaPreview] = [
         ("tt0816692", "Interstellar"),
@@ -344,187 +267,29 @@ private enum Samples {
                     background: MetahubArtwork.background(imdbID: id),
                     logo: MetahubArtwork.logo(imdbID: id))
     }
+    static let progress = [0.62, 0.25, 0.85, 0.4]
+    /// A title's Play colour, as `PlayColourStore` reads one from its artwork.
+    static let playColour = Theme.playControlColour(hex: "C47A3A")
+    static let synopsis = "A team of explorers travels beyond the solar system to find a future for humanity. Their journey takes them "
+        + "through a wormhole and across worlds where time passes differently."
     static let review = try? JSONDecoder().decode(TMDbReview.self, from: Data("""
         {"id":"appearance-preview","author":"Alex","content":"A beautiful film with a memorable story and an incredible soundtrack. The pacing never lets up, and the ending stays with you long after the credits roll.","author_details":{"rating":8}}
         """.utf8))
-    static let synopsis = "A team of explorers travels beyond the solar system to find a future for humanity."
-    static let synopsisMore = "Their journey takes them through a wormhole and across worlds where time passes differently."
-
-}
-
-/// Preview artwork uses the same source and image view as the library.
-private struct SampleArtwork: View {
-    let index: Int
-
-    var body: some View {
-        let item = Samples.items[index % Samples.items.count]
-        ArtworkImage(url: item.background, title: item.name, maxPixelSize: 640)
-    }
-}
-
-/// Home's spotlight in miniature, at Appearance's height, with its page dots and, when Appearance turns its pages, turning them.
-private struct SpotlightPreview: View {
-    @Environment(\.appAppearance) private var appearance
-    @State private var page = 0
-
-    var body: some View {
-        TabView(selection: $page) {
-            ForEach(0..<3, id: \.self) { index in
-                SampleArtwork(index: index + 1)
-                    .tag(index)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .frame(height: 190)
-        .overlay { BottomFade(length: 0.45) }
-        .padding(.bottom, ShowcasePageControl.height)
-        .overlay(alignment: .bottom) {
-            ShowcasePageControl(count: 3, currentPage: page)
-                .frame(height: ShowcasePageControl.height)
-        }
-        .task(id: PageTurn(seconds: appearance.heroAutoAdvance, page: page)) {
-            let seconds = appearance.heroAutoAdvance
-            guard seconds > 0 else { return }
-            try? await Task.sleep(for: .seconds(seconds))
-            guard !Task.isCancelled else { return }
-            withAnimation(.snappy(duration: 0.5)) { page = (page + 1) % 3 }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private struct PageTurn: Equatable {
-        let seconds: Int
-        let page: Int
-    }
-}
-
-/// An episode row in miniature: a watched one as it always shows, and an unstarted one as Hide spoilers shows it.
-private struct EpisodePreview: View {
-    let watched: Bool
-    @Environment(\.appAppearance) private var appearance
-    @Environment(\.layoutMetrics) private var metrics
-
-    private var hides: Bool { appearance.hidesSpoilers && !watched }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            SampleArtwork(index: watched ? 1 : 3)
-                .blur(radius: hides && appearance.spoilerStills ? 12 : 0, opaque: true)
-                .frame(width: 128, height: 72)
-                .overlay(alignment: .bottomTrailing) {
-                    if watched {
-                        Image(systemName: "checkmark")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                            .background(.black.opacity(0.65), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
-                            .padding(Theme.Spacing.xs)
-                    }
-                }
-                .mediaArtwork(cornerRadius: Theme.Radius.card)
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(watched ? "EPISODE 3" : "EPISODE 4")
-                    .font(Theme.Typography.eyebrow)
-                    .foregroundStyle(Theme.dimText)
-                Text(watched ? "Low Tide" : "The Boat That Answered")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.white)
-                    .redacted(reason: hides && appearance.spoilerTitles ? .placeholder : [])
-                Text(watched ? "The keeper logs the signal for the third night running." :
-                        "Mara reaches the boat and finds who has been answering her.")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(2)
-                    .redacted(reason: hides && appearance.spoilerSynopses ? .placeholder : [])
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, metrics.pageMargin)
-        .accessibilityHidden(true)
-    }
-}
-
-/// The navigation control's segments, lit under the pointer as the Mac's navigation control lights them (`MacPageNavigation`), with
-/// the second drawn lit as well.
-private struct HoverSegmentsPreview: View {
-    @Environment(\.layoutMetrics) private var metrics
-    @Environment(\.appAppearance.hover) private var hover
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selection = 0
-    @State private var hoveredSegment: Int?
-    private static let titles = ["Home", "Discover", "Library"]
-    private static let shownSegment = 1
-    private static let height: CGFloat = 32
-
-    var body: some View {
-        GeometryReader { geometry in
-            let segmentWidth = geometry.size.width / CGFloat(Self.titles.count)
-            CornerSegmentedPicker("Navigation", options: Array(Self.titles.indices), selection: $selection) {
-                Self.titles[$0]
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay {
-                ZStack {
-                    light(at: Self.shownSegment, width: segmentWidth, height: geometry.size.height)
-                    if let hoveredSegment, hoveredSegment != Self.shownSegment {
-                        light(at: hoveredSegment, width: segmentWidth, height: geometry.size.height)
-                    }
-                }
-                .allowsHitTesting(false)
-            }
-            .animation(hover.animation(0.15, reduceMotion: reduceMotion), value: hoveredSegment)
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let location):
-                    guard segmentWidth > 0, geometry.frame(in: .local).contains(location) else {
-                        hoveredSegment = nil
-                        return
-                    }
-                    hoveredSegment = min(Self.titles.count - 1, Int(location.x / segmentWidth))
-                case .ended:
-                    hoveredSegment = nil
-                }
-            }
-        }
-        .frame(height: Self.height)
-        .accessibilityHidden(true)
-    }
-
-    private func light(at segment: Int, width: CGFloat, height: CGFloat) -> some View {
-        ScaledCapsule(scale: metrics.cornerScale(for: .filters))
-            .fill(.white.opacity(hover.segmentFillOpacity))
-            .overlay { ScaledCapsule(scale: metrics.cornerScale(for: .filters)).strokeBorder(.white.opacity(hover.segmentRimOpacity), lineWidth: 1) }
-            .brightness(hover.buttonBrightness)
-            .scaleEffect(reduceMotion ? 1 : hover.buttonScale)
-            .frame(width: max(0, width - 4), height: Self.height - 4)
-            .position(x: width * (CGFloat(segment) + 0.5), y: height / 2)
-    }
-}
-
-/// A dot that crosses a track with the app's own animation, at Appearance's speed, each time Play Animation is pressed.
-private struct MotionPreview: View {
-    @Environment(\.layoutMetrics) private var metrics
-    @State private var moved = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Circle()
-                .fill(.tint)
-                .frame(width: 26, height: 26)
-                .frame(maxWidth: .infinity, alignment: moved ? .trailing : .leading)
-                .padding(5)
-                .background(Theme.surface, in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
-                .accessibilityHidden(true)
-            Button {
-                Haptics.play(.buttons)
-                withAnimation(.snappy(duration: 0.8)) { moved.toggle() }
-            } label: {
-                Label("Play Animation", systemImage: "play.fill")
-            }
-            .buttonStyle(PointingHandButtonStyle(style: .bordered))
-            .accessibilityIdentifier("settings.appearance.playAnimation")
-        }
-        .padding(.horizontal, metrics.pageMargin)
-    }
+    static let stream: RankedStream = {
+        let url = URL(string: "https://example.com/interstellar.mkv")!
+        let stream = AddonStream(name: "Torrentio\n4K", description: "Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.Atmos\n💾 62.3 GB",
+                                 source: .direct(url))
+        return RankedStream(id: "appearance-preview", stream: stream,
+                            addon: AddonSummary(id: UUID(), name: "Torrentio", host: "torrentio.example"),
+                            quality: StreamQuality.parse(stream), route: .native(url))
+    }()
+    static let episodes = [
+        Video(id: "appearance-preview:1:3", title: "Low Tide", season: 1, episode: 3, released: "2024-01-17",
+              thumbnail: MetahubArtwork.background(imdbID: "tt0133093"),
+              overview: "The keeper logs the signal for the third night running."),
+        Video(id: "appearance-preview:1:4", title: "The Boat That Answered", season: 1, episode: 4, released: "2024-01-24",
+              thumbnail: MetahubArtwork.background(imdbID: "tt0120737"),
+              overview: "Mara reaches the boat and finds who has been answering her."),
+    ]
 }
 #endif

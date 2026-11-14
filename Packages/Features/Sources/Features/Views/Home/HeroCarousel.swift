@@ -347,7 +347,11 @@ private struct HeroPage: View {
     private var heroPixelSize: CGFloat { isLandscape ? TitleHero.landscapePixelSize : TitleHero.portraitPixelSize }
     /// Portrait only, and only when the picture carries the title: the logo is neither loaded nor drawn, its space is kept.
     private var hidesLogo: Bool { !isLandscape && heroArtwork?.portraitHidesLogo == true }
-    private var logoURL: URL? { hidesLogo ? nil : (item.logo ?? heroArtwork?.logo) }
+    private var logoCandidates: [URL] {
+        guard !hidesLogo else { return [] }
+        return HeroLogos.candidates(preview: item.logo, artwork: heroArtwork, imdbID: item.id, artworkReady: artworkChecked)
+    }
+    private var logoURL: URL? { logoCandidates.first }
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: artworkChecked) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
@@ -376,7 +380,7 @@ private struct HeroPage: View {
     /// line spreads in portrait, as wide as a short line in landscape.
     private func metaLine(spreads: Bool) -> some View {
         Text(verbatim: " ")
-            .font(Theme.Typography.metaLine)
+            .appFont(.metaLine)
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
             .overlay {
@@ -399,7 +403,7 @@ private struct HeroPage: View {
     /// grey lines stand in while the details load, so nothing moves when the text arrives.
     private var synopsisLines: some View {
         Text(verbatim: awaitsDetails ? " " : (synopsis ?? " "))
-            .font(Theme.Typography.metaLine)
+            .appFont(.metaLine, role: .reading)
             .foregroundStyle(.white.opacity(0.72))
             .multilineTextAlignment(.center)
             .lineLimit(2, reservesSpace: true)
@@ -502,12 +506,13 @@ private struct HeroPage: View {
             await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item),
                                               logos: PlayColourStore.logos(for: item))
         }
-        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoURL?.absoluteString ?? "-")|\(artworkChecked)|\(keepsPicture)|\(distance <= 1)") {
+        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoCandidates.map(\.absoluteString).joined(separator: "|"))|\(artworkChecked)|\(keepsPicture)|\(distance <= 1)") {
             // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
             guard keepsPicture else { hero.release(keeping: []); return }
             // After a rotation the other orientation's picture goes too.
             hero.release(keeping: heroURL.map { [($0, heroPixelSize)] } ?? [])
-            await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize)
+            await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
+                            logoFallbacks: Array(logoCandidates.dropFirst()))
         }
     }
 
@@ -615,7 +620,7 @@ private struct HeroPage: View {
                     .transition(.identity)
             case .none:
                 Text(item.name)
-                    .font(Theme.Typography.largeTitle)
+                    .appFont(.largeTitle)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

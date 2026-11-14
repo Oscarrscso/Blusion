@@ -325,7 +325,7 @@ struct RatingButtonsRow: View {
                 buttons(ratings: ratings)
                 if let issue = store.reviewServiceIssue {
                     Text(issue)
-                        .font(Theme.Typography.micro)
+                        .appFont(.micro)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("detail.reviews.issue")
                 }
@@ -350,7 +350,10 @@ struct RatingButtonsRow: View {
             if site == .myAnimeList { return isAnime }
             return site == .imdb || ratings?.shortText(for: site) != nil
         }
-        let sites = shown.filter { !ReviewPageReader.supports($0) } + shown.filter { ReviewPageReader.supports($0) }
+        // Letterboxd leads, then IMDb and TMDB; on anime MyAnimeList leads, IMDb takes TMDB's place and TMDB follows it.
+        let order: [ReviewSite] = isAnime ? [.myAnimeList, .letterboxd, .imdb, .tmdb] : [.letterboxd, .imdb, .tmdb, .myAnimeList]
+        let ordered = shown.filter { !ReviewPageReader.supports($0) }.sorted { (order.firstIndex(of: $0) ?? 0) < (order.firstIndex(of: $1) ?? 0) }
+        let sites = ordered + shown.filter { ReviewPageReader.supports($0) }
         let showsLinkIcon = sites.count <= 4
         return GeometryReader { geometry in
             // A divider stands between each two buttons, with the same gap on either side of it as between the buttons themselves.

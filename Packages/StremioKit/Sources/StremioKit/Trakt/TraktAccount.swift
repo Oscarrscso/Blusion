@@ -261,26 +261,31 @@ public actor TraktAccount {
     }
 
     /// Removes the local token immediately, then best-effort revokes the remote token.
-    public func signOut() async {
+    @discardableResult
+    public func signOut() async -> Bool {
         let token = try? await loadToken()
         let credentials = try? await credentials()
         credentialsRevision += 1
         pendingPKCE = nil
-        try? await secrets.remove(Keys.token)
+        do { try await secrets.remove(Keys.token) } catch { return false }
         if let token, let (clientID, clientSecret) = credentials {
             var body = ["token": token.accessToken, "client_id": clientID]
             if token.redirectURI == nil { body["client_secret"] = clientSecret }
             _ = try? await request(path: "oauth/revoke", clientID: clientID,
                                    body: body)
         }
+        return true
     }
 
-    public func clearCredentials() async {
+    @discardableResult
+    public func clearCredentials() async -> Bool {
         credentialsRevision += 1
         pendingPKCE = nil
-        try? await secrets.remove(Keys.token)
-        try? await secrets.remove(Keys.clientSecret)
-        try? await secrets.remove(Keys.redirectURI)
+        var cleared = true
+        for key in [Keys.token, Keys.clientSecret, Keys.redirectURI] {
+            do { try await secrets.remove(key) } catch { cleared = false }
+        }
+        return cleared
     }
 
     /// A token changed through iCloud. Results requested with the previous credentials must be discarded.

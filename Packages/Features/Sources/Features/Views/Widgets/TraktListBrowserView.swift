@@ -115,7 +115,7 @@ struct TraktListBrowserView: View {
         HStack(spacing: Theme.Spacing.s) {
             Image(systemName: "textformat").font(Theme.Typography.caption).foregroundStyle(.secondary).accessibilityHidden(true)
             TextField(titlePlaceholder.isEmpty ? "Widget title (optional)" : titlePlaceholder, text: $title)
-                .font(Theme.Typography.medium)
+                .appFont(.medium)
                 .submitLabel(.done)
                 .accessibilityIdentifier("widgetEditor.title")
         }
@@ -157,7 +157,7 @@ struct TraktListBrowserView: View {
             browser.leaveUser()
         } label: {
             Label("Lists by @\(user.username)", systemImage: "chevron.left")
-                .font(Theme.Typography.mediumStrong)
+                .appFont(.mediumStrong)
         }
         .buttonStyle(GlassCapsuleButtonStyle())
         .padding(.horizontal, metrics.contentMargin)
@@ -248,19 +248,19 @@ struct TraktListRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
-                    .font(Theme.Typography.mediumStrong)
+                    .appFont(.mediumStrong)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text("@\(list.username)").lineLimit(1)
                     Label("\(list.itemCount)", systemImage: "film.stack")
                     Label("\(list.likes)", systemImage: "heart")
                 }
-                .font(Theme.Typography.caption)
+                .appFont(.caption)
                 .foregroundStyle(.secondary)
                 .labelStyle(.titleAndIcon)
                 if !list.description.isEmpty {
                     Text(TraktListRow.plain(list.description))
-                        .font(Theme.Typography.caption)
+                        .appFont(.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
                 }
@@ -311,8 +311,8 @@ private struct TraktUserRow: View {
                 .frame(width: 32, height: 32)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName ?? "@\(user.username)").font(Theme.Typography.mediumStrong).lineLimit(1)
-                if user.displayName != nil { Text("@\(user.username)").font(Theme.Typography.caption).foregroundStyle(.secondary).lineLimit(1) }
+                Text(user.displayName ?? "@\(user.username)").appFont(.mediumStrong).lineLimit(1)
+                if user.displayName != nil { Text("@\(user.username)").appFont(.caption).foregroundStyle(.secondary).lineLimit(1) }
             }
             Spacer(minLength: 0)
             if user.isVIP { Badge("VIP") }

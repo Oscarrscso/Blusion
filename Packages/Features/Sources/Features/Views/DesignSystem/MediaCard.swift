@@ -298,13 +298,13 @@ struct MediaCard: View {
     private var captions: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(item.name)
-                .font(Theme.Typography.cardTitle)
+                .appFont(.cardTitle)
                 .foregroundStyle(.primary)
                 .textCase(appearance.uppercaseCaptions ? .uppercase : nil)
                 .lineLimit(appearance.captionLines, reservesSpace: true)
             if appearance.showsCaptionDetails {
                 Text(subtitleLine)
-                    .font(Theme.Typography.cardSubtitle)
+                    .appFont(.cardSubtitle)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }

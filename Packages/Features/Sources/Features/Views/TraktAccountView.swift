@@ -9,6 +9,8 @@ struct TraktAccountView: View {
     @State private var model: TraktAccountViewModel
     /// Settings' model, which holds the Continue Watching refresh.
     let settings: SettingsViewModel
+    @AppStorage(GhostMode.defaultsKey) private var ghostIsOn = false
+    @State private var confirmsDisconnect = false
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     init(services: AppServices, settings: SettingsViewModel) {
@@ -44,14 +46,20 @@ struct TraktAccountView: View {
         .disabled(model.isWorking)
         .overlay { if model.isWorking { Spinner().padding().glassEffect() } }
         .accessibilityIdentifier("trakt.form")
+        .confirmationDialog("Disconnect Trakt?", isPresented: $confirmsDisconnect, titleVisibility: .visible) {
+            Button("Disconnect", role: .destructive) { Task { await model.signOut() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Stops Trakt sync and removes this account’s local sign-in. Your local library and history, and your data on Trakt, are kept.")
+        }
     }
 
     private var accountSection: some View {
         Section {
             if model.isSignedIn {
-                Label("Connected", systemImage: "checkmark.circle")
+                Label(ghostIsOn ? "Paused by Ghost Mode" : "Connected", systemImage: ghostIsOn ? "pause.circle" : "checkmark.circle")
                     .accessibilityIdentifier("trakt.signedIn")
-                Button("Disconnect", role: .destructive) { Task { await model.signOut() } }
+                Button("Disconnect", role: .destructive) { confirmsDisconnect = true }
                     .accessibilityIdentifier("trakt.signOut")
             } else {
                 Button("Connect") { Task { await signIn() } }
@@ -66,8 +74,10 @@ struct TraktAccountView: View {
     private var syncSection: some View {
         Section {
             Button("Sync Now") { Task { await model.sync() } }
+                .disabled(ghostIsOn)
                 .accessibilityIdentifier("trakt.sync")
             Button("Import Collection") { Task { await model.importFromTrakt() } }
+                .disabled(ghostIsOn)
                 .accessibilityIdentifier("trakt.import")
             if model.pendingCount > 0 {
                 Text(pendingText).foregroundStyle(.secondary).accessibilityIdentifier("trakt.pending")
