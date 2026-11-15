@@ -6,6 +6,36 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
 
 [Latest release](https://github.com/Oscarrscso/Blusion-public/releases/latest)
 
+## Features
+
+### Browse
+
+- Movie, series and people search.
+- Ratings, reviews and cast filmographies.
+
+### Watch
+
+- Stremio addons and built-in playback.
+- Trakt sync.
+
+### Personalise
+
+- Customisable Home widgets, shelves and layouts.
+
+## Build
+
+Requires a Mac, Xcode with the iOS 26 SDK or newer, and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+
+```bash
+brew install xcodegen
+./scripts/enable-fallback.sh
+open Blusion.xcodeproj
+```
+
+Select your development team in Xcode's Signing & Capabilities, choose a device or simulator, then run. The script generates the project with the MPVKit playback engine enabled.
+
+*In active development.*
+
 ## Screenshots
 
 <!-- All portrait screenshots use fastlane/frameit-frames, Apple iPhone 17 Black. -->
@@ -36,33 +66,3 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
   <tr><th colspan="2">Library</th></tr>
   <tr><td colspan="2"><img src="docs/screenshots/library-landscape-iphone-17.png" width="100%" alt="Library in landscape"></td></tr>
 </table>
-
-## Features
-
-### Browse
-
-- Movie, series and people search.
-- Ratings, reviews and cast filmographies.
-
-### Watch
-
-- Stremio addons and built-in playback.
-- Trakt sync.
-
-### Personalise
-
-- Customisable Home widgets, shelves and layouts.
-
-## Build
-
-Requires a Mac, Xcode with the iOS 26 SDK or newer, and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-
-```bash
-brew install xcodegen
-./scripts/enable-fallback.sh
-open Blusion.xcodeproj
-```
-
-Select your development team in Xcode's Signing & Capabilities, choose a device or simulator, then run. The script generates the project with the MPVKit playback engine enabled.
-
-*In active development.*
