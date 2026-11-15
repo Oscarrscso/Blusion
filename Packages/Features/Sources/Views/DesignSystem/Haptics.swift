@@ -233,6 +233,13 @@ struct ShelfScroll<Content: View>: View {
         .onPreferenceChange(ShelfEdgeKey.self) { edges in
             // A plain row sizes itself, and a pinned row is already the card's height, so there is nothing to measure.
             guard lazy, pinnedHeight == nil else { return }
+            if edges.isEmpty {
+                if measuredKey != resetKey {
+                    measuredKey = resetKey
+                    if height != nil { height = nil }
+                }
+                return
+            }
             let tallest = edges.map(\.height).max() ?? 0
             guard tallest > 0 else { return }
             let previous = measuredKey == resetKey ? height : nil

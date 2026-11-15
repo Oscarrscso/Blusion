@@ -342,6 +342,9 @@ extension EnvironmentValues {
 
     /// Settings → Appearance, as the root read it (see `appliesAppearance()`).
     @Entry var appAppearance = AppearancePreferences()
+
+    /// True inside Settings chrome so controls keep standard SF typography while live previews opt back out.
+    @Entry var usesSettingsTypography = false
 }
 
 extension View {
@@ -354,6 +357,11 @@ extension View {
     /// a look of its own. The preview leaves out `motion`: the root's animation speed already reaches it, and twice would square it.
     func appearanceLook(_ appearance: AppearancePreferences, motion: Bool = true) -> some View {
         modifier(AppearanceLookModifier(appearance: appearance, motion: motion))
+    }
+
+    /// Isolates Settings chrome to standard SF typography at the device Dynamic Type size while keeping accent, background, corners, and hover.
+    func settingsTypography() -> some View {
+        modifier(SettingsTypographyModifier())
     }
 
     /// A shelf or section heading in Appearance's heading style: its font, size, weight, width, letter spacing and case.
@@ -411,6 +419,7 @@ private struct AppearanceLookModifier: ViewModifier {
             .tracking(appearance.letterSpacing.points)
             .lineSpacing(appearance.lineSpacing.points)
             .environment(\.appAppearance, appearance)
+            .environment(\.usesSettingsTypography, false)
             // Off stops every SwiftUI animation inside, implicit ones included; another speed scales the animations changes carry.
             .transaction { transaction in
                 if speed == 0 {
@@ -420,6 +429,30 @@ private struct AppearanceLookModifier: ViewModifier {
                     transaction.animation = transaction.animation?.speed(speed)
                 }
             }
+    }
+}
+
+private struct SettingsTypographyModifier: ViewModifier {
+    @Environment(\.systemTextSize) private var systemTextSize
+    @Environment(\.appAppearance) private var appearance
+
+    func body(content: Content) -> some View {
+        var settingsAppearance = appearance
+        settingsAppearance.reading = AppearancePreferences.TextStyle()
+        settingsAppearance.interface = .followingReading()
+        settingsAppearance.headings = .headings()
+        return content
+            .environment(\.usesSettingsTypography, true)
+            .environment(\.appAppearance, settingsAppearance)
+            .dynamicTypeSize(systemTextSize)
+            .font(.body)
+            .fontDesign(.default)
+            .fontWidth(.standard)
+            .bold(false)
+            .italic(false)
+            .tracking(0)
+            .lineSpacing(0)
+            .textCase(nil)
     }
 }
 

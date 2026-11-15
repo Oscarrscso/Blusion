@@ -250,10 +250,9 @@ struct DetailView: View {
                         if !showsStreams {
                             Group {
                                 TitleSectionLine(contentMargin: contentMargin)
-                                    // The hero already reserves space below its rating pills. Account for that inset, then use the
-                                    // same section gap on both sides so the divider actually sits between the two sections.
-                                    // Landscape with reviews open: the panel is the hero's last part, so nothing of the inset lies below it.
-                                    .padding(.top, isLandscape && model.openedReviews == nil
+                                    // The hero already reserves space below its rating pills when nothing sits under it. Account for
+                                    // that inset, then use the same section gap on both sides so the divider sits evenly between sections.
+                                    .padding(.top, hasLandscapeHeroBottomInset
                                         ? metrics.titleRatingsGap - TitleHero.landscapeContentBottomInset
                                         : metrics.titleRatingsGap)
                                 // Each section below has a faint line above it, as far from it as the one under the ratings.
@@ -304,7 +303,7 @@ struct DetailView: View {
                                         }
                                     }
                                 }
-                                .padding(.top, isLandscape ? Theme.Spacing.s : metrics.titleRatingsGap)
+                                .padding(.top, metrics.titleRatingsGap)
                             }
                             .transition(.opacity)
                         }
@@ -568,6 +567,15 @@ struct DetailView: View {
 
     /// The id the page scrolls to once the streams are ready: an empty row just above the picker.
     private static let streamsScrollID = "detail.streams"
+
+    /// True when the landscape hero ends with its padded text column rather than a trailer, reviews panel, or Mac hero.
+    private var hasLandscapeHeroBottomInset: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        isLandscape && !model.trailer.showsPanel && model.openedReviews == nil
+        #endif
+    }
 
     /// True once the streams have taken the details' place.
     private var showsStreams: Bool { streams.showsStreams }

@@ -108,6 +108,7 @@ struct SettingsColumnHeading: ViewModifier {
     let title: String
     var action: AnyView? = nil
     @Environment(\.showsSettingsColumnTitle) private var showsTitle
+    @Environment(\.usesSettingsTypography) private var usesSettingsTypography
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
 
@@ -117,7 +118,11 @@ struct SettingsColumnHeading: ViewModifier {
                 .toolbar(.hidden, for: .navigationBar)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(title).headingStyle()
+                        if usesSettingsTypography {
+                            Text(title).font(.title2.bold())
+                        } else {
+                            Text(title).headingStyle()
+                        }
                         Spacer(minLength: Theme.Spacing.m)
                         action
                     }

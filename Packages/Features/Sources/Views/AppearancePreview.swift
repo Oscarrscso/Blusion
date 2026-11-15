@@ -11,6 +11,7 @@ struct AppearancePreview: View {
     /// Hover's preview: one piece of each sample is drawn lit, beside unlit ones.
     var lightsOnePiece = false
     var contentPadding: CGFloat = 0
+    var verticalPadding: CGFloat = Theme.Spacing.l
     @Environment(\.layoutMetrics) private var metrics
 
     var body: some View {
@@ -18,7 +19,7 @@ struct AppearancePreview: View {
                                      style: .continuous)
         SampleStack(samples: samples)
             .padding(contentPadding)
-            .padding(.vertical, Theme.Spacing.l)
+            .padding(.vertical, verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .environment(\.previewLightsOnePiece, lightsOnePiece)
             .background(appearance.pageBackground)
@@ -29,6 +30,17 @@ struct AppearancePreview: View {
             // A picture of the app, not a working part of it; only Hover's answers the pointer.
             .allowsHitTesting(lightsOnePiece)
             .accessibilityHidden(true)
+    }
+}
+
+extension AppearanceControls {
+    /// The look being set, drawn on `samples` with an explicit vertical padding for compact previews.
+    func preview(_ samples: [AppearanceSample], lightsOnePiece: Bool = false, contentPadding: CGFloat = 0,
+                 verticalPadding: CGFloat) -> some View {
+        AppearancePreview(appearance: current, samples: samples, lightsOnePiece: lightsOnePiece,
+                          contentPadding: contentPadding, verticalPadding: verticalPadding)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
     }
 }
 

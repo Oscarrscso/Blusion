@@ -51,8 +51,12 @@ struct AppearanceColourPage: View {
 
 struct AppearanceTextPage: View {
     @State private var expandedRoles: Set<AppearancePreferences.TextRole> = []
+
     var body: some View {
         AppearanceSectionPage(title: "Text", section: .text) { controls in
+            Section {
+                controls.preview([.text], contentPadding: Theme.Spacing.m, verticalPadding: Theme.Spacing.m)
+            }
             Section {
                 controls.menu("App text size", \.textSize, id: "text.reading.textSize")
             }
@@ -61,15 +65,23 @@ struct AppearanceTextPage: View {
                     DisclosureGroup(isExpanded: Binding(get: { expandedRoles.contains(role) }, set: { expanded in
                         if expanded { expandedRoles.insert(role) } else { expandedRoles.remove(role) }
                     })) {
+                        controls.preview([sample(for: role)], contentPadding: Theme.Spacing.m, verticalPadding: Theme.Spacing.m)
                         TextRoleOptions(role: role, controls: controls)
                     } label: {
-                        LabeledContent(role.label, value: controls.current.textRoleSummary(role))
-                            .settingsHover()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(role.label)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            Text(controls.current.textRoleSummary(role))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.vertical, 2)
+                        .settingsHover()
                     }
                     .accessibilityIdentifier("settings.appearance.text.\(role.rawValue)")
-                    if expandedRoles.contains(role) {
-                        controls.preview([sample(for: role)], contentPadding: Theme.Spacing.m)
-                    }
                 }
             }
         }

@@ -289,9 +289,11 @@ struct AppearanceSectionPage<Content: View>: View {
             Section {
                 Button("Restore Defaults") {
                     Haptics.play(.buttons)
+                    draft = nil
+                    isSliding = false
                     appearance = appearance.restoringDefaults(of: section)
                 }
-                .disabled(appearance.isDefault(section))
+                .disabled((draft ?? appearance).isDefault(section))
                 .accessibilityIdentifier("settings.appearance.\(section.rawValue).restore")
             }
         }

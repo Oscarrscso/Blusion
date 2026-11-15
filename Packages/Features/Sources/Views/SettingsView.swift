@@ -53,6 +53,11 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        settingsBody.settingsTypography()
+    }
+
+    @ViewBuilder
+    private var settingsBody: some View {
         #if targetEnvironment(macCatalyst)
         // As on iPad: the list beside the page chosen in it, and what that page pushes on a stack of its own.
         @Bindable var router = router
@@ -123,7 +128,7 @@ struct SettingsView: View {
                                 page(selection)
                                     .id(selection)
                                     .environment(\.settingsSidePage, sidePage)
-                                .environment(\.showsSettingsColumnTitle, true)
+                                    .environment(\.showsSettingsColumnTitle, true)
                                     .environment(\.isPhoneLandscape, false)
                             }
                         }
@@ -503,7 +508,7 @@ func lazyLoadLabel(_ level: Int) -> String {
     LazyLoadLookahead.levels[min(max(level, 1), LazyLoadLookahead.levels.count) - 1].label
 }
 
-/// One row of the Settings root, in the format of the Widgets page: a symbol, a title and a one-line summary. Also the Haptics page's
+/// One row of the Settings root, in the format of the Widgets page: a symbol, a title and a summary. Also the Haptics page's
 /// rows, one per place.
 struct SettingsRow: View {
     let title: String
@@ -516,7 +521,10 @@ struct SettingsRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                 if let summary {
-                    Text(summary).appFont(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
         } icon: {
@@ -678,6 +686,7 @@ extension View {
             .navigationBarTitleDisplayMode(.inline)
             .modifier(SettingsLandscapeNavigation())
             .modifier(SettingsColumnHeading(title: title, action: action))
+            .settingsTypography()
     }
 }
 

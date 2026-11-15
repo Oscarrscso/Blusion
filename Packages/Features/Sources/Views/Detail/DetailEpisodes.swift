@@ -64,6 +64,7 @@ struct DetailEpisodes: View {
         let width = episodeWidth(pageWidth: pageWidth)
         let initialEpisode = model.episodes.first { $0.id == model.nextUp?.id }
             ?? model.episodes.first
+        let showsShelf = model.isLoading || !model.episodes.isEmpty
         // The season row stands as far above the episodes as the Cast heading does above its photos.
         return VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             HStack(spacing: Theme.Spacing.m) {
@@ -73,52 +74,54 @@ struct DetailEpisodes: View {
                 episodeWidthToggle
             }
             .padding(.horizontal, contentMargin)
-            ScrollViewReader { proxy in
-                ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
-                            resetKey: "\(model.selectedSeason ?? -1):\(Int(width))",
-                            initialID: initialEpisode?.id) {
-                    if model.isLoading && model.episodes.isEmpty {
-                        ForEach(0..<3, id: \.self) { index in
-                            VStack(alignment: .leading, spacing: 0) {
-                                Theme.placeholder
-                                    .frame(width: width, height: width / CardAspect.wide.ratio)
-                                    .loadingCardSpinner()
-                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    DetailSkeletonLine(font: Theme.Typography.eyebrow, width: 70)
-                                        .padding(.top, setsShortCardText ? 0 : -Theme.Spacing.xs)
-                                    DetailSkeletonParagraph(style: setsShortCardText ? .footnote : .body, lines: 2)
-                                    Rectangle().fill(Theme.separator).frame(height: 0.5)
-                                    DetailSkeletonParagraph(style: setsShortCardText ? .caption1 : .body, lines: 5)
-                                        .frame(minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-                                        .clipped()
-                                    Rectangle().fill(Theme.separator).frame(height: 0.5)
-                                    DetailSkeletonLine(font: .caption2, width: width * 0.65)
+            if showsShelf {
+                ScrollViewReader { proxy in
+                    ShelfScroll(margin: contentMargin, spacing: metrics.cardSpacing,
+                                resetKey: "\(model.selectedSeason ?? -1):\(Int(width))",
+                                initialID: initialEpisode?.id) {
+                        if model.isLoading && model.episodes.isEmpty {
+                            ForEach(0..<3, id: \.self) { index in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Theme.placeholder
+                                        .frame(width: width, height: width / CardAspect.wide.ratio)
+                                        .loadingCardSpinner()
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                        DetailSkeletonLine(font: Theme.Typography.eyebrow, width: 70)
+                                            .padding(.top, setsShortCardText ? 0 : -Theme.Spacing.xs)
+                                        DetailSkeletonParagraph(style: setsShortCardText ? .footnote : .body, lines: 2)
+                                        Rectangle().fill(Theme.separator).frame(height: 0.5)
+                                        DetailSkeletonParagraph(style: setsShortCardText ? .caption1 : .body, lines: 5)
+                                            .frame(minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                                            .clipped()
+                                        Rectangle().fill(Theme.separator).frame(height: 0.5)
+                                        DetailSkeletonLine(font: .caption2, width: width * 0.65)
+                                    }
+                                    .padding(Theme.Spacing.s + EpisodeRow.overlayInset(stillRadius: Theme.Radius.card))
+                                    .modifier(EpisodeInformationFrame(isShortWidth: !model.matchesEpisodeWidthToText))
+                                    .frame(width: width)
                                 }
-                                .padding(Theme.Spacing.s + EpisodeRow.overlayInset(stillRadius: Theme.Radius.card))
-                                .modifier(EpisodeInformationFrame(isShortWidth: !model.matchesEpisodeWidthToText))
                                 .frame(width: width)
+                                .background(Theme.placeholder)
+                                .mediaArtwork(cornerRadius: Theme.Radius.card)
+                                .reportsShelfEdge(id: index)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Loading episode")
                             }
-                            .frame(width: width)
-                            .background(Theme.placeholder)
-                            .mediaArtwork(cornerRadius: Theme.Radius.card)
-                            .reportsShelfEdge(id: index)
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("Loading episode")
+                        }
+                        ForEach(model.episodes) { episode in
+                            episodeRow(episode, width: width)
+                                .id(episode.id).reportsShelfEdge(id: episode.id)
                         }
                     }
-                    ForEach(model.episodes) { episode in
-                        episodeRow(episode, width: width)
-                            .id(episode.id).reportsShelfEdge(id: episode.id)
+                    // Create the loaded season at its saved starting position, with no delayed scroll.
+                    .id("\(model.isLoading):\(model.selectedSeason ?? -1)")
+                    .animation(.snappy, value: model.matchesEpisodeWidthToText)
+                    .task(id: shuffledEpisode) {
+                        guard let shuffledEpisode else { return }
+                        try? await Task.sleep(for: .milliseconds(80))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(.snappy) { proxy.scrollTo(shuffledEpisode, anchor: .leading) }
                     }
-                }
-                // Create the loaded season at its saved starting position, with no delayed scroll.
-                .id("\(model.isLoading):\(model.selectedSeason ?? -1)")
-                .animation(.snappy, value: model.matchesEpisodeWidthToText)
-                .task(id: shuffledEpisode) {
-                    guard let shuffledEpisode else { return }
-                    try? await Task.sleep(for: .milliseconds(80))
-                    guard !Task.isCancelled else { return }
-                    withAnimation(.snappy) { proxy.scrollTo(shuffledEpisode, anchor: .leading) }
                 }
             }
         }
