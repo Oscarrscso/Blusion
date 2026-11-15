@@ -16,7 +16,16 @@ let package = Package(
         .package(path: "../Persistence"),
     ],
     targets: [
-        .target(name: "Features", dependencies: ["StremioKit", "PlayerKit", "Persistence"]),
+        .target(name: "Features", dependencies: ["StremioKit", "PlayerKit", "Persistence"], path: "Sources"),
+        .testTarget(
+            name: "FeaturesTests",
+            dependencies: [
+                "Features",
+                .product(name: "StremioKitTestSupport", package: "StremioKit"),
+                .product(name: "PlayerKitTestSupport", package: "PlayerKit"),
+            ],
+            path: "Tests"
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

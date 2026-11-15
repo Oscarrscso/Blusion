@@ -1,0 +1,266 @@
+#if canImport(UIKit)
+import SwiftUI
+import StremioKit
+
+/// A capsule that names a failing addon without hiding the rest of the screen. The failure is said by the icon and the text,
+/// not by a coloured block.
+struct ErrorChip: View {
+    @Environment(\.layoutMetrics) private var metrics
+    let text: String
+
+    var body: some View {
+        Label {
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        }
+        .appFont(style: .footnote, weight: .medium, role: .interface)
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.surfaceStrong, in: ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Shown instead of a wall of per-addon errors when every request failed because the device is offline.
+struct OfflineBanner: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.m) {
+            Image(systemName: "wifi.slash")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(Connectivity.offlineTitle)
+                    .appFont(.headline)
+                Text(Connectivity.offlineMessage)
+                    .appFont(.medium)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Theme.Spacing.l)
+        .cardSurface()
+        .padding(.horizontal, Theme.screenPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("offline.banner")
+    }
+}
+
+/// Wraps its children onto several lines instead of clipping them (chips at large Dynamic Type sizes).
+struct WrappingStack<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        // A vertical stack of chips keeps layout trivial and never clips at accessibility sizes.
+        VStack(alignment: .leading, spacing: 8, content: content)
+    }
+}
+
+/// Poster artwork: 2:3 with poster corners. Give it a width (`.frame(width:)`) and the height follows.
+struct PosterImage: View {
+    let url: URL?
+    let title: String
+
+    var body: some View {
+        ArtworkImage(url: url, title: title, maxPixelSize: 480)
+            .aspectRatio(CardAspect.poster.ratio, contentMode: .fit)
+            .mediaArtwork(cornerRadius: Theme.Radius.poster)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The first-run state: no addon is installed, so there is nothing to browse yet.
+struct EmptyAddonsView: View {
+    let onOpenAddons: () -> Void
+
+    var body: some View {
+        EmptyStateLayout(
+            title: "No addons yet",
+            systemImage: "puzzlepiece.extension",
+            message: "Addons bring the catalogs, search and streams. "
+                + "Paste an addon's link (it starts with https:// or stremio://) in Settings."
+        ) {
+            Button("Add an addon", action: onOpenAddons)
+                .buttonStyle(.primaryActionCompact)
+                .padding(.top, Theme.Spacing.s)
+                .accessibilityIdentifier("empty.addAddon")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("empty.noAddons")
+    }
+}
+
+/// Where each kind of value in a stack leads. Every tab's stack uses the same set.
+struct AppDestinations: ViewModifier {
+    let services: AppServices
+    /// The stack's path in the router, which its back swipe pops.
+    let path: ReferenceWritableKeyPath<AppRouter, NavigationPath>
+    @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(AppRouter.self) private var router
+
+    func body(content: Content) -> some View {
+        content
+            .navigationDestination(for: MetaPreview.self) { preview in
+                IMDbTitlePage(preview: preview, services: services) { DetailView(preview: $0, services: services) }
+                    .titlePage(on: path)
+                    .onAppear { recordIfSearched(preview.name) }
+            }
+            .navigationDestination(for: TitleDestination.self) { destination in
+                let detail = IMDbTitlePage(preview: destination.preview, services: services) {
+                    DetailView(preview: $0, services: services, artwork: destination.artwork, artworkChecked: destination.artworkChecked,
+                               handoff: destination.handoff, streams: destination.streams, heroPostersOverride: destination.usesHeroPosters,
+                               playChoice: destination.playChoice)
+                }
+                .titlePage(on: path)
+                .onAppear { recordIfSearched(destination.preview.name) }
+                // A title opened with no animation closes with none: Back and the back swipe pop it through `AppRouter.goBack`.
+                if destination.opensInstantly {
+                    detail
+                } else {
+                    detail.zoomDestination(id: destination.sourceID, in: zoomNamespace)
+                }
+            }
+            .navigationDestination(for: PersonDestination.self) { PersonView(destination: $0, services: services).titlePage(on: path) }
+            .navigationDestination(for: TMDbTitleDestination.self) { TMDbTitleView(destination: $0, services: services).titlePage(on: path) }
+            .navigationDestination(for: StreamRequest.self) { StreamPickerView(request: $0, services: services).browsingBackNavigation() }
+            .navigationDestination(for: CatalogListRequest.self) { CatalogListView(request: $0, services: services).browsingBackNavigation() }
+            // A title's page that left the stack without a word (a pop to the root) gives up its depth, so no other page there is taken
+            // for one (see `TitlePageBars`).
+            .onChange(of: router[keyPath: path].count) { _, count in
+                if let depths = router.titlePageDepths[path], depths.contains(where: { $0 > count }) {
+                    router.titlePageDepths[path] = depths.filter { $0 <= count }
+                }
+            }
+            .backSwipe(path: path)
+    }
+
+    /// A title opened straight from Search's results goes to the top of the recent searches, and Search reads them again; the title's name
+    /// is what is kept. One opened further in, from a service or a category, was not searched for.
+    private func recordIfSearched(_ name: String) {
+        guard path == \.searchPath, router.searchPath.count == 1 else { return }
+        services.searchHistory.save(SearchViewModel.recording(name, into: services.searchHistory.load()))
+        router.recentSearchRevision += 1
+    }
+}
+
+/// A title's page in a stack: no tab bar while it is on top (iPhone and iPad; Mac uses the shared scrolling navigation), and the bar starts coming
+/// back the moment it is left, as the stack's path shrinks at the start of the way back rather than once it has finished. Its depth is
+/// noted with the router, so the Continue Watching bar goes and comes back with it (see `AppRouter.showsTitlePage`).
+private struct TitlePageBars: ViewModifier {
+    let path: ReferenceWritableKeyPath<AppRouter, NavigationPath>
+    @Environment(AppRouter.self) private var router
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+    @Environment(\.usesEditorialTabBar) private var usesEditorialTabBar
+    @Environment(\.appAppearance) private var appearance
+    @State private var depth: Int?
+
+    func body(content: Content) -> some View {
+        content
+            #if !targetEnvironment(macCatalyst)
+            .toolbarVisibility(hidesTabBar ? .hidden : .visible, for: .tabBar)
+            #endif
+            .onAppear {
+                let current = router[keyPath: path].count
+                depth = current
+                // Pages deeper than this one have gone, whether or not they said so.
+                router.titlePageDepths[path] = (router.titlePageDepths[path] ?? []).filter { $0 < current }.union([current])
+            }
+            // A page covered by another keeps its place; one that has been left gives it up.
+            .onDisappear {
+                guard let depth, router[keyPath: path].count < depth else { return }
+                router.titlePageDepths[path]?.remove(depth)
+            }
+    }
+
+    /// On top, or under a page pushed over it, until the stack's path falls below it. Before it has appeared it is the page arriving.
+    private var isOnTop: Bool {
+        guard let depth else { return true }
+        return router[keyPath: path].count >= depth
+    }
+
+    /// Title pages hide the tab bar unless Appearance keeps it on an upright iPhone so Home can be tapped from them.
+    private var hidesTabBar: Bool {
+        if usesEditorialTabBar { return true }
+        if isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone { return true }
+        if isOnTop, appearance.showsTitlePageTabBar, UIDevice.current.userInterfaceIdiom == .phone, !isPhoneLandscape {
+            return false
+        }
+        return isOnTop
+    }
+}
+
+/// Mac and landscape iPhone browsing pages use Back without a navigation bar. Elsewhere the navigation bar's Back is `RoundBackButton`
+/// in place of the system's, so it takes Other Buttons' corners and the buttons' finish as every other round button does.
+private struct BrowsingBackNavigation: ViewModifier {
+    @Environment(\.isPhoneLandscape) private var isPhoneLandscape
+
+    func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content.macBackNavigation()
+        #else
+        let usesCornerBack = isPhoneLandscape && UIDevice.current.userInterfaceIdiom == .phone
+        content
+            .navigationBarBackButtonHidden()
+            .toolbarVisibility(usesCornerBack ? .hidden : .automatic, for: .navigationBar)
+            .toolbar {
+                if !usesCornerBack {
+                    ToolbarItem(placement: .topBarLeading) {
+                        RoundBackButton()
+                            .accessibilityIdentifier("navigation.back")
+                    }
+                    // The button draws its own glass in its own shape.
+                    .sharedBackgroundVisibility(.hidden)
+                }
+            }
+        #endif
+    }
+}
+
+/// Back as a round glass button in Other Buttons' corners and the buttons' finish: in the navigation bar of every browsing page, and in
+/// the top corner in phone landscape. Pops the showing tab's stack as the back swipe does, so a title opened from the spotlight closes
+/// with no animation.
+struct RoundBackButton: View {
+    var action: (() -> Void)? = nil
+    @Environment(AppRouter.self) private var router
+    @Environment(\.layoutMetrics) private var metrics
+
+    var body: some View {
+        let shape = ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons))
+        Button {
+            Haptics.play(.navigation)
+            if let action { action() } else { router.goBackOnTab() }
+        } label: {
+            Image(systemName: "chevron.backward")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .buttonSurface(.regular.interactive(), in: shape)
+                .contentShape(shape)
+        }
+        .buttonStyle(.hoverPlain)
+        .accessibilityLabel("Back")
+    }
+}
+
+extension View {
+    func browsingBackNavigation() -> some View {
+        modifier(BrowsingBackNavigation())
+    }
+
+    /// See `TitlePageBars`.
+    func titlePage(on path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) -> some View {
+        modifier(TitlePageBars(path: path))
+            .browsingBackNavigation()
+    }
+}
+
+extension View {
+    func appDestinations(services: AppServices, path: ReferenceWritableKeyPath<AppRouter, NavigationPath>) -> some View {
+        modifier(AppDestinations(services: services, path: path))
+    }
+}
+#endif

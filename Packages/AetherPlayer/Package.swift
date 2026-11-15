@@ -23,7 +23,7 @@ let package = Package(
                  traits: ["TrueHDObjectAudio", "DTSXObjectAudio", "DualLayerDolbyVision"]),
     ],
     targets: [
-        .target(name: "AetherPlayer", dependencies: ["PlaybackGeometry", .product(name: "AetherEngine", package: "AetherEngine")]),
+        .target(name: "AetherPlayer", dependencies: ["PlaybackGeometry", .product(name: "AetherEngine", package: "AetherEngine")], path: "Sources"),
     ],
     swiftLanguageModes: [.v6]
 )

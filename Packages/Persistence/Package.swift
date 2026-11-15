@@ -2,7 +2,7 @@
 import PackageDescription
 
 // SwiftData metadata store and Keychain secret store. Apple-only code is behind `#if canImport(...)`,
-// so the package still builds (as an empty module) on Linux. See ADR-002.
+// so the package still builds (as an empty module) on Linux.
 let package = Package(
     name: "Persistence",
     platforms: [.iOS("26.0"), .macOS(.v14)],
@@ -14,7 +14,16 @@ let package = Package(
         .package(path: "../PlayerKit"),
     ],
     targets: [
-        .target(name: "Persistence", dependencies: ["StremioKit", "PlayerKit"]),
+        .target(name: "Persistence", dependencies: ["StremioKit", "PlayerKit"], path: "Sources"),
+        .testTarget(
+            name: "PersistenceTests",
+            dependencies: [
+                "Persistence",
+                .product(name: "StremioKit", package: "StremioKit"),
+                .product(name: "PlayerKit", package: "PlayerKit"),
+            ],
+            path: "Tests"
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

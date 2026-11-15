@@ -5,9 +5,7 @@ import SwiftData
 import StremioKit
 import Persistence
 import Features
-#if BLUSION_FALLBACK_ENGINE
 import FallbackPlayer
-#endif
 
 /// Builds the app's long-lived services once. UI tests (`BLUSION_UITEST=1`) get in-memory stores, so every test launch starts empty
 /// and nothing is written to the Keychain or disk.
@@ -109,7 +107,7 @@ final class AppEnvironment {
         // Before any view exists: the haptics are the listener's own, and the first gesture of the session must already obey them.
         Haptics.apply(HapticPreferences.saved(in: settingsDefaults))
         let registry = AddonRegistry(store: store, secrets: secrets, client: client, logger: logger)
-        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS, AV1 and friends go to the fallback engine on iPhone and Mac (ADR-006).
+        // AVPlayer for MP4/MOV/M4V/HLS. MKV, AVI, DTS, AV1 and friends go to the fallback engine on iPhone and Mac.
         let makeEngine: EngineFactory = { candidate in
             switch candidate.route {
             case .native:
@@ -120,7 +118,6 @@ final class AppEnvironment {
                 #endif
                 return engine
             case .fallback(_, let reason):
-                #if BLUSION_FALLBACK_ENGINE
                 // AetherEngine first (native Dolby Vision, profile 7 FEL, Atmos), unless the listener chose mpv; mpv for full subtitle
                 // styling and as the backup when AetherEngine can't start a stream (`.fullFeaturedEngine`, PlaybackCoordinator).
                 let player = Self.playerPreferences(settingsDefaults)
@@ -130,9 +127,6 @@ final class AppEnvironment {
                     return FallbackEngine(backend: aether)
                 }
                 return FallbackEngine(backend: MPVBackend())
-                #else
-                return nil
-                #endif
             default:
                 return nil
             }
@@ -140,22 +134,10 @@ final class AppEnvironment {
         // The stream a player is opening on starts downloading at once, while its screen animates in. AetherEngine can take such bytes;
         // AVPlayer and mpv fetch their own, so only AetherEngine's streams warm.
         let preloadStream: StreamPreloader = { candidate in
-            #if BLUSION_FALLBACK_ENGINE
             guard case .fallback(_, let reason) = candidate.route, reason != .fullFeaturedEngine, let url = candidate.url,
                   Self.playerPreferences(settingsDefaults).advancedEngine == .aether else { return }
             AetherBackend.prewarm(url: url, headers: candidate.headers)
-            #endif
         }
-        #if BLUSION_FALLBACK_ENGINE
-        let fallbackLinked = true
-        #else
-        let fallbackLinked = false
-        #endif
-        #if BLUSION_FALLBACK_ENGINE
-        let aetherLinked = true
-        #else
-        let aetherLinked = false
-        #endif
         // The Home layout is a preference, not a secret: it names addons by manifest id and host, never by URL. It is shared with the
         // user's other devices through a folder they choose in Settings (see `SyncedWidgetStore`).
         let sharedFolder = SharedFolder(defaults: settingsDefaults)
@@ -212,12 +194,12 @@ final class AppEnvironment {
         let streamService = StreamService(registry: registry, client: client, timings: addonSpeed)
         let subtitleService = SubtitleService(registry: registry, client: client)
         let downloadManager = DownloadManager(store: downloads, secrets: secrets, settings: settings, streams: streamService,
-                                              subtitles: subtitleService, fallback: fallbackLinked,
+                                              subtitles: subtitleService, fallback: true,
                                               hardwareAV1: AVHardware.decodesAV1InHardware, persistent: !uiTesting)
         DownloadBackgroundEvents.manager = downloadManager
         Task { await downloadManager.start() }
         let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService, settings: settings, progress: progress, library: library,
-                                   makeEngine: makeEngine, preloadStream: preloadStream, fallbackEngineLinked: fallbackLinked, aetherEngineLinked: aetherLinked,
+                                   makeEngine: makeEngine, preloadStream: preloadStream, fallbackEngineLinked: true, aetherEngineLinked: true,
                                    decodesAV1InHardware: AVHardware.decodesAV1InHardware,
                                    widgets: widgets, widgetContent: widgetContent,
                                    posterRatings: posterRatings, handoffs: handoffs, searchHistory: searchHistory, traktAccount: traktAccount, trakt: trakt,

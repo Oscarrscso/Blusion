@@ -1,4 +1,3 @@
-#if BLUSION_FALLBACK_ENGINE
 import AetherPlayer
 import AVFoundation
 import Foundation
@@ -250,4 +249,3 @@ extension AetherBackend: PictureInPictureBacking {
     public func pictureInPictureTimeRange() -> CMTimeRange { session.pictureInPictureTimeRange() }
     public func setPictureInPictureActive(_ active: Bool) { session.setPictureInPictureActive(active) }
 }
-#endif

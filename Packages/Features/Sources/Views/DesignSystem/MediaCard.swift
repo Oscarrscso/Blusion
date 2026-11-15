@@ -1,0 +1,582 @@
+#if canImport(UIKit)
+import SwiftUI
+import StremioKit
+
+/// The shape of a card's artwork. `ratio` is width / height.
+enum CardAspect: String, CaseIterable, Sendable {
+    case poster, wide, square
+
+    var ratio: CGFloat {
+        switch self {
+        case .poster: 2.0 / 3.0
+        case .wide: 16.0 / 9.0
+        case .square: 1
+        }
+    }
+
+    /// Posters and square artwork use the poster radius, wide artwork the card radius.
+    var cornerRadius: CGFloat {
+        self == .wide ? Theme.Radius.card : Theme.Radius.poster
+    }
+
+    /// Whether a card of this shape carries its name underneath by default. Posters do not: the art carries the title, as in the
+    /// TV app's poster shelves. Landscape and square cards do.
+    var showsCaptionByDefault: Bool {
+        self != .poster
+    }
+}
+
+/// How big a card is within its aspect: a scale of the layout's base width (`LayoutMetrics.posterWidth` and friends), so
+/// `.medium` is the TV app's own size on every platform.
+enum CardSize: String, CaseIterable, Sendable {
+    case small, medium, large
+
+    var scale: CGFloat {
+        switch self {
+        case .small: 0.82
+        case .medium: 1
+        case .large: 1.22
+        }
+    }
+
+    /// The card's width in points. Without `metrics` the phone layout's numbers.
+    func width(for aspect: CardAspect, metrics: LayoutMetrics = .compact) -> CGFloat {
+        let base: CGFloat = switch aspect {
+        case .poster: metrics.posterWidth
+        case .wide: metrics.wideCardWidth
+        case .square: metrics.squareWidth
+        }
+        return (base * scale).rounded()
+    }
+}
+
+/// One title: artwork with continuous rounded corners and, for landscape and square cards, its name and a grey line underneath.
+/// Poster and square cards show `item.poster`; wide cards show `item.background`, falling back to the poster.
+///
+/// The card is `width` wide, or `size`'s width when `width` is nil. `stretched()` lets a grid give it a column's width instead.
+/// `showsTitle` nil means the aspect's default (no caption under a poster, a caption under wide and square cards); pass a Bool to
+/// force either. With `showsRating`, posters carry the IMDb and Letterboxd ratings from the environment's `PosterRatingsStore`.
+/// With `usesBetterPosters`, a poster takes its picture from the BetterPosters addon, which carries the IMDb rating itself; the app's own
+/// rating is drawn only when the usual poster stands in, and while a BetterPosters picture loads over it.
+struct MediaCard: View {
+    let item: MetaPreview
+    let aspect: CardAspect
+    let size: CardSize
+    let showsTitle: Bool?
+    let showsRating: Bool
+    let width: CGFloat?
+    let subtitle: String?
+    let usesBetterPosters: Bool
+    private var stretches = false
+    private var zoomID: String?
+    /// True while a held poster's streams load: a spinner over the artwork, as on an episode's card.
+    /// True while the picture on show is the usual poster, which stands in for a BetterPosters picture that has not loaded (or did not).
+    @State private var posterFellBack = false
+    private var usesHeroPosters: Bool { appearance.usesHeroPosters }
+    @Environment(\.heroPosterOverride) private var heroPosterOverride
+    @State private var heroArtwork: TMDbArtwork?
+    @State private var heroArtworkChecked = false
+    @State private var heroImageIsReady = false
+    /// Optional, as the rating badges read it: a screen without the store keeps the addon's picture.
+    @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
+    @Environment(\.zoomNamespace) private var zoomNamespace
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.appAppearance) private var appearance
+
+    init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
+         width: CGFloat? = nil, subtitle: String? = nil, usesBetterPosters: Bool = false) {
+        self.item = item
+        self.aspect = aspect
+        self.size = size
+        self.showsTitle = showsTitle
+        self.showsRating = showsRating
+        self.width = width
+        self.subtitle = subtitle
+        self.usesBetterPosters = usesBetterPosters
+    }
+
+    var body: some View {
+        let fixed = resolvedWidth
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            artwork
+            if showsCaption { captions }
+        }
+        // The caption is laid out inside the artwork's width and never widens the card: it is cut off instead.
+        .frame(minWidth: stretches ? 0 : fixed, idealWidth: fixed, maxWidth: stretches ? .infinity : fixed, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spokenName)
+        .accessibilityIdentifier("poster.\(item.id)")
+    }
+
+    /// The card takes whatever width it is offered rather than its fixed width. Only a grid column offers a real width; a row does not.
+    func stretched() -> MediaCard {
+        var copy = self
+        copy.stretches = true
+        return copy
+    }
+
+    /// Makes the artwork the place a pushed screen zooms out of (see `TitleDestination`).
+    func zoomSource(_ id: String) -> MediaCard {
+        var copy = self
+        copy.zoomID = id
+        return copy
+    }
+
+    private var resolvedWidth: CGFloat {
+        Self.resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
+    }
+
+    static func resolvedWidth(width: CGFloat?, aspect: CardAspect, size: CardSize, metrics: LayoutMetrics, isLandscape: Bool) -> CGFloat {
+        width ?? (isLandscape && aspect == .poster
+            ? (metrics.landscapePosterWidth * size.scale).rounded()
+            : size.width(for: aspect, metrics: metrics))
+    }
+
+    /// The pictures a card for `item` asks `ImagePipeline` for, with the URLs and pixel sizes it uses. The card draws from this, and so does
+    /// `BufferedArtwork`, so what the buffer loads is exactly what the card finds in the cache. A landscape poster also shows the
+    /// title's logo. A poster that uses Better Posters asks for its BetterPosters picture, which the card shows first. A landscape poster
+    /// and a BetterPosters picture carry the usual poster as their fallback, as the card's do.
+    static func artworkRequests(for item: MetaPreview, aspect: CardAspect, size: CardSize = .medium, width: CGFloat? = nil,
+                                metrics: LayoutMetrics, isLandscape: Bool, displayScale: CGFloat,
+                                usesBetterPosters: Bool = false, usesHeroPosters: Bool = false,
+                                heroArtwork: TMDbArtwork? = nil, heroArtworkChecked: Bool = false) -> [ArtworkPrefetcher.Request] {
+        let landscape = isLandscape && aspect == .poster
+        let fixed = resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
+        let pixels = pixelSize(width: fixed, artwork: landscape ? .wide : aspect, displayScale: displayScale)
+        var requests: [ArtworkPrefetcher.Request] = []
+        if usesHeroPosters && aspect == .poster {
+            // Never download a provisional backdrop before the actual poster's lookup has answered.
+            guard heroArtwork != nil || heroArtworkChecked else { return [] }
+            if let url = (landscape ? heroArtwork?.backdrop : heroArtwork?.portrait)
+                ?? item.background ?? MetahubArtwork.background(imdbID: item.id) {
+                requests.append(.init(url: url, maxPixelSize: PosterQuality.heroPosterPixelSize))
+            }
+            if let logo = item.logo ?? heroArtwork?.logo {
+                requests.append(.init(url: logo, maxPixelSize: logoPixelSize))
+            }
+        } else if landscape {
+            if let url = landscapeArtworkURL(for: item) {
+                requests.append(.init(url: url, maxPixelSize: pixels, fallback: PosterQuality.poster(for: item)))
+            }
+            if let logo = landscapeLogoURL(for: item) { requests.append(.init(url: logo, maxPixelSize: logoPixelSize)) }
+        } else if let url = betterPosterURL(for: item, aspect: aspect, usesBetterPosters: usesBetterPosters) {
+            requests.append(.init(url: url, maxPixelSize: pixels, fallback: artworkURL(for: item, aspect: aspect)))
+        } else if let url = artworkURL(for: item, aspect: aspect) {
+            requests.append(.init(url: url, maxPixelSize: pixels))
+        }
+        return requests
+    }
+
+    /// The BetterPosters picture a card of this shape shows first: only for a poster that uses the addon, and only for a title the addon
+    /// has an id for (see `BetterPosters.posterURL`). Nil otherwise.
+    private static func betterPosterURL(for item: MetaPreview, aspect: CardAspect, usesBetterPosters: Bool) -> URL? {
+        guard usesBetterPosters, aspect == .poster else { return nil }
+        return BetterPosters.posterURL(id: item.id, type: item.type)
+    }
+
+    /// Decoded no larger than the card is drawn, so a long shelf stays light in memory.
+    private static func pixelSize(width: CGFloat, artwork: CardAspect, displayScale: CGFloat) -> CGFloat {
+        min((max(width, width / artwork.ratio) * displayScale).rounded(.up), 1200)
+    }
+
+    /// The size `LandscapeArtwork` decodes its logo at.
+    private static let logoPixelSize: CGFloat = 400
+
+    private static func landscapeArtworkURL(for item: MetaPreview) -> URL? {
+        PosterQuality.landscape(item.background) ?? MetahubArtwork.background(imdbID: item.id) ?? PosterQuality.poster(for: item)
+    }
+
+    private static func landscapeLogoURL(for item: MetaPreview) -> URL? { item.logo ?? MetahubArtwork.logo(imdbID: item.id) }
+
+    private static func artworkURL(for item: MetaPreview, aspect: CardAspect) -> URL? {
+        switch aspect {
+        case .wide: PosterQuality.landscape(item.background) ?? PosterQuality.poster(for: item)
+        case .poster, .square: PosterQuality.poster(for: item)
+        }
+    }
+
+    private var usesLandscapeArtwork: Bool { isLandscape && aspect == .poster }
+
+    private var usesHeroArtwork: Bool { (heroPosterOverride ?? usesHeroPosters) && aspect == .poster }
+
+    private var resolvedHeroArtwork: TMDbArtwork? {
+        heroArtwork ?? ratingsStore?.cachedHeroArtwork(for: item)
+    }
+
+    private var heroArtworkURL: URL? {
+        guard heroArtworkChecked || resolvedHeroArtwork != nil else { return nil }
+        return (usesLandscapeArtwork ? resolvedHeroArtwork?.backdrop : resolvedHeroArtwork?.portrait)
+            ?? item.background ?? MetahubArtwork.background(imdbID: item.id)
+    }
+
+    private var artworkAspect: CardAspect { usesLandscapeArtwork ? .wide : aspect }
+
+    private var showsCaption: Bool {
+        !usesLandscapeArtwork && (showsTitle ?? aspect.showsCaption(appearance))
+    }
+
+    /// The BetterPosters picture this card shows first, or nil when it shows the usual artwork.
+    private var betterPosterURL: URL? {
+        guard !usesHeroArtwork else { return nil }
+        return Self.betterPosterURL(for: item, aspect: artworkAspect, usesBetterPosters: usesBetterPosters)
+    }
+
+    private var artwork: some View {
+        artworkSpace
+            .overlay {
+                if usesHeroArtwork {
+                    LandscapeArtwork(title: item.name, artwork: heroArtworkURL,
+                                     logo: item.logo ?? resolvedHeroArtwork?.logo,
+                                     maxPixelSize: PosterQuality.heroPosterPixelSize,
+                                     logoAlignment: usesLandscapeArtwork ? .center : .bottom,
+                                     logoBottomInset: usesLandscapeArtwork ? 0 : (showsRating && ratingsStore?.occupiesPosterBottom == true ? Theme.Spacing.xl + Theme.Spacing.s : Theme.Spacing.m),
+                                     showsLogo: usesLandscapeArtwork || resolvedHeroArtwork?.portraitHidesLogo != true,
+                                     acceptsAnyCachedSize: false, usesHeroLogo: true, artworkIsReady: $heroImageIsReady)
+                        .id(heroArtworkURL)
+                } else if usesLandscapeArtwork {
+                    LandscapeArtwork(title: item.name, artwork: Self.landscapeArtworkURL(for: item),
+                                     logo: Self.landscapeLogoURL(for: item), maxPixelSize: pixelSize,
+                                     fallbackArtwork: PosterQuality.poster(for: item))
+                } else {
+                    // A BetterPosters card waits for its own picture: the usual poster is only its fallback, for when that picture fails.
+                    // The view is keyed by the picture, so turning the setting on or off starts the card from its placeholder.
+                    ArtworkImage(url: betterPosterURL ?? artworkURL, title: item.name, maxPixelSize: pixelSize,
+                                 fallbackURL: betterPosterURL == nil ? nil : artworkURL, usesFallback: $posterFellBack,
+                                 keepsPictureOnShow: betterPosterURL == nil && aspect == .poster)
+                        .id(betterPosterURL)
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if showsRating && (!usesHeroArtwork || heroImageIsReady) && (aspect != .wide || isLandscape) && (betterPosterURL == nil || posterFellBack) {
+                    PosterRatingsOverlay(item: item, isLandscape: isLandscape)
+                }
+            }
+            .mediaArtwork(cornerRadius: artworkAspect.cornerRadius)
+            .zoomSource(id: zoomID ?? "", in: zoomID == nil ? nil : zoomNamespace)
+            .task(id: "\(item.identity)|\(usesHeroArtwork)|\(ratingsStore?.reviewServicesRevision ?? 0)") {
+                heroArtwork = nil
+                heroArtworkChecked = false
+                guard usesHeroArtwork else { return }
+                if let ratingsStore {
+                    heroArtwork = ratingsStore.cachedHeroArtwork(for: item)
+                    await ratingsStore.prewarmHeroArtwork(for: item)
+                    guard !Task.isCancelled else { return }
+                    heroArtwork = ratingsStore.cachedHeroArtwork(for: item)
+                }
+                heroArtworkChecked = true
+            }
+            // The title's Play colour is read from its poster while the card is on show, so its page has the colour on the first frame.
+            .task(id: item.identity) {
+                await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item),
+                                                  logos: PlayColourStore.logos(for: item))
+            }
+    }
+
+    /// The artwork's box. A fixed card already knows its width, so its height is set outright: an aspect-ratio box would take
+    /// its height from whatever the enclosing row proposes, and cards after the first in a row came out squeezed. Only a grid
+    /// column stretches, and it offers a real width, so the ratio can work there.
+    @ViewBuilder
+    private var artworkSpace: some View {
+        if stretches {
+            Color.clear.aspectRatio(artworkAspect.ratio, contentMode: .fit)
+        } else {
+            let fixed = resolvedWidth
+            Color.clear.frame(width: fixed, height: fixed / artworkAspect.ratio)
+        }
+    }
+
+    private var pixelSize: CGFloat {
+        Self.pixelSize(width: resolvedWidth, artwork: artworkAspect, displayScale: displayScale)
+    }
+
+    /// The title on as many lines as Appearance's Title lines gives it (one by default), and the grey line unless Appearance turned it
+    /// off. Every line keeps its room whether it is filled or not: cards of one kind share a height (a row takes its height from its first
+    /// card, see `MediaRow`), and the grey line sits right under the name. A long name is cut off rather than wrapped past them, as in the
+    /// TV app.
+    private var captions: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.name)
+                .appFont(.cardTitle)
+                .foregroundStyle(.primary)
+                .textCase(appearance.uppercaseCaptions ? .uppercase : nil)
+                .lineLimit(appearance.captionLines, reservesSpace: true)
+            if appearance.showsCaptionDetails {
+                Text(subtitleLine)
+                    .appFont(.cardSubtitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "Drama · 2008": a blank line when there is nothing to say, so the grey lines of a row still line up.
+    private var subtitleLine: String {
+        if let subtitle, !subtitle.isEmpty { return subtitle }
+        let line = [item.genres.first, item.releaseInfo].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return line.isEmpty ? " " : line
+    }
+
+    private var artworkURL: URL? { Self.artworkURL(for: item, aspect: aspect) }
+
+    private var spokenName: String {
+        [item.name, item.releaseInfo].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+}
+
+/// A blank stand-in for a `MediaCard` while its title loads: the same artwork box (a poster in landscape is a wide card), corners,
+/// outline, width and caption lines, so the title lands exactly where its placeholder stood. `stretched()` takes a grid column's width,
+/// as the card's does.
+struct CardPlaceholder: View {
+    let aspect: CardAspect
+    var size: CardSize = .medium
+    var showsTitle: Bool? = nil
+    var width: CGFloat? = nil
+    var fill: AnyShapeStyle = AnyShapeStyle(Theme.surface)
+    private var stretches = false
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.isLandscape) private var isLandscape
+    @Environment(\.appAppearance) private var appearance
+
+    init(aspect: CardAspect, size: CardSize = .medium, showsTitle: Bool? = nil, width: CGFloat? = nil,
+         fill: AnyShapeStyle = AnyShapeStyle(Theme.surface)) {
+        self.aspect = aspect
+        self.size = size
+        self.showsTitle = showsTitle
+        self.width = width
+        self.fill = fill
+    }
+
+    func stretched() -> CardPlaceholder {
+        var copy = self
+        copy.stretches = true
+        return copy
+    }
+
+    var body: some View {
+        let landscape = isLandscape && aspect == .poster
+        let artwork: CardAspect = landscape ? .wide : aspect
+        let fixed = MediaCard.resolvedWidth(width: width, aspect: aspect, size: size, metrics: metrics, isLandscape: isLandscape)
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Group {
+                if stretches {
+                    Rectangle().fill(fill).aspectRatio(artwork.ratio, contentMode: .fit)
+                } else {
+                    Rectangle().fill(fill).frame(width: fixed, height: fixed / artwork.ratio)
+                }
+            }
+            .mediaArtwork(cornerRadius: artwork.cornerRadius)
+            if !landscape && (showsTitle ?? aspect.showsCaption(appearance)) {
+                VStack(alignment: .leading, spacing: 2) {
+                    line(font: Theme.Typography.cardTitle, share: 0.78, lines: appearance.captionLines)
+                    if appearance.showsCaptionDetails { line(font: Theme.Typography.cardSubtitle, share: 0.46) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(minWidth: stretches ? 0 : fixed, idealWidth: fixed, maxWidth: stretches ? .infinity : fixed, alignment: .leading)
+    }
+
+    /// A caption line's room, as the card's text keeps it, with a bar across `share` of the card's width.
+    private func line(font: Font, share: CGFloat, lines: Int = 1) -> some View {
+        Text(" ")
+            .font(font)
+            .lineLimit(lines, reservesSpace: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .topLeading) {
+                GeometryReader { proxy in
+                    RoundedRectangle(cornerRadius: 3 * metrics.cornerScale(for: .artwork), style: .continuous)
+                        .fill(fill)
+                        .frame(width: proxy.size.width * share)
+                        .padding(.vertical, 3)
+                }
+            }
+    }
+}
+
+/// `MediaCard` that opens the title.
+struct MediaCardLink: View {
+    let item: MetaPreview
+    let aspect: CardAspect
+    let size: CardSize
+    let showsTitle: Bool?
+    let showsRating: Bool
+    let width: CGFloat?
+    let subtitle: String?
+    let usesBetterPosters: Bool
+    private var stretches = false
+    @Environment(\.zoomScope) private var zoomScope
+    @Environment(\.appAppearance) private var appearance
+    private var usesHeroPosters: Bool { appearance.usesHeroPosters }
+    @Environment(\.heroPosterOverride) private var heroPosterOverride
+
+    init(item: MetaPreview, aspect: CardAspect = .poster, size: CardSize = .medium, showsTitle: Bool? = nil, showsRating: Bool = true,
+         width: CGFloat? = nil, subtitle: String? = nil, usesBetterPosters: Bool = false) {
+        self.item = item
+        self.aspect = aspect
+        self.size = size
+        self.showsTitle = showsTitle
+        self.showsRating = showsRating
+        self.width = width
+        self.subtitle = subtitle
+        self.usesBetterPosters = usesBetterPosters
+    }
+
+    var body: some View {
+        // The row's scope makes the id unique on screen, so the title's screen zooms out of this card and not a twin in another row.
+        let sourceID = "\(zoomScope)/\(item.identity)"
+        let card = MediaCard(item: item, aspect: aspect, size: size, showsTitle: showsTitle, showsRating: showsRating, width: width,
+                             subtitle: subtitle, usesBetterPosters: usesBetterPosters)
+            .zoomSource(sourceID)
+        NavigationLink(value: TitleDestination(preview: item, sourceID: sourceID,
+                                              usesHeroPosters: (heroPosterOverride ?? usesHeroPosters) && aspect == .poster)) {
+            stretches ? card.stretched() : card
+        }
+        .buttonStyle(PressableCardStyle.poster)
+        .simultaneousGesture(TapGesture().onEnded { Haptics.play(.titles) })
+        .prewarmsHeroArtwork(item)
+        .help(item.name)
+        .titleCardMenu(item)
+    }
+
+    /// The link takes the width it is offered, as a grid column does. See `MediaCard.stretched()`.
+    func stretched() -> MediaCardLink {
+        var copy = self
+        copy.stretches = true
+        return copy
+    }
+}
+
+extension View {
+    /// Every poster layout shares the playback actions from holding Play, on both iPhone and Mac.
+    func titleCardMenu(_ item: MetaPreview) -> some View {
+        modifier(TitleCardMenu(item: item))
+    }
+}
+
+private struct TitleCardMenu: ViewModifier {
+    let item: MetaPreview
+    @Environment(TitleActions.self) private var actions: TitleActions?
+    @Environment(AppRouter.self) private var router: AppRouter?
+    @Environment(\.zoomScope) private var zoomScope
+    @Environment(\.layoutMetrics) private var metrics
+
+    func body(content: Content) -> some View {
+        if router != nil {
+            content
+                .contentShape(.contextMenuPreview,
+                              RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .artwork), style: .continuous))
+                .contextMenu {
+                    if let line = actions?.resumeLine(for: item) {
+                        Button(line) {}.disabled(true)
+                        Divider()
+                    }
+                    Button("Play with Infuse", systemImage: "play.rectangle.on.rectangle") { open(.infuse) }
+                    Button("Stream Selector", systemImage: "arrow.up.right.square") { open(.streamSelector) }
+                    PlayQualityMenuItems(disc: nil) { open(.quality($0)) }
+                }
+        } else {
+            content
+        }
+    }
+
+    /// Opens the title's page on the tab in front, where the choice is made as if from Play's own hold menu.
+    private func open(_ choice: TitlePlayChoice) {
+        guard let router else { return }
+        Haptics.play(.buttons)
+        router[keyPath: router.pathKey(for: router.tab)]
+            .append(TitleDestination(preview: item, sourceID: "\(zoomScope)/\(item.identity)", playChoice: choice))
+    }
+}
+
+extension View {
+    /// Looks up a card's title in TMDb after a brief hover on Mac, or a moment on screen on iPhone, so its page opens with artwork known.
+    /// Only the lookup runs (no picture), and a card that scrolls away before the moment is up asks nothing. Does nothing without TMDb.
+    func prewarmsHeroArtwork(_ item: MetaPreview) -> some View {
+        modifier(PrewarmHeroArtworkModifier(item: item))
+    }
+}
+
+private struct PrewarmHeroArtworkModifier: ViewModifier {
+    let item: MetaPreview
+    @State private var isVisible = false
+    @Environment(\.loadsVisibleArtwork) private var sectionIsVisible
+    #if targetEnvironment(macCatalyst)
+    @State private var isHovering = false
+    #endif
+    /// Optional, as the rating badges read it: a screen without the store simply does not prewarm.
+    @Environment(PosterRatingsStore.self) private var ratings: PosterRatingsStore?
+
+    func body(content: Content) -> some View {
+        let item = self.item
+        let ratings = self.ratings
+        #if targetEnvironment(macCatalyst)
+        let shouldPrewarm = isVisible && sectionIsVisible && isHovering
+        #else
+        let shouldPrewarm = isVisible && sectionIsVisible
+        #endif
+        return content
+            .onScrollVisibility { isVisible = $0 }
+            #if targetEnvironment(macCatalyst)
+            .onHover { isHovering = $0 }
+            #endif
+            .task(id: "\(item.identity)|\(shouldPrewarm)", priority: .low) {
+            // Without TMDb there is nothing to look up, so the card starts no wait at all.
+            guard shouldPrewarm, let ratings, ratings.canLookUpHeroArtwork else { return }
+            // `.task` is cancelled when the card scrolls away, which ends the wait before any lookup starts.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await ratings.prewarmHeroArtwork(for: item)
+        }
+    }
+}
+
+/// How cards answer a touch or a pointer: pressed, they dim and shrink a little with a quick spring; under a pointer (Mac, iPad
+/// trackpad) they lift slightly and highlight. Reduce Motion keeps the card still.
+struct PressableCardStyle: ButtonStyle {
+    /// Poster shelves share a pointer glow and pronounced lift on Mac; touch keeps its existing feel.
+    static var poster: PressableCardStyle {
+        #if targetEnvironment(macCatalyst)
+        PressableCardStyle(addsSystemHighlight: false, tracksPointer: true)
+        #else
+        PressableCardStyle()
+        #endif
+    }
+
+    /// False keeps the card its own size under a pointer and only highlights it: a card as wide as its column (a stream) would grow past
+    /// the column's edges.
+    var lifts = true
+    /// False leaves out the system's hover highlight, so the card's own highlight is its one hover effect (a stream's card on a Mac).
+    var addsSystemHighlight = true
+    var showsFocus = true
+    var tracksPointer = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        // The label's pointerInteraction supplies the system highlight once.
+        PressableCardLabel(configuration: configuration, lifts: lifts, addsSystemHighlight: addsSystemHighlight, showsFocus: showsFocus,
+                           tracksPointer: tracksPointer)
+    }
+}
+
+/// A view of its own because the hover state needs somewhere to live.
+private struct PressableCardLabel: View {
+    @Environment(\.layoutMetrics) private var metrics
+    let configuration: ButtonStyleConfiguration
+    let lifts: Bool
+    let addsSystemHighlight: Bool
+    let showsFocus: Bool
+    let tracksPointer: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? (tracksPointer ? 0.985 : 0.96) : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
+            .pointerInteraction(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .artwork), lifts: lifts && !configuration.isPressed, showsFocus: showsFocus, systemHighlight: addsSystemHighlight,
+                                tracksPointer: tracksPointer)
+    }
+}
+#endif

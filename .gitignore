@@ -13,20 +13,14 @@ build/
 App/Info.plist
 # Generated private credential constants (values come from .env at project generation)
 App/PrivateAPIKeys.generated.swift
-project.fallback.generated.yml
 
-# Development artifacts
-.claude/
-Tests/
-**/Tests/
-*TestSupport/
-Tools/
-*.md
-!README.md
-coverage/
-coverage-*.txt
-*.profraw
-*.profdata
+# Generated mock media (see Tools/MockAddon/make-fixtures.sh)
+Tools/MockAddon/fixtures/generated/
+
+# Local run artifacts
+.claude/worktrees/
+.mock-addon.pid
+.mock-addon.log
 
 # OS / editor
 .DS_Store

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Called automatically by the fallback scheme after SwiftPM resolves AetherEngine.
+# Called automatically by the scheme after SwiftPM resolves AetherEngine.
 # Swift 6 rejects the upstream C-pointer capture in an actor-isolated closure.
 # Patch Xcode's existing checkout; no separate local dependency is required.
 set -euo pipefail

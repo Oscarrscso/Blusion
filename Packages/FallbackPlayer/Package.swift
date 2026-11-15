@@ -1,7 +1,6 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// OPT-IN (ADR-006). Not part of the default app build: `scripts/enable-fallback.sh` adds it to the generated Xcode project.
 // AetherPlayer is linked separately by the app, on Mac Catalyst through the slices scripts/aether-catalyst-slices.py makes.
 let package = Package(
     name: "FallbackPlayer",
@@ -18,7 +17,8 @@ let package = Package(
     targets: [
         .target(
             name: "FallbackPlayer",
-            dependencies: ["PlayerKit", .product(name: "StremioKit", package: "StremioKit"), .product(name: "MPVKit", package: "MPVKit")]
+            dependencies: ["PlayerKit", .product(name: "StremioKit", package: "StremioKit"), .product(name: "MPVKit", package: "MPVKit")],
+            path: "Sources"
         ),
     ],
     swiftLanguageModes: [.v6]
