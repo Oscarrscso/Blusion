@@ -4,50 +4,46 @@
 
 A native SwiftUI media browser and player for iPhone, iPad and Mac, built around Stremio addons and customisable Home widgets.
 
-<p align="center">
-  <img src="docs/screenshots/movie-landscape-iphone-17.png" width="100%" alt="A Bug's Life details, ratings and reviews in landscape">
-</p>
-
 ## Screenshots
 
-### Home
+<!-- All portrait screenshots use fastlane/frameit-frames, Apple iPhone 17 Black. -->
 
-<p align="center">
-  <img src="docs/screenshots/home-iphone-17.png" width="32%" alt="Home with Cover Flow and film collections">
-</p>
+<table>
+  <tr>
+    <th width="25%">Home</th>
+    <th width="25%" colspan="2">Widgets</th>
+    <th width="25%">Advanced stream selection<br><sup>optional</sup></th>
+  </tr>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/home-iphone-17.png" width="210" alt="Home with Cover Flow and film collections"></td>
+    <td width="25%"><img src="docs/screenshots/widgets-iphone-17.svg" width="210" alt="Widget collection with different shelf styles"></td>
+    <td width="25%"><img src="docs/screenshots/widget-editor-iphone-17.svg" width="210" alt="Widget editor with list, genre and date options"></td>
+    <td width="25%"><img src="docs/screenshots/advanced-stream-selection-iphone-17.svg" width="210" alt="Advanced stream selection with Auto Pick and quality filters"></td>
+  </tr>
+</table>
 
-### Widgets
+<table>
+  <tr>
+    <th width="25%">Search</th>
+    <th width="25%">Series</th>
+    <th width="25%">People</th>
+    <th width="25%">Ratings &amp; reviews</th>
+  </tr>
+  <tr>
+    <td width="25%"><img src="docs/screenshots/search-iphone-17.png" width="210" alt="Search and streaming service discovery"></td>
+    <td width="25%"><img src="docs/screenshots/series-iphone-17.png" width="210" alt="Series details and episode cards"></td>
+    <td width="25%"><img src="docs/screenshots/person-iphone-17.png" width="210" alt="Biography and filmography"></td>
+    <td width="25%"><img src="docs/screenshots/ratings-reviews-iphone-17.svg" width="210" alt="Film ratings, Letterboxd reviews and TMDb reviews"></td>
+  </tr>
+</table>
 
-<p align="center">
-  <img src="docs/screenshots/widgets.png" width="34%" alt="Widget collection with different shelf styles">
-  <img src="docs/screenshots/widget-editor.png" width="34%" alt="Widget editor with list, genre and date options">
-</p>
-
-### Advanced stream selection <sup>optional</sup>
-
-<p align="center">
-  <img src="docs/screenshots/advanced-stream-selection.png" width="34%" alt="Advanced stream selection with Auto Pick, quality filters and technical details">
-</p>
-
-### Ratings &amp; reviews
-
-<p align="center">
-  <img src="docs/screenshots/ratings-reviews.png" width="34%" alt="Film ratings, Letterboxd reviews and TMDb reviews">
-</p>
-
-### Search &amp; discovery
-
-<p align="center">
-  <img src="docs/screenshots/search-iphone-17.png" width="32%" alt="Search and streaming service discovery">
-  <img src="docs/screenshots/series-iphone-17.png" width="32%" alt="Cosmos series details and episode cards">
-  <img src="docs/screenshots/person-iphone-17.png" width="32%" alt="Al Pacino biography and filmography">
-</p>
-
-### Library
-
-<p align="center">
-  <img src="docs/screenshots/library-landscape-iphone-17.png" width="100%" alt="Library filters and artwork grid in landscape">
-</p>
+<table>
+  <tr><th width="50%">Movie details</th><th width="50%">Library</th></tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/movie-landscape-iphone-17.png" width="440" alt="Movie details in landscape"></td>
+    <td width="50%"><img src="docs/screenshots/library-landscape-iphone-17.png" width="440" alt="Library filters and artwork grid in landscape"></td>
+  </tr>
+</table>
 
 ## Features
 
