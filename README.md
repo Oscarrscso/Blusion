@@ -4,15 +4,17 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
 
 ## Screenshots
 
+<!-- Device frame: fastlane/frameit-frames, latest/Apple iPhone 17 Black.png -->
+
 <p align="center">
-  <img src="docs/screenshots/home.jpeg" width="24%" alt="Home with Cover Flow and film collections">
-  <img src="docs/screenshots/search.jpeg" width="24%" alt="Search and streaming service discovery">
-  <img src="docs/screenshots/series.jpeg" width="24%" alt="Cosmos series details and episode cards">
-  <img src="docs/screenshots/person.jpeg" width="24%" alt="Al Pacino biography and filmography">
+  <img src="docs/screenshots/home-iphone-17.png" width="24%" alt="Home with Cover Flow and film collections">
+  <img src="docs/screenshots/search-iphone-17.png" width="24%" alt="Search and streaming service discovery">
+  <img src="docs/screenshots/series-iphone-17.png" width="24%" alt="Cosmos series details and episode cards">
+  <img src="docs/screenshots/person-iphone-17.png" width="24%" alt="Al Pacino biography and filmography">
 </p>
 <p align="center">
-  <img src="docs/screenshots/movie-landscape.jpeg" width="49%" alt="A Bug's Life details, ratings and reviews in landscape">
-  <img src="docs/screenshots/library-landscape.jpeg" width="49%" alt="Library filters and artwork grid in landscape">
+  <img src="docs/screenshots/movie-landscape-iphone-17.png" width="49%" alt="A Bug's Life details, ratings and reviews in landscape">
+  <img src="docs/screenshots/library-landscape-iphone-17.png" width="49%" alt="Library filters and artwork grid in landscape">
 </p>
 
 ## Features
