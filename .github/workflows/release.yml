@@ -1,0 +1,65 @@
+name: Publish alpha release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    if: github.repository == 'Oscarrscso/Blusion' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare version and public change summary
+        run: |
+          python3 - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+          import os
+          import re
+          import subprocess
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+
+          version = re.search(r" Blusion (v\.[0-9]+a) </h1>", Path("README.md").read_text()).group(1)
+          with open(os.environ["GITHUB_ENV"], "a") as output:
+              output.write(f"VERSION={version}\n")
+          previous = subprocess.run(["git", "describe", "--tags", "--match", "v.*", "--abbrev=0", "HEAD^"], capture_output=True, text=True)
+          baseline = previous.stdout.strip() if previous.returncode == 0 else git("hash-object", "-t", "tree", "/dev/null")
+          changes = git("diff", "--name-only", baseline, "HEAD").splitlines()
+          groups = Counter()
+          for path in changes:
+              parts = path.split("/")
+              if path.startswith("Packages/Features/Sources/") and len(parts) > 3:
+                  group = "App interface" if parts[3] == "Views" else parts[3]
+              elif path.startswith("Packages/"):
+                  group = {"StremioKit": "Metadata and addons", "PlayerKit": "Playback", "AetherPlayer": "Playback", "FallbackPlayer": "Playback", "PlaybackGeometry": "Playback", "Persistence": "Saved data"}.get(parts[1], parts[1])
+              else:
+                  group = {"App": "App startup and assets", "scripts": "Build tools", "Config": "Build configuration", "project.yml": "Build configuration", ".github": "Release automation", "docs": "Documentation", "README.md": "Documentation"}.get(parts[0], "Repository maintenance")
+              groups[group] += 1
+          notes = [f"Alpha source release **{version}**. The number is the app source commit count at sync time.", "", "### Changes"]
+          notes += [f"- {group}: {count} file{'s' if count != 1 else ''} updated." for group, count in sorted(groups.items())]
+          if previous.returncode == 0:
+              notes += ["", f"[Full changes](https://github.com/{os.environ['GITHUB_REPOSITORY']}/compare/{baseline}...{version})"]
+          notes += ["", "### Build", "", "Source code only; no prebuilt app is attached. See the [build instructions](https://github.com/Oscarrscso/Blusion#build)."]
+          Path(os.environ["RUNNER_TEMP"], "release-notes.md").write_text("\n".join(notes) + "\n")
+          PY
+      - name: Publish alpha release once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists."
+          else
+            gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "$VERSION" --prerelease \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,url
