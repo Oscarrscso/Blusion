@@ -63,7 +63,7 @@ extension AppearancePreferences {
             parts.append("Custom order")
         }
         if hidesSpoilers { parts.append("No spoilers") }
-        if blursBackground { parts.append("Blurred background") }
+        if blursBackground { parts.append("Poster background") }
         if showsTitlePageTabBar { parts.append("Tab bar") }
         return parts.joined(separator: " · ")
     }

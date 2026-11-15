@@ -350,6 +350,9 @@ private enum ExtendedArtworkRenderer {
     /// A veil of mid-grey behind the text, apart from the blur: it pulls whites down and lifts darks, as the TV app's cards do, so
     /// the text reads on both. It starts late, so the still's lightest colours run on past its edge first.
     private static let veilStart = 0.8, veilEnd = 1.7, veilAmount = 0.68, veilGrey = 0.3
+    /// A darker charcoal veil for title-page poster backdrops so bright posters cannot wash out `Theme.metaText`, `Theme.faintText`,
+    /// `Theme.surface`, and section dividers, while saturated poster colours remain recognizable.
+    private static let backdropVeilAmount = 0.75, backdropVeilGrey = 0.06
 
     static func render(_ image: UIImage, size: CGSize, scale: CGFloat) -> UIImage? {
         let width = (size.width * scale).rounded(), height = (size.height * scale).rounded()
@@ -408,7 +411,7 @@ private enum ExtendedArtworkRenderer {
     }
 
     /// One row of `TitleBackdropRequest`'s backdrop: the band at the picture's foot, averaged down, set under the columns it came from, then
-    /// given the card's blur and veil. The row's edges carry on across the page where the picture does not reach.
+    /// given the card's blur and a dark charcoal veil. The row's edges carry on across the page where the picture does not reach.
     static func backdropRow(_ request: TitleBackdropRequest) -> UIImage? {
         let scale = request.scale
         let pageWidth = (request.pageWidth * scale).rounded()
@@ -446,7 +449,8 @@ private enum ExtendedArtworkRenderer {
         blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
 
         let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: 1)
-        let veil = CIImage(color: CIColor(red: veilGrey, green: veilGrey, blue: veilGrey, alpha: veilAmount)).cropped(to: bounds)
+        let veil = CIImage(color: CIColor(red: backdropVeilGrey, green: backdropVeilGrey, blue: backdropVeilGrey, alpha: backdropVeilAmount))
+            .cropped(to: bounds)
         guard let blurred = blur.outputImage,
               let pixels = context.createCGImage(veil.composited(over: blurred).cropped(to: bounds), from: bounds) else { return nil }
         return UIImage(cgImage: pixels, scale: scale, orientation: .up)

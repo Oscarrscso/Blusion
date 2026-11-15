@@ -85,6 +85,62 @@ import StremioKit
         #expect(abs(surface.clipView.frame.width - expected185.visible.width) < 0.01)
         #expect(abs(returned.height - expected185.picture.height) < 0.01)
         #expect(surface.videoView.transform == .identity)
+    }
 
+    @Test func posterBackgroundSummaryAndBackdropContrast() throws {
+        var appearance = AppearancePreferences()
+        #expect(!appearance.titlePagesSummary.contains("Poster background"))
+        appearance.blursBackground = true
+        #expect(appearance.titlePagesSummary.contains("Poster background"))
+        #expect(!appearance.titlePagesSummary.contains("Blurred background"))
+
+        let white = try solidImage(red: 1, green: 1, blue: 1)
+        let whiteBackdrop = try #require(TitleBackdropRequest(
+            image: white, frame: CGSize(width: 390, height: 520), visibleBottom: 520, alignsTop: true, pageWidth: 390, scale: 1
+        ).render())
+        let whiteRGB = try middleRGB(of: whiteBackdrop)
+        #expect(whiteRGB.red <= 0.35 && whiteRGB.green <= 0.35 && whiteRGB.blue <= 0.35)
+        #expect(whiteRGB.red >= 0.15)
+
+        let red = try solidImage(red: 1, green: 0, blue: 0)
+        let redBackdrop = try #require(TitleBackdropRequest(
+            image: red, frame: CGSize(width: 390, height: 520), visibleBottom: 520, alignsTop: true, pageWidth: 390, scale: 1
+        ).render())
+        let redRGB = try middleRGB(of: redBackdrop)
+        #expect(redRGB.red - redRGB.green > 0.15 && redRGB.red - redRGB.blue > 0.15)
+    }
+
+    @Test func macPageNavigationTopInsetScalesWithCardSpacing() {
+        #expect(MacPageNavigation.topInset(spacing: 12) == MacPageNavigation.inset + MacPageNavigation.controlHeight + 12)
+        #expect(MacPageNavigation.topInset(spacing: 24) == MacPageNavigation.inset + MacPageNavigation.controlHeight + 24)
+    }
+
+    private func solidImage(red: CGFloat, green: CGFloat, blue: CGFloat, size: CGSize = CGSize(width: 80, height: 120)) throws -> UIImage {
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let width = Int(size.width), height = Int(size.height)
+        let context = try #require(CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+            space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let color = try #require(CGColor(colorSpace: colorSpace, components: [red, green, blue, 1]))
+        context.setFillColor(color)
+        context.fill(CGRect(origin: .zero, size: size))
+        return UIImage(cgImage: try #require(context.makeImage()))
+    }
+
+    private func middleRGB(of image: UIImage) throws -> (red: Double, green: Double, blue: Double) {
+        let cgImage = try #require(image.cgImage)
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let width = cgImage.width, height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try #require(CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        }
+        let offset = (width / 2) * 4
+        return (Double(bytes[offset]) / 255, Double(bytes[offset + 1]) / 255, Double(bytes[offset + 2]) / 255)
     }
 }

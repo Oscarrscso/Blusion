@@ -11,6 +11,9 @@ struct MacPageNavigation: View {
     /// The control's widest, and its distance from the window's edges.
     static let maxWidth: CGFloat = 650
     static let inset: CGFloat = 16
+
+    /// Space from the window's top edge to the first control below the navigation bar, leaving `spacing` below the control's bottom edge.
+    static func topInset(spacing: CGFloat) -> CGFloat { inset + controlHeight + spacing }
     #if targetEnvironment(macCatalyst)
     @Environment(AppRouter.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -234,6 +237,7 @@ struct MacBackNavigation: ViewModifier {
 private struct MacPageScroll: ViewModifier {
     let reservesNavigationSpace: Bool
     @Environment(MacNavigationScrollState.self) private var navigation: MacNavigationScrollState?
+    @Environment(\.layoutMetrics) private var metrics
     /// This page's place in the navigation's scroll tracking.
     @State private var scrollID = UUID()
     @State private var isVisible = false
@@ -245,7 +249,7 @@ private struct MacPageScroll: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .contentMargins(.top, reservesNavigationSpace ? MacPageNavigation.height : 0, for: .scrollContent)
+            .contentMargins(.top, reservesNavigationSpace ? MacPageNavigation.topInset(spacing: metrics.cardSpacing) : 0, for: .scrollContent)
             .onScrollGeometryChange(for: Position.self) {
                 let insets = $0.contentInsets.top + $0.contentInsets.bottom
                 return Position(offset: max(0, $0.contentOffset.y + $0.contentInsets.top),

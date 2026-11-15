@@ -347,11 +347,13 @@ struct MacGridPage: View {
     @State private var visible = CollectionVisibleRanges()
     @State private var zoomScope = UUID().uuidString
     @Environment(MacNavigationScrollState.self) private var navigation: MacNavigationScrollState?
+    @Environment(\.layoutMetrics) private var metrics
     /// This page's place in the navigation's scroll tracking (see `MacNavigationScrollState`).
     @State private var scrollID = UUID()
 
     var body: some View {
-        CollectionPage(blocks: blocks, topInset: MacPageNavigation.height, bottomInset: Theme.Spacing.l, scrollToTop: scrollToTop,
+        CollectionPage(blocks: blocks, topInset: MacPageNavigation.topInset(spacing: metrics.cardSpacing),
+                       bottomInset: Theme.Spacing.l, scrollToTop: scrollToTop,
                        onScrollOffset: { [navigation, scrollID] offset, maxOffset in
                            navigation?.update(offset: offset, maxOffset: maxOffset, from: scrollID)
                        })

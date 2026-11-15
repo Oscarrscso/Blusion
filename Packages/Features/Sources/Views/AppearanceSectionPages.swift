@@ -253,7 +253,7 @@ struct AppearanceTitlePagesPage: View {
             }
             Section {
                 controls.toggle("Unfold synopsis", \.expandsSynopsis, id: "unfoldSynopsis")
-                controls.toggle("Blurred background", \.blursBackground, id: "blurredBackground")
+                controls.toggle("Poster background", \.blursBackground, id: "blurredBackground")
                 if isPhone {
                     controls.toggle("Tab bar on title pages", \.showsTitlePageTabBar, id: "titlePageTabBar")
                 }

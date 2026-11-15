@@ -56,6 +56,14 @@ struct SearchView: View {
         }
     }
 
+    private var topControlsSpacing: CGFloat {
+        #if targetEnvironment(macCatalyst)
+        metrics.cardSpacing
+        #else
+        Theme.Spacing.m
+        #endif
+    }
+
     private var standardPage: some View {
         @Bindable var model = model
         return ScrollViewReader { proxy in
@@ -63,7 +71,7 @@ struct SearchView: View {
                 // Spaced as Discover is: the row above the filters stands where Discover's title does, and the filters and grid follow
                 // at the filter bar's own gaps.
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    VStack(alignment: .leading, spacing: topControlsSpacing) {
                         #if targetEnvironment(macCatalyst)
                         TextField("Shows, Movies, and More", text: $model.query)
                             .textFieldStyle(.roundedBorder)
@@ -78,7 +86,7 @@ struct SearchView: View {
                             OfflineBanner()
                         }
                     }
-                    .padding(.bottom, Theme.Spacing.m)
+                    .padding(.bottom, topControlsSpacing)
                     if model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         if model.showsNoSearchableAddons {
                             EmptyStateView("No addon can search", systemImage: "magnifyingglass",
@@ -91,9 +99,7 @@ struct SearchView: View {
                         results
                     }
                 }
-                #if targetEnvironment(macCatalyst)
-                .padding(.top, Theme.Spacing.l)
-                #else
+                #if !targetEnvironment(macCatalyst)
                 // The navigation bar's search field already stands clear of the page, so the first row needs less above it.
                 .padding(.top, Theme.Spacing.s)
                 #endif

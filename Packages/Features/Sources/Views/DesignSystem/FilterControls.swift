@@ -176,7 +176,6 @@ struct BrowseFilterBar<Menus: View>: View {
                 }
             }
         }
-        .frame(minHeight: 44)
     }
 
     @ViewBuilder
