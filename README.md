@@ -31,11 +31,10 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
     <td width="50%"><img src="docs/screenshots/person-iphone-17.png" width="100%" alt="People"></td>
     <td width="50%"><img src="docs/screenshots/ratings-reviews-iphone-17.svg" width="100%" alt="Ratings &amp; reviews"></td>
   </tr>
-  <tr><th width="50%">Movie details</th><th width="50%">Library</th></tr>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/movie-landscape-iphone-17.png" width="100%" alt="Movie details"></td>
-    <td width="50%"><img src="docs/screenshots/library-landscape-iphone-17.png" width="100%" alt="Library"></td>
-  </tr>
+  <tr><th colspan="2">Movie details</th></tr>
+  <tr><td colspan="2"><img src="docs/screenshots/movie-landscape-iphone-17.png" width="100%" alt="Movie details in landscape"></td></tr>
+  <tr><th colspan="2">Library</th></tr>
+  <tr><td colspan="2"><img src="docs/screenshots/library-landscape-iphone-17.png" width="100%" alt="Library in landscape"></td></tr>
 </table>
 
 ## Features
