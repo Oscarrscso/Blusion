@@ -249,6 +249,30 @@ enum SearchResults {
 
     // MARK: De-duplication
 
+    /// Excludes raw addon library entries and synthetic Easynews search placeholder rows that carry the addon logo instead of a title.
+    static func isExcludedAddonItem(_ item: MetaPreview) -> Bool {
+        let lowerType = item.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lowerType == "library" { return true }
+        let lowerID = item.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lowerID.hasPrefix("easynews:")
+            || lowerID.hasPrefix("easynews-plus:")
+            || lowerID.hasPrefix("easynews_plus:")
+            || lowerID.hasPrefix("easynews.")
+            || lowerID == "easynews"
+            || lowerID == "easynews-plus" {
+            return true
+        }
+        if item.description?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .hasPrefix("provides search results from easynews") == true {
+            return true
+        }
+        if item.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "easynews",
+           lowerType == "tv" {
+            return true
+        }
+        return false
+    }
+
     /// Each title once, in the order first seen. Two entries are one title when they share an identity, or when one names it by IMDb
     /// id and the other by TMDb id with the same type, name and year: the IMDb identity, which addons can play, is the one kept.
     /// Either way the entry kept takes what only the other knew (a poster, a synopsis, genres). A remake, another year or another
@@ -257,7 +281,7 @@ enum SearchResults {
         var positions: [String: Int] = [:]
         var aliases: [String: (index: Int, namespace: String)] = [:]
         var result: [MetaPreview] = []
-        for item in items {
+        for item in items where !isExcludedAddonItem(item) {
             if let position = positions[item.identity] {
                 result[position] = filling(result[position], from: item)
                 continue

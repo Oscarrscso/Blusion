@@ -321,7 +321,7 @@ extension SearchViewModel {
 
     /// Keeps what was found for the suggestions of later words: the newest first, each once, a bounded number.
     private func remember(_ titles: [MetaPreview], _ people: [TMDbTitlePerson]) {
-        let fresh = titles.filter { Self.groupType($0.type) != "library" }
+        let fresh = titles.filter { !SearchResults.isExcludedAddonItem($0) }
         if !fresh.isEmpty {
             let identities = Set(fresh.map(\.identity))
             knownTitles = Array((fresh + knownTitles.filter { !identities.contains($0.identity) }).prefix(240))
@@ -345,8 +345,8 @@ extension SearchViewModel {
 
     /// Keeps sections in the user's addon order, whatever order the addons answer in.
     private func insert(_ section: Section, order: [UUID]) {
-        // Addon library entries are raw files, so keep them out of Search's title results.
-        let section = Section(addon: section.addon, items: section.items.filter { Self.groupType($0.type) != "library" })
+        // Addon library entries and synthetic Easynews search placeholders are not playable titles, so keep them out of Search.
+        let section = Section(addon: section.addon, items: section.items.filter { !SearchResults.isExcludedAddonItem($0) })
         if let index = sections.firstIndex(where: { $0.id == section.id }) {
             sections[index] = section
             return

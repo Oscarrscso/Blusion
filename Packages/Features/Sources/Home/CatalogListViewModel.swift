@@ -15,7 +15,8 @@ struct CatalogListRequest: Hashable, Sendable {
     }
 }
 
-/// The grid behind "See All", a collection tile or a genre. One source pages 50 at a time; several sources load once, merged.
+/// The grid behind "See All", a collection tile, a genre or a search category. Pages each source 50 items at a time, interleaving and
+/// deduplicating across sources as the user scrolls.
 @MainActor
 @Observable
 final class CatalogListViewModel {
@@ -24,6 +25,13 @@ final class CatalogListViewModel {
         case loaded
         case loadingMore
         case failed(WidgetSourceError)
+    }
+
+    private struct SourceCursor {
+        let source: WidgetSource
+        var nextSkip = 0
+        var hasMore = true
+        var emptyRounds = 0
     }
 
     let request: CatalogListRequest
@@ -80,8 +88,8 @@ final class CatalogListViewModel {
     private var genreTask: Task<Void, Never>?
     /// The loaded titles whose genres are already the ones their pages list.
     private var genreResolved: Set<String> = []
-    /// Raw items received so far: the protocol's `skip` counts what the addon sent, not what is left after de-duplication.
-    private var receivedCount = 0
+    /// Per-source pagination state: each source tracks its own raw `skip` cursor, exhaustion, and consecutive duplicate-only rounds.
+    private var cursors: [SourceCursor] = []
 
     init(request: CatalogListRequest, services: AppServices, defaults: UserDefaults = .standard) {
         self.request = request
@@ -151,14 +159,14 @@ final class CatalogListViewModel {
         await load()
     }
 
-    /// Loads the first page, or the merged list for several sources. Items already on screen stay until the new ones arrive.
+    /// Loads the first page across all sources. Items already on screen stay until the new ones arrive.
     func load() async {
         genreTask?.cancel()
         genreResolved = []
         generation += 1
         let current = generation
         let sources = request.sources
-        receivedCount = 0
+        cursors = sources.map { SourceCursor(source: $0) }
         canLoadMore = false
         state = .loading
         guard !sources.isEmpty else {
@@ -168,56 +176,124 @@ final class CatalogListViewModel {
             return
         }
         do {
-            let page: [MetaPreview]
-            let nextSkip: Int
-            let hasMore: Bool
-            if sources.count == 1 {
-                let loaded = try await services.widgetContent.page(for: sources[0], limit: CatalogListViewModel.pageSize, skip: 0)
-                page = loaded.items
-                nextSkip = loaded.nextSkip
-                hasMore = loaded.hasMore
-            } else {
-                page = try await services.widgetContent.items(for: sources, limit: CatalogListViewModel.mergedLimit)
-                nextSkip = 0
-                hasMore = false
-            }
+            let fetched = try await fetchNextRound(initial: true)
             guard current == generation else { return }
-            items = CatalogListViewModel.appending(page, to: [])
+            items = Self.appending(fetched, to: [])
             shuffleRank = [:]
             rankNewItems()
             refreshVisible()
-            receivedCount = nextSkip
-            canLoadMore = hasMore
+            canLoadMore = cursors.contains(where: \.hasMore)
             resolveGenres()
             state = .loaded
         } catch {
             guard current == generation else { return }
-            state = .failed(CatalogListViewModel.widgetError(error))
+            state = .failed(Self.widgetError(error))
         }
     }
 
-    /// Call when the last item scrolls into view. Does nothing while a load runs, after an empty page, or for several sources.
+    /// Call when the last item scrolls into view. Does nothing while a load runs or once all sources are exhausted.
     func loadMore() async {
-        let sources = request.sources
-        guard canLoadMore, state == .loaded, sources.count == 1, let source = sources.first else { return }
+        guard canLoadMore, state == .loaded, !cursors.isEmpty else { return }
         let current = generation
         state = .loadingMore
+        let before = items.count
         do {
-            let page = try await services.widgetContent.page(for: source, limit: CatalogListViewModel.pageSize, skip: receivedCount)
+            while cursors.contains(where: \.hasMore) {
+                let fetched = try await fetchNextRound(initial: false)
+                guard current == generation else { return }
+                items = Self.appending(fetched, to: items)
+                if items.count > before || !cursors.contains(where: \.hasMore) {
+                    break
+                }
+            }
             guard current == generation else { return }
-            receivedCount = page.nextSkip
-            let before = items.count
-            items = CatalogListViewModel.appending(page.items, to: items)
             rankNewItems()
             refreshVisible()
-            canLoadMore = page.hasMore && items.count > before
+            canLoadMore = cursors.contains(where: \.hasMore)
             resolveGenres()
             state = .loaded
         } catch {
             guard current == generation else { return }
             // Keeps what is there; scrolling to the end again tries the page once more.
+            if items.count > before {
+                rankNewItems()
+                refreshVisible()
+                resolveGenres()
+            }
+            canLoadMore = cursors.contains(where: \.hasMore)
             state = .loaded
         }
+    }
+
+    /// Fetches one page concurrently from each source whose cursor still has more, updates cursor state, and interleaves the results.
+    private func fetchNextRound(initial: Bool) async throws -> [MetaPreview] {
+        let current = generation
+        let active = cursors.enumerated().filter { $0.element.hasMore }.map { ($0.offset, $0.element) }
+        guard !active.isEmpty else { return [] }
+        let content = services.widgetContent
+        let limit = Self.pageSize
+        let outcomes = await withTaskGroup(
+            of: (Int, Result<WidgetContentService.Page, WidgetSourceError>).self,
+            returning: [(Int, Result<WidgetContentService.Page, WidgetSourceError>)].self
+        ) { group in
+            for (index, cursor) in active {
+                let source = cursor.source
+                let skip = cursor.nextSkip
+                group.addTask {
+                    do {
+                        let page = try await content.page(for: source, limit: limit, skip: skip)
+                        return (index, .success(page))
+                    } catch {
+                        return (index, .failure(CatalogListViewModel.widgetError(error)))
+                    }
+                }
+            }
+            var collected: [(Int, Result<WidgetContentService.Page, WidgetSourceError>)] = []
+            for await outcome in group { collected.append(outcome) }
+            return collected.sorted { $0.0 < $1.0 }
+        }
+        guard current == generation else { return [] }
+
+        var nextCursors = cursors
+        var seen = initial ? Set<String>() : Set(items.map(\.identity))
+        var lists: [[MetaPreview]] = []
+        var firstError: WidgetSourceError?
+
+        for (index, outcome) in outcomes {
+            switch outcome {
+            case .failure(let error):
+                firstError = firstError ?? error
+                nextCursors[index].hasMore = false
+            case .success(let page):
+                let previousSkip = nextCursors[index].nextSkip
+                nextCursors[index].nextSkip = page.nextSkip
+                var contributedNew = false
+                for item in page.items {
+                    if seen.insert(item.identity).inserted {
+                        contributedNew = true
+                    }
+                }
+                if page.items.isEmpty || !page.hasMore || page.nextSkip <= previousSkip {
+                    nextCursors[index].hasMore = false
+                } else if !contributedNew {
+                    nextCursors[index].emptyRounds += 1
+                    if nextCursors.count == 1 || nextCursors[index].emptyRounds >= 2 {
+                        nextCursors[index].hasMore = false
+                    }
+                } else {
+                    nextCursors[index].emptyRounds = 0
+                    nextCursors[index].hasMore = true
+                }
+                lists.append(page.items)
+            }
+        }
+
+        if lists.isEmpty, let firstError {
+            throw firstError
+        }
+
+        cursors = nextCursors
+        return Self.interleave(lists)
     }
 
     /// Gives the loaded titles the genres their own pages list, the same facts as Discover and Detail, so the Genre menu and its filter
@@ -243,13 +319,28 @@ final class CatalogListViewModel {
         }
     }
 
+    /// Interleaves source lists round-robin (position 0 of each list, then position 1, etc.), keeping the first occurrence of each identity.
+    private static func interleave(_ lists: [[MetaPreview]]) -> [MetaPreview] {
+        var seen = Set<String>()
+        var merged: [MetaPreview] = []
+        let longest = lists.map(\.count).max() ?? 0
+        for position in 0..<longest {
+            for list in lists where position < list.count {
+                let item = list[position]
+                guard seen.insert(item.identity).inserted else { continue }
+                merged.append(item)
+            }
+        }
+        return merged
+    }
+
     /// Keeps each title once across pages.
     private static func appending(_ page: [MetaPreview], to list: [MetaPreview]) -> [MetaPreview] {
         var seen = Set(list.map(\.identity))
         return list + page.filter { seen.insert($0.identity).inserted }
     }
 
-    private static func widgetError(_ error: Error) -> WidgetSourceError {
+    nonisolated private static func widgetError(_ error: Error) -> WidgetSourceError {
         (error as? WidgetSourceError) ?? .addon(AddonError.from(error))
     }
 }
