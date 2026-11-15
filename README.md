@@ -11,36 +11,30 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
 <!-- All portrait screenshots use fastlane/frameit-frames, Apple iPhone 17 Black. -->
 
 <table width="100%">
+  <tr><th width="50%">Home</th><th width="50%">Widgets</th></tr>
   <tr>
-    <th width="25%">Home</th>
-    <th width="50%" colspan="2">Widgets</th>
-    <th width="25%">Advanced stream selection<br><sup>optional</sup></th>
+    <td width="50%"><img src="docs/screenshots/home-iphone-17.png" width="100%" alt="Home"></td>
+    <td width="50%"><img src="docs/screenshots/widgets-iphone-17.svg" width="100%" alt="Widgets"></td>
   </tr>
+  <tr><th width="50%">Widget editor</th><th width="50%">Advanced stream selection<br><sup>optional</sup></th></tr>
   <tr>
-    <td width="25%"><img src="docs/screenshots/home-iphone-17.png" width="100%" alt="Home with Cover Flow and film collections"></td>
-    <td width="25%"><img src="docs/screenshots/widgets-iphone-17.svg" width="100%" alt="Widget collection with different shelf styles"></td>
-    <td width="25%"><img src="docs/screenshots/widget-editor-iphone-17.svg" width="100%" alt="Widget editor with list, genre and date options"></td>
-    <td width="25%"><img src="docs/screenshots/advanced-stream-selection-iphone-17.svg" width="100%" alt="Advanced stream selection with Auto Pick and quality filters"></td>
+    <td width="50%"><img src="docs/screenshots/widget-editor-iphone-17.svg" width="100%" alt="Widget editor"></td>
+    <td width="50%"><img src="docs/screenshots/advanced-stream-selection-iphone-17.svg" width="100%" alt="Advanced stream selection"></td>
   </tr>
+  <tr><th width="50%">Search</th><th width="50%">Series</th></tr>
   <tr>
-    <th width="25%">Search</th>
-    <th width="25%">Series</th>
-    <th width="25%">People</th>
-    <th width="25%">Ratings &amp; reviews</th>
+    <td width="50%"><img src="docs/screenshots/search-iphone-17.png" width="100%" alt="Search"></td>
+    <td width="50%"><img src="docs/screenshots/series-iphone-17.png" width="100%" alt="Series"></td>
   </tr>
+  <tr><th width="50%">People</th><th width="50%">Ratings &amp; reviews</th></tr>
   <tr>
-    <td width="25%"><img src="docs/screenshots/search-iphone-17.png" width="100%" alt="Search and streaming service discovery"></td>
-    <td width="25%"><img src="docs/screenshots/series-iphone-17.png" width="100%" alt="Series details and episode cards"></td>
-    <td width="25%"><img src="docs/screenshots/person-iphone-17.png" width="100%" alt="Biography and filmography"></td>
-    <td width="25%"><img src="docs/screenshots/ratings-reviews-iphone-17.svg" width="100%" alt="Film ratings, Letterboxd reviews and TMDb reviews"></td>
+    <td width="50%"><img src="docs/screenshots/person-iphone-17.png" width="100%" alt="People"></td>
+    <td width="50%"><img src="docs/screenshots/ratings-reviews-iphone-17.svg" width="100%" alt="Ratings &amp; reviews"></td>
   </tr>
-</table>
-
-<table width="100%">
   <tr><th width="50%">Movie details</th><th width="50%">Library</th></tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/movie-landscape-iphone-17.png" width="440" alt="Movie details in landscape"></td>
-    <td width="50%"><img src="docs/screenshots/library-landscape-iphone-17.png" width="440" alt="Library filters and artwork grid in landscape"></td>
+    <td width="50%"><img src="docs/screenshots/movie-landscape-iphone-17.png" width="100%" alt="Movie details"></td>
+    <td width="50%"><img src="docs/screenshots/library-landscape-iphone-17.png" width="100%" alt="Library"></td>
   </tr>
 </table>
 
