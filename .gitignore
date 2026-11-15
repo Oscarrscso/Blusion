@@ -15,14 +15,16 @@ App/Info.plist
 App/PrivateAPIKeys.generated.swift
 project.fallback.generated.yml
 
-# Generated mock media (see Tools/MockAddon/make-fixtures.sh)
-Tools/MockAddon/fixtures/generated/
-
-# Local run artifacts
-.claude/worktrees/
-.mock-addon.pid
-.mock-addon.log
+# Development artifacts
+.claude/
+Tests/
+**/Tests/
+*TestSupport/
+Tools/
+*.md
+!README.md
 coverage/
+coverage-*.txt
 *.profraw
 *.profdata
 

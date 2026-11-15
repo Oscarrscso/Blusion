@@ -135,11 +135,6 @@ struct RootView: View {
             environment.services.posterRatings.markPlacement = settings.posterMarkPlacement
             await reloadReviewServices()
             await environment.seedDefaultAddons()
-            #if DEBUG
-            await DebugDemoData.installExtraAddons(environment.services)
-            await DebugDemoData.installFakeOMDbIfRequested(environment.services)
-            await DebugDemoData.seedIfRequested(environment.services)
-            #endif
             isReady = true
             Task { await hideSplash() }
             refreshIMDbDataset()
@@ -149,12 +144,6 @@ struct RootView: View {
                     scene.sizeRestrictions?.minimumSize = CGSize(width: 800, height: 600)
                 }
             }
-            #endif
-            #if DEBUG
-            DebugSnapshot.scheduleIfRequested()
-            DebugStress.startIfRequested()
-            DebugHangSampler.start()
-            await DebugHandoffProbe.startIfRequested(environment.services)
             #endif
         }
         // An app left open for days is still checked once a day: coming back to the front asks again, and the 24-hour rule decides.
@@ -211,9 +200,6 @@ struct RootView: View {
             // Let the tabs register their result observers when a callback cold-launches Blusion.
             await Task.yield()
             if await PlaybackHandoffCenter(services: environment.services).handle(url) { userStateRevision += 1 }
-            #if DEBUG
-            await DebugHandoffProbe.record(url, services: environment.services)
-            #endif
         }
     }
 }
@@ -266,7 +252,7 @@ private struct MacTitlebar: UIViewRepresentable {
 }
 
 /// A Mac window can be no larger than what it shows, and the first thing this app shows is the launch splash: without room
-/// to grow the window opens 16 points wide and ignores the default size. A snapshot run sets its own size (`DebugSnapshot`).
+/// to grow the window opens 16 points wide and ignores the default size.
 private struct MacWindowSize: ViewModifier {
     private let applies = ProcessInfo.processInfo.environment["BLUSION_WINDOW_SIZE"] == nil
 

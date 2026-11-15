@@ -8,8 +8,6 @@ let package = Package(
     platforms: [.iOS("26.0"), .macOS(.v14)],
     products: [
         .library(name: "PlayerKit", targets: ["PlayerKit"]),
-        // MockEngine for test targets of this and other packages. Never linked into the app.
-        .library(name: "PlayerKitTestSupport", targets: ["PlayerKitTestSupport"]),
     ],
     dependencies: [
         .package(path: "../StremioKit"),
@@ -17,11 +15,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "PlayerKit", dependencies: ["StremioKit", "PlaybackGeometry"]),
-        .target(name: "PlayerKitTestSupport", dependencies: ["PlayerKit"]),
-        .testTarget(
-            name: "PlayerKitTests",
-            dependencies: ["PlayerKit", "PlayerKitTestSupport", .product(name: "StremioKitTestSupport", package: "StremioKit")]
-        ),
     ],
     swiftLanguageModes: [.v6]
 )

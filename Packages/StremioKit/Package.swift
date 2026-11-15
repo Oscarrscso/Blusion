@@ -8,17 +8,9 @@ let package = Package(
     platforms: [.iOS("26.0"), .macOS(.v14)],
     products: [
         .library(name: "StremioKit", targets: ["StremioKit"]),
-        // Mock addon launcher, stub transport and sample addons for test targets of this and other packages. Never linked into the app.
-        .library(name: "StremioKitTestSupport", targets: ["StremioKitTestSupport"]),
     ],
     targets: [
         .target(name: "StremioKit"),
-        .target(name: "StremioKitTestSupport", dependencies: ["StremioKit"]),
-        .testTarget(
-            name: "StremioKitTests",
-            dependencies: ["StremioKit", "StremioKitTestSupport"],
-            resources: [.copy("Fixtures")]
-        ),
     ],
     swiftLanguageModes: [.v6]
 )

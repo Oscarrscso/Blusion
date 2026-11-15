@@ -3,7 +3,7 @@
 # every line marked `#fallback# ` is un-commented. Then generates the Xcode project from it.
 #
 #   ./scripts/enable-fallback.sh                 write the spec and run xcodegen on it
-#   ./scripts/enable-fallback.sh --generate-only write the spec only (verify.sh uses this when FALLBACK=1)
+#   ./scripts/enable-fallback.sh --generate-only write the spec only
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

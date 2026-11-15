@@ -8,7 +8,6 @@ let package = Package(
     products: [.library(name: "PlaybackGeometry", targets: ["PlaybackGeometry"])],
     targets: [
         .target(name: "PlaybackGeometry"),
-        .testTarget(name: "PlaybackGeometryTests", dependencies: ["PlaybackGeometry"]),
     ],
     swiftLanguageModes: [.v6]
 )

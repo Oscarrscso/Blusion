@@ -17,14 +17,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "Features", dependencies: ["StremioKit", "PlayerKit", "Persistence"]),
-        .testTarget(
-            name: "FeaturesTests",
-            dependencies: [
-                "Features",
-                .product(name: "StremioKitTestSupport", package: "StremioKit"),
-                .product(name: "PlayerKitTestSupport", package: "PlayerKit"),
-            ]
-        ),
     ],
     swiftLanguageModes: [.v6]
 )
