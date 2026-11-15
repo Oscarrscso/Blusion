@@ -21,6 +21,11 @@ struct WidgetEditorView: View {
     @State private var showsTileSource = false
     @State private var editedTile: CollectionItem?
     @Environment(\.dismiss) private var dismiss
+    #if targetEnvironment(macCatalyst)
+    @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.appAppearance) private var appearance
+    @State private var editMode = EditMode.inactive
+    #endif
 
     /// Edits `widget`.
     init(widget: HomeWidget, model: WidgetsManagerViewModel, services: AppServices) {
@@ -56,8 +61,17 @@ struct WidgetEditorView: View {
         }
     }
 
+    private var exportWidgetInfo: (title: String, text: String)? {
+        guard mode != .create, let saved = model.widgets.first(where: { $0.id == widget.id }),
+              !HomeLayout.isContinueWatching(saved), let text = WidgetsManagerViewModel.exportJSON(of: saved) else { return nil }
+        return (saved.title, text)
+    }
+
     private var form: some View {
         Form {
+            #if targetEnvironment(macCatalyst)
+            macHeaderSection
+            #endif
             switch widget.content {
             case .collection(let tiles):
                 titleSection
@@ -91,6 +105,10 @@ struct WidgetEditorView: View {
         .screenBackground()
         .navigationTitle(mode == .create ? "New Widget" : "Edit Widget")
         .navigationBarTitleDisplayMode(.inline)
+        .macBackNavigation()
+        #if targetEnvironment(macCatalyst)
+        .environment(\.editMode, $editMode)
+        #else
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(mode == .create ? "Add" : "Save", action: commit)
@@ -98,16 +116,16 @@ struct WidgetEditorView: View {
             }
             if case .collection = widget.content { ToolbarItem(placement: .topBarTrailing) { EditButton().pointerFeedback() } }
             // An existing widget, as saved, as text for Import Widgets.
-            if mode != .create, let saved = model.widgets.first(where: { $0.id == widget.id }), !HomeLayout.isContinueWatching(saved),
-               let text = WidgetsManagerViewModel.exportJSON(of: saved) {
+            if let exportWidgetInfo {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                    ShareLink(item: exportWidgetInfo.text, preview: SharePreview(exportWidgetInfo.title)) { Image(systemName: "square.and.arrow.up") }
                         .pointerFeedback()
                         .accessibilityLabel("Export Widget")
                         .accessibilityIdentifier("widgetEditor.export")
                 }
             }
         }
+        #endif
         .sheet(isPresented: $showsTileSource) {
             NavigationStack {
                 WidgetSourcePicker(model: model, genresOnly: true, showsCancel: true) { choice, genre in
@@ -129,6 +147,46 @@ struct WidgetEditorView: View {
             }
         }
     }
+
+    #if targetEnvironment(macCatalyst)
+    private var macHeaderSection: some View {
+        Section {
+            HStack(spacing: Theme.Spacing.s) {
+                Text(mode == .create ? "New Widget" : "Edit Widget")
+                    .headingStyle()
+                Spacer(minLength: Theme.Spacing.m)
+                if case .collection = widget.content {
+                    EditButton()
+                        .buttonStyle(.glassCapsule)
+                        .controlSize(.small)
+                        .pointerFeedback()
+                }
+                if let exportWidgetInfo {
+                    ShareLink(item: exportWidgetInfo.text, preview: SharePreview(exportWidgetInfo.title)) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.glassCapsule)
+                    .controlSize(.small)
+                    .pointerFeedback()
+                    .accessibilityLabel("Export Widget")
+                    .accessibilityIdentifier("widgetEditor.export")
+                }
+                Button(action: commit) {
+                    Text(mode == .create ? "Add" : "Save")
+                        .fontWeight(.semibold)
+                        .pointerFeedback()
+                }
+                .finishedProminentButtonStyle(appearance.buttonFinish)
+                .buttonBorderShape(metrics.cornerScale(for: .actionButtons) == 1
+                    ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons)))
+                .controlSize(.small)
+                .accessibilityIdentifier("widgetEditor.save")
+            }
+        }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
+    }
+    #endif
 
     // MARK: Saving
 

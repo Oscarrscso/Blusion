@@ -23,13 +23,20 @@ struct QualityBadge: View {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
+            QualityBadgeIcon(symbol: symbol)
         }
         .qualityBadgeChrome(tint: tint)
-        // The capsule is as wide as its text, so a short label is never cut short.
-        .fixedSize()
         .accessibilityLabel(Text(verbatim: spokenAs ?? title))
+    }
+}
+
+/// The shared SF Symbol styling inside every quality and status badge, so icon-only marks match the symbols beside text.
+private struct QualityBadgeIcon: View {
+    let symbol: String
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 9, weight: .semibold))
     }
 }
 
@@ -47,15 +54,25 @@ private struct QualityBadgeChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = ScaledCapsule(scale: metrics.cornerScale(for: .filters))
-        content
-            .appFont(.microStrong)
-            .foregroundStyle(tint.opacity(0.92))
-            .lineLimit(1)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(tint.opacity(0.10), in: shape)
-            .overlay { shape.strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
-            .accessibilityElement(children: .combine)
+        ZStack {
+            // Lock every badge's height to single-line `.microStrong` text so icon-only badges match text badges at all text sizes.
+            Text(verbatim: "Ag")
+                .fixedSize()
+                .frame(width: 0)
+                .hidden()
+                .accessibilityHidden(true)
+            content
+        }
+        .appFont(.microStrong)
+        .foregroundStyle(tint.opacity(0.92))
+        .lineLimit(1)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.10), in: shape)
+        .overlay { shape.strokeBorder(tint.opacity(0.32), lineWidth: 0.6) }
+        // The capsule fits its content intrinsically, so neither short labels nor icon-only marks compress or clip.
+        .fixedSize()
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -63,7 +80,7 @@ private struct QualityBadgeChrome: ViewModifier {
 /// still says "Dolby Atmos", since the symbol has no text of its own.
 struct SpatialAudioBadge: View {
     var body: some View {
-        Image(systemName: "airpodspro")
+        QualityBadgeIcon(symbol: "airpodspro")
             .qualityBadgeChrome(tint: .white)
             .accessibilityLabel(Text(verbatim: "Dolby Atmos"))
     }
@@ -74,7 +91,7 @@ struct TorBoxMark: View {
     let cache: TorBoxCache
 
     var body: some View {
-        Image(systemName: cache == .cached ? "bolt.fill" : "hourglass")
+        QualityBadgeIcon(symbol: cache == .cached ? "bolt.fill" : "hourglass")
             .qualityBadgeChrome(tint: cache == .cached ? QualityBadge.cachedGreen : .white)
             .accessibilityLabel(Text(verbatim: cache == .cached ? "Cached on TorBox" : "Not cached on TorBox"))
     }
@@ -119,7 +136,7 @@ extension QualityBadge {
         if titled {
             QualityBadge(delivery.title, symbol: symbol, tint: tint)
         } else {
-            Image(systemName: symbol)
+            QualityBadgeIcon(symbol: symbol)
                 .qualityBadgeChrome(tint: tint)
                 .accessibilityLabel(Text(verbatim: delivery.title))
         }

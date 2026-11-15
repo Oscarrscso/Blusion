@@ -18,6 +18,7 @@ struct WidgetBuilderView: View {
     /// Called in place of leaving this screen once a new widget is added (see `WidgetEditorView`).
     private let onAdded: (() -> Void)?
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.appAppearance) private var appearance
     @Environment(\.dismiss) private var dismiss
 
     /// Makes a widget in `style` when `widget` is nil (a TMDB list of popular movies), or changes `widget`.
@@ -30,10 +31,19 @@ struct WidgetBuilderView: View {
         _model = State(initialValue: WidgetBuilderModel(mode: mode, widget: widget, style: style, manager: manager, services: services))
     }
 
+    private var exportWidgetInfo: (title: String, text: String)? {
+        guard mode != .create, let saved = manager.widgets.first(where: { $0.id == model.widget.id }),
+              let text = WidgetsManagerViewModel.exportJSON(of: saved) else { return nil }
+        return (saved.title, text)
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                    #if targetEnvironment(macCatalyst)
+                    macHeader
+                    #endif
                     if model.needsTMDbToken { tokenNotice }
                     SentenceCard(model: model)
                     StyleMenu(model: model)
@@ -58,6 +68,8 @@ struct WidgetBuilderView: View {
         .screenBackground()
         .navigationTitle(mode == .create ? "New Widget" : "Edit Widget")
         .navigationBarTitleDisplayMode(.inline)
+        .macBackNavigation()
+        #if !targetEnvironment(macCatalyst)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(mode == .create ? "Add" : "Save", action: save)
@@ -65,10 +77,9 @@ struct WidgetBuilderView: View {
                     .accessibilityIdentifier("widgetEditor.save")
             }
             // The widget as saved, as text for Import Widgets.
-            if mode != .create, let saved = manager.widgets.first(where: { $0.id == model.widget.id }),
-               let text = WidgetsManagerViewModel.exportJSON(of: saved) {
+            if let exportWidgetInfo {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: text, preview: SharePreview(saved.title)) { Image(systemName: "square.and.arrow.up") }
+                    ShareLink(item: exportWidgetInfo.text, preview: SharePreview(exportWidgetInfo.title)) { Image(systemName: "square.and.arrow.up") }
                         .pointerFeedback()
                         .accessibilityLabel("Export Widget")
                         .accessibilityIdentifier("widgetEditor.export")
@@ -82,6 +93,7 @@ struct WidgetBuilderView: View {
                 }
             }
         }
+        #endif
         .navigationDestination(isPresented: $showsPicker) {
             WidgetSourcePicker(model: manager, openTraktLists: { showsTraktBrowser = true }, chooseSource: { source in
                 model.setSource(source)
@@ -136,6 +148,37 @@ struct WidgetBuilderView: View {
     }
 
     // MARK: Parts of the screen
+
+    #if targetEnvironment(macCatalyst)
+    private var macHeader: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Text(mode == .create ? "New Widget" : "Edit Widget")
+                .headingStyle()
+            Spacer(minLength: Theme.Spacing.m)
+            if let exportWidgetInfo {
+                ShareLink(item: exportWidgetInfo.text, preview: SharePreview(exportWidgetInfo.title)) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(.glassCapsule)
+                .controlSize(.small)
+                .pointerFeedback()
+                .accessibilityLabel("Export Widget")
+                .accessibilityIdentifier("widgetEditor.export")
+            }
+            Button(action: save) {
+                Text(mode == .create ? "Add" : "Save")
+                    .fontWeight(.semibold)
+                    .pointerFeedback()
+            }
+            .finishedProminentButtonStyle(appearance.buttonFinish)
+            .buttonBorderShape(metrics.cornerScale(for: .actionButtons) == 1
+                ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons)))
+            .controlSize(.small)
+            .disabled(!model.canCommit)
+            .accessibilityIdentifier("widgetEditor.save")
+        }
+    }
+    #endif
 
     /// The notice that a TMDB list cannot be read until a TMDB token is saved in Settings.
     private var tokenNotice: some View {

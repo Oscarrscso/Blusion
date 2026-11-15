@@ -19,6 +19,19 @@ struct WidgetSourcePicker: View {
 
     var body: some View {
         List {
+            #if targetEnvironment(macCatalyst)
+            if !showsCancel {
+                Section {
+                    Text("Choose Source")
+                        .headingStyle()
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    TextField("Find a catalog", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
+            #endif
             if !genresOnly && query.isEmpty {
                 Section("Streaming Services") {
                     ForEach(StreamProvider.browsable, id: \.self) { provider in
@@ -39,6 +52,7 @@ struct WidgetSourcePicker: View {
                     }
                     NavigationLink {
                         TraktListLinkForm(model: model, chooseSource: chooseSource)
+                            .environment(\.hasMacBackNavigation, false)
                     } label: {
                         Text("Trakt List from Link")
                     }
@@ -58,6 +72,7 @@ struct WidgetSourcePicker: View {
                         .scrollIndicatorsFlash(onAppear: true)
                         .navigationTitle(choice.title)
                         .macBackNavigation()
+                        .environment(\.hasMacBackNavigation, false)
                         .scrollContentBackground(.hidden)
                         .screenBackground()
                     } label: { label(choice) }
@@ -68,18 +83,44 @@ struct WidgetSourcePicker: View {
         }
         .scrollIndicators(.visible, axes: .vertical)
         .scrollIndicatorsFlash(onAppear: true)
-        .searchable(text: $query, prompt: "Find a catalog")
+        .sourcePickerSearchable(enabled: usesNavigationSearch, query: $query)
         .navigationTitle("Choose Source")
+        .navigationBarTitleDisplayMode(.inline)
+        .pushedMacBackNavigation(!showsCancel)
         .scrollContentBackground(.hidden)
         .screenBackground()
         .accessibilityIdentifier("widgetSource.list")
         .toolbar { if showsCancel { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } } }
     }
 
+    private var usesNavigationSearch: Bool {
+        #if targetEnvironment(macCatalyst)
+        return showsCancel
+        #else
+        return true
+        #endif
+    }
+
     private func label(_ choice: WidgetsManagerViewModel.CatalogChoice) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(choice.title)
             Text(choice.addonName).appFont(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func pushedMacBackNavigation(_ isPushed: Bool) -> some View {
+        if isPushed { macBackNavigation() } else { self }
+    }
+
+    @ViewBuilder
+    func sourcePickerSearchable(enabled: Bool, query: Binding<String>) -> some View {
+        if enabled {
+            searchable(text: query, prompt: "Find a catalog")
+        } else {
+            self
         }
     }
 }

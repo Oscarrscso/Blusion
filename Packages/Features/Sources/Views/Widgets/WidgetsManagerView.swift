@@ -478,7 +478,11 @@ struct WidgetsManagerView: View {
             syncOrder()
             if !old.isEmpty, !Set(new).isSubset(of: old) { withAnimation { hidesWidgets = false } }
         }
-        .navigationDestination(item: $openedWidget) { WidgetEditorView(widget: $0, model: model, services: services) }
+        .navigationDestination(item: $openedWidget) {
+            WidgetEditorView(widget: $0, model: model, services: services)
+                // Embedded in Settings, this push stays outside `router.settingsPath`, so MacBackNavigation uses `isPresented`.
+                .environment(\.showsSettingsColumnTitle, false)
+        }
         // Adding a widget shows the cards, so the new one is not hidden with the rest. Leaving Add Widget also leaves the settings opened
         // from it, back to the cards.
         .navigationDestination(isPresented: $showsGallery) {
@@ -486,6 +490,7 @@ struct WidgetsManagerView: View {
                 hidesWidgets = false
                 showsGallery = false
             }
+            .environment(\.showsSettingsColumnTitle, false)
         }
         .sheet(isPresented: $showsImport, onDismiss: {
             showsPendingImport = model.pendingImport != nil

@@ -51,7 +51,9 @@ struct TraktListBrowserView: View {
         .safeAreaInset(edge: .top, spacing: 0) { controls }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .scrollDismissesKeyboard(.interactively)
+        #if !targetEnvironment(macCatalyst)
         .searchable(text: $browser.query, prompt: browser.tab == .lists ? "Search Trakt lists…" : "Search Trakt users…")
+        #endif
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
         .refreshable { await browser.load(refresh: true) }
@@ -62,9 +64,12 @@ struct TraktListBrowserView: View {
             await browser.load()
         }
         .onChange(of: browser.tab) { browser.leaveUser() }
-        .screenBackground()
+        // On Mac, `controls` in `safeAreaInset(edge: .top)` already clears the floating navigation.
+        .screenBackground(reservesNavigationSpace: false)
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .macBackNavigation()
+        #if !targetEnvironment(macCatalyst)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(actionTitle, action: commit)
@@ -72,6 +77,7 @@ struct TraktListBrowserView: View {
                     .accessibilityIdentifier("widgetEditor.save")
             }
         }
+        #endif
         .environment(\.layoutMetrics, browserMetrics)
         .accessibilityIdentifier("traktBrowser")
     }
@@ -90,6 +96,29 @@ struct TraktListBrowserView: View {
     private var controls: some View {
         @Bindable var browser = browser
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            #if targetEnvironment(macCatalyst)
+            HStack(spacing: Theme.Spacing.s) {
+                Text(navigationTitle)
+                    .headingStyle()
+                Spacer(minLength: Theme.Spacing.m)
+                Button(action: commit) {
+                    Text(actionTitle)
+                        .fontWeight(.semibold)
+                        .pointerFeedback()
+                }
+                .finishedProminentButtonStyle(appearance.buttonFinish)
+                .buttonBorderShape(metrics.cornerScale(for: .actionButtons) == 1
+                    ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .actionButtons)))
+                .controlSize(.small)
+                .disabled(!canAdd)
+                .accessibilityIdentifier("widgetEditor.save")
+            }
+            .padding(.horizontal, metrics.contentMargin)
+            TextField(browser.tab == .lists ? "Search Trakt lists…" : "Search Trakt users…", text: $browser.query)
+                .textFieldStyle(.roundedBorder)
+                .submitLabel(.search)
+                .padding(.horizontal, metrics.contentMargin)
+            #endif
             HStack(spacing: Theme.Spacing.s) {
                 titleField
                 sortMenu
@@ -105,6 +134,9 @@ struct TraktListBrowserView: View {
             if browser.tab == .lists && browser.trimmedQuery.isEmpty && browser.browsedUser == nil { scopeChips }
         }
         .padding(.vertical, Theme.Spacing.s)
+        #if targetEnvironment(macCatalyst)
+        .padding(.top, MacPageNavigation.topInset(spacing: Theme.Spacing.s))
+        #endif
         // Solid, up under the navigation bar: the rows scroll out of sight beneath the controls. With nothing behind them the rows showed
         // through and between the glass buttons.
         .background { appearance.pageBackground.ignoresSafeArea(edges: .top) }

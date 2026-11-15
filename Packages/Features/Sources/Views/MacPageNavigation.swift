@@ -3,6 +3,10 @@ import Persistence
 import SwiftUI
 import StremioKit
 
+extension EnvironmentValues {
+    @Entry var hasMacBackNavigation = false
+}
+
 /// One navigation view for every Mac page, moved with the active page's scroll offset.
 struct MacPageNavigation: View {
     @Environment(\.layoutMetrics) private var metrics
@@ -215,12 +219,19 @@ struct MacBackNavigation: ViewModifier {
     @Environment(\.isPresented) private var isPresented
     @Environment(\.showsSettingsColumnTitle) private var showsColumnTitle
     @Environment(\.settingsColumnDepth) private var columnDepth
+    @Environment(\.hasMacBackNavigation) private var hasMacBackNavigation
+
+    private var showsBackButton: Bool {
+        !hasMacBackNavigation && (showsColumnTitle ? columnDepth > 0 : isPresented)
+    }
 
     func body(content: Content) -> some View {
         content
+            .navigationBarBackButtonHidden()
             .toolbar(.hidden, for: .navigationBar)
+            .environment(\.hasMacBackNavigation, hasMacBackNavigation || showsBackButton)
             .overlay(alignment: .topLeading) {
-                if showsColumnTitle ? columnDepth > 0 : isPresented {
+                if showsBackButton {
                     // The system's glass button draws a third shorter than its frame on Mac, so the glass is drawn at the navigation
                     // control's height, as the round actions beside Play are.
                     Button("Back", systemImage: "chevron.backward") { dismiss() }
