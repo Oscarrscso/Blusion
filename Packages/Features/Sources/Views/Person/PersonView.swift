@@ -84,7 +84,7 @@ struct PersonView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .center)
-        .padding(.top, Theme.Spacing.l)
+        .padding(.top, Self.isDesktop || isPhoneInLandscape ? Theme.Spacing.l : 0)
     }
 
     /// The biography and any note on why the page is short, below the photos.
