@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Fresh simulator build + compiled-bundle audit + actual player interaction tests.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-[[ "$(uname -s)" == Darwin ]] || { echo "verify-player-ui: needs macOS, Xcode and an iOS simulator" >&2; exit 2; }
-REVISION="$(git rev-parse HEAD)"
-TAG="$(git rev-parse --short HEAD)"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
+blusion_require_darwin "verify-player-ui: needs macOS, Xcode and an iOS simulator"
+blusion_set_revision_tag
 PHASE="${PLAYER_VERIFICATION_PHASE:-all}"
 case "$PHASE" in all|release|simulator) ;; *) echo "invalid player verification phase: $PHASE" >&2; exit 64;; esac
 mkdir -p "$ROOT/build/player-verification.noindex"
@@ -15,15 +13,7 @@ mkdir -p "$WORK/shots"
 python3 scripts/verify-player-build.py
 bash scripts/generate-project.sh
 if [[ "$PHASE" != release ]]; then
-UDID="$(xcrun simctl list devices available -j | python3 -c '
-import json,sys
-runtimes=json.load(sys.stdin)["devices"]
-for runtime in sorted(runtimes, reverse=True):
- if "iOS" not in runtime: continue
- phones=[d for d in runtimes[runtime] if "iPhone" in d["name"] and d.get("isAvailable",True)]
- if phones:
-  print(phones[0]["udid"]); break
-')"
+UDID="$(blusion_find_iphone_simulator_udid)"
 [[ -n "$UDID" ]] || { echo "verify-player-ui: no installed iPhone simulator" >&2; exit 1; }
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b

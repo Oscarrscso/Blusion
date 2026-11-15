@@ -110,6 +110,60 @@ import StremioKit
         #expect(redRGB.red - redRGB.green > 0.15 && redRGB.red - redRGB.blue > 0.15)
     }
 
+    @Test func episodeExtendedArtworkHasNoGreyBandAtSeam() throws {
+        let black = try solidImage(red: 0, green: 0, blue: 0, size: CGSize(width: 320, height: 180))
+        let rendered = try #require(ExtendedArtworkRenderer.render(black, size: CGSize(width: 320, height: 320), scale: 1))
+        let cgImage = try #require(rendered.cgImage)
+        #expect(cgImage.width == 320 && cgImage.height == 320)
+
+        let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+        let width = cgImage.width, height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try #require(CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            let white = try #require(CGColor(colorSpace: colorSpace, components: [1, 1, 1, 1]))
+            context.setFillColor(white)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+
+        let x = width / 2
+        func rowRGB(_ y: Int) -> (red: Double, green: Double, blue: Double) {
+            let offset = (y * width + x) * 4
+            return (Double(bytes[offset]) / 255, Double(bytes[offset + 1]) / 255, Double(bytes[offset + 2]) / 255)
+        }
+
+        let upperStillEnd = Int(180 * 0.75)
+        for y in 0...upperStillEnd {
+            let rgb = rowRGB(y)
+            #expect(rgb.red <= 0.01 && rgb.green <= 0.01 && rgb.blue <= 0.01)
+        }
+
+        for y in upperStillEnd..<(height - 1) {
+            let current = rowRGB(y)
+            let next = rowRGB(y + 1)
+            #expect(current.red <= next.red + 0.01)
+            #expect(current.green <= next.green + 0.01)
+            #expect(current.blue <= next.blue + 0.01)
+        }
+
+        for y in 170...195 {
+            let current = rowRGB(y)
+            let below = rowRGB(y + 10)
+            #expect(current.red <= below.red + 0.01)
+            #expect(current.green <= below.green + 0.01)
+            #expect(current.blue <= below.blue + 0.01)
+        }
+
+        let bottom = rowRGB(height - 1)
+        #expect(abs(bottom.red - 0.3 * 0.68) <= 0.02)
+        #expect(abs(bottom.green - 0.3 * 0.68) <= 0.02)
+        #expect(abs(bottom.blue - 0.3 * 0.68) <= 0.02)
+    }
+
     @Test func macPageNavigationTopInsetScalesWithCardSpacing() {
         #expect(MacPageNavigation.topInset(spacing: 12) == MacPageNavigation.inset + MacPageNavigation.controlHeight + 12)
         #expect(MacPageNavigation.topInset(spacing: 24) == MacPageNavigation.inset + MacPageNavigation.controlHeight + 24)

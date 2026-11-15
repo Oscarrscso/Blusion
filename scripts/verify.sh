@@ -18,8 +18,7 @@
 #   CATALOG_PORT / STREAM_PORT   mock ports (default 7001 / 7002)
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/common.sh"
 mkdir -p build
 
 MODE="${1:-node}"
@@ -118,18 +117,7 @@ if [[ "$HAS_XCODE" == 1 ]]; then
 
   log "4/6 xcodebuild test"
   # Newest iOS runtime, first iPhone on it. Never hardcode a device name.
-  UDID="$(xcrun simctl list devices available -j | python3 -c '
-import json, sys
-d = json.load(sys.stdin)["devices"]
-def ver(k):
-    try: return tuple(int(x) for x in k.split("iOS-")[1].split("-"))
-    except Exception: return ()
-runtimes = sorted((k for k in d if "iOS" in k and any("iPhone" in s["name"] and s.get("isAvailable", True) for s in d[k])), key=ver, reverse=True)
-if not runtimes: sys.exit(0)
-phones = [s for s in d[runtimes[0]] if "iPhone" in s["name"] and s.get("isAvailable", True)]
-pick = next((s for s in phones if "Pro" in s["name"] and "Max" not in s["name"]), phones[0])
-print(pick["udid"])
-')" || fail "listing iPhone simulators"
+  UDID="$(blusion_find_iphone_simulator_udid)" || fail "listing iPhone simulators"
   if [[ -z "$UDID" ]]; then
     echo "SKIPPED (no iOS simulator runtime installed)"
     SKIPPED+=("simulator-tests")

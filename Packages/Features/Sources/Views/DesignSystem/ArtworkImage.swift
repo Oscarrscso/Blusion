@@ -336,7 +336,7 @@ private struct ExtendedArtwork: View {
 
 /// Builds `ExtendedArtwork`'s picture. Positions are shares of the still's height from the card's top, so the ramp sits on the still
 /// whatever the text below it measures.
-private enum ExtendedArtworkRenderer {
+enum ExtendedArtworkRenderer {
     /// Gamma-encoded, as UIKit composites, so the veil reads as its numbers say.
     private static let context = CIContext(options: [
         .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedSRGB) as Any,
@@ -365,13 +365,15 @@ private enum ExtendedArtworkRenderer {
         let still = (width * 9 / 16).rounded()
         let seam = height - still
         let scaler = CIFilter.lanczosScaleTransform()
-        scaler.inputImage = source
+        scaler.inputImage = source.clampedToExtent()
         scaler.scale = Float(max(width / source.extent.width, still / source.extent.height))
         scaler.aspectRatio = 1
+        let scaledWidth = source.extent.width * CGFloat(scaler.scale)
+        let scaledHeight = source.extent.height * CGFloat(scaler.scale)
         guard let scaled = scaler.outputImage else { return nil }
         let frame = scaled
-            .transformed(by: CGAffineTransform(translationX: -scaled.extent.minX - (scaled.extent.width - width) / 2,
-                                               y: seam - scaled.extent.minY - (scaled.extent.height - still) / 2))
+            .transformed(by: CGAffineTransform(translationX: -(scaledWidth - width) / 2,
+                                               y: seam - (scaledHeight - still) / 2))
             .cropped(to: CGRect(x: 0, y: seam, width: width, height: still))
 
         // The still's lower band, mirrored at its edge and stretched to the card's foot: the colours meet the still without a seam
@@ -381,7 +383,10 @@ private enum ExtendedArtworkRenderer {
             let bandHeight = max(1, (still * band).rounded())
             let stretch = seam / bandHeight
             let below = frame.cropped(to: CGRect(x: 0, y: seam, width: width, height: bandHeight))
-                .transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -stretch, tx: 0, ty: seam * (1 + stretch)))
+                .transformed(by: CGAffineTransform(translationX: 0, y: -seam))
+                .clampedToExtent()
+                .transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -stretch, tx: 0, ty: seam))
+                .cropped(to: CGRect(x: 0, y: 0, width: width, height: seam))
             canvas = frame.composited(over: below)
         }
 
