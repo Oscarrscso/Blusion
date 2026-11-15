@@ -147,6 +147,7 @@ struct SettingsView: View {
                     .background { liveAppearance.pageBackground.ignoresSafeArea() }
                 }
             }
+            .ignoresSafeArea(edges: .bottom)
             .background { liveAppearance.pageBackground.ignoresSafeArea() }
             .toolbar(.hidden, for: .tabBar)
             .onAppear { sidePage.closesWhenToggled = false }
