@@ -1,6 +1,16 @@
-# Blusion <sup>v.1363</sup>
+<h1><img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="48" height="48" alt="Blusion app icon"> Blusion <sup>v.1363</sup></h1>
+
+<p>
+  <img src="https://img.shields.io/badge/iPhone-007AFF?style=flat-square" alt="iPhone">
+  <img src="https://img.shields.io/badge/iPad-007AFF?style=flat-square" alt="iPad">
+  <img src="https://img.shields.io/badge/Mac-007AFF?style=flat-square" alt="Mac">
+</p>
 
 A native SwiftUI media browser and player for iPhone, iPad and Mac, built around Stremio addons and customisable Home widgets.
+
+<p align="center">
+  <img src="docs/screenshots/movie-landscape-iphone-17.png" width="100%" alt="A Bug's Life details, ratings and reviews in landscape">
+</p>
 
 ## Screenshots
 
@@ -13,16 +23,24 @@ A native SwiftUI media browser and player for iPhone, iPad and Mac, built around
   <img src="docs/screenshots/person-iphone-17.png" width="24%" alt="Al Pacino biography and filmography">
 </p>
 <p align="center">
-  <img src="docs/screenshots/movie-landscape-iphone-17.png" width="49%" alt="A Bug's Life details, ratings and reviews in landscape">
-  <img src="docs/screenshots/library-landscape-iphone-17.png" width="49%" alt="Library filters and artwork grid in landscape">
+  <img src="docs/screenshots/library-landscape-iphone-17.png" width="75%" alt="Library filters and artwork grid in landscape">
 </p>
 
 ## Features
 
-- Customisable widgets, shelves and layouts.
+### Browse
+
 - Movie, series and people search.
 - Ratings, reviews and cast filmographies.
-- Stremio addons, built-in playback and Trakt sync.
+
+### Watch
+
+- Stremio addons and built-in playback.
+- Trakt sync.
+
+### Personalise
+
+- Customisable Home widgets, shelves and layouts.
 
 ## Build
 
