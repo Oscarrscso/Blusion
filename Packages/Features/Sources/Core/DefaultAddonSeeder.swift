@@ -44,15 +44,20 @@ public struct DefaultAddonSeeder: Sendable {
         case failed(RegistryError)
     }
 
-    public static let flagKey = "defaults.seededMetadataAddon.v1"
+    static let flagKey = "defaults.seededMetadataAddon.v1"
 
     private let registry: AddonRegistry
     private let flags: any FlagStore
     private let manifestURL: String
     private let manifestID: String
 
-    public init(registry: AddonRegistry, flags: any FlagStore,
-                manifestURL: String = SuggestedAddon.cinemeta.manifestURL, manifestID: String = SuggestedAddon.cinemeta.manifestID) {
+    public init(registry: AddonRegistry, flags: any FlagStore) {
+        self.init(registry: registry, flags: flags,
+                  manifestURL: SuggestedAddon.cinemeta.manifestURL,
+                  manifestID: SuggestedAddon.cinemeta.manifestID)
+    }
+
+    init(registry: AddonRegistry, flags: any FlagStore, manifestURL: String, manifestID: String) {
         self.registry = registry
         self.flags = flags
         self.manifestURL = manifestURL

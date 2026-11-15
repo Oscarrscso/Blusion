@@ -11,41 +11,41 @@ import StremioKit
 /// a value added later keeps older saves loading, and the fields that used to be fixed steps (card size, corners, spacing, the outline
 /// switch) read the old steps into the new values.
 public struct AppearancePreferences: Sendable, Equatable, Codable {
-    public static let defaultsKey = "settings.appearance"
+    static let defaultsKey = "settings.appearance"
 
     // MARK: - Ranges and options
 
-    public static let cardScaleRange: ClosedRange<Double> = 0.6...1.6
-    public static let cornerScaleRange: ClosedRange<Double> = 0...2.5
-    public static let spacingScaleRange: ClosedRange<Double> = 0.3...2
-    public static let shelfSpacingScaleRange: ClosedRange<Double> = 0...3
-    public static let sideMarginScaleRange: ClosedRange<Double> = 0...2
-    public static let shelfDividerThicknessRange: ClosedRange<Double> = 0.5...4
-    public static let shelfDividerOpacityRange: ClosedRange<Double> = 0.03...0.6
-    public static let tintStrengthRange: ClosedRange<Double> = 0.04...0.3
+    static let cardScaleRange: ClosedRange<Double> = 0.6...1.6
+    static let cornerScaleRange: ClosedRange<Double> = 0...2.5
+    static let spacingScaleRange: ClosedRange<Double> = 0.3...2
+    static let shelfSpacingScaleRange: ClosedRange<Double> = 0...3
+    static let sideMarginScaleRange: ClosedRange<Double> = 0...2
+    static let shelfDividerThicknessRange: ClosedRange<Double> = 0.5...4
+    static let shelfDividerOpacityRange: ClosedRange<Double> = 0.03...0.6
+    static let tintStrengthRange: ClosedRange<Double> = 0.04...0.3
     /// The column counts a phone's portrait and landscape title grids offer.
-    public static let phoneGridColumnRange: ClosedRange<Int> = 2...6
-    public static let captionLineRange: ClosedRange<Int> = 1...2
+    static let phoneGridColumnRange: ClosedRange<Int> = 2...6
+    static let captionLineRange: ClosedRange<Int> = 1...2
     /// Seconds between the spotlight's pages turning by themselves; zero leaves them for the listener to swipe.
-    public static let heroAutoAdvanceOptions = [0, 5, 8, 12, 20, 30]
+    static let heroAutoAdvanceOptions = [0, 5, 8, 12, 20, 30]
 
     // MARK: - Colour
 
-    public var accent: Accent = .olive
+    var accent: Accent = .olive
     /// The accent when `accent` is `.custom`. Kept when another accent is chosen, so going back to Custom finds it again.
-    public var customAccent = RGB(red: 0.058990478515625, green: 0, blue: 0.2928619384765625)
-    public var background: Background = .graphite
+    var customAccent = RGB(red: 0.058990478515625, green: 0, blue: 0.2928619384765625)
+    var background: Background = .graphite
     /// The background when `background` is `.custom`. Kept like the custom accent.
-    public var customBackground = RGB(red: 0, green: 0, blue: 0.049957275390625)
+    var customBackground = RGB(red: 0, green: 0, blue: 0.049957275390625)
     /// How much of the accent the Tinted background has, as a share of the accent's own brightness (`tintStrengthRange`).
-    public var tintStrength: Double = 0.11
-    public var playStyle: PlayStyle = .artwork
-    public var buttonFinish: ButtonFinish = .glass
+    var tintStrength: Double = 0.11
+    var playStyle: PlayStyle = .artwork
+    var buttonFinish: ButtonFinish = .glass
 
     // MARK: - Text
 
     /// Prose: synopses and other reading. Its text size is the listener's own and a preset leaves it.
-    public var reading: TextStyle = {
+    var reading: TextStyle = {
         var style = TextStyle()
         style.textSize = .large
         style.width = .expanded
@@ -55,11 +55,11 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         return style
     }()
     /// Buttons, metadata, captions and other interface text. Each choice follows reading until it is set.
-    public var interface = TextStyle.followingReading()
+    var interface = TextStyle.followingReading()
     /// Shelf and section headings. The face, width, spacing, slant and text size follow reading; weight and size are their own.
-    public var headings = TextStyle.headings()
+    var headings = TextStyle.headings()
 
-    public func storedText(for role: TextRole) -> TextStyle {
+    func storedText(for role: TextRole) -> TextStyle {
         switch role {
         case .reading: reading
         case .interface: interface
@@ -67,7 +67,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public mutating func setStoredText(_ style: TextStyle, for role: TextRole) {
+    mutating func setStoredText(_ style: TextStyle, for role: TextRole) {
         switch role {
         case .reading: reading = style
         case .interface: interface = style
@@ -76,7 +76,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     }
 
     /// `role`'s choices, with any it still borrows filled in from reading.
-    public func resolvedText(for role: TextRole) -> TextStyle {
+    func resolvedText(for role: TextRole) -> TextStyle {
         let stored = storedText(for: role)
         guard role != .reading else { return stored }
         var resolved = stored
@@ -91,18 +91,18 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         return resolved
     }
 
-    public var textSize: TextSize {
+    var textSize: TextSize {
         get { reading.textSize }
         set { reading.textSize = newValue }
     }
 
-    public var font: FontStyle {
+    var font: FontStyle {
         get { reading.font }
         set { reading.font = newValue }
     }
 
     /// Reading in a heavy weight. Kept so earlier saves, which stored a switch, still read.
-    public var boldText: Bool {
+    var boldText: Bool {
         get { reading.weight == .bold || reading.weight == .heavy || reading.weight == .black }
         set {
             reading.weight = newValue ? .bold : .regular
@@ -110,27 +110,27 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var italicText: Bool {
+    var italicText: Bool {
         get { reading.italic }
         set { reading.italic = newValue }
     }
 
-    public var fontWidth: FontWidth {
+    var fontWidth: FontWidth {
         get { reading.width }
         set { reading.width = newValue }
     }
 
-    public var letterSpacing: LetterSpacing {
+    var letterSpacing: LetterSpacing {
         get { reading.letterSpacing }
         set { reading.letterSpacing = newValue }
     }
 
-    public var lineSpacing: LineSpacing {
+    var lineSpacing: LineSpacing {
         get { reading.lineSpacing }
         set { reading.lineSpacing = newValue }
     }
 
-    public var headingFont: HeadingFont {
+    var headingFont: HeadingFont {
         get { headings.followsFont ? .matchText : (HeadingFont(rawValue: headings.font.rawValue) ?? .matchText) }
         set {
             if let font = newValue.font {
@@ -143,7 +143,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     }
 
     /// Buttons, metadata, captions and other interface text. `matchText` uses the reading face.
-    public var interfaceFont: HeadingFont {
+    var interfaceFont: HeadingFont {
         get { interface.followsFont ? .matchText : (HeadingFont(rawValue: interface.font.rawValue) ?? .matchText) }
         set {
             if let font = newValue.font {
@@ -155,7 +155,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var headingWeight: HeadingWeight {
+    var headingWeight: HeadingWeight {
         get { headings.weight }
         set {
             headings.weight = newValue
@@ -163,7 +163,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var headingSize: HeadingSize {
+    var headingSize: HeadingSize {
         get { headings.scale }
         set {
             headings.scale = newValue
@@ -171,7 +171,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var headingWidth: HeadingWidth {
+    var headingWidth: HeadingWidth {
         get {
             guard !headings.followsWidth else { return .matchText }
             switch headings.width {
@@ -191,7 +191,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var headingSpacing: HeadingSpacing {
+    var headingSpacing: HeadingSpacing {
         get {
             guard !headings.followsLetterSpacing else { return .matchText }
             switch headings.letterSpacing {
@@ -211,12 +211,12 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var uppercaseHeadings: Bool {
+    var uppercaseHeadings: Bool {
         get { headings.capitals }
         set { headings.capitals = newValue }
     }
 
-    public var headingColour: HeadingColour {
+    var headingColour: HeadingColour {
         get { headings.colour }
         set { headings.colour = newValue }
     }
@@ -224,111 +224,111 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     // MARK: - Cards
 
     /// Every card's width in shelves and wide grids, as a share of the layout's own (`cardScaleRange`).
-    public var cardScale: Double = 1
+    var cardScale: Double = 1
     /// The roundness of posters, cards, tiles and stills, as a share of their own radius (`cornerScaleRange`). Zero is square.
-    public var cornerScale: Double = 1.5
+    var cornerScale: Double = 1.5
     /// Missing entries follow the global corner scale; overrides are absolute, not multiplied by it.
-    public var cornerOverrides: [String: Double] = [:]
-    public var includesCircularButtons = true
+    var cornerOverrides: [String: Double] = [:]
+    var includesCircularButtons = true
 
-    public func cornerScale(for group: CornerGroup) -> Double {
+    func cornerScale(for group: CornerGroup) -> Double {
         cornerOverrides[group.rawValue] ?? cornerScale
     }
     /// The gaps between cards and between shelves, as a share of the layout's own (`spacingScaleRange`).
-    public var spacingScale: Double = 0.3
+    var spacingScale: Double = 0.3
     /// The gap between shelves on its own; nil follows `spacingScale`.
-    public var shelfSpacingScale: Double? = 1.4000000000000001
+    var shelfSpacingScale: Double? = 1.4000000000000001
     /// The page's left and right margin, as a share of the layout's own (it also follows `spacingScale`, so tight spacing reaches the edges).
-    public var sideMarginScale: Double = 1.1
+    var sideMarginScale: Double = 1.1
     /// A horizontal line between shelves, with its thickness, strength and whether it runs edge to edge.
-    public var showsShelfDividers = true
-    public var shelfDividerThickness: Double = 1.5
-    public var shelfDividerOpacity: Double = 0.07
-    public var shelfDividerFullWidth = true
+    var showsShelfDividers = true
+    var shelfDividerThickness: Double = 1.5
+    var shelfDividerOpacity: Double = 0.07
+    var shelfDividerFullWidth = true
     /// The lines between a title page's sections: Home's shelf lines, or these of its own.
-    public var titleDividersFollowHome = true
-    public var showsTitleDividers = true
-    public var titleDividerThickness: Double = 1
-    public var titleDividerOpacity: Double = 0.06
-    public var titleDividerFullWidth = false
-    public var effectiveShowsTitleDividers: Bool { titleDividersFollowHome ? showsShelfDividers : showsTitleDividers }
-    public var effectiveTitleDividerThickness: Double { titleDividersFollowHome ? shelfDividerThickness : titleDividerThickness }
-    public var effectiveTitleDividerOpacity: Double { titleDividersFollowHome ? shelfDividerOpacity : titleDividerOpacity }
-    public var effectiveTitleDividerFullWidth: Bool { titleDividersFollowHome ? shelfDividerFullWidth : titleDividerFullWidth }
-    public var effectiveShelfSpacingScale: Double { shelfSpacingScale ?? spacingScale }
+    var titleDividersFollowHome = true
+    var showsTitleDividers = true
+    var titleDividerThickness: Double = 1
+    var titleDividerOpacity: Double = 0.06
+    var titleDividerFullWidth = false
+    var effectiveShowsTitleDividers: Bool { titleDividersFollowHome ? showsShelfDividers : showsTitleDividers }
+    var effectiveTitleDividerThickness: Double { titleDividersFollowHome ? shelfDividerThickness : titleDividerThickness }
+    var effectiveTitleDividerOpacity: Double { titleDividersFollowHome ? shelfDividerOpacity : titleDividerOpacity }
+    var effectiveTitleDividerFullWidth: Bool { titleDividersFollowHome ? shelfDividerFullWidth : titleDividerFullWidth }
+    var effectiveShelfSpacingScale: Double { shelfSpacingScale ?? spacingScale }
     /// Poster columns of a grid (Library, Discover, See All) on a phone held upright.
-    public var phoneGridColumns = 3
+    var phoneGridColumns = 3
     /// Title columns on a phone held sideways, independently of the portrait grid.
-    public var phoneLandscapeGridColumns = 3
+    var phoneLandscapeGridColumns = 3
     /// Every poster carries its title and a grey line underneath, as landscape and square cards do.
-    public var showsPosterTitles = false
+    var showsPosterTitles = false
     /// Lines a card's title may take under it before it is cut off (`captionLineRange`). Every card of a kind keeps the same height.
-    public var captionLines = 1
+    var captionLines = 1
     /// The grey line under a card's title ("Drama · 2008").
-    public var showsCaptionDetails = true
+    var showsCaptionDetails = true
     /// A card's title in capitals.
-    public var uppercaseCaptions = false
-    public var outline: Outline = .standard
+    var uppercaseCaptions = false
+    var outline: Outline = .standard
     /// Buttons take the cards' hairline (Outline's strength, or Default when cards have none).
-    public var outlinesButtons = true
-    public var artworkTone: ArtworkTone = .natural
-    public var progressColour: ProgressColour = .white
-    public var progressThickness: ProgressThickness = .thin
+    var outlinesButtons = true
+    var artworkTone: ArtworkTone = .natural
+    var progressColour: ProgressColour = .white
+    var progressThickness: ProgressThickness = .thin
     /// The minutes left beside the progress line on Continue cards.
-    public var showsTimeLeft = true
+    var showsTimeLeft = true
 
     // MARK: - Poster artwork
 
     /// Poster cards use 1200-pixel hero artwork; details reuse it while loading the full-resolution image.
-    public var usesHeroPosters = false
+    var usesHeroPosters = false
     /// IMDb and Letterboxd ratings on posters.
-    public var showsPosterRatings = true
+    var showsPosterRatings = true
     /// Rating logos keep their brand colours. Off, they take the text colour, so they match the rest of the screen.
-    public var showsColouredRatingLogos = true
+    var showsColouredRatingLogos = true
     /// Film posters carry a 4K or Blu-ray mark beside their ratings when Best Blurays names that disc as the film's best.
-    public var showsBestDiscOnPosters = true
+    var showsBestDiscOnPosters = true
     /// Where a poster's disc or streamer brand sits: in the ratings pill, or on its own in a corner. Top right by default.
-    public var posterMarkPlacement: PosterMarkPlacement = .topTrailing
+    var posterMarkPlacement: PosterMarkPlacement = .topTrailing
 
     // MARK: - Layout
 
-    public var layout: Layout = .standard
+    var layout: Layout = .standard
 
     // MARK: - Home
 
     /// Seconds between the spotlight turning its page by itself; zero never (`heroAutoAdvanceOptions`).
-    public var heroAutoAdvance = 0
+    var heroAutoAdvance = 0
     /// Retained for saved-look compatibility; showcase dots are always visible.
-    public var showsPageDots = true
+    var showsPageDots = true
     /// Maximum titles shown in Continue Watching, after filtering by kind.
-    public var continueWatchingLimit = 12
+    var continueWatchingLimit = 12
 
     // MARK: - Title pages
 
     /// Unwatched episodes on a title page hide what `spoilerStills`, `spoilerSynopses` and `spoilerTitles` say until they are started.
-    public var hidesSpoilers = false
-    public var spoilerStills = false
-    public var spoilerSynopses = true
-    public var spoilerTitles = false
+    var hidesSpoilers = false
+    var spoilerStills = false
+    var spoilerSynopses = true
+    var spoilerTitles = false
     /// The synopsis opens unfolded.
-    public var expandsSynopsis = false
+    var expandsSynopsis = false
     /// The hero picture runs down the whole page as an episode card's still runs under its text, in place of the fade to the page's colour.
-    public var blursBackground = false
+    var blursBackground = false
     /// The title page's sections below Play, synopsis and ratings.
-    public var showsReviews = true
-    public var showsCast = true
-    public var showsInformation = true
-    public var showsFranchise = true
-    public var showsRelated = true
+    var showsReviews = true
+    var showsCast = true
+    var showsInformation = true
+    var showsFranchise = true
+    var showsRelated = true
     /// Where the title can be watched in the viewer's region, from TMDb.
-    public var showsWatchAnywhere = true
-    public var sectionOrder: SectionOrder = .reviewsFirst
+    var showsWatchAnywhere = true
+    var sectionOrder: SectionOrder = .reviewsFirst
     /// Empty keeps the earlier Reviews First / Cast First choice, including existing saved looks and presets.
-    public var titleSectionOrder: [TitleSection] = [.episodes, .reviews, .cast, .franchise, .related, .information, .watchAnywhere]
+    var titleSectionOrder: [TitleSection] = [.episodes, .reviews, .cast, .franchise, .related, .information, .watchAnywhere]
     /// On iPhone held upright, a title page keeps the tab bar so Home can be tapped from it.
-    public var showsTitlePageTabBar = true
+    var showsTitlePageTabBar = true
 
-    public var orderedTitleSections: [TitleSection] {
+    var orderedTitleSections: [TitleSection] {
         let saved = titleSectionOrder.isEmpty && sectionOrder == .castFirst
             ? [.episodes, .cast, .reviews, .information, .franchise, .related, .watchAnywhere] : titleSectionOrder
         var order: [TitleSection] = []
@@ -338,7 +338,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         return order
     }
 
-    public func showsTitleSection(_ section: TitleSection) -> Bool {
+    func showsTitleSection(_ section: TitleSection) -> Bool {
         switch section {
         case .episodes: true
         case .reviews: showsReviews
@@ -352,23 +352,23 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
 
     // MARK: - Navigation and motion
 
-    public var startTab: StartTab = .home
+    public internal(set) var startTab: StartTab = .home
     /// A card zooms into the title it opens, and the title zooms back into it.
-    public var zoomTransitions = true
-    public var animationSpeed: AnimationSpeed = .fastest
+    var zoomTransitions = true
+    public internal(set) var animationSpeed: AnimationSpeed = .fastest
     /// The iPhone's tab bar names its tabs under their icons.
-    public var phoneTabTitles = false
+    var phoneTabTitles = false
     /// The iPhone's tab bar shrinks while a page scrolls down.
-    public var minimisesTabBar = true
+    var minimisesTabBar = true
     /// The Continue Watching bar above the iPhone's tab bar.
-    public var showsContinueBar = false
+    var showsContinueBar = false
 
     // MARK: - Hover
 
     /// The Mac's hover feedback.
-    public var hover = Hover()
+    var hover = Hover()
 
-    public init() {}
+    init() {}
 
     /// Copies what a preset sets from `look`: colour, Play's fill and the buttons' finish, text but its size, cards, corners, the layout,
     /// Home's spotlight, the title page's layout, zoom transitions, the iPhone's tab bar and the Mac's hover. The custom colours stay.
@@ -719,17 +719,17 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     // MARK: - Reading
 
     /// The preset this look is, if it is one.
-    public var preset: Preset? {
+    var preset: Preset? {
         Preset.allCases.first { $0.applied(to: self) == self }
     }
 
     /// The accent's colour, the app's own included.
-    public var accentRGB: RGB {
+    var accentRGB: RGB {
         accent == .custom ? customAccent : (accent.rgb ?? Accent.blusion.rgb ?? customAccent)
     }
 
     /// The page background's colour.
-    public var backgroundRGB: RGB {
+    var backgroundRGB: RGB {
         switch background {
         case .tinted: accentRGB.scaled(by: tintStrength)
         case .custom: customBackground
@@ -737,39 +737,39 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
         }
     }
 
-    public var isDefault: Bool { self == AppearancePreferences() }
+    var isDefault: Bool { self == AppearancePreferences() }
 
     /// This look with the poster switches taken from `current`. A saved, pasted or copied look sets the colour, text, cards and the rest,
     /// never the poster switches, which were not part of a look before they moved here.
-    public func keepingPosterArtwork(of current: AppearancePreferences) -> AppearancePreferences {
+    func keepingPosterArtwork(of current: AppearancePreferences) -> AppearancePreferences {
         var look = self
         for field in Self.fields where field.isPosterArtwork { field.copy(&look, current) }
         return look
     }
 
     /// Whether everything but the poster artwork is at its default, so Settings can list the poster switches apart from the look.
-    public var isDefaultExceptPosterArtwork: Bool { keepingPosterArtwork(of: AppearancePreferences()).isDefault }
+    var isDefaultExceptPosterArtwork: Bool { keepingPosterArtwork(of: AppearancePreferences()).isDefault }
 
     /// The parts of Settings → Appearance, each with a page of its own and its own Restore Defaults.
-    public enum Section: String, Sendable, CaseIterable, Identifiable {
+    enum Section: String, Sendable, CaseIterable, Identifiable {
         case colour, text, cards, corners, home, titlePages, motion, hover
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
     }
 
     /// This look with one section back at its defaults and the rest as it is.
-    public func restoringDefaults(of section: Section) -> AppearancePreferences {
+    func restoringDefaults(of section: Section) -> AppearancePreferences {
         let defaults = AppearancePreferences()
         var result = self
         for field in Self.fields where field.section == section { field.copy(&result, defaults) }
         return result
     }
 
-    public func isDefault(_ section: Section) -> Bool { restoringDefaults(of: section) == self }
+    func isDefault(_ section: Section) -> Bool { restoringDefaults(of: section) == self }
 
     /// What a card's height depends on besides its own shape, size and width: a shelf or grid that measured its cards measures again when
     /// this changes.
-    public var layoutKey: String {
+    var layoutKey: String {
         let numbers = [cardScale, spacingScale, cornerScale, effectiveShelfSpacingScale, sideMarginScale, shelfDividerThickness,
                        shelfDividerOpacity].map { String(format: "%.3f", $0) }
         let text = [reading.layoutKey, interface.layoutKey, headings.layoutKey]
@@ -784,7 +784,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     }
 
     /// Back to the defaults (Settings → Clear data → Settings, and Appearance's Reset).
-    public static func reset(in defaults: UserDefaults = .standard) {
+    static func reset(in defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: defaultsKey)
     }
 

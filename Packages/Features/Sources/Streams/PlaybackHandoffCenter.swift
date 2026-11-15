@@ -18,7 +18,11 @@ public struct PlaybackHandoffCenter: Sendable {
     private let services: AppServices
     private let now: @Sendable () -> Date
 
-    public init(services: AppServices, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(services: AppServices) {
+        self.init(services: services, now: { Date() })
+    }
+
+    init(services: AppServices, now: @escaping @Sendable () -> Date) {
         self.services = services
         self.now = now
     }

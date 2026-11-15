@@ -2,19 +2,19 @@ import Foundation
 import PlayerKit
 import StremioKit
 
-public struct ContinueWatchingEntry: Identifiable, Equatable, Sendable {
-    public let request: StreamRequest
-    public let fraction: Double
-    public let updatedAt: Date
-    public var id: String { request.identity }
+struct ContinueWatchingEntry: Identifiable, Equatable, Sendable {
+    let request: StreamRequest
+    let fraction: Double
+    let updatedAt: Date
+    var id: String { request.identity }
 
-    public var subtitle: String {
+    var subtitle: String {
         guard let season = request.season, let episode = request.episode else { return "" }
         return "S\(season) E\(episode)"
     }
 
     /// An episode's own name: an episode's title is "Series · Episode". nil for a film, or a title without the episode's name.
-    public var episodeName: String? {
+    var episodeName: String? {
         guard request.episode != nil else { return nil }
         let title = request.title
         let name: Substring

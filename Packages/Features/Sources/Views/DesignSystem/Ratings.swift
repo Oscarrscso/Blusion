@@ -1,6 +1,36 @@
+import StremioKit
+
+extension ReviewSite {
+    /// The review sites shown on a title's rating row and used to decide whether the expanded panel header repeats the site name.
+    @MainActor
+    static func availableSites(for item: MetaPreview, ratings: TitleRatings?) -> [ReviewSite] {
+        // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed. They sit
+        // at the far right, after the other sites.
+        // Rotten Tomatoes and Metacritic are for films only: a show has no button for either. MyAnimeList always has one on anime, and only
+        // there.
+        let isAnime = ratings?.isAnime ?? ReviewSite.isAnime(item)
+        let shown = ReviewSite.allCases.filter { site in
+            if ReviewPageReader.supports(site) { return item.type == "movie" }
+            if site == .myAnimeList { return isAnime }
+            return site == .imdb || ratings?.shortText(for: site) != nil
+        }
+        // Letterboxd leads, then IMDb and TMDB; on anime MyAnimeList leads, IMDb takes TMDB's place and TMDB follows it.
+        let order: [ReviewSite] = isAnime ? [.myAnimeList, .letterboxd, .imdb, .tmdb] : [.letterboxd, .imdb, .tmdb, .myAnimeList]
+        let ordered = shown.filter { !ReviewPageReader.supports($0) }.sorted { (order.firstIndex(of: $0) ?? 0) < (order.firstIndex(of: $1) ?? 0) }
+        return ordered + shown.filter { ReviewPageReader.supports($0) }
+    }
+}
+
+extension RatingSiteLabel {
+    /// True when the expanded review panel header should repeat the site's white text name next to its icon.
+    /// Two-site rows already draw each site's uppercase name in its pill, so repeating it in the header is redundant.
+    static func showsPanelHeaderSiteName(siteCount: Int) -> Bool {
+        !usesName(siteCount: siteCount)
+    }
+}
+
 #if canImport(UIKit)
 import SwiftUI
-import StremioKit
 
 /// Letterboxd's mark: three small overlapping dots. Drawn, not an image, so it needs no brand assets and stays crisp at any size.
 struct LetterboxdMark: View {
@@ -341,20 +371,7 @@ struct RatingButtonsRow: View {
     }
 
     private func buttons(ratings: TitleRatings?) -> some View {
-        // Rotten Tomatoes and Metacritic always have a button: their reviews are read from the site itself, so a score is not needed. They sit
-        // at the far right, after the other sites.
-        // Rotten Tomatoes and Metacritic are for films only: a show has no button for either. MyAnimeList always has one on anime, and only
-        // there.
-        let isAnime = ratings?.isAnime ?? ReviewSite.isAnime(item)
-        let shown = ReviewSite.allCases.filter { site in
-            if ReviewPageReader.supports(site) { return item.type == "movie" }
-            if site == .myAnimeList { return isAnime }
-            return site == .imdb || ratings?.shortText(for: site) != nil
-        }
-        // Letterboxd leads, then IMDb and TMDB; on anime MyAnimeList leads, IMDb takes TMDB's place and TMDB follows it.
-        let order: [ReviewSite] = isAnime ? [.myAnimeList, .letterboxd, .imdb, .tmdb] : [.letterboxd, .imdb, .tmdb, .myAnimeList]
-        let ordered = shown.filter { !ReviewPageReader.supports($0) }.sorted { (order.firstIndex(of: $0) ?? 0) < (order.firstIndex(of: $1) ?? 0) }
-        let sites = ordered + shown.filter { ReviewPageReader.supports($0) }
+        let sites = ReviewSite.availableSites(for: item, ratings: ratings)
         let showsLinkIcon = sites.count <= 4
         let showsSiteName = RatingSiteLabel.usesName(siteCount: sites.count)
         return GeometryReader { geometry in

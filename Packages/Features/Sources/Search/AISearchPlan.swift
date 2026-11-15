@@ -2,29 +2,29 @@ import Foundation
 import StremioKit
 
 /// A bounded set of database searches, not titles invented by the language model.
-public struct AISearchPlan: Sendable, Equatable {
-    public struct Person: Sendable, Equatable {
-        public enum Role: String, Sendable { case cast, director, writer, creator }
-        public var name: String
-        public var role: Role
+struct AISearchPlan: Sendable, Equatable {
+    struct Person: Sendable, Equatable {
+        enum Role: String, Sendable { case cast, director, writer, creator }
+        var name: String
+        var role: Role
         /// The part they must play ("Forrest Gump"), checked against the credit's own character. Nil for any part.
-        public var character: String?
-        public init(name: String, role: Role, character: String? = nil) { self.name = name; self.role = role; self.character = character }
+        var character: String?
+        init(name: String, role: Role, character: String? = nil) { self.name = name; self.role = role; self.character = character }
     }
 
-    public var filters: DescribedSearch
-    public var titleQueries: [String]
-    public var referenceTitles: [String]
-    public var people: [Person]
-    public var companies: [String]
-    public var language: String?
-    public var excludedTopics: [String]
-    public var requiresSemanticRanking: Bool
-    public var unwatchedOnly: Bool
+    var filters: DescribedSearch
+    var titleQueries: [String]
+    var referenceTitles: [String]
+    var people: [Person]
+    var companies: [String]
+    var language: String?
+    var excludedTopics: [String]
+    var requiresSemanticRanking: Bool
+    var unwatchedOnly: Bool
     /// Only titles the viewing history holds ("comedies I've seen").
-    public var watchedOnly = false
+    var watchedOnly = false
     /// Streaming services the titles must be on, as TMDb lists them in the device's region. Only discover searches can check this.
-    public var providers: [StreamProvider] = []
+    var providers: [StreamProvider] = []
     /// The lexical fallback can still find factual matches, but an inference failure must remain retryable.
     var interpretationFailed = false
     /// Set when the words ask for nothing beyond facts and topics: titles TMDb has tagged with every requested topic then need no
@@ -38,7 +38,7 @@ public struct AISearchPlan: Sendable, Equatable {
     /// Set when the model gave back words that do not read as a title as one: only a title of that name or its sequels counts.
     var titleSequelsOnly = false
 
-    public init(filters: DescribedSearch, titleQueries: [String] = [], referenceTitles: [String] = [], people: [Person] = [],
+    init(filters: DescribedSearch, titleQueries: [String] = [], referenceTitles: [String] = [], people: [Person] = [],
                 companies: [String] = [], language: String? = nil, excludedTopics: [String] = [], unwatchedOnly: Bool = false,
                 requiresSemanticRanking: Bool = true) {
         self.filters = filters
@@ -97,27 +97,27 @@ public struct AISearchPlan: Sendable, Equatable {
 // MARK: - Filter chips
 
 /// One requirement a discovery search was read as asking for, shown as a chip that can be changed or removed.
-public struct SearchChip: Identifiable, Hashable, Sendable {
-    public enum Kind: Hashable, Sendable {
+struct SearchChip: Identifiable, Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
         case kind, years, runtime, score, language, unwatched, watched
         case genre(String), excludedGenre(String), theme(String), excludedTheme(String)
         case person(String), similar(String), studio(String), provider(StreamProvider)
     }
 
-    public let kind: Kind
-    public let title: String
-    public var id: Kind { kind }
+    let kind: Kind
+    let title: String
+    var id: Kind { kind }
 }
 
 /// A value a chip can be changed to, as the plan the search then runs. No model reads anything again.
-public struct SearchChipOption: Identifiable, Sendable {
-    public let title: String
-    public let plan: AISearchPlan
-    public var id: String { title }
+struct SearchChipOption: Identifiable, Sendable {
+    let title: String
+    let plan: AISearchPlan
+    var id: String { title }
 }
 
 extension AISearchPlan {
-    public var chips: [SearchChip] {
+    var chips: [SearchChip] {
         var chips: [SearchChip] = []
         func add(_ kind: SearchChip.Kind, _ title: String) { chips.append(SearchChip(kind: kind, title: title)) }
         if let kind = filters.kind { add(.kind, kind == .movie ? "Movies" : "Series") }
@@ -143,7 +143,7 @@ extension AISearchPlan {
     }
 
     /// The plan without one requirement. With no theme or reference left, nothing is left for a synopsis to show.
-    public func removing(_ chip: SearchChip.Kind) -> AISearchPlan {
+    func removing(_ chip: SearchChip.Kind) -> AISearchPlan {
         var plan = self
         switch chip {
         case .kind: plan.filters.kind = nil
@@ -170,7 +170,7 @@ extension AISearchPlan {
     }
 
     /// What a chip can be changed to. Empty for a chip that can only be removed.
-    public func options(for chip: SearchChip.Kind, now: Date = Date()) -> [SearchChipOption] {
+    func options(for chip: SearchChip.Kind, now: Date = Date()) -> [SearchChipOption] {
         func option(_ title: String, _ edit: (inout AISearchPlan) -> Void) -> SearchChipOption {
             var plan = self
             edit(&plan)
@@ -217,37 +217,37 @@ extension AISearchPlan {
 // MARK: - Candidates
 
 /// A candidate's number in the list the model was shown (from 1), and why it fits.
-public struct RankedCandidate: Sendable, Equatable {
-    public let number: Int
-    public let reason: String
+struct RankedCandidate: Sendable, Equatable {
+    let number: Int
+    let reason: String
 
-    public init(number: Int, reason: String) {
+    init(number: Int, reason: String) {
         self.number = number
         self.reason = reason
     }
 }
 
 /// Chooses from a numbered list of real candidates, best first.
-public protocol CandidateRanking: Sendable {
+protocol CandidateRanking: Sendable {
     /// `references` describes the titles the request names, so "like Prisoners" is read as that film, not as a word.
     func rank(request: String, references: [String], candidates: [String], watched: [String]) async throws -> [RankedCandidate]
 }
 
 /// Facts attached only to search candidates; never written into a title's synopsis or saved metadata.
-public struct AISearchCandidate: Sendable {
-    public let item: MetaPreview
-    public let evidence: String
-    public let metadata: TMDbSearchMetadata?
-    public init(item: MetaPreview, evidence: String, metadata: TMDbSearchMetadata? = nil) {
+struct AISearchCandidate: Sendable {
+    let item: MetaPreview
+    let evidence: String
+    let metadata: TMDbSearchMetadata?
+    init(item: MetaPreview, evidence: String, metadata: TMDbSearchMetadata? = nil) {
         self.item = item; self.evidence = evidence; self.metadata = metadata
     }
 }
 
-public struct AISearchUpdate: Sendable {
-    public enum Issue: Sendable, Equatable {
+struct AISearchUpdate: Sendable {
+    enum Issue: Sendable, Equatable {
         case needsTMDbToken, database, ranking
 
-        public var text: String {
+        var text: String {
             switch self {
             case .needsTMDbToken: "Add a TMDB Read Access Token in Settings to use AI Search."
             case .database: "Some search data couldn't load. Try again."
@@ -256,9 +256,9 @@ public struct AISearchUpdate: Sendable {
         }
     }
 
-    public enum Stage: Sendable, Equatable {
+    enum Stage: Sendable, Equatable {
         case interpreting, filters, titles, people, similar, themes, ranking, complete
-        public var text: String {
+        var text: String {
             switch self {
             case .interpreting: "Understanding your search…"
             case .filters: "Finding matches for your filters…"
@@ -271,13 +271,13 @@ public struct AISearchUpdate: Sendable {
             }
         }
     }
-    public let items: [MetaPreview]
-    public let stage: Stage
-    public let issue: Issue?
+    let items: [MetaPreview]
+    let stage: Stage
+    let issue: Issue?
     /// What the search was read as asking for, once that is known: what the filter chips show.
-    public let plan: AISearchPlan?
+    let plan: AISearchPlan?
 
-    public init(items: [MetaPreview], stage: Stage, issue: Issue? = nil, plan: AISearchPlan? = nil) {
+    init(items: [MetaPreview], stage: Stage, issue: Issue? = nil, plan: AISearchPlan? = nil) {
         self.items = items
         self.stage = stage
         self.issue = issue

@@ -9,9 +9,9 @@ import PlayerKit
 @MainActor
 @Observable
 public final class DownloadManager {
-    public private(set) var items: [DownloadItem] = []
-    public private(set) var errorMessage: String?
-    public private(set) var isReady = false
+    private(set) var items: [DownloadItem] = []
+    private(set) var errorMessage: String?
+    private(set) var isReady = false
     public var backgroundCompletion: (() -> Void)?
     private let store: any DownloadStore
     private let secrets: any SecretStore
@@ -26,9 +26,9 @@ public final class DownloadManager {
     private var adapter: DownloadSession?
     private var saving: Task<Void, any Error>?
     private var pausing: Set<UUID> = []
-    public private(set) var enqueueing: Set<String> = []
-    public private(set) var streamDownloads: [String: UUID] = [:]
-    public private(set) var loadingRequests: Set<String> = []
+    private(set) var enqueueing: Set<String> = []
+    private(set) var streamDownloads: [String: UUID] = [:]
+    private(set) var loadingRequests: Set<String> = []
     private var startup: Task<Void, Never>?
     private var listener: Task<Void, Never>?
     private var subtitleTasks: [UUID: Task<Void, Never>] = [:]
@@ -36,7 +36,7 @@ public final class DownloadManager {
     private var active: [UUID: URLSessionDownloadTask] = [:]
     private var preparing: Set<UUID> = []
     private var playing: Set<UUID> = []
-    public private(set) var transferSpeeds: [UUID: Double] = [:]
+    private(set) var transferSpeeds: [UUID: Double] = [:]
     private var rateSamples: [UUID: (bytes: Int64, date: Date)] = [:]
     private var lastSaved: [UUID: Date] = [:]
 
@@ -59,12 +59,12 @@ public final class DownloadManager {
         self.store = store; self.secrets = secrets; self.settings = settings; self.streams = streams
         self.subtitles = subtitles; self.fallback = fallback; self.hardwareAV1 = hardwareAV1; self.persistent = persistent
     }
-    public var storageBytes: Int64 {
+    var storageBytes: Int64 {
         guard let root, let files = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         return max(items.reduce(0) { $0 + $1.received },
                    files.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) })
     }
-    public func configuration() async -> PolicyConfiguration {
+    func configuration() async -> PolicyConfiguration {
         var config = await settings.load().policy(fallbackEngineLinked: fallback, decodesAV1InHardware: hardwareAV1)
         config.playerPreference = .builtIn
         return config
@@ -142,7 +142,7 @@ public final class DownloadManager {
     private enum DownloadError: Error { case credentials, storage, format, response }
 
     @discardableResult
-    public func enqueue(_ ranked: RankedStream, request: StreamRequest) async -> Bool {
+    func enqueue(_ ranked: RankedStream, request: StreamRequest) async -> Bool {
         guard enqueueing.insert(ranked.id).inserted else { return true }
         defer { enqueueing.remove(ranked.id) }
         await start()
@@ -202,19 +202,19 @@ public final class DownloadManager {
         if quality.isRemux { values["Release"] = "Remux" }
         return values
     }
-    public func speed(for id: UUID, at date: Date) -> Double? {
+    func speed(for id: UUID, at date: Date) -> Double? {
         guard let sample = rateSamples[id], date.timeIntervalSince(sample.date) < 5 else { return nil }
         return transferSpeeds[id]
     }
-    public func item(for request: StreamRequest) -> DownloadItem? {
+    func item(for request: StreamRequest) -> DownloadItem? {
         items.first { $0.request.identity == request.identity && $0.pendingDeletion != true }
     }
-    public func item(forStream id: String) -> DownloadItem? {
+    func item(forStream id: String) -> DownloadItem? {
         guard let downloadID = streamDownloads[id] else { return nil }
         return items.first { $0.id == downloadID && $0.pendingDeletion != true }
     }
     /// Match UI rows using secrets in memory; no remote stream ID is copied into the persisted metadata.
-    public func bindStream(_ ranked: RankedStream, request: StreamRequest) async {
+    func bindStream(_ ranked: RankedStream, request: StreamRequest) async {
         guard item(forStream: ranked.id) == nil else { return }
         await start()
         for item in items where item.request.identity == request.identity && item.pendingDeletion != true {
@@ -225,7 +225,7 @@ public final class DownloadManager {
         }
     }
     /// Title/episode actions resolve eligible streams with the same built-in policy as stream cards.
-    public func enqueueBest(_ request: StreamRequest) async {
+    func enqueueBest(_ request: StreamRequest) async {
         guard loadingRequests.insert(request.identity).inserted else { return }
         defer { loadingRequests.remove(request.identity) }
         let config = await configuration()
@@ -240,7 +240,7 @@ public final class DownloadManager {
         }
         await enqueue(choice, request: request)
     }
-    public func pause(_ id: UUID) async {
+    func pause(_ id: UUID) async {
         guard let i = index(id), items[i].state != .complete, pausing.insert(id).inserted else { return }
         defer {
             pausing.remove(id)
@@ -269,12 +269,12 @@ public final class DownloadManager {
         saved.resumeOffset = saved.offset
         try await save(saved, id: id)
     }
-    public func resume(_ id: UUID) async {
+    func resume(_ id: UUID) async {
         guard let i = index(id), [.paused, .failed].contains(items[i].state), !isDeleting(id) else { return }
         items[i].state = .queued; items[i].failure = nil; items[i].retries = 0
         do { try await persist(); await pump() } catch { await fail(id, "Could not save download") }
     }
-    public func delete(_ id: UUID) async {
+    func delete(_ id: UUID) async {
         guard let i = index(id) else { return }
         items[i].pendingDeletion = true
         if items[i].state != .complete { items[i].state = .paused }
@@ -303,7 +303,7 @@ public final class DownloadManager {
         await pump()
     }
     @discardableResult
-    public func deleteAll() async -> (failed: Int, pending: Int) {
+    func deleteAll() async -> (failed: Int, pending: Int) {
         var failed = 0
         var pending = 0
         for id in items.map(\.id) {
@@ -314,7 +314,7 @@ public final class DownloadManager {
         }
         return (failed, pending)
     }
-    public func preferencesChanged() async {
+    func preferencesChanged() async {
         // A new request is required because cellular access belongs to the request, including resumed system requests.
         let ids = items.filter { $0.state == .downloading || $0.state == .queued }.map(\.id)
         for id in ids {
@@ -661,7 +661,7 @@ public final class DownloadManager {
               FileManager.default.fileExists(atPath: file.path) else { return nil }
         return file
     }
-    public func plan(for id: UUID) async -> PlaybackPlan? {
+    func plan(for id: UUID) async -> PlaybackPlan? {
         await start()
         guard let i = index(id), items[i].state == .complete, items[i].pendingDeletion != true, let file = localFile(items[i]), let root else {
             if index(id) != nil { await fail(id, "File missing") }
@@ -678,7 +678,7 @@ public final class DownloadManager {
                             retriesInFallbackEngine: fallback, retriesInBackupEngine: fallback)
     }
     /// The download's cached landscape picture, which its card shows offline. Nil until it has been cached.
-    public func artworkURL(for item: DownloadItem) -> URL? {
+    func artworkURL(for item: DownloadItem) -> URL? {
         guard let root, let path = item.artworkPath else { return nil }
         return DownloadFiles.resolve(path, for: item.id, in: root)
     }
@@ -703,8 +703,8 @@ public final class DownloadManager {
     /// Marked for deletion: kept until its last callback (a transfer cancelling, a pause or start finishing, its player closing), then
     /// removed. The mark is saved on the item, so a deletion a quit cut short finishes at the next launch.
     private func isDeleting(_ id: UUID) -> Bool { items.first { $0.id == id }?.pendingDeletion == true }
-    public func opened(_ id: UUID) { playing.insert(id) }
-    public func closed(_ id: UUID, watched: Bool) async {
+    func opened(_ id: UUID) { playing.insert(id) }
+    func closed(_ id: UUID, watched: Bool) async {
         playing.remove(id)
         let preferences = await settings.load()
         if isDeleting(id) || (watched && preferences.downloadsDeleteWhenWatched) { await delete(id) }
@@ -715,6 +715,6 @@ public final class DownloadManager {
             return value.contains("://") || value.contains("@") ? "Media" : value
         }.joined(separator: " ")
     }
-    public func clearError() { errorMessage = nil }
+    func clearError() { errorMessage = nil }
 }
 #endif

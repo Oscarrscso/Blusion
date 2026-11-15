@@ -6,20 +6,20 @@ import StremioKit
 /// Home's spotlight and the title page both build their metadata line from the entry kept here, so the two lines are the same text.
 @MainActor
 @Observable
-public final class HeroMetaStore {
+final class HeroMetaStore {
     private var previews: [String: MetaPreview] = [:]
     /// Lookups under way, by title, so a title asked for twice at once shares one request.
     @ObservationIgnored private var lookups: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let browse: BrowseService
     @ObservationIgnored private let prices: JustWatchPrices
 
-    public nonisolated init(browse: BrowseService, client: AddonClient) {
+    nonisolated init(browse: BrowseService, client: AddonClient) {
         self.browse = browse
         self.prices = JustWatchPrices(client: client)
     }
 
     /// Regional rent and buy offers for a picked-up case, using the same session cache as the title page.
-    public func prices(for item: MetaPreview) async -> TitlePrices? {
+    func prices(for item: MetaPreview) async -> TitlePrices? {
         let shown = preview(for: item)
         let year = shown.releaseInfo?.firstMatch(of: /[0-9]{4}/).flatMap { Int($0.output) }
         return try? await prices.localPrices(id: item.id, title: shown.name, year: year, type: item.type,
@@ -27,19 +27,19 @@ public final class HeroMetaStore {
     }
 
     /// The details kept for the title, or nil when none have been loaded yet.
-    public func kept(for item: MetaPreview) -> MetaPreview? {
+    func kept(for item: MetaPreview) -> MetaPreview? {
         previews[item.identity]
     }
 
     /// What the metadata line is built from: the kept details, else the item as it is.
-    public func preview(for item: MetaPreview) -> MetaPreview {
+    func preview(for item: MetaPreview) -> MetaPreview {
         kept(for: item) ?? item
     }
 
     /// Asks the addons for the title's details and keeps them. A title already kept, or being asked for, asks nothing more; callers
     /// that arrive while the request runs wait for it. An answer built from the item alone (no addon answered) is not kept, so it is
     /// asked again.
-    public func load(for item: MetaPreview) async {
+    func load(for item: MetaPreview) async {
         let key = item.identity
         guard previews[key] == nil else { return }
         if let running = lookups[key] {
@@ -56,20 +56,20 @@ public final class HeroMetaStore {
     }
 
     /// Keeps the details the title page has just loaded itself, replacing any kept before.
-    public func record(_ details: MetaPreview, for item: MetaPreview) {
+    func record(_ details: MetaPreview, for item: MetaPreview) {
         previews[item.identity] = details
     }
 
     /// The parts of the metadata line for a title, for `MetaLine`. Home's spotlight and the title page both call this with the same
     /// ratings store, so the two lines are built by the same code from the same details.
-    public func parts(for item: MetaPreview, certification: String?, ratings: PosterRatingsStore) -> [String?] {
+    func parts(for item: MetaPreview, certification: String?, ratings: PosterRatingsStore) -> [String?] {
         let shown = preview(for: item)
         return DetailViewModel.heroMetaParts(for: shown, certification: certification,
                                              imdbRating: ratings.ratings(for: shown, includeReviews: true, source: .imdb).imdb)
     }
 
     /// The genres of the metadata line for a title, the same ones `parts` shows, for `MetaLine` to drop first when the line is too long.
-    public func genres(for item: MetaPreview) -> [String] {
+    func genres(for item: MetaPreview) -> [String] {
         DetailViewModel.heroMetaGenres(for: preview(for: item))
     }
 }

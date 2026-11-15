@@ -3,7 +3,7 @@ import Observation
 import StremioKit
 
 /// Why a trailer could not be played.
-public enum TrailerPlaybackError: Error, Equatable {
+enum TrailerPlaybackError: Error, Equatable {
     /// The player could not open the trailer, or it has nothing to show.
     case unplayable
     /// The player did not get ready in time.
@@ -14,7 +14,7 @@ public enum TrailerPlaybackError: Error, Equatable {
 
 /// A trailer's player once it can start. The page shows it; stopping it pauses it and lets the stream go.
 @MainActor
-public protocol TrailerPlayback: AnyObject {
+protocol TrailerPlayback: AnyObject {
     /// The trailer's length in seconds, when the player knows it.
     var duration: TimeInterval? { get }
     /// The picture's width over its height, when the player knows it.
@@ -28,7 +28,7 @@ public protocol TrailerPlayback: AnyObject {
 }
 
 /// Makes the player for a trailer's link, or for a YouTube video, and waits until it can start.
-public protocol TrailerPreparing: Sendable {
+protocol TrailerPreparing: Sendable {
     /// Gives `url` to the player as it is and returns once enough has buffered to start. Throws when the link cannot be played, and
     /// `CancellationError` when the task is cancelled; either way the player it made is released.
     @MainActor func prepare(_ url: URL) async throws -> any TrailerPlayback
@@ -54,10 +54,10 @@ struct UnavailableTrailerPreparer: TrailerPreparing {
 }
 
 /// The trailers a tap tries, best first.
-public struct TrailerPlan: Sendable {
-    public var trailers: [Trailer]
+struct TrailerPlan: Sendable {
+    var trailers: [Trailer]
 
-    public init(trailers: [Trailer]) {
+    init(trailers: [Trailer]) {
         self.trailers = trailers
     }
 }
@@ -67,8 +67,8 @@ public struct TrailerPlan: Sendable {
 /// allows it. Only one load runs at a time, leaving the page cancels it, and a load that takes longer than `loadDeadline` is given up.
 @MainActor
 @Observable
-public final class TrailerLoader {
-    public enum Phase: Equatable {
+final class TrailerLoader {
+    enum Phase: Equatable {
         case idle
         /// Finding the trailer and buffering it.
         case loading
@@ -82,40 +82,40 @@ public final class TrailerLoader {
     static let loadDeadline: Duration = .seconds(30)
 
     /// Where a page's trailers and their checks come from.
-    public struct Source: Sendable {
-        public var plan: @MainActor () async -> TrailerPlan
+    struct Source: Sendable {
+        var plan: @MainActor () async -> TrailerPlan
         /// Asks YouTube about the video (its id): whether it may be tried in the embedded player, and the shape of its picture.
-        public var embedCheck: @MainActor (String) async -> YouTubeEmbedCheck.Answer
+        var embedCheck: @MainActor (String) async -> YouTubeEmbedCheck.Answer
 
-        public init(plan: @escaping @MainActor () async -> TrailerPlan,
+        init(plan: @escaping @MainActor () async -> TrailerPlan,
                     embedCheck: @escaping @MainActor (String) async -> YouTubeEmbedCheck.Answer) {
             self.plan = plan
             self.embedCheck = embedCheck
         }
     }
 
-    public private(set) var phase: Phase = .idle
+    private(set) var phase: Phase = .idle
     /// The player of the trailer that is playing. Nil in every other phase.
-    public private(set) var playback: (any TrailerPlayback)?
+    private(set) var playback: (any TrailerPlayback)?
     /// A YouTube trailer to open in the YouTube app. It is set only when YouTube will not embed the video and nothing else
     /// played: the YouTube app is the fallback for a video the embedded player cannot play. The page opens it and sets this back
     /// to nil.
-    public var youTubeHandoff: Trailer?
+    var youTubeHandoff: Trailer?
     /// The shape of the trailer that is playing, width over height. Nil when it is not known, and the panel is then 16:9.
-    public private(set) var aspectRatio: Double?
+    private(set) var aspectRatio: Double?
     /// True while the player is full screen: the page is covered then, not left, so it must not close the player.
-    @ObservationIgnored public var isFullScreen = false
+    @ObservationIgnored var isFullScreen = false
 
     /// True while the page shows the trailer's panel: the player, or the line that says it failed. While the trailer loads only the
     /// trailer button's spinner shows, so the page does not open an empty panel first.
-    public var showsPanel: Bool {
+    var showsPanel: Bool {
         switch phase {
         case .playing, .failed: return true
         case .idle, .loading: return false
         }
     }
 
-    public var isPlaying: Bool {
+    var isPlaying: Bool {
         if case .playing = phase { return true }
         return false
     }
@@ -129,7 +129,7 @@ public final class TrailerLoader {
     /// Gives up the load it was started with when `loadDeadline` has passed. Cancelled once a load ends.
     @ObservationIgnored private var deadlineTask: Task<Void, Never>?
 
-    public init(preparer: any TrailerPreparing) {
+    init(preparer: any TrailerPreparing) {
         self.preparer = preparer
         self.durations = .shared
         self.deadline = Self.loadDeadline
@@ -143,7 +143,7 @@ public final class TrailerLoader {
 
     /// The trailer button's tap. Idle or failed: loads the trailer (a failed load is tried again). Loading: nothing, since one load runs at
     /// a time. Playing: closes the player.
-    public func toggle(_ source: Source) {
+    func toggle(_ source: Source) {
         switch phase {
         case .loading: return
         case .playing: close()
@@ -152,7 +152,7 @@ public final class TrailerLoader {
     }
 
     /// Closes the inline player: pauses it and lets the stream go.
-    public func close() {
+    func close() {
         playback?.stop()
         playback = nil
         aspectRatio = nil
@@ -161,7 +161,7 @@ public final class TrailerLoader {
     }
 
     /// The page is left: a load under way is cancelled, the player is closed and an error is cleared.
-    public func cancel() {
+    func cancel() {
         generation += 1
         task?.cancel()
         task = nil

@@ -2,12 +2,12 @@ import Foundation
 import StremioKit
 
 /// Which results the Search screen shows. People are a kind of their own: they are never mixed into the titles.
-public enum SearchScope: String, CaseIterable, Identifiable, Sendable {
+enum SearchScope: String, CaseIterable, Identifiable, Sendable {
     case all, movies, series, people
 
-    public var id: Self { self }
+    var id: Self { self }
 
-    public var title: String {
+    var title: String {
         switch self {
         case .all: "All"
         case .movies: "Movies"
@@ -27,12 +27,12 @@ public enum SearchScope: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// One row of the suggestions shown while typing: a recent search, a title or a person.
-public enum SearchSuggestion: Identifiable, Hashable, Sendable {
+enum SearchSuggestion: Identifiable, Hashable, Sendable {
     case recent(String)
     case media(MetaPreview)
     case person(TMDbTitlePerson)
 
-    public var id: String {
+    var id: String {
         switch self {
         case .recent(let term): "recent/\(term.lowercased())"
         case .media(let item): "media/\(item.identity)"
@@ -41,11 +41,11 @@ public enum SearchSuggestion: Identifiable, Hashable, Sendable {
     }
 }
 
-public struct SearchResultFilter: Equatable, Sendable {
-    public enum Sort: String, CaseIterable, Identifiable, Sendable {
+struct SearchResultFilter: Equatable, Sendable {
+    enum Sort: String, CaseIterable, Identifiable, Sendable {
         case relevance, rating, newest
-        public var id: Self { self }
-        public var title: String {
+        var id: Self { self }
+        var title: String {
             switch self {
             case .relevance: "Relevance"
             case .rating: "Rating"
@@ -54,15 +54,15 @@ public struct SearchResultFilter: Equatable, Sendable {
         }
     }
     /// The genres the results are narrowed to, in the order they were added. A result with any of them shows.
-    public var genres: [String] = []
-    public var year: Int?
-    public var minimumRating: Int?
-    public var sort = Sort.relevance
-    public var isActive: Bool { !genres.isEmpty || year != nil || minimumRating != nil }
-    public init() {}
+    var genres: [String] = []
+    var year: Int?
+    var minimumRating: Int?
+    var sort = Sort.relevance
+    var isActive: Bool { !genres.isEmpty || year != nil || minimumRating != nil }
+    init() {}
 
     /// The one genre of a single-choice menu.
-    public var genre: String? {
+    var genre: String? {
         get { genres.first }
         set { genres = newValue.map { [$0] } ?? [] }
     }

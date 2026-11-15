@@ -6,8 +6,8 @@ import StremioKit
 /// Discover: mix TMDb recommendations for a shuffled sample of the library, filter and sort locally, and paginate.
 @MainActor
 @Observable
-public final class DiscoverViewModel {
-    public enum State: Equatable {
+final class DiscoverViewModel {
+    enum State: Equatable {
         case idle
         case loadingFirstPage
         case loaded
@@ -16,45 +16,45 @@ public final class DiscoverViewModel {
     }
 
     /// One library title chosen as a recommendation seed.
-    public struct Seed: Equatable, Hashable, Sendable {
-        public let id: String
-        public let type: String
+    struct Seed: Equatable, Hashable, Sendable {
+        let id: String
+        let type: String
 
-        public init(id: String, type: String) {
+        init(id: String, type: String) {
             self.id = id
             self.type = type
         }
 
-        public var identity: String { "\(type)/\(id)" }
+        var identity: String { "\(type)/\(id)" }
     }
 
-    public static let windowSize = 24
-    public static let seedLimit = 6
-    public static let keywordPageLimit = 4
+    static let windowSize = 24
+    static let seedLimit = 6
+    static let keywordPageLimit = 4
     private static let imdbBatchSize = 6
     private static let discoverPageSize = 20
 
-    public private(set) var sources: [CatalogSource] = []
+    private(set) var sources: [CatalogSource] = []
     /// Nil combines movies and series.
-    public private(set) var selectedType: String?
-    public private(set) var selectedGenre: String?
-    public var showsAllTypes: Bool { selectedType == nil }
-    public private(set) var items: [MetaPreview] = []
-    public private(set) var state: State = .idle
-    public private(set) var canLoadMore = false
-    public var isOffline: Bool { state == .failed(.offline) }
-    public var sort: CatalogListSort = .original
-    public var minimumRating: Double?
+    private(set) var selectedType: String?
+    private(set) var selectedGenre: String?
+    var showsAllTypes: Bool { selectedType == nil }
+    private(set) var items: [MetaPreview] = []
+    private(set) var state: State = .idle
+    private(set) var canLoadMore = false
+    var isOffline: Bool { state == .failed(.offline) }
+    var sort: CatalogListSort = .original
+    var minimumRating: Double?
 
     /// The release-year span the Year menu chose, inclusive bounds. Titles outside it are hidden from `visibleItems`; nothing is fetched again.
-    public var minimumYear: Int?
-    public var maximumYear: Int?
+    var minimumYear: Int?
+    var maximumYear: Int?
 
     /// The library seeds chosen on the latest reload, kept across `loadMore()`.
-    public private(set) var seeds: [Seed] = []
+    private(set) var seeds: [Seed] = []
 
     /// The year span as a filter chip words it, the same as the Library's chips ("1990–1999"); nil when no span is set.
-    public var yearSpanLabel: String? {
+    var yearSpanLabel: String? {
         switch (minimumYear, maximumYear) {
         case let (low?, high?): low == high ? "\(low)" : "\(low)–\(high)"
         case let (low?, nil): "From \(low)"
@@ -80,13 +80,13 @@ public final class DiscoverViewModel {
     private var hasMoreKeywords = true
     private var popularSkip = 0
 
-    public init(services: AppServices, shuffle: @escaping ([Seed]) -> [Seed] = { $0.shuffled() }) {
+    init(services: AppServices, shuffle: @escaping ([Seed]) -> [Seed] = { $0.shuffled() }) {
         self.services = services
         self.shuffleSeeds = shuffle
     }
 
     /// The Genre menu's choices: the genres the loaded titles list, named as title pages name them, one of each, A to Z.
-    public var genres: [String] { MediaGenres.choices(in: items.flatMap(\.genres)) }
+    var genres: [String] { MediaGenres.choices(in: items.flatMap(\.genres)) }
 
     static func genres(of catalogs: [CatalogDescriptor]) -> [String] {
         MediaGenres.choices(in: catalogs.flatMap(genreOptions(of:)))
@@ -115,11 +115,11 @@ public final class DiscoverViewModel {
         return text.split(whereSeparator: { !$0.isLetter }).contains { orderWords.contains($0) }
     }
 
-    public var hasSources: Bool { true }
+    var hasSources: Bool { true }
 
     /// Sort and filter the loaded titles locally using the same rules as a catalog's See All page. Under a rating threshold or Top Rated,
     /// each title's scores come from the rating store, and a view reading this draws again as each one arrives.
-    public var visibleItems: [MetaPreview] {
+    var visibleItems: [MetaPreview] {
         let filter = CatalogListFilter(sort: sort, type: selectedType, genre: selectedGenre, minimumYear: minimumYear,
                                        maximumYear: maximumYear, minimumRating: minimumRating)
         guard filter.minimumRating != nil || filter.sort == .rating else { return CatalogListFiltering.apply(filter, to: items) }
@@ -128,36 +128,36 @@ public final class DiscoverViewModel {
     }
 
     /// Discover's content types on both platforms.
-    public var types: [String] { ["movie", "series"] }
+    var types: [String] { ["movie", "series"] }
 
-    public var visibleSources: [CatalogSource] { sources }
+    var visibleSources: [CatalogSource] { sources }
 
     /// Starts the initial load without touching addon catalogs.
-    public func loadSources() async {
+    func loadSources() async {
         if state == .idle || state == .loadingFirstPage {
             await reload()
         }
     }
 
     /// Changing type reloads the library seeds for that type.
-    public func select(type: String) async {
+    func select(type: String) async {
         let normalized = type.lowercased()
         guard types.contains(normalized) else { return }
         selectedType = normalized
         await reload()
     }
 
-    public func selectAllTypes() async {
+    func selectAllTypes() async {
         selectedType = nil
         await reload()
     }
 
     /// `nil` clears the filter. Genre filters the loaded titles locally without reloading the seeds.
-    public func select(genre: String?) async {
+    func select(genre: String?) async {
         selectedGenre = genre
     }
 
-    public func reload() async {
+    func reload() async {
         guard !Task.isCancelled else { return }
         generation += 1
         let current = generation
@@ -201,7 +201,7 @@ public final class DiscoverViewModel {
         }
     }
 
-    public func loadMore() async {
+    func loadMore() async {
         guard canLoadMore, state == .loaded else { return }
         let current = generation
         let rawToken = await services.settings.load().tmdbReadToken?.trimmingCharacters(in: .whitespacesAndNewlines)

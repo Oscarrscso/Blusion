@@ -26,7 +26,7 @@ extension SearchViewModel {
     }
 
     /// The titles to show: every source merged, each title once, filtered and best first. People are apart, in `people`.
-    public func results(in scope: SearchScope = .all) -> [MetaPreview] {
+    func results(in scope: SearchScope = .all) -> [MetaPreview] {
         guard scope != .people else { return [] }
         // The rating filter and the Rating sort read each title's scores, some arriving later, so their list is worked out on each read:
         // the view reading it draws again as each score arrives.
@@ -81,17 +81,17 @@ extension SearchViewModel {
     }
 
     /// The people the search found: those TMDb has for the words as a name, best first, or those a described search names.
-    public var people: [TMDbTitlePerson] {
+    var people: [TMDbTitlePerson] {
         isDiscovery ? namedPeople : SearchResults.ranked(tmdbPeople, query: query)
     }
 
-    public var availableGenres: [String] {
+    var availableGenres: [String] {
         MediaGenres.normalised(combinedResults.flatMap { resolvedGenres[$0.identity] ?? $0.genres }).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
-    public var availableYears: [Int] { Array(Set(combinedResults.compactMap { SearchResults.year(of: $0) })).sorted(by: >) }
+    var availableYears: [Int] { Array(Set(combinedResults.compactMap { SearchResults.year(of: $0) })).sorted(by: >) }
 
-    public func clearFilters() { filter = SearchResultFilter() }
+    func clearFilters() { filter = SearchResultFilter() }
 
     /// A typed genre is a requirement for the whole results grid, including literal addon/TMDb matches.
     private var requiredGenres: [String] {
@@ -147,12 +147,12 @@ extension SearchViewModel {
     // MARK: Suggestions and corrections
 
     /// True while the field holds words the full results were not asked for: the screen may show `suggestions` instead.
-    public var showsSuggestions: Bool { !term.isEmpty && submittedTerm != term }
+    var showsSuggestions: Bool { !term.isEmpty && submittedTerm != term }
 
     /// What the words may be heading for, at most ten rows: recent searches, people, then titles, each matching the words by name.
     /// Before the network answers they come from what this screen found earlier. Empty for words that match no name, such as a
     /// description, which goes straight to its results.
-    public var suggestions: [SearchSuggestion] {
+    var suggestions: [SearchSuggestion] {
         let term = self.term
         guard !term.isEmpty else { return [] }
         let waiting = phase == .searching
@@ -172,14 +172,14 @@ extension SearchViewModel {
 
     /// The name the words were likely meant as, once the search is done and nothing matches them as typed. Nil for a search that
     /// found what it named, and for a description.
-    public var correction: String? {
+    var correction: String? {
         guard phase == .done, !isDiscovery else { return nil }
         let names = (groups.flatMap(\.items) + tmdbTitles).map(\.name) + tmdbPeople.map(\.name)
         return SearchResults.correction(for: term, among: names)
     }
 
     /// Searches for the corrected name instead.
-    public func applyCorrection() async {
+    func applyCorrection() async {
         guard let correction else { return }
         query = correction
         await submit()
@@ -188,17 +188,17 @@ extension SearchViewModel {
     // MARK: Filter chips
 
     /// What a described search was read as asking for, each requirement one chip.
-    public var chips: [SearchChip] { isDiscovery ? discovery?.chips ?? [] : [] }
+    var chips: [SearchChip] { isDiscovery ? discovery?.chips ?? [] : [] }
 
-    public func options(for chip: SearchChip) -> [SearchChipOption] { discovery?.options(for: chip.kind) ?? [] }
+    func options(for chip: SearchChip) -> [SearchChipOption] { discovery?.options(for: chip.kind) ?? [] }
 
-    public func remove(_ chip: SearchChip) {
+    func remove(_ chip: SearchChip) {
         if let discovery { applyDiscovery(discovery.removing(chip.kind)) }
     }
 
     /// Searches the edited plan. The words are not read again, so no model interprets anything: only the database is asked, and
     /// a check of candidates already made is reused.
-    public func applyDiscovery(_ plan: AISearchPlan) {
+    func applyDiscovery(_ plan: AISearchPlan) {
         let term = self.term
         guard !term.isEmpty, plan != discovery else { return }
         discovery = plan

@@ -16,7 +16,7 @@ extension SearchViewModel {
         activeTerm = nil
     }
 
-    public func cancel() {
+    func cancel() {
         stopWork()
         if phase == .searching { phase = .idle }
         if aiPhase == .searching { aiPhase = .idle }
@@ -56,7 +56,7 @@ extension SearchViewModel {
 
     /// Results across all addons, grouped by content type: movie first, then series, then other types in order of first appearance.
     /// Within a group items keep addon order (the user's order) then the addon's own order; duplicates (same `identity`) appear once.
-    public var groups: [Group] {
+    var groups: [Group] {
         var seen = Set<String>()
         var order: [String] = []
         var itemsByType: [String: [MetaPreview]] = [:]
@@ -74,7 +74,7 @@ extension SearchViewModel {
 
     /// Asks whether any enabled addon can search and whether TMDb can, and reads the browse genres. Call when the Search screen
     /// appears; every search checks again.
-    public func refreshAvailability() async {
+    func refreshAvailability() async {
         recentQueries = Self.normalised(history.load())
         let addons = await services.browse.searchableAddons()
         hasSearchableAddons = !addons.isEmpty
@@ -85,19 +85,19 @@ extension SearchViewModel {
     }
 
     /// Forgets one recent search. Case-insensitive, like the de-duplication.
-    public func removeRecent(_ query: String) {
+    func removeRecent(_ query: String) {
         let key = Self.key(query)
         recentQueries.removeAll { Self.key($0) == key }
         history.save(recentQueries)
     }
 
-    public func clearRecents() {
+    func clearRecents() {
         recentQueries = []
         history.save([])
     }
 
     /// Call whenever the query changes. Old work is cancelled at once, stale answers are dropped, and the new search is debounced.
-    public func queryDidChange() {
+    func queryDidChange() {
         let term = self.term
         if !term.isEmpty, activeTerm == term, phase == .searching || aiPhase == .searching { return }
         stopWork()
@@ -112,7 +112,7 @@ extension SearchViewModel {
     }
 
     /// The keyboard's Search button skips the debounce and asks for the full results.
-    public func submit() async {
+    func submit() async {
         guard !Task.isCancelled else { return }
         let term = self.term
         guard !term.isEmpty else { stopWork(); reset(); return }
@@ -139,7 +139,7 @@ extension SearchViewModel {
     }
 
     /// Test and accessibility helper: the addon search can finish before the described search.
-    public func waitUntilDone() async {
+    func waitUntilDone() async {
         await task?.value
         await tmdbTask?.value
         await aiTask?.value
@@ -171,13 +171,13 @@ extension SearchViewModel {
     }
 
     /// Loads the on-device model while Search is on screen, so a first described search does not wait for it to load.
-    public func prewarmAI() {
+    func prewarmAI() {
         guard aiAvailable else { return }
         Task.detached(priority: .utility) { OnDeviceDescriptionInterpreter.prewarm() }
     }
 
     /// Retries only the described search, keeping the other results. An edited plan is searched again as edited.
-    public func retryAI() {
+    func retryAI() {
         let term = self.term
         guard !term.isEmpty else { return }
         aiPhase = .searching
@@ -333,13 +333,13 @@ extension SearchViewModel {
     }
 
     /// Reads the recents again, for when a title was opened from Search and its name was recorded (see `recording(_:into:)`).
-    public func reloadRecents() {
+    func reloadRecents() {
         recentQueries = Self.normalised(history.load())
     }
 
     /// The recents with a title added at the top, in place of an older copy of it. A title opened from Search is what is recorded, not
     /// the letters typed on the way to it.
-    public static func recording(_ title: String, into queries: [String]) -> [String] {
+    static func recording(_ title: String, into queries: [String]) -> [String] {
         normalised([title] + queries)
     }
 

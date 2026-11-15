@@ -4,7 +4,7 @@ import StremioKit
 
 extension PosterRatingsStore {
     /// TMDb scores fill episodes that have no rating from their addon.
-    public func episodeRatings(seriesIMDbID: String, season: Int) async -> [Int: Double] {
+    func episodeRatings(seriesIMDbID: String, season: Int) async -> [Int: Double] {
         guard let tmdb, !isClearing else { return [:] }
         do {
             let scores = try await tmdb.seasonEpisodeRatings(seriesIMDbID: seriesIMDbID, season: season)
@@ -31,7 +31,7 @@ extension PosterRatingsStore {
 
     /// IMDb scores from the local dataset using OMDb's episode IDs, with OMDb's scores filling gaps.
     /// One network request per season; complete seasons refresh daily, partial/empty ones hourly. Cached identities work offline.
-    public func episodeRatings(for seriesID: String, season: Int, expectedEpisodes: Set<Int> = []) async -> [Int: Double] {
+    func episodeRatings(for seriesID: String, season: Int, expectedEpisodes: Set<Int> = []) async -> [Int: Double] {
         guard !isClearing, LetterboxdRatings.isIMDbID(seriesID), season >= 0 else { return [:] }
         let key = "omdb:\(seriesID):s\(season)"
         if let running = episodeTasks[key] { return await running.value }
@@ -117,7 +117,7 @@ extension PosterRatingsStore {
     }
 
     /// Resolve an episode's IMDb title ID from the existing offline index or cached OMDb season.
-    public func imdbEpisodeID(seriesIMDbID: String, season: Int, episode: Int) async -> String? {
+    func imdbEpisodeID(seriesIMDbID: String, season: Int, episode: Int) async -> String? {
         guard LetterboxdRatings.isIMDbID(seriesIMDbID), season >= 0, episode >= 0 else { return nil }
         let key = "omdb:\(seriesIMDbID):s\(season)"
         let local = await localEpisodeIDs(for: seriesIMDbID, season: season, key: key)
@@ -175,7 +175,7 @@ extension PosterRatingsStore {
 
     /// Whether OMDb can still be asked for episode scores: there is a key, OMDb has not refused it (401 or the 429 quota pause) and today's
     /// requests from this device are under the daily limit. TMDb fills gaps after IMDb has been checked.
-    public var omdbAllowsEpisodeRequests: Bool {
+    var omdbAllowsEpisodeRequests: Bool {
         guard let omdb else { return false }
         return !isOMDbPaused && omdb.usage.today() < OMDbUsage.dailyLimit
     }

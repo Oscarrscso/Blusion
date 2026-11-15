@@ -3,8 +3,8 @@ import StremioKit
 
 /// One change waiting to reach Trakt. The queue holds at most one per title and slot (saved, watched, playback): a later change to the
 /// same title replaces the earlier one, so it holds what Trakt should end up with, not every step on the way.
-public struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
-    public enum Kind: String, Codable, Sendable {
+struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
+    enum Kind: String, Codable, Sendable {
         /// On, or off, the Trakt watchlist. The collection is never written.
         case save, unsave
         /// In, or out of, the watched history.
@@ -14,26 +14,26 @@ public struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
     }
 
     /// The three things kept in step with Trakt. A title has one pending operation in each at most.
-    public enum Slot: String, Sendable {
+    enum Slot: String, Sendable {
         case saved, watched, playback
     }
 
-    public var kind: Kind
+    var kind: Kind
     /// The local identity the change is about: `movie/tt1`, `series/tt1`, or `series/tt1:1:2` for an episode.
-    public var identity: String
+    var identity: String
     /// When the user did it.
-    public var at: Date
+    var at: Date
     /// The paused position as a percentage, for `.progress`.
-    public var progress: Double?
+    var progress: Double?
     /// Requests this went out in that may have reached Trakt: counted as the request leaves, and taken back only when Trakt refused it
     /// outright. Zero means Trakt has certainly not seen it.
-    public var attempts = 0
+    var attempts = 0
     /// The earliest time to send it. A playing title's position waits here until playback has been still for a moment.
-    public var notBefore: Date
+    var notBefore: Date
 
     /// Nil when Trakt cannot take the change: only IMDb movies, shows and episodes sync. Saving is about a whole title; the watched
     /// mark and the paused position are about a movie or one episode.
-    public init?(kind: Kind, identity: String, at: Date, progress: Double? = nil, notBefore: Date? = nil) {
+    init?(kind: Kind, identity: String, at: Date, progress: Double? = nil, notBefore: Date? = nil) {
         guard let target = Self.target(of: identity) else { return nil }
         switch kind {
         case .save, .unsave:
@@ -48,7 +48,7 @@ public struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
         self.notBefore = notBefore ?? at
     }
 
-    public var slot: Slot {
+    var slot: Slot {
         switch kind {
         case .save, .unsave: return .saved
         case .watched, .unwatched: return .watched
@@ -56,7 +56,7 @@ public struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
         }
     }
 
-    public var id: String { "\(slot.rawValue)|\(identity)" }
+    var id: String { "\(slot.rawValue)|\(identity)" }
 
     /// The change that undoes this one, for the kinds that have one.
     var inverse: Kind? {
@@ -102,27 +102,27 @@ public struct TraktSyncOperation: Codable, Sendable, Equatable, Identifiable {
 /// last read.
 public struct TraktSyncState: Codable, Sendable, Equatable {
     /// The retry queue.
-    public var operations: [TraktSyncOperation] = []
+    var operations: [TraktSyncOperation] = []
     /// Deletion events: when a saved title was removed here, by library identity. An import does not bring such a title back unless
     /// Trakt listed it after that.
-    public var removedSaved: [String: Date] = [:]
+    var removedSaved: [String: Date] = [:]
     /// When a watched mark was cleared here, by progress identity. Trakt's older watch does not bring the mark back.
-    public var unwatched: [String: Date] = [:]
+    var unwatched: [String: Date] = [:]
     /// When a title was taken off Continue Watching here. Trakt's older paused record stays hidden.
-    public var removedPlayback: [String: Date] = [:]
+    var removedPlayback: [String: Date] = [:]
     /// The watchlist as Trakt last sent it. A title in here that Trakt no longer lists was removed somewhere else.
-    public var syncedSaved: Set<String> = []
+    var syncedSaved: Set<String> = []
     /// The watched history as Trakt last sent it, by progress identity.
-    public var syncedWatched: Set<String> = []
+    var syncedWatched: Set<String> = []
     /// Saved titles that are here only because Trakt's collection holds them. They are never put on the watchlist, and removing one
     /// here leaves the collection alone.
-    public var collected: Set<String> = []
+    var collected: Set<String> = []
     /// Trakt's change dates when it was last read, so only what changed is fetched again.
-    public var activities: TraktLastActivities?
+    var activities: TraktLastActivities?
     /// When everything was last read whatever the change dates said.
-    public var lastFullPull: Date?
+    var lastFullPull: Date?
 
-    public init() {}
+    init() {}
 
     private enum CodingKeys: String, CodingKey {
         case operations, removedSaved, unwatched, removedPlayback, syncedSaved, syncedWatched, collected, activities, lastFullPull
@@ -148,13 +148,13 @@ public protocol TraktSyncStateStore: Sendable {
     func save(_ state: TraktSyncState) async
 }
 
-public actor InMemoryTraktSyncStateStore: TraktSyncStateStore {
+actor InMemoryTraktSyncStateStore: TraktSyncStateStore {
     private var state: TraktSyncState
 
-    public init(_ initial: TraktSyncState = TraktSyncState()) { state = initial }
+    init(_ initial: TraktSyncState = TraktSyncState()) { state = initial }
 
-    public func load() async -> TraktSyncState { state }
-    public func save(_ state: TraktSyncState) async { self.state = state }
+    func load() async -> TraktSyncState { state }
+    func save(_ state: TraktSyncState) async { self.state = state }
 }
 
 /// The sync state in one JSON file, replaced whole on each save so a crash never leaves half of it. A file that cannot be read starts

@@ -36,6 +36,7 @@ struct DetailRatings: View {
 struct DetailReviewsPanel: View {
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.appAppearance) private var appearance
+    @Environment(PosterRatingsStore.self) private var ratingsStore: PosterRatingsStore?
     let reviews: DetailViewModel.OpenedReviews
     /// The site kept on screen while `reviews` loads behind it. Nil when `reviews` is the one on screen, or is the first to open.
     var shown: DetailViewModel.OpenedReviews?
@@ -47,6 +48,8 @@ struct DetailReviewsPanel: View {
     let onClose: () -> Void
     /// Embedded panels can fit their page to the available scroll viewport.
     var viewportHeight: CGFloat? = nil
+    /// Overrides whether the white site name appears in the panel header. Nil follows the rating row's two-site rule.
+    var showsSiteName: Bool?
     /// The id the page scrolls to when the reviews open, so they are in view.
     static let scrollID = "detail.reviewsPanel"
     /// How tall the site's page is on the page. A Mac window has room for more of it than a phone.
@@ -82,14 +85,26 @@ struct DetailReviewsPanel: View {
     /// Reserve the full viewport while the first site loads. Keep an existing site visible during switches.
     private var showsSkeleton: Bool { isLoading && (shown == nil || shown?.site == reviews.site) }
 
+    private var showsSiteNameInHeader: Bool {
+        if let showsSiteName { return showsSiteName }
+        let sites = ReviewSite.availableSites(for: item, ratings: ratingsStore?.ratings(for: item))
+        return RatingSiteLabel.showsPanelHeaderSiteName(siteCount: sites.count)
+    }
+
     var body: some View {
         let visible = visible
+        let showsSiteNameInHeader = showsSiteNameInHeader
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 ReviewSiteIcon(site: visible.site, size: 14, keepsColour: true)
-                Text(visible.site.name)
-                    .appFont(.mediumStrong)
-                    .foregroundStyle(.white)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(visible.site.name)
+                    .accessibilityHidden(showsSiteNameInHeader)
+                if showsSiteNameInHeader {
+                    Text(visible.site.name)
+                        .appFont(.mediumStrong)
+                        .foregroundStyle(.white)
+                }
                 if visible.isSearch && !ReviewPageReader.supports(visible.site) {
                     Text("Search")
                         .appFont(.caption)

@@ -17,8 +17,8 @@ import UIKit
 /// call sites stay identical on both platforms (see `docs/DESIGN_SPEC.md`). Catalyst plays none of them.
 @MainActor
 public enum Haptics {
-    public typealias Place = HapticPreferences.Place
-    public typealias Feel = HapticPreferences.Feel
+    typealias Place = HapticPreferences.Place
+    typealias Feel = HapticPreferences.Feel
 
     // MARK: - Tuning
 

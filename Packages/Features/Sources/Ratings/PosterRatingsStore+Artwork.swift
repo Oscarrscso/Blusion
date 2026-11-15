@@ -4,14 +4,14 @@ import StremioKit
 
 extension PosterRatingsStore {
     /// The hero artwork already fetched for this title this session, read without waiting. Nil until a lookup for it has succeeded.
-    public func cachedHeroArtwork(for item: MetaPreview) -> TMDbArtwork? {
+    func cachedHeroArtwork(for item: MetaPreview) -> TMDbArtwork? {
         heroArtworkByID[item.id]
     }
 
     /// Original-resolution portrait and landscape artwork for the featured carousel, independent of poster rating visibility.
     /// Successful answers are kept for the session, so a title coming back into the spotlight is ready at once. A title asked for again
     /// while its lookup runs waits for that lookup rather than making another request.
-    public func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
+    func heroArtwork(for item: MetaPreview) async -> TMDbArtwork? {
         if let known = heroArtworkByID[item.id] { return known }
         guard let tmdb, !isClearing else { return nil }
         if let running = heroArtworkTasks[item.id] { return await running.value }
@@ -27,14 +27,14 @@ extension PosterRatingsStore {
 
     /// The age rating already fetched for this title this session, read without waiting. Nil until a lookup for it has answered, and
     /// when TMDb has none.
-    public func cachedCertification(for item: MetaPreview, region: String = "US") -> String? {
+    func cachedCertification(for item: MetaPreview, region: String = "US") -> String? {
         certificationByID["\(item.identity)|\(region.uppercased())"].flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// The title's age rating in one country. Answers are kept for the session, "none" included, so a title coming
     /// back into the spotlight asks nothing. A lookup that failed is not kept, and a title asked for again while its lookup runs waits
     /// for that lookup.
-    public func certification(for item: MetaPreview, region: String = "US") async -> String? {
+    func certification(for item: MetaPreview, region: String = "US") async -> String? {
         let key = "\(item.identity)|\(region.uppercased())"
         if certificationByID[key] != nil { return cachedCertification(for: item, region: region) }
         guard let tmdb, !isClearing else { return nil }
@@ -56,12 +56,12 @@ extension PosterRatingsStore {
     }
 
     /// Whether hero artwork can be asked for at all: a TMDb client is configured. Without one, prewarming is skipped entirely.
-    public var canLookUpHeroArtwork: Bool { tmdb != nil && !isClearing }
+    var canLookUpHeroArtwork: Bool { tmdb != nil && !isClearing }
 
     /// Looks up a title's hero artwork before its page opens, for a card that has been on screen for a moment. Only the TMDb answer is asked
     /// for, never a picture. At most `maxPrewarmLookups` run at once, so a fast scroll does not burst TMDb, and a lookup still waiting for its
     /// turn is dropped when its card scrolls away. Does nothing without a TMDb client, or when the title's artwork is already known.
-    public func prewarmHeroArtwork(for item: MetaPreview) async {
+    func prewarmHeroArtwork(for item: MetaPreview) async {
         guard tmdb != nil, !isClearing, heroArtworkByID[item.id] == nil else { return }
         let waiter = UUID()
         let granted = await withTaskCancellationHandler {

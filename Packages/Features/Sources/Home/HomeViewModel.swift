@@ -6,8 +6,8 @@ import StremioKit
 /// Home: the user's widgets, or the automatic layout, as sections. Each hero and row loads on its own and fills in as its addon answers.
 @MainActor
 @Observable
-public final class HomeViewModel {
-    public enum Phase: Equatable {
+final class HomeViewModel {
+    enum Phase: Equatable {
         case loading
         /// Nothing installed: the empty state explains how to add an addon by URL.
         case noAddons
@@ -16,42 +16,42 @@ public final class HomeViewModel {
         case ready
     }
 
-    public struct Section: Identifiable, Equatable {
-        public let widget: HomeWidget
+    struct Section: Identifiable, Equatable {
+        let widget: HomeWidget
         /// Items of a `.hero`, `.banner` or `.row` widget. `.collection` and `.continueWatching` sections stay `.loaded([])`.
-        public var state: Loadable<[MetaPreview]>
+        var state: Loadable<[MetaPreview]>
         /// Why a row has nothing to show (addon missing, Trakt client ID needed, unsupported source). nil when fine or still loading.
-        public var issue: WidgetSourceError?
+        var issue: WidgetSourceError?
         /// True while the section shows items from before (this launch or the last) and a fresh load is on its way.
-        public var isRefreshing = false
-        public var id: String { widget.id }
+        var isRefreshing = false
+        var id: String { widget.id }
     }
 
-    public private(set) var phase: Phase = .loading
-    public private(set) var sections: [Section] = []
+    private(set) var phase: Phase = .loading
+    private(set) var sections: [Section] = []
     /// The seed each shuffled widget's items take on this opening of Home (see `WidgetShuffling`). A widget without a shuffle has none.
     private var itemSeeds: [String: UInt64] = [:]
     /// The widgets as saved, by id, before any shuffle or random source changed what Home shows: what a widget's export shares.
-    public private(set) var layoutWidgets: [String: HomeWidget] = [:]
+    private(set) var layoutWidgets: [String: HomeWidget] = [:]
     /// The photo of each genre tile without a picture of its own, by `tilePhotoKey`: the artwork of a title in its genre, a different title
     /// for each tile of a widget. A tile without one yet shows its colours.
-    public private(set) var tilePhotos: [String: URL] = [:]
+    private(set) var tilePhotos: [String: URL] = [:]
     /// In-progress titles, newest first (`LibraryViewModel.continueWatching(from:)`).
-    public private(set) var continueWatching: [WatchProgress] = []
-    public enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
-    public private(set) var continueState: ContinueState = .loading
-    public private(set) var continueEntries: [ContinueWatchingEntry] = []
+    private(set) var continueWatching: [WatchProgress] = []
+    enum ContinueState: Equatable { case loading, disconnected, ready, failed(String) }
+    private(set) var continueState: ContinueState = .loading
+    private(set) var continueEntries: [ContinueWatchingEntry] = []
     /// True when the user has saved their own widget list; false for the automatic layout.
-    public private(set) var isCustomised = false
+    private(set) var isCustomised = false
 
     private let services: AppServices
     private var generation = 0
-    public private(set) var loadRevision = 0
+    private(set) var loadRevision = 0
     /// The rows below the one on screen that `loadRowsBelow` loaded ahead, in page order. Their posters are kept loaded too.
-    public private(set) var queuedRowIDs: [String] = []
+    private(set) var queuedRowIDs: [String] = []
     /// The cards a row shows across the page as it scrolls in, which Home sets from its width. A row below the screen takes this many of
     /// Home's titles ahead, not its whole list, so the titles reach as many rows down as they fill.
-    public var cardsAcross = 4
+    var cardsAcross = 4
     @ObservationIgnored private var requestedSections: Set<String> = []
     @ObservationIgnored private var loadingSections: Set<String> = []
     private var traktPlayback: [TraktPlaybackItem] = []
@@ -59,19 +59,19 @@ public final class HomeViewModel {
     private var lastPlaybackRefresh = Date.distantPast
     private var addonSignature: [String]?
 
-    public init(services: AppServices) {
+    init(services: AppServices) {
         self.services = services
     }
 
     /// Every hero/row section failed and every failure was "offline": show one banner instead of an error on every row.
-    public var isOffline: Bool {
+    var isOffline: Bool {
         let rows = sections.filter { loadingConfiguration($0.widget.content) != nil }
         let errors = rows.compactMap(\.state.error)
         return phase == .ready && !rows.isEmpty && errors.count == rows.count && Connectivity.isOffline(errors)
     }
 
     /// Rebuilds the sections from the saved widgets (or `DefaultWidgets.make(for:)`) and leaves row loading to viewport visibility.
-    public func load() async {
+    func load() async {
         generation += 1
         let current = generation
         let addons = await services.registry.addons
@@ -125,7 +125,7 @@ public final class HomeViewModel {
     }
 
     /// Fetch visible or prefetched sections once. Completed sections keep their metadata when scrolled away.
-    public func loadVisibleSection(_ id: String) async {
+    func loadVisibleSection(_ id: String) async {
         guard !Task.isCancelled, !requestedSections.contains(id), !loadingSections.contains(id),
               let section = sections.first(where: { $0.id == id }) else { return }
         let current = generation
@@ -151,7 +151,7 @@ public final class HomeViewModel {
     /// Loads the rows below `id`, which has just come on screen, before they scroll in. It loads as many titles as Optimisation's Home
     /// preloading keeps ready, counting `cardsAcross` for each row, and `queuedRowIDs` becomes those rows, so only the rows nearest the
     /// screen keep their posters loaded.
-    public func loadRowsBelow(_ id: String) async {
+    func loadRowsBelow(_ id: String) async {
         let current = generation
         guard !isOffline, let index = sections.firstIndex(where: { $0.id == id }) else { return }
         var ahead = OptimisationSettings.homeTitlesAhead()
@@ -167,12 +167,12 @@ public final class HomeViewModel {
     }
 
     /// Shows a layout the user saved on their other device since this one last looked (see `SyncedWidgetStore`).
-    public func takeInSharedLayout() async {
+    func takeInSharedLayout() async {
         if await services.widgets.takeInSharedLayout() { await load() }
     }
 
     /// Forgets every cached page, then loads again. The rows keep what they show until the new items arrive.
-    public func refresh() async {
+    func refresh() async {
         await services.posterRatings.refresh()
         await services.widgetContent.invalidate()
         await refreshContinueWatching(force: true)
@@ -180,7 +180,7 @@ public final class HomeViewModel {
     }
 
     /// Loads one hero or row again, after it failed.
-    public func retry(sectionID: String) async {
+    func retry(sectionID: String) async {
         guard let index = sections.firstIndex(where: { $0.id == sectionID }),
               let row = loadingConfiguration(sections[index].widget.content) else { return }
         let current = generation
@@ -196,7 +196,7 @@ public final class HomeViewModel {
 
     /// Turns Better Posters on or off for a poster row and saves the layout. The row keeps its items: only its cards change. Only a saved
     /// layout can change this way. Saving the automatic layout would stop it following the addons, so nothing is saved for it.
-    public func setBetterPosters(_ on: Bool, sectionID: String) async {
+    func setBetterPosters(_ on: Bool, sectionID: String) async {
         guard isCustomised, let index = sections.firstIndex(where: { $0.id == sectionID }),
               case .row(var row) = sections[index].widget.content,
               row.presentation.aspectRatio == .poster, row.presentation.usesBetterPosters != on else { return }
@@ -214,7 +214,7 @@ public final class HomeViewModel {
     }
 
     /// Adds Blusion TV to a saved layout that has never had it, once, right after Continue Watching. Removed later, it stays removed.
-    public func placeBlusionTVOnce(defaults: UserDefaults = .standard) async {
+    func placeBlusionTVOnce(defaults: UserDefaults = .standard) async {
         let key = "home.blusionTVPlaced.v1"
         guard !defaults.bool(forKey: key) else { return }
         defaults.set(true, forKey: key)
@@ -228,7 +228,7 @@ public final class HomeViewModel {
     /// Removes a widget from the layout, as the widgets page does. The change starts from the list as it is saved now, so an edit made
     /// elsewhere is not saved over. Nothing saved while this layout was customised means it was reset elsewhere: the change is refused,
     /// and Home shows the automatic layout again. From the automatic layout, the first removal saves the whole layout minus the widget.
-    public func removeWidget(sectionID: String) async {
+    func removeWidget(sectionID: String) async {
         guard sections.contains(where: { $0.id == sectionID }) else { return }
         let saved = await services.widgets.load()
         guard saved != nil || !isCustomised else {
@@ -255,7 +255,7 @@ public final class HomeViewModel {
     /// Puts a copy of a widget straight after it, as the widgets page does, starting from the list as it is saved now. The copy shows what
     /// the original shows at once, so nothing is fetched again. Nothing saved while this layout was customised means it was reset
     /// elsewhere: the change is refused, and Home shows the automatic layout again.
-    public func duplicateWidget(sectionID: String) async {
+    func duplicateWidget(sectionID: String) async {
         guard sections.contains(where: { $0.id == sectionID }) else { return }
         let saved = await services.widgets.load()
         guard saved != nil || !isCustomised else {
@@ -281,12 +281,12 @@ public final class HomeViewModel {
     }
 
     /// Cheap refresh for when Home reappears after something was watched: only Continue Watching changes.
-    public func continueWatchingRefreshInterval() async -> Int {
+    func continueWatchingRefreshInterval() async -> Int {
         let settings = await services.settings.load()
         return max(0, settings.continueWatchingRefreshSeconds ?? 300)
     }
 
-    public func refreshContinueWatching(force: Bool = false) async {
+    func refreshContinueWatching(force: Bool = false) async {
         let local = await services.progress.all()
         continueWatching = LibraryViewModel.continueWatching(from: local)
         continueEntries = ContinueWatchingEntry.merge(local: local, remote: traktPlayback)
@@ -334,7 +334,7 @@ public final class HomeViewModel {
 
     /// Takes a title off Continue Watching. The removal is queued for Trakt, which sync sends now or when Trakt can next be reached; Trakt's
     /// paused record stays hidden until it is gone.
-    public func removeFromContinueWatching(_ entry: ContinueWatchingEntry) async {
+    func removeFromContinueWatching(_ entry: ContinueWatchingEntry) async {
         await services.removeContinueWatching(identity: entry.id)
         traktPlayback.removeAll { $0.id == entry.id }
         let local = await services.progress.all()
@@ -343,7 +343,7 @@ public final class HomeViewModel {
     }
 
     /// Marks the selected movie or episode watched, syncing its history and clearing Trakt's paused entry.
-    public func markWatched(_ entry: ContinueWatchingEntry) async {
+    func markWatched(_ entry: ContinueWatchingEntry) async {
         guard !GhostMode.isOn else { return }
         let request = entry.request
         var record = await services.progress.progress(for: entry.id) ?? WatchProgress(
@@ -363,7 +363,7 @@ public final class HomeViewModel {
     }
 
     /// Reloads whenever the set, order or enabled state of addons changes. Run from a view's `.task`; cancelling stops it.
-    public func observeAddons() async {
+    func observeAddons() async {
         for await addons in await services.registry.updates() {
             guard !Task.isCancelled else { break }
             let newSignature = addons.map { "\($0.id.uuidString):\($0.isEnabled)" }
@@ -450,7 +450,7 @@ public final class HomeViewModel {
 
     /// The key of a tile's photo in `tilePhotos`. It names the tile's sources too, so a tile edited to another genre never shows the old
     /// genre's photo. Only for this run of the app: the photos are not saved.
-    nonisolated public static func tilePhotoKey(widgetID: String, tile: CollectionItem) -> String {
+    nonisolated static func tilePhotoKey(widgetID: String, tile: CollectionItem) -> String {
         "\(widgetID)/\(tile.id)/\(tile.sources.hashValue)"
     }
 

@@ -3,7 +3,7 @@ import StremioKit
 
 extension TMDbRelatedTitle {
     /// The release year. Nil when the date is missing or has no year in it.
-    public var year: Int? {
+    var year: Int? {
         guard let releaseDate, releaseDate.count >= 4 else { return nil }
         return Int(releaseDate.prefix(4))
     }
@@ -14,13 +14,13 @@ extension TMDbRelatedTitle {
     }
 
     /// The title as the shared media cards draw it.
-    public var preview: MetaPreview {
+    var preview: MetaPreview {
         MetaPreview(id: "tmdb:\(mediaType):\(tmdbID)", type: mediaType == "movie" ? "movie" : "series", name: title,
                     poster: poster, background: backdrop, releaseInfo: year.map(String.init), genres: genres)
     }
 
     /// The title as a card with its resolved IMDb id.
-    public func preview(imdbID: String) -> MetaPreview {
+    func preview(imdbID: String) -> MetaPreview {
         let synopsis = overview?.trimmingCharacters(in: .whitespacesAndNewlines)
         return MetaPreview(id: imdbID, type: mediaType == "movie" ? "movie" : "series", name: title,
                            poster: poster, background: backdrop, description: synopsis?.isEmpty == false ? synopsis : nil,

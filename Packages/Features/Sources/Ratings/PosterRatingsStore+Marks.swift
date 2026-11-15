@@ -5,7 +5,7 @@ import StremioKit
 extension PosterRatingsStore {
     /// The film's best disc as the device last heard it from Best Blurays, for the Highest Quality mark in Play's hold menu. Nil for a
     /// series, and for a film the site has not been asked about or names no disc for. Asks no one.
-    public func knownBestDisc(for item: MetaPreview) async -> BestDiscFormat? {
+    func knownBestDisc(for item: MetaPreview) async -> BestDiscFormat? {
         guard item.type == "movie", LetterboxdRatings.isIMDbID(item.id) else { return nil }
         if let disc = entries[item.identity]?.bestDisc { return disc }
         return await marks.record(for: item.id)?.disc
@@ -13,20 +13,20 @@ extension PosterRatingsStore {
 
     /// The streamer the title's poster mark shows, from memory or the marks kept on this device, so the title page can name it at once
     /// rather than after its own lookups.
-    public func knownStreamer(for item: MetaPreview) async -> TMDbWatchService? {
+    func knownStreamer(for item: MetaPreview) async -> TMDbWatchService? {
         guard LetterboxdRatings.isIMDbID(item.id) else { return nil }
         if let streamer = entries[item.identity]?.streamer { return streamer }
         return await marks.record(for: item.id)?.streamer
     }
 
     /// Keeps the disc the stream picker found, so the film's posters and title page show it without asking the site again.
-    public func rememberBestEdition(_ result: BestBlurayResult, imdbID: String) async {
+    func rememberBestEdition(_ result: BestBlurayResult, imdbID: String) async {
         await marks.storeDisc(Self.disc(in: result), for: imdbID, checkedAt: now())
         await showMarks(imdbID: imdbID)
     }
 
     /// Keeps the streamer the title page found, so its posters show it without asking TMDb again. Only for the region marks are kept for.
-    public func rememberWatch(_ watch: TMDbTitleWatch, imdbID: String, region: String) async {
+    func rememberWatch(_ watch: TMDbTitleWatch, imdbID: String, region: String) async {
         guard region == marks.region else { return }
         await marks.storeStreamer(watch.streaming.first, for: imdbID, checkedAt: now())
         await showMarks(imdbID: imdbID)

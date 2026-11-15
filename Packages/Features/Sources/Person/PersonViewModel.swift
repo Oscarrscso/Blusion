@@ -59,7 +59,7 @@ struct CreditYearSection: Identifiable, Equatable, Sendable {
 
 extension CreditCategory {
     /// The name of the role in the filter menu and on a credit.
-    public var title: String {
+    var title: String {
         switch self {
         case .acting: "Acting"
         case .directing: "Directing"
@@ -90,7 +90,7 @@ extension TMDbPersonCredit {
     }
 
     /// The title as the shared media cards draw it. Its id names the title by TMDb id, since no IMDb id is known yet.
-    public var preview: MetaPreview {
+    var preview: MetaPreview {
         MetaPreview(id: "tmdb:\(mediaType):\(tmdbID)", type: isMovie ? "movie" : "series", name: title.isEmpty ? "Untitled" : title,
                     poster: poster, background: backdrop, releaseInfo: year.map(String.init))
     }

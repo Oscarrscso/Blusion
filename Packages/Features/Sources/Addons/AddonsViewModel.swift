@@ -2,15 +2,15 @@ import Foundation
 import Observation
 import StremioKit
 
-public struct SuggestedAddon: Sendable, Equatable {
-    public let name: String
-    public let detail: String
-    public let manifestURL: String
+struct SuggestedAddon: Sendable, Equatable {
+    let name: String
+    let detail: String
+    let manifestURL: String
     /// The id in the addon's manifest, for recognising it once installed.
-    public let manifestID: String
+    let manifestID: String
 
     /// Stremio's official metadata addon: catalogs, search and metadata, no streams.
-    public static let cinemeta = SuggestedAddon(name: "Cinemeta", detail: "Official catalogs and metadata (no streams)",
+    static let cinemeta = SuggestedAddon(name: "Cinemeta", detail: "Official catalogs and metadata (no streams)",
                                                 manifestURL: "https://v3-cinemeta.strem.io/manifest.json", manifestID: "com.linvo.cinemeta")
 }
 

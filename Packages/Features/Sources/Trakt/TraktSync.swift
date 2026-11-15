@@ -15,23 +15,23 @@ import Network
 /// The stores given here are the plain ones, so what sync writes is never taken for a change the user made.
 public actor TraktSync {
     /// What one sync changed.
-    public struct Summary: Sendable, Equatable {
+    struct Summary: Sendable, Equatable {
         /// Saved titles and watched marks brought in from Trakt.
-        public var savedAdded = 0
-        public var watchedAdded = 0
+        var savedAdded = 0
+        var watchedAdded = 0
         /// Saved titles and watched marks removed here because they left Trakt.
-        public var savedRemoved = 0
-        public var watchedRemoved = 0
+        var savedRemoved = 0
+        var watchedRemoved = 0
         /// Saved titles and watched items Trakt added or removed for the changes sent.
-        public var savedSent = 0
-        public var watchedSent = 0
-        public var playbackSent = 0
-        public var playbackRemoved = 0
+        var savedSent = 0
+        var watchedSent = 0
+        var playbackSent = 0
+        var playbackRemoved = 0
 
-        public init() {}
+        init() {}
 
         /// True when the library or the watch history here is not what it was.
-        public var changedLocalData: Bool { savedAdded + watchedAdded + savedRemoved + watchedRemoved > 0 }
+        var changedLocalData: Bool { savedAdded + watchedAdded + savedRemoved + watchedRemoved > 0 }
     }
 
     /// How long changes wait for more of the same before they are sent, so marking a season is one request.
@@ -85,7 +85,7 @@ public actor TraktSync {
     private var monitor: NWPathMonitor?
     #endif
 
-    public init(account: TraktAccount, library: any LibraryStore, progress: any ProgressStore,
+    init(account: TraktAccount, library: any LibraryStore, progress: any ProgressStore,
                 store: any TraktSyncStateStore = InMemoryTraktSyncStateStore(), schedulesItself: Bool = false,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.account = account
@@ -181,7 +181,7 @@ public actor TraktSync {
 
     /// A title taken off Continue Watching, whether or not this device holds a position for it: Trakt's paused record is removed, and
     /// until it is, it stays hidden (see `visiblePlayback`).
-    public func playbackRemoved(_ identity: String) async {
+    func playbackRemoved(_ identity: String) async {
         await load()
         recordPlaybackRemoval(identity, at: now(), signedIn: await account.isSignedIn())
         await changed()
@@ -250,7 +250,7 @@ public actor TraktSync {
     // MARK: - Trakt's paused records
 
     /// Trakt's paused records without the ones taken off Continue Watching here since they were paused.
-    public func visiblePlayback(_ items: [TraktPlaybackItem]) async -> [TraktPlaybackItem] {
+    func visiblePlayback(_ items: [TraktPlaybackItem]) async -> [TraktPlaybackItem] {
         await load()
         return items.filter { item in
             guard let removed = state.removedPlayback[item.id] else { return true }
@@ -262,7 +262,7 @@ public actor TraktSync {
     /// Trakt's percentage into a position. A record that is already at the same place is left alone: Trakt's runtime is only an estimate
     /// of this file's length, and the position sent from here comes back with a later date.
     /// A local runtime takes precedence, and a pause cannot clear a watched mark; only history sync does that.
-    public func storeRemotePlayback(_ items: [TraktPlaybackItem]) async {
+    func storeRemotePlayback(_ items: [TraktPlaybackItem]) async {
         guard !GhostMode.isOn else { return }
         for item in items {
             let previous = await progress.progress(for: item.id)
@@ -278,7 +278,7 @@ public actor TraktSync {
     // MARK: - Syncing
 
     /// Changes still waiting to reach Trakt.
-    public func pendingCount() async -> Int {
+    func pendingCount() async -> Int {
         await load()
         return state.operations.count
     }
@@ -288,7 +288,7 @@ public actor TraktSync {
     /// applies every removal. `sendingLocalOnly` also queues the saved titles and watched marks here that Trakt has never had.
     /// Signed out, it does nothing. Throws what stopped it; whatever was not sent stays queued.
     @discardableResult
-    public func sync(force: Bool = false, sendingLocalOnly: Bool = false) async throws -> Summary {
+    func sync(force: Bool = false, sendingLocalOnly: Bool = false) async throws -> Summary {
         let previous = running
         let task = Task { [weak self] () throws -> Summary in
             _ = await previous?.result
@@ -626,7 +626,7 @@ public actor TraktSync {
 
     /// A fresh sign-in: any pause is over, and everything is read.
     @discardableResult
-    public func signedIn() async throws -> Summary {
+    func signedIn() async throws -> Summary {
         pause = .none
         failures = 0
         return try await sync(force: true)
@@ -634,7 +634,7 @@ public actor TraktSync {
 
     /// Signed out: the queue and what was known of Trakt's lists and collection go, so nothing is sent to, or removed because of,
     /// another account. The deletions recorded here stay, so signing in again does not bring removed titles back.
-    public func signedOut() async {
+    func signedOut() async {
         await load()
         scheduled?.cancel()
         scheduled = nil
@@ -653,7 +653,7 @@ public actor TraktSync {
     }
 
     /// Forgets everything, for a full data reset.
-    public func reset() async {
+    func reset() async {
         await signedOut()
         state = TraktSyncState()
         await persist()

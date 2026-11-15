@@ -3,12 +3,12 @@ import Observation
 import StremioKit
 
 /// What a grid screen shows: a title, the sources its items come from and how its cards look. A navigation value.
-public struct CatalogListRequest: Hashable, Sendable {
-    public var title: String
-    public var sources: [WidgetSource]
-    public var presentation: WidgetPresentation
+struct CatalogListRequest: Hashable, Sendable {
+    var title: String
+    var sources: [WidgetSource]
+    var presentation: WidgetPresentation
 
-    public init(title: String, sources: [WidgetSource], presentation: WidgetPresentation = WidgetPresentation()) {
+    init(title: String, sources: [WidgetSource], presentation: WidgetPresentation = WidgetPresentation()) {
         self.title = title
         self.sources = sources
         self.presentation = presentation
@@ -18,23 +18,23 @@ public struct CatalogListRequest: Hashable, Sendable {
 /// The grid behind "See All", a collection tile or a genre. One source pages 50 at a time; several sources load once, merged.
 @MainActor
 @Observable
-public final class CatalogListViewModel {
-    public enum State: Equatable {
+final class CatalogListViewModel {
+    enum State: Equatable {
         case loading
         case loaded
         case loadingMore
         case failed(WidgetSourceError)
     }
 
-    public let request: CatalogListRequest
-    public private(set) var items: [MetaPreview] = []
-    public private(set) var state: State = .loading
-    public private(set) var canLoadMore = false
+    let request: CatalogListRequest
+    private(set) var items: [MetaPreview] = []
+    private(set) var state: State = .loading
+    private(set) var canLoadMore = false
     /// Loaded, and nothing to show. A failed load is not empty.
-    public var isEmpty: Bool { state == .loaded && items.isEmpty }
+    var isEmpty: Bool { state == .loaded && items.isEmpty }
 
     /// The order and narrowing the grid shows. The order is remembered for this list's title; the narrowing starts clear each visit.
-    public var filter = CatalogListFilter() {
+    var filter = CatalogListFilter() {
         didSet {
             if filter.sort != oldValue.sort {
                 if filter.sort == .shuffle { reshuffle() }
@@ -44,11 +44,11 @@ public final class CatalogListViewModel {
         }
     }
     /// The loaded titles that pass `filter`, in its order. The grid draws these.
-    public private(set) var visibleItems: [MetaPreview] = []
+    private(set) var visibleItems: [MetaPreview] = []
     /// The types among the loaded titles, so the type selector shows only when there is a choice to make.
-    public var loadedTypes: Set<String> { Set(items.map { $0.type.lowercased() }) }
+    var loadedTypes: Set<String> { Set(items.map { $0.type.lowercased() }) }
     /// Whether the sources hold movies and series together, so the type selector is in place while the first page loads.
-    public var expectsMixedTypes: Bool {
+    var expectsMixedTypes: Bool {
         var types = Set<String>()
         for source in request.sources {
             switch source {
@@ -63,7 +63,7 @@ public final class CatalogListViewModel {
     }
     /// The Genre menu's choices: the genres the loaded titles' own pages list, one of each, A to Z, with the chosen one always among
     /// them. Years and orders are left out.
-    public var loadedGenres: [String] {
+    var loadedGenres: [String] {
         let listed = items.flatMap(\.genres).filter { !DiscoverViewModel.isYear($0) && !DiscoverViewModel.isOrder($0) }
         return MediaGenres.choices(in: listed + (filter.genre.map { [$0] } ?? []))
     }
@@ -83,7 +83,7 @@ public final class CatalogListViewModel {
     /// Raw items received so far: the protocol's `skip` counts what the addon sent, not what is left after de-duplication.
     private var receivedCount = 0
 
-    public init(request: CatalogListRequest, services: AppServices, defaults: UserDefaults = .standard) {
+    init(request: CatalogListRequest, services: AppServices, defaults: UserDefaults = .standard) {
         self.request = request
         self.services = services
         self.defaults = defaults
@@ -94,7 +94,7 @@ public final class CatalogListViewModel {
     }
 
     /// A new random order of everything loaded. Choosing Shuffle again, or its button, calls this.
-    public func reshuffle() {
+    func reshuffle() {
         var generator = SystemRandomNumberGenerator()
         shuffleRank = CatalogListFiltering.shuffleRanks(for: items, using: &generator)
         refreshVisible()
@@ -102,7 +102,7 @@ public final class CatalogListViewModel {
 
     /// When the filter leaves fewer titles than fill a screen, pages are fetched until it does or the source runs out, a few at most, so a
     /// narrow filter over a long list still shows what the list holds.
-    public func fillForFilter() async {
+    func fillForFilter() async {
         var fetched = 0
         while filter.isFiltering, visibleItems.count < 24, canLoadMore, state == .loaded, fetched < 5 {
             fetched += 1
@@ -145,14 +145,14 @@ public final class CatalogListViewModel {
     }
 
     /// Refresh must ask the sources again, even when their cached page has not expired.
-    public func refresh() async {
+    func refresh() async {
         await services.posterRatings.refresh()
         await services.widgetContent.invalidate()
         await load()
     }
 
     /// Loads the first page, or the merged list for several sources. Items already on screen stay until the new ones arrive.
-    public func load() async {
+    func load() async {
         genreTask?.cancel()
         genreResolved = []
         generation += 1
@@ -197,7 +197,7 @@ public final class CatalogListViewModel {
     }
 
     /// Call when the last item scrolls into view. Does nothing while a load runs, after an empty page, or for several sources.
-    public func loadMore() async {
+    func loadMore() async {
         let sources = request.sources
         guard canLoadMore, state == .loaded, sources.count == 1, let source = sources.first else { return }
         let current = generation

@@ -3,8 +3,8 @@ import StremioKit
 
 /// What Pick for me is asked for. Every choice is optional: with none made it picks from well-liked titles of either kind. The choices
 /// become a search plan as they stand, so no words are read and no model is asked.
-public struct SearchPick: Equatable, Sendable {
-    public enum Mood: String, CaseIterable, Identifiable, Sendable {
+struct SearchPick: Equatable, Sendable {
+    enum Mood: String, CaseIterable, Identifiable, Sendable {
         case funny = "Funny"
         case feelGood = "Feel-good"
         case romantic = "Romantic"
@@ -16,8 +16,8 @@ public struct SearchPick: Equatable, Sendable {
         case inspiring = "Inspiring"
         case thoughtProvoking = "Thought-provoking"
 
-        public var id: Self { self }
-        public var title: String { rawValue }
+        var id: Self { self }
+        var title: String { rawValue }
 
         /// The genre that is the mood, for the moods that are one.
         var genre: String? {
@@ -47,19 +47,19 @@ public struct SearchPick: Equatable, Sendable {
         }
     }
 
-    public var kind: TMDbDiscoverQuery.Kind?
-    public var mood: Mood?
-    public var genre: String?
+    var kind: TMDbDiscoverQuery.Kind?
+    var mood: Mood?
+    var genre: String?
     /// The first year of the decade.
-    public var decade: Int?
-    public var maximumRuntime: Int?
+    var decade: Int?
+    var maximumRuntime: Int?
     /// TMDb's score, 0 to 10.
-    public var minimumScore: Double?
+    var minimumScore: Double?
 
-    public init() {}
+    init() {}
 
     /// The genres offered for a kind: series are not offered the genres TMDb has for films alone.
-    public static func genres(for kind: TMDbDiscoverQuery.Kind?) -> [String] {
+    static func genres(for kind: TMDbDiscoverQuery.Kind?) -> [String] {
         guard let kind else { return allGenres }
         return allGenres.filter { TMDbDiscoverQuery.genre(named: $0, kind: kind) != nil }
     }
@@ -70,19 +70,19 @@ public struct SearchPick: Equatable, Sendable {
     ]
 
     /// This decade back to the 1950s.
-    public static func decades(now: Date = Date()) -> [Int] {
+    static func decades(now: Date = Date()) -> [Int] {
         let current = Calendar(identifier: .gregorian).component(.year, from: now) / 10 * 10
         return Array(stride(from: current, through: 1950, by: -10))
     }
 
-    public static let runtimes = [30, 60, 90, 120, 150]
-    public static let scores = [6.0, 7.0, 7.5, 8.0]
+    static let runtimes = [30, 60, 90, 120, 150]
+    static let scores = [6.0, 7.0, 7.5, 8.0]
 
-    public static func runtimeTitle(_ minutes: Int) -> String { "Under \(minutes) min" }
-    public static func scoreTitle(_ score: Double) -> String { AISearchPlan.scoreTitle(score) }
+    static func runtimeTitle(_ minutes: Int) -> String { "Under \(minutes) min" }
+    static func scoreTitle(_ score: Double) -> String { AISearchPlan.scoreTitle(score) }
 
     /// The choices in words, as the search field shows them: "Funny movies from the 1990s under 120 minutes".
-    public var title: String {
+    var title: String {
         let lead = [mood?.title, genre?.lowercased()].compactMap { $0 }.joined(separator: " ")
         var text: String
         switch (lead.isEmpty, kind) {

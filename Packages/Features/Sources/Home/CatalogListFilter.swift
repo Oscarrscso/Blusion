@@ -2,7 +2,7 @@ import Foundation
 import StremioKit
 
 /// How the grid behind "See All" orders what it has loaded. `original` keeps the source's own order.
-public enum CatalogListSort: String, CaseIterable, Identifiable, Sendable, Codable {
+enum CatalogListSort: String, CaseIterable, Identifiable, Sendable, Codable {
     case original
     case rating
     case newest
@@ -10,9 +10,9 @@ public enum CatalogListSort: String, CaseIterable, Identifiable, Sendable, Codab
     case title
     case shuffle
 
-    public var id: String { rawValue }
+    var id: String { rawValue }
 
-    public var title: String {
+    var title: String {
         switch self {
         case .original: "Default"
         case .rating: "Top Rated"
@@ -23,7 +23,7 @@ public enum CatalogListSort: String, CaseIterable, Identifiable, Sendable, Codab
         }
     }
 
-    public var systemImage: String {
+    var systemImage: String {
         switch self {
         case .original: "list.bullet"
         case .rating: "star"
@@ -59,18 +59,18 @@ enum CatalogListRecent: Int, CaseIterable, Identifiable, Sendable {
 
 /// What the grid behind "See All" shows of what it has loaded: its order, and the type, genre, release years and rating it is narrowed to. Every
 /// choice works on the loaded titles, so it applies to any source, addon, TMDB or Trakt alike.
-public struct CatalogListFilter: Equatable, Sendable {
-    public var sort: CatalogListSort = .original
+struct CatalogListFilter: Equatable, Sendable {
+    var sort: CatalogListSort = .original
     /// "movie" or "series"; nil shows both.
-    public var type: String?
+    var type: String?
     /// A genre the titles list, matched whatever its case; nil shows every genre.
-    public var genre: String?
-    public var minimumYear: Int?
-    public var maximumYear: Int?
+    var genre: String?
+    var minimumYear: Int?
+    var maximumYear: Int?
     /// Out of 10, against the title's rating (see `RatingSource.order(isAnime:)`).
-    public var minimumRating: Double?
+    var minimumRating: Double?
 
-    public init(sort: CatalogListSort = .original, type: String? = nil, genre: String? = nil, minimumYear: Int? = nil,
+    init(sort: CatalogListSort = .original, type: String? = nil, genre: String? = nil, minimumYear: Int? = nil,
                 maximumYear: Int? = nil, minimumRating: Double? = nil) {
         self.sort = sort
         self.type = type
@@ -81,9 +81,9 @@ public struct CatalogListFilter: Equatable, Sendable {
     }
 
     /// A narrowing choice is on. The order is not a filter: it never hides a title.
-    public var isFiltering: Bool { type != nil || genre != nil || minimumYear != nil || maximumYear != nil || minimumRating != nil }
+    var isFiltering: Bool { type != nil || genre != nil || minimumYear != nil || maximumYear != nil || minimumRating != nil }
 
-    public mutating func clearFilters() {
+    mutating func clearFilters() {
         type = nil
         genre = nil
         minimumYear = nil
@@ -92,7 +92,7 @@ public struct CatalogListFilter: Equatable, Sendable {
     }
 
     /// The release window's label for its menu, or nil when any year shows.
-    public func yearLabel(now: Date = Date(), calendar: Calendar = .current) -> String? {
+    func yearLabel(now: Date = Date(), calendar: Calendar = .current) -> String? {
         for recent in CatalogListRecent.allCases {
             let range = recent.years(now: now, calendar: calendar)
             if minimumYear == range.lowerBound, maximumYear == range.upperBound { return recent.title }

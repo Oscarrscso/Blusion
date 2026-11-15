@@ -583,7 +583,7 @@ private struct PlayerInfoMedia: View {
                 DetailReviewsPanel(reviews: reviews, shown: infoModel.shownReviews, item: item,
                                    isLoading: infoModel.reviewsLoading,
                                    onLoaded: { infoModel.reviewsDidLoad(reviews) }, onClose: infoModel.closeReviews,
-                                   viewportHeight: reviewHeight)
+                                   viewportHeight: reviewHeight, showsSiteName: infoModel.isEpisode ? true : nil)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }

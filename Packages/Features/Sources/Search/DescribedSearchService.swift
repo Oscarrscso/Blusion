@@ -1,12 +1,12 @@
 import Foundation
 import StremioKit
 
-public protocol DescriptionInterpreting: Sendable {
+protocol DescriptionInterpreting: Sendable {
     func interpret(_ text: String) async -> DescribedSearch
     func plan(_ text: String) async -> AISearchPlan
 }
 
-public extension DescriptionInterpreting {
+extension DescriptionInterpreting {
     func plan(_ text: String) async -> AISearchPlan {
         AISearchPlan(filters: await interpret(text),
                      titleQueries: DescribedSearch.readsLikeDescription(text) ? [] : [text])
@@ -24,7 +24,7 @@ struct KeywordDescriptionInterpreter: DescriptionInterpreting {
 }
 
 /// Small database batches are published as soon as they are checked. Model inference never hides an earlier batch.
-public struct DescribedSearchService: Sendable {
+struct DescribedSearchService: Sendable {
     let interpreter: any DescriptionInterpreting
     let keywords: @Sendable (String) async -> [TMDbDiscoverQuery.Named]
     let titles: @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview]
@@ -42,7 +42,7 @@ public struct DescribedSearchService: Sendable {
     /// A title's rating out of 10, as the rating filters judge it, from its TMDb score and the other sites; a minimum score is held to it.
     let titleRating: @Sendable (MetaPreview, Double?) async -> Double?
 
-    public init(interpreter: any DescriptionInterpreting, keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named],
+    init(interpreter: any DescriptionInterpreting, keywords: @escaping @Sendable (String) async -> [TMDbDiscoverQuery.Named],
                 titles: @escaping @Sendable (TMDbDiscoverQuery) async throws -> [MetaPreview],
                 ranker: (any CandidateRanking)? = nil,
                 titleMatches: @escaping @Sendable (String) async throws -> [MetaPreview] = { _ in [] },
@@ -140,7 +140,7 @@ public struct DescribedSearchService: Sendable {
     /// The titles a search asks for, published batch by batch. The on-device model reads only a search that describes something:
     /// words that could be a title ("Dune", "zombies") and plain filters ("90s comedy") are read from the words alone. With
     /// `supplied`, an edited plan, nothing is read again: the plan is searched as it stands.
-    public func titles(for text: String, plan supplied: AISearchPlan? = nil,
+    func titles(for text: String, plan supplied: AISearchPlan? = nil,
                        onUpdate: @escaping @Sendable (AISearchUpdate) async -> Void = { _ in }) async -> [MetaPreview] {
         let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty, !Task.isCancelled else { return [] }

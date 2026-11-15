@@ -7,21 +7,21 @@ import StremioKit
 @Observable
 public final class PosterRatingsStore {
     /// Makes visible posters, review rows and episodes ask again after saving credentials or refreshing.
-    public internal(set) var reviewServicesRevision = 0
-    public internal(set) var omdbError: String?
-    public internal(set) var reviewServiceIssue: String?
-    public var isEnabled: Bool {
+    var reviewServicesRevision = 0
+    var omdbError: String?
+    var reviewServiceIssue: String?
+    var isEnabled: Bool {
         didSet { if isEnabled { Task { startLookups() } } }
     }
     /// Read by the rating logos: their brand colours when on, the text colour when off. Mirrors the saved setting.
-    public var showsColouredLogos = false
+    var showsColouredLogos = false
     /// Posters show the film's best disc beside the ratings, looked up on bestblurays.com, or else the service the title streams on, from
     /// TMDb. Mirrors the saved setting.
-    public var showsBestDisc = false {
+    var showsBestDisc = false {
         didSet { if showsBestDisc, !oldValue { Task { startLookups() } } }
     }
     /// Where posters put that mark. Mirrors the saved setting.
-    public var markPlacement = PosterMarkPlacement.topTrailing
+    var markPlacement = PosterMarkPlacement.topTrailing
 
     /// Copies the poster switches from the saved look, the one place they are read from. Launch, a reset and every change to the look call
     /// it, so a preset or an imported look reaches the posters as well as the switches in Settings.
@@ -32,7 +32,7 @@ public final class PosterRatingsStore {
         markPlacement = look.posterMarkPlacement
     }
     /// True when ratings or a mark sit along a poster's bottom edge, so a logo drawn over the poster keeps clear of them.
-    public var occupiesPosterBottom: Bool {
+    var occupiesPosterBottom: Bool {
         isEnabled || showsBestDisc && markPlacement != .topLeading && markPlacement != .topTrailing
     }
 
@@ -114,7 +114,7 @@ public final class PosterRatingsStore {
     /// Returns the same object every time. No observed property changes synchronously when called from a view body. `includeMarks` asks
     /// for the title's disc and streamer whether or not posters show marks, ahead of other titles, for a screen built on them (the video
     /// store's cases).
-    public func ratings(for item: MetaPreview, includeReviews: Bool = false, source: RatingSource? = nil,
+    func ratings(for item: MetaPreview, includeReviews: Bool = false, source: RatingSource? = nil,
                         includeMarks: Bool = false) -> TitleRatings {
         let entry = storedEntry(for: item)
         // MyAnimeList searches by name, so anime listed under its own databases' ids (Kitsu's, say) is looked up too.
@@ -148,7 +148,7 @@ public final class PosterRatingsStore {
     /// The title as the rating filters and the Rating sorts judge it (see `RatingSource.order(isAnime:)`); nil until a site has scored it.
     /// Asks for the scores it needs whatever the poster setting: IMDb's from the device at once, then Letterboxd's, TMDb's and, for
     /// anime, MyAnimeList's, in turn with the posters' lookups. Reading it inside observation tracking re-runs that as each score arrives.
-    public func judgedRating(for item: MetaPreview) -> JudgedRating? {
+    func judgedRating(for item: MetaPreview) -> JudgedRating? {
         let entry = storedEntry(for: item)
         guard !isClearing else { return entry.judgedRating }
         if myAnimeList != nil, entry.isAnime { enqueue(item, provider: .myAnimeList, includeReviews: false, forFilter: true) }
@@ -256,7 +256,7 @@ public final class PosterRatingsStore {
     }
 
     /// What the device holds, for Settings. Nil when nothing has been downloaded yet.
-    public func imdbDatasetStatus() async -> IMDbDatasetStatus? { await dataset?.status() }
+    func imdbDatasetStatus() async -> IMDbDatasetStatus? { await dataset?.status() }
 
     /// Called after the user saves or removes credentials. Old requests finish cancelling before the clients change.
     public func setReviewServices(omdb: OMDbRatings? = nil, tmdb: TMDbRatings?, refreshCache: Bool = false) async {
@@ -283,7 +283,7 @@ public final class PosterRatingsStore {
     }
 
     /// Recheck visible titles, including old empty answers and failed requests. Keep good scores on screen and on disk.
-    public func refresh() async {
+    func refresh() async {
         await cancelLookups()
         ignoresCachedFreshnessUntil = now().addingTimeInterval(Self.refreshWindow)
         omdbPausedUntil = nil
@@ -294,7 +294,7 @@ public final class PosterRatingsStore {
     }
 
     /// Cancel before clearing, so an old answer cannot restore cleared data.
-    public func forgetAll() async {
+    func forgetAll() async {
         await cancelLookups()
         await cache.clear()
         await marks.clear()

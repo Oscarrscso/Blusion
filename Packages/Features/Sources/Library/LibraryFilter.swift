@@ -87,18 +87,18 @@ enum AddedWithin: String, CaseIterable, Sendable, Identifiable {
 
 /// A rating site that every rating filter and Rating sort judges a title by. A title is rated by the first site in `order(isAnime:)` that
 /// has scored it. Each score stays on its own site's scale until it is put out of 10, and it is never averaged with another site's.
-public enum RatingSource: String, CaseIterable, Sendable, Identifiable {
+enum RatingSource: String, CaseIterable, Sendable, Identifiable {
     case letterboxd, imdb, myAnimeList, tmdb
 
-    public var id: String { rawValue }
+    var id: String { rawValue }
 
     /// Letterboxd, then IMDb; anime by MyAnimeList, then IMDb and Letterboxd. TMDb scores posters and reviews, not the rating filter.
-    public static func order(isAnime: Bool) -> [RatingSource] {
+    static func order(isAnime: Bool) -> [RatingSource] {
         isAnime ? [.myAnimeList, .imdb, .letterboxd] : [.letterboxd, .imdb]
     }
 
     /// The top of the site's own scale.
-    public var scaleMaximum: Double {
+    var scaleMaximum: Double {
         switch self {
         case .letterboxd: 5
         case .imdb, .myAnimeList, .tmdb: 10
@@ -106,10 +106,10 @@ public enum RatingSource: String, CaseIterable, Sendable, Identifiable {
     }
 
     /// A score put out of 10: 3.5 of 5 is 7.
-    public func outOfTen(_ score: Double) -> Double { score * 10 / scaleMaximum }
+    func outOfTen(_ score: Double) -> Double { score * 10 / scaleMaximum }
 
     /// The title's rating from its sites' scores, each on its own scale; nil when none has scored it.
-    public static func judge(isAnime: Bool, score: (RatingSource) -> Double?) -> JudgedRating? {
+    static func judge(isAnime: Bool, score: (RatingSource) -> Double?) -> JudgedRating? {
         for source in order(isAnime: isAnime) {
             if let value = score(source) { return JudgedRating(score: source.outOfTen(value), hasIMDb: score(.imdb) != nil) }
         }
@@ -118,20 +118,20 @@ public enum RatingSource: String, CaseIterable, Sendable, Identifiable {
 }
 
 /// A title's rating as the rating filters and the Rating sorts judge it (see `RatingSource.order(isAnime:)`).
-public struct JudgedRating: Equatable, Sendable {
+struct JudgedRating: Equatable, Sendable {
     /// Out of 10.
-    public var score: Double
+    var score: Double
     /// IMDb has scored the title. IMDb's score is on the device, so such a title is judged as soon as it loads; one only another site has
     /// scored waits for that site's lookup.
-    public var hasIMDb: Bool
+    var hasIMDb: Bool
 
-    public init(score: Double, hasIMDb: Bool) {
+    init(score: Double, hasIMDb: Bool) {
         self.score = score
         self.hasIMDb = hasIMDb
     }
 
     /// The catalog's IMDb rating, and nothing else: the rating where no lookups are supplied.
-    public static func catalogue(_ item: MetaPreview) -> JudgedRating? {
+    static func catalogue(_ item: MetaPreview) -> JudgedRating? {
         item.imdbRating.map { JudgedRating(score: $0, hasIMDb: true) }
     }
 }

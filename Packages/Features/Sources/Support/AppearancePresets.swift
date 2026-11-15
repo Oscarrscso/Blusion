@@ -8,12 +8,12 @@ extension AppearancePreferences {
     /// Applying one sets all of that together, with Play's fill, whether the buttons are glass, the headings' colour and the Mac's hover.
     /// The listener's text size, custom colours, start tab, Home's Continue Watching bar, the title page sections shown, spoiler hiding
     /// and animation speed stay their own.
-    public enum Preset: String, Sendable, CaseIterable, Identifiable {
+    enum Preset: String, Sendable, CaseIterable, Identifiable {
         case original, netflix, appleTV, disneyPlus, primeVideo, letterboxd, plex, arthouse
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .original: "Original"
             case .netflix: "Netflix"
@@ -36,7 +36,7 @@ extension AppearancePreferences {
         static let squarePlay = 0.3
 
         /// `appearance` with this preset's look.
-        public func applied(to appearance: AppearancePreferences) -> AppearancePreferences {
+        func applied(to appearance: AppearancePreferences) -> AppearancePreferences {
             var look = AppearancePreferences()
             if self != .original {
                 // The themed looks keep their own typography, spacing and section order.

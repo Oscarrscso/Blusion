@@ -9,30 +9,30 @@ import StremioKit
 /// `settings`, `addons`, `widgets`, `gallery`, `gallery:<section>`, `player`.
 public struct LaunchRoute: Sendable, Equatable {
     /// The tab bar, in order: Home, Discover, Library, Settings, Search. Widgets is a tab on Mac only, at the bottom of its sidebar.
-    public enum Tab: String, Sendable, Hashable, CaseIterable {
+    enum Tab: String, Sendable, Hashable, CaseIterable {
         case home, discover, library, settings, search, widgets
     }
 
     /// Settings, or one of the screens inside it. They open on the Settings tab.
-    public enum Sheet: String, Sendable, Equatable {
+    enum Sheet: String, Sendable, Equatable {
         case settings, addons, widgets
     }
 
-    public var tab: Tab
+    var tab: Tab
     /// Typed into the search field on arrival.
-    public var searchQuery: String?
+    var searchQuery: String?
     /// Pushed onto the Home stack on arrival.
-    public var detail: MetaPreview?
-    public var streams: StreamRequest?
-    public var sheet: Sheet?
+    var detail: MetaPreview?
+    var streams: StreamRequest?
+    var sheet: Sheet?
     /// The component gallery, optionally opened on one of its sections.
-    public var showsGallery: Bool
-    public var gallerySection: String?
+    var showsGallery: Bool
+    var gallerySection: String?
     /// The player on a public sample stream, for looking at its controls without a stream addon.
-    public var showsPlayerDemo: Bool
+    var showsPlayerDemo: Bool
 
-    public init(tab: Tab = .home, searchQuery: String? = nil, detail: MetaPreview? = nil, streams: StreamRequest? = nil,
-                sheet: Sheet? = nil, showsGallery: Bool = false, gallerySection: String? = nil, showsPlayerDemo: Bool = false) {
+    init(tab: Tab = .home, searchQuery: String? = nil, detail: MetaPreview? = nil, streams: StreamRequest? = nil,
+         sheet: Sheet? = nil, showsGallery: Bool = false, gallerySection: String? = nil, showsPlayerDemo: Bool = false) {
         self.tab = tab
         self.searchQuery = searchQuery
         self.detail = detail

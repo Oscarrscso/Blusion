@@ -3,12 +3,12 @@ import Foundation
 /// The choices Settings → Appearance offers, each with the value it stands for.
 extension AppearancePreferences {
     /// sRGB, 0…1.
-    public struct RGB: Sendable, Equatable, Codable {
-        public var red: Double
-        public var green: Double
-        public var blue: Double
+    struct RGB: Sendable, Equatable, Codable {
+        var red: Double
+        var green: Double
+        var blue: Double
 
-        public init(red: Double, green: Double, blue: Double) {
+        init(red: Double, green: Double, blue: Double) {
             self.red = min(max(red, 0), 1)
             self.green = min(max(green, 0), 1)
             self.blue = min(max(blue, 0), 1)
@@ -20,7 +20,7 @@ extension AppearancePreferences {
     // MARK: - Colour
 
     /// The tint of buttons, switches, the selected tab and links.
-    public enum Accent: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum Accent: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         /// The app's own accent, from the asset catalogue.
         case blusion
         case blue, indigo, purple, pink, red, orange, yellow, green, mint, teal, cyan, white
@@ -29,9 +29,9 @@ extension AppearancePreferences {
         /// `AppearancePreferences.customAccent`.
         case custom
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .blusion: "Blusion"
             case .custom: "Custom"
@@ -40,7 +40,7 @@ extension AppearancePreferences {
         }
 
         /// The preset's colour; nil for the custom accent, which is saved beside it.
-        public var rgb: RGB? {
+        var rgb: RGB? {
             switch self {
             case .blusion: RGB(red: 0.42, green: 0.51, blue: 1)
             case .blue: RGB(red: 0.04, green: 0.52, blue: 1)
@@ -66,18 +66,18 @@ extension AppearancePreferences {
     }
 
     /// The colour behind every page, and the colour hero artwork fades into.
-    public enum Background: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum Background: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case black, graphite, charcoal, slate, steel, ink, navy, midnight, plum, forest, cocoa
         /// A very dark shade of the accent, as dark as `tintStrength` says.
         case tinted
         /// `AppearancePreferences.customBackground`.
         case custom
 
-        public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
 
         /// The fixed backgrounds' colour; nil for Tinted and Custom, which come from other fields.
-        public var rgb: RGB? {
+        var rgb: RGB? {
             switch self {
             case .black: RGB(red: 0, green: 0, blue: 0)
             case .graphite: RGB(red: 0.078, green: 0.078, blue: 0.078)
@@ -98,12 +98,12 @@ extension AppearancePreferences {
     // MARK: - Text
 
     /// Where a piece of text sits. Display is shelf and section headings, interface is controls and metadata, reading is prose.
-    public enum TextRole: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum TextRole: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case reading, interface, display
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .reading: "Body text"
             case .interface: "Buttons & labels"
@@ -114,30 +114,30 @@ extension AppearancePreferences {
 
     /// One kind of text: its size, face, width, weight, slant, spacing, colour and case. Interface and headings leave a choice unset
     /// (`follows…`) to use reading's until the listener sets that choice on its own.
-    public struct TextStyle: Sendable, Equatable, Codable {
-        public var textSize: TextSize = .system
-        public var followsTextSize = false
-        public var font: FontStyle = .standard
-        public var followsFont = false
-        public var width: FontWidth = .standard
-        public var followsWidth = false
-        public var weight: HeadingWeight = .regular
-        public var followsWeight = false
-        public var italic = false
-        public var followsItalic = false
-        public var letterSpacing: LetterSpacing = .standard
-        public var followsLetterSpacing = false
-        public var lineSpacing: LineSpacing = .standard
-        public var followsLineSpacing = false
-        public var colour: HeadingColour = .primary
-        public var capitals = false
-        public var scale: HeadingSize = .standard
-        public var followsScale = false
+    struct TextStyle: Sendable, Equatable, Codable {
+        var textSize: TextSize = .system
+        var followsTextSize = false
+        var font: FontStyle = .standard
+        var followsFont = false
+        var width: FontWidth = .standard
+        var followsWidth = false
+        var weight: HeadingWeight = .regular
+        var followsWeight = false
+        var italic = false
+        var followsItalic = false
+        var letterSpacing: LetterSpacing = .standard
+        var followsLetterSpacing = false
+        var lineSpacing: LineSpacing = .standard
+        var followsLineSpacing = false
+        var colour: HeadingColour = .primary
+        var capitals = false
+        var scale: HeadingSize = .standard
+        var followsScale = false
 
-        public init() {}
+        init() {}
 
         /// Every choice follows reading, until the listener sets one.
-        public static func followingReading() -> TextStyle {
+        static func followingReading() -> TextStyle {
             var style = TextStyle()
             style.followsTextSize = true
             style.followsFont = true
@@ -151,7 +151,7 @@ extension AppearancePreferences {
         }
 
         /// Headings follow the reading face, width, spacing, slant and text size, and keep a bold Title 2 of their own.
-        public static func headings() -> TextStyle {
+        static func headings() -> TextStyle {
             var style = followingReading()
             style.followsWeight = false
             style.weight = .bold
@@ -160,14 +160,14 @@ extension AppearancePreferences {
         }
 
         /// True when this style has no choice of its own besides colour and capitals, which stay at their defaults.
-        public var followsReading: Bool {
+        var followsReading: Bool {
             followsTextSize && followsFont && followsWidth && followsWeight && followsItalic
                 && followsLetterSpacing && followsLineSpacing && followsScale
                 && colour == .primary && !capitals
         }
 
         /// What a layout depends on, so a shelf measures its cards again when the type changes.
-        public var layoutKey: String {
+        var layoutKey: String {
             [textSize.rawValue, "\(followsTextSize)", font.rawValue, "\(followsFont)", width.rawValue, "\(followsWidth)",
              weight.rawValue, "\(followsWeight)", "\(italic)", "\(followsItalic)", letterSpacing.rawValue, "\(followsLetterSpacing)",
              lineSpacing.rawValue, "\(followsLineSpacing)", colour.rawValue, "\(capitals)", scale.rawValue, "\(followsScale)"]
@@ -176,13 +176,13 @@ extension AppearancePreferences {
     }
 
     /// A fixed text size for the whole app, or the system's own. The accessibility sizes go past the largest ordinary size.
-    public enum TextSize: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum TextSize: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case system, xSmall, small, medium, large, xLarge, xxLarge, xxxLarge
         case accessibility1, accessibility2, accessibility3, accessibility4, accessibility5
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .system: "System"
             case .xSmall: "Extra Small"
@@ -205,16 +205,16 @@ extension AppearancePreferences {
     /// Most of the list is sans-serif. New York, Charter and Georgia are the serifs that remain. A save that named a serif no longer
     /// offered (Baskerville, Palatino, Iowan Old Style, Hoefler Text, Didot, Bodoni, Typewriter) reads as New York. Kefa, which is
     /// unavailable on iOS, reads as Default, the face it fell back to there.
-    public enum FontStyle: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum FontStyle: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case standard, rounded, serif, monospaced
         case avenir, avenirNext, futura, gillSans, helveticaNeue
         case helvetica, arial, verdana, trebuchet, avenirNextCondensed, galvji, dinAlternate
         case charter, georgia
         case optima
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .standard: "Default"
             case .serif: "New York"
@@ -239,7 +239,7 @@ extension AppearancePreferences {
         }
 
         /// The font family, for a face that is not a system design.
-        public var familyName: String? {
+        var familyName: String? {
             switch self {
             case .avenir: "Avenir"
             case .avenirNext: "Avenir Next"
@@ -260,7 +260,7 @@ extension AppearancePreferences {
             }
         }
 
-        public init(from decoder: Decoder) throws {
+        init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
             if let style = Self(rawValue: raw) ?? Self.migrated(from: raw) {
@@ -270,7 +270,7 @@ extension AppearancePreferences {
             }
         }
 
-        public func encode(to encoder: Encoder) throws {
+        func encode(to encoder: Encoder) throws {
             var container = encoder.singleValueContainer()
             try container.encode(rawValue)
         }
@@ -286,21 +286,21 @@ extension AppearancePreferences {
     }
 
     /// How wide the system font's letters are.
-    public enum FontWidth: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum FontWidth: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case compressed, condensed, standard, expanded
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
     }
 
     /// Extra space between letters, in points.
-    public enum LetterSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum LetterSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case tight, standard, wide, wider
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
 
-        public var points: Double {
+        var points: Double {
             switch self {
             case .tight: -0.5
             case .standard: 0
@@ -311,13 +311,13 @@ extension AppearancePreferences {
     }
 
     /// Extra space between the lines of text that wraps, in points.
-    public enum LineSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum LineSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case standard, relaxed, airy
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
 
-        public var points: Double {
+        var points: Double {
             switch self {
             case .standard: 0
             case .relaxed: 3
@@ -327,24 +327,24 @@ extension AppearancePreferences {
     }
 
     /// A reading face, or the reading face itself. Headings and interface text each have one.
-    public enum HeadingFont: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingFont: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case matchText, standard, rounded, serif, monospaced
         case avenir, avenirNext, futura, gillSans, helveticaNeue
         case helvetica, arial, verdana, trebuchet, avenirNextCondensed, galvji, dinAlternate
         case charter, georgia
         case optima
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             if self == .matchText { return "Same as body text" }
             return font?.label ?? rawValue.capitalized
         }
 
         /// The face, or nil to follow the reading text.
-        public var font: FontStyle? { FontStyle(rawValue: rawValue) }
+        var font: FontStyle? { FontStyle(rawValue: rawValue) }
 
-        public init(from decoder: Decoder) throws {
+        init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
             let migrated = FontStyle.migrated(from: raw)?.rawValue
@@ -355,26 +355,26 @@ extension AppearancePreferences {
             }
         }
 
-        public func encode(to encoder: Encoder) throws {
+        func encode(to encoder: Encoder) throws {
             var container = encoder.singleValueContainer()
             try container.encode(rawValue)
         }
     }
 
-    public enum HeadingWeight: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingWeight: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case regular, medium, semibold, bold, heavy, black
 
-        public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
     }
 
     /// How wide headings' letters are: the text's own, or one of their own. Only the default font has widths.
-    public enum HeadingWidth: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingWidth: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case matchText, compressed, condensed, standard, expanded
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .matchText: "Same as Text"
             case .standard: "Default"
@@ -383,7 +383,7 @@ extension AppearancePreferences {
         }
 
         /// The width, or nil to follow the text's.
-        public var width: FontWidth? {
+        var width: FontWidth? {
             switch self {
             case .matchText: nil
             case .compressed: .compressed
@@ -395,12 +395,12 @@ extension AppearancePreferences {
     }
 
     /// Extra space between headings' letters: the text's own, or their own.
-    public enum HeadingSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingSpacing: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case matchText, tight, standard, wide, wider
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .matchText: "Same as Text"
             case .standard: "Default"
@@ -409,7 +409,7 @@ extension AppearancePreferences {
         }
 
         /// The spacing, or nil to follow the text's.
-        public var spacing: LetterSpacing? {
+        var spacing: LetterSpacing? {
             switch self {
             case .matchText: nil
             case .tight: .tight
@@ -421,21 +421,21 @@ extension AppearancePreferences {
     }
 
     /// The heading's text style: Title 3, Title 2 (the app's own), Title, Large Title.
-    public enum HeadingSize: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingSize: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case small, standard, large, huge
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
     }
 
     // MARK: - Cards
 
-    public enum CornerGroup: String, Sendable, Codable, CaseIterable, Identifiable {
+    enum CornerGroup: String, Sendable, Codable, CaseIterable, Identifiable {
         case artwork, playButton, actionButtons, filters, reviews, panels, playerControls, settingsRows
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
         /// What the group rounds, in the words the listener sees it by.
-        public var label: String {
+        var label: String {
             switch self {
             case .artwork: "Posters, Cards & Photos"
             case .playButton: "Play Button"
@@ -450,14 +450,14 @@ extension AppearancePreferences {
     }
 
     /// The hairline just inside every poster, card and still.
-    public enum Outline: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum Outline: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case off, faint, standard, strong
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
 
         /// The hairline's white, as an opacity. The default is `Theme.artworkBorder`'s.
-        public var opacity: Double {
+        var opacity: Double {
             switch self {
             case .off: 0
             case .faint: 0.1
@@ -467,16 +467,16 @@ extension AppearancePreferences {
         }
 
         /// The hairline's width in pixels.
-        public var pixels: Double { self == .strong ? 2 : 1 }
+        var pixels: Double { self == .strong ? 2 : 1 }
     }
 
     /// The colour of the artwork on posters, cards, tiles and stills. Full-screen hero artwork keeps its own.
-    public enum ArtworkTone: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum ArtworkTone: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case natural, vivid, muted, dim, mono
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var label: String {
+        var label: String {
             switch self {
             case .natural: "Natural"
             case .mono: "Black & White"
@@ -484,7 +484,7 @@ extension AppearancePreferences {
             }
         }
 
-        public var saturation: Double {
+        var saturation: Double {
             switch self {
             case .natural, .dim: 1
             case .vivid: 1.35
@@ -493,25 +493,25 @@ extension AppearancePreferences {
             }
         }
 
-        public var brightness: Double { self == .dim ? -0.14 : 0 }
-        public var contrast: Double { self == .vivid || self == .mono ? 1.06 : 1 }
+        var brightness: Double { self == .dim ? -0.14 : 0 }
+        var contrast: Double { self == .vivid || self == .mono ? 1.06 : 1 }
     }
 
     /// The colour of the progress line on Continue cards.
-    public enum ProgressColour: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum ProgressColour: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case white, accent
 
-        public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
     }
 
-    public enum ProgressThickness: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum ProgressThickness: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case thin, standard, thick
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
 
-        public var points: Double {
+        var points: Double {
             switch self {
             case .thin: 2
             case .standard: 3
@@ -525,30 +525,30 @@ extension AppearancePreferences {
     /// How the app's pages are laid out: its own pages, or the editorial ones (on iPhone for now): a pill bar in place of the tab bar, a
     /// typeset Search with its results on the accent, and title pages set over their full-screen picture. Only presets set it: Arthouse
     /// the editorial pages, every other preset the standard ones.
-    public enum Layout: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum Layout: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case standard, editorial
 
-        public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
     }
 
     // MARK: - Buttons and headings
 
     /// How Play is filled: tinted glass in the title's artwork colour (the app's own), solid white with dark text, or the accent, solid.
-    public enum PlayStyle: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum PlayStyle: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case artwork, white, accent
 
-        public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
     }
 
     /// What the buttons are made of: Liquid Glass, flat fills for a look whose app draws no glass (shown as Flat), or no fill at all
     /// (shown as Plain: every button, Play included, is its label alone). The saved values keep their first names.
-    public enum ButtonFinish: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum ButtonFinish: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case glass, solid, flat
 
-        public var id: String { rawValue }
-        public var label: String {
+        var id: String { rawValue }
+        var label: String {
             switch self {
             case .glass: "Glass"
             case .solid: "Flat"
@@ -558,11 +558,11 @@ extension AppearancePreferences {
     }
 
     /// The colour of a kind of text: the text's own, a neutral from white down to charcoal, or the accent.
-    public enum HeadingColour: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HeadingColour: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case primary, white, offWhite, lightGrey, secondary, darkGrey, charcoal, accent
 
-        public var id: String { rawValue }
-        public var label: String {
+        var id: String { rawValue }
+        var label: String {
             switch self {
             case .primary: "Default"
             case .white: "White"
@@ -576,7 +576,7 @@ extension AppearancePreferences {
         }
 
         /// The fixed neutral a choice names. Nil for the text's own colour, the system's grey and the accent.
-        public var neutral: RGB? {
+        var neutral: RGB? {
             switch self {
             case .white: RGB(red: 1, green: 1, blue: 1)
             case .offWhite: RGB(red: 0.93, green: 0.91, blue: 0.87)
@@ -590,11 +590,11 @@ extension AppearancePreferences {
 
     // MARK: - Title pages, navigation and motion
 
-    public enum TitleSection: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum TitleSection: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case episodes, reviews, cast, information, franchise, related, watchAnywhere
 
-        public var id: String { rawValue }
-        public var label: String {
+        var id: String { rawValue }
+        var label: String {
             switch self {
             case .episodes: "Episodes"
             case .reviews: "Reviews"
@@ -608,11 +608,11 @@ extension AppearancePreferences {
     }
 
     /// The order of the two sections under a title's episodes.
-    public enum SectionOrder: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum SectionOrder: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case reviewsFirst, castFirst
 
-        public var id: String { rawValue }
-        public var label: String { self == .reviewsFirst ? "Reviews First" : "Cast First" }
+        var id: String { rawValue }
+        var label: String { self == .reviewsFirst ? "Reviews First" : "Cast First" }
     }
 
     /// The tab the app opens on when nothing else asks for one.
@@ -620,9 +620,9 @@ extension AppearancePreferences {
         case home, discover, library, search
 
         public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var label: String { rawValue.capitalized }
 
-        public var tab: LaunchRoute.Tab {
+        var tab: LaunchRoute.Tab {
             switch self {
             case .home: .home
             case .discover: .discover
@@ -638,7 +638,7 @@ extension AppearancePreferences {
         case off, slower, standard, faster, fastest
 
         public var id: String { rawValue }
-        public var label: String { rawValue.capitalized }
+        var label: String { rawValue.capitalized }
 
         /// The speed multiplier; zero is Off.
         public var factor: Double {
@@ -653,14 +653,14 @@ extension AppearancePreferences {
     }
 
     /// How long the Mac's hover feedback takes to light and fade, as a share of its own timing. Instant draws it at once.
-    public enum HoverSpeed: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
+    enum HoverSpeed: String, Sendable, Equatable, Codable, CaseIterable, Identifiable {
         case instant, fast, standard, slow
 
-        public var id: String { rawValue }
-        public var label: String { self == .standard ? "Default" : rawValue.capitalized }
+        var id: String { rawValue }
+        var label: String { self == .standard ? "Default" : rawValue.capitalized }
 
         /// The duration multiplier; zero is Instant.
-        public var factor: Double {
+        var factor: Double {
             switch self {
             case .instant: 0
             case .fast: 0.5
@@ -672,56 +672,56 @@ extension AppearancePreferences {
 
     /// The Mac's hover feedback: what lights, grows and lifts under the pointer (see `PointerInteraction.swift`). The defaults are the
     /// look the app always had. The iPhone has no pointer to hover, so nothing here reaches it.
-    public struct Hover: Sendable, Equatable, Codable {
-        public var isEnabled = true
+    struct Hover: Sendable, Equatable, Codable {
+        var isEnabled = true
         /// How much brighter a button or glass control draws under the pointer (`brightnessRange`).
-        public var brightness: Double = 0.15
+        var brightness: Double = 0.15
         /// How much a button or glass control grows under the pointer, as a share of its size (`growRange`).
-        public var grow: Double = 0.025
+        var grow: Double = 0.025
         /// The white fill a glass control and a navigation segment take under the pointer (`fillRange`).
-        public var glassFill: Double = 0.18
-        public var showsRim = true
+        var glassFill: Double = 0.18
+        var showsRim = true
         /// The rim drawn round a glass control and a navigation segment under the pointer (`rimRange`).
-        public var rimStrength: Double = 0.35
+        var rimStrength: Double = 0.35
         /// How much a card the pointer follows grows under it, as a share of its size (`cardLiftRange`).
-        public var cardLift: Double = 0.04
-        public var cardShadow = true
-        public var showsGlow = true
+        var cardLift: Double = 0.04
+        var cardShadow = true
+        var showsGlow = true
         /// The glow that follows the pointer across a card (`glowRange`).
-        public var glowStrength: Double = 0.04
-        public var speed: HoverSpeed = .standard
+        var glowStrength: Double = 0.04
+        var speed: HoverSpeed = .standard
         /// The system's own hover highlight alongside the app's.
-        public var systemHighlight = true
+        var systemHighlight = true
 
-        public static let brightnessRange: ClosedRange<Double> = 0...0.4
-        public static let growRange: ClosedRange<Double> = 0...0.1
-        public static let fillRange: ClosedRange<Double> = 0...0.5
-        public static let rimRange: ClosedRange<Double> = 0...1
-        public static let cardLiftRange: ClosedRange<Double> = 0...0.12
-        public static let glowRange: ClosedRange<Double> = 0...0.2
+        static let brightnessRange: ClosedRange<Double> = 0...0.4
+        static let growRange: ClosedRange<Double> = 0...0.1
+        static let fillRange: ClosedRange<Double> = 0...0.5
+        static let rimRange: ClosedRange<Double> = 0...1
+        static let cardLiftRange: ClosedRange<Double> = 0...0.12
+        static let glowRange: ClosedRange<Double> = 0...0.2
 
-        public init() {}
+        init() {}
 
         // The values the modifiers draw with: zero when hover feedback is off.
 
-        public var buttonBrightness: Double { isEnabled ? brightness : 0 }
-        public var buttonScale: Double { isEnabled ? 1 + grow : 1 }
-        public var glassFillOpacity: Double { isEnabled ? glassFill : 0 }
-        public var glassRimOpacity: Double { isEnabled && showsRim ? rimStrength : 0 }
+        var buttonBrightness: Double { isEnabled ? brightness : 0 }
+        var buttonScale: Double { isEnabled ? 1 + grow : 1 }
+        var glassFillOpacity: Double { isEnabled ? glassFill : 0 }
+        var glassRimOpacity: Double { isEnabled && showsRim ? rimStrength : 0 }
         /// A navigation segment's fill and rim, a little quieter than a glass control's (0.16 and 0.3 by default).
-        public var segmentFillOpacity: Double { glassFillOpacity * (0.16 / 0.18) }
-        public var segmentRimOpacity: Double { glassRimOpacity * (0.3 / 0.35) }
+        var segmentFillOpacity: Double { glassFillOpacity * (0.16 / 0.18) }
+        var segmentRimOpacity: Double { glassRimOpacity * (0.3 / 0.35) }
         /// A card's highlight (0.08 by default; 0.012 for a card with the pointer glow), in step with the glass fill.
-        public var cardFillOpacity: Double { glassFillOpacity * (0.08 / 0.18) }
-        public var trackedCardFillOpacity: Double { glassFillOpacity * (0.012 / 0.18) }
-        public var cardScale: Double { isEnabled ? 1 + cardLift : 1 }
-        public var castsShadow: Bool { isEnabled && cardShadow }
-        public var glowOpacity: Double { isEnabled && showsGlow ? glowStrength : 0 }
-        public var usesSystemHighlight: Bool { isEnabled && systemHighlight }
+        var cardFillOpacity: Double { glassFillOpacity * (0.08 / 0.18) }
+        var trackedCardFillOpacity: Double { glassFillOpacity * (0.012 / 0.18) }
+        var cardScale: Double { isEnabled ? 1 + cardLift : 1 }
+        var castsShadow: Bool { isEnabled && cardShadow }
+        var glowOpacity: Double { isEnabled && showsGlow ? glowStrength : 0 }
+        var usesSystemHighlight: Bool { isEnabled && systemHighlight }
         /// `duration` at this speed, or nil (no animation) for Instant.
-        public func duration(_ duration: Double) -> Double? { speed.factor == 0 ? nil : duration * speed.factor }
+        func duration(_ duration: Double) -> Double? { speed.factor == 0 ? nil : duration * speed.factor }
 
-        public init(from decoder: Decoder) throws {
+        init(from decoder: Decoder) throws {
             self.init()
             let container = try decoder.container(keyedBy: CodingKeys.self)
             func read<Value: Decodable>(_ key: CodingKeys, _ fallback: Value) -> Value {

@@ -26,7 +26,7 @@ public final class InMemorySearchHistoryStore: SearchHistoryStore, @unchecked Se
 
 /// Recent searches in `UserDefaults`, so they survive a relaunch. A list of search words is not a secret, so it is not in the Keychain.
 public final class DefaultsSearchHistoryStore: SearchHistoryStore, @unchecked Sendable {
-    public static let key = "search.recentQueries"
+    static let key = "search.recentQueries"
 
     private let defaults: UserDefaults
 
