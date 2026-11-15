@@ -1,4 +1,4 @@
-# Blusion
+# Blusion <sup>v.1363</sup>
 
 A native SwiftUI media browser and player for iPhone, iPad and Mac, built around Stremio addons and customisable Home widgets.
 
