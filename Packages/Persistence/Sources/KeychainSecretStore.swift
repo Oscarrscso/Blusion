@@ -42,8 +42,8 @@ public final class KeychainSecretStore: SecretStore, Sendable {
         self.onSynchronizedChange = onSynchronizedChange
     }
 
-    /// False where the system keeps this app away from the Keychain altogether. A Mac Catalyst build signed without a
-    /// provisioning profile has no application identifier, and every call fails with `errSecMissingEntitlement`.
+    /// False where the system keeps this app away from the Keychain altogether. A build signed without a provisioning profile
+    /// or entitlement (Mac Catalyst or unsigned simulator) has no application identifier, and every call fails with `errSecMissingEntitlement`.
     public static var isUsable: Bool {
         // A read finds nothing and says so; only a write is refused. Deleting an item that does not exist changes nothing.
         let probe: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
@@ -52,11 +52,13 @@ public final class KeychainSecretStore: SecretStore, Sendable {
         return SecItemDelete(probe as CFDictionary) != errSecMissingEntitlement
     }
 
-    /// The secret store for this device: the Keychain, except in a Mac build that may not use it. There the secrets go into a
+    /// The secret store for this device: the Keychain, except where the build may not use it. There the secrets go into a
     /// file only the user's account can read, next to the app's store. `usesKeychain` says which one it is.
     public static func forThisDevice(onSynchronizedChange: (@Sendable () -> Void)? = nil) -> (store: any SecretStore, usesKeychain: Bool) {
-        #if canImport(SwiftData) && (targetEnvironment(macCatalyst) || os(macOS))
-        if !isUsable, let folder = PersistenceContainer.defaultStoreURL()?.deletingLastPathComponent() {
+        #if canImport(SwiftData) && (targetEnvironment(macCatalyst) || os(macOS) || targetEnvironment(simulator))
+        if !isUsable,
+           let folder = PersistenceContainer.defaultStoreURL()?.deletingLastPathComponent()
+               ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
             return (FileSecretStore(fileURL: folder.appendingPathComponent("Secrets.json")), false)
         }
         #endif

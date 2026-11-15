@@ -28,10 +28,11 @@ final class AppEnvironment {
     /// Installs the default metadata addon on first launch. Waits at most `limit` so the first screen
     /// usually opens with content; a slower install finishes in the background and Home fills in when the registry publishes the addon.
     func seedDefaultAddons(waitingAtMost limit: Duration = .seconds(3)) async {
-        guard let seeder else { return }
+        guard seeder != nil else { return }
+        let seeder = self.seeder
         // Not a task group: a group waits for all its children, and the install cannot be cancelled, so the screen would wait for it anyway.
         let install = Task {
-            await seeder.seedIfNeeded()
+            await seeder?.seedIfNeeded()
         }
         let (finished, signal) = AsyncStream<Void>.makeStream()
         Task {

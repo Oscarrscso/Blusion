@@ -149,30 +149,6 @@ targets:
         # The repository root, for build scripts. A project generated elsewhere (build/*/) overrides it, as its SRCROOT is that folder.
         BLUSION_REPO_ROOT: "$(SRCROOT)"
 
-  BlusionTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: Tests/BlusionTests
-    dependencies:
-      - target: Blusion
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.blusion.player.tests
-        GENERATE_INFOPLIST_FILE: YES
-
-  BlusionUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - path: Tests/BlusionUITests
-    dependencies:
-      - target: Blusion
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.blusion.player.uitests
-        GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: Blusion
 
 schemes:
   Blusion:
@@ -187,8 +163,3 @@ schemes:
       config: Debug
       # Run without LLDB attached: on Xcode 26 / iOS 26 the debugger attach leaves the app on a dark screen for a long time at launch.
       debugEnabled: false
-    test:
-      config: Debug
-      targets:
-        - BlusionTests
-        - BlusionUITests

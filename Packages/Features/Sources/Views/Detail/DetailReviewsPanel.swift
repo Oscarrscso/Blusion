@@ -239,160 +239,160 @@ extension ReviewPageRules {
     /// 120 ms. A page that has finished loading without a heading or a card opens after 2.5 s; one still loading, after six.
     static let paintedScript = #"""
     (function () {
-      var heading = /^\s*(user|audience) reviews?\s*$/i;
-      var started = Date.now();
-      var headingNode = null;
-      var headingAt = 0;
-      var lastSignature = '';
-      var stableFor = 0;
-      var done = false;
-      var painting = false;
-      var interval = null;
+      var heading = /^\s*(user|audience) reviews?\s*$/i
+      var started = Date.now()
+      var headingNode = null
+      var headingAt = 0
+      var lastSignature = ''
+      var stableFor = 0
+      var done = false
+      var painting = false
+      var interval = null
 
       // Whether the page's style sheets have arrived, so what is laid out is the page as it is drawn, not its bare text. IMDb's script runs
       // as the page starts, before they have.
       function stylesLoaded() {
-        var links = document.querySelectorAll('link[rel="stylesheet"]');
+        var links = document.querySelectorAll('link[rel="stylesheet"]')
         for (var i = 0; i < links.length; i++) { if (!links[i].sheet) return false; }
-        return true;
+        return true
       }
 
-      var isIMDb = /(^|\.)imdb\.com$/.test(location.hostname);
-      var isRottenTomatoes = /(^|\.)rottentomatoes\.com$/.test(location.hostname);
-      var isMetacritic = /(^|\.)metacritic\.com$/.test(location.hostname);
-      var isTMDb = /(^|\.)themoviedb\.org$/.test(location.hostname);
-      var isMyAnimeList = /(^|\.)myanimelist\.net$/.test(location.hostname);
+      var isIMDb = /(^|\.)imdb\.com$/.test(location.hostname)
+      var isRottenTomatoes = /(^|\.)rottentomatoes\.com$/.test(location.hostname)
+      var isMetacritic = /(^|\.)metacritic\.com$/.test(location.hostname)
+      var isTMDb = /(^|\.)themoviedb\.org$/.test(location.hostname)
+      var isMyAnimeList = /(^|\.)myanimelist\.net$/.test(location.hostname)
       // Rotten Tomatoes' and Metacritic's search and title pages lead on to their reviews: they wait for that page rather than open early
       // themselves.
       var leadsOn = (isRottenTomatoes && !/\/reviews(\/|$)/.test(location.pathname))
         || (isMetacritic && !/\/(user|critic)-reviews(\/|$)/.test(location.pathname))
-        || (isMyAnimeList && !/\/reviews(\/|$)/.test(location.pathname));
+        || (isMyAnimeList && !/\/reviews(\/|$)/.test(location.pathname))
 
       // The first review card, once it is laid out with its text: on IMDb the card that holds the first review date, on Rotten Tomatoes
       // its first review card, on Metacritic the card around its first user review's footer, on TMDB its first review card. Those sites'
       // pages only.
       function firstCard() {
-        if (!(isIMDb || isRottenTomatoes || isMetacritic || isTMDb || isMyAnimeList) || !document.body || !stylesLoaded()) return null;
-        var card = null;
+        if (!(isIMDb || isRottenTomatoes || isMetacritic || isTMDb || isMyAnimeList) || !document.body || !stylesLoaded()) return null
+        var card = null
         if (isIMDb) {
-          var date = document.querySelector('.review-date');
-          card = date && date.closest('.ipc-list-card, article');
+          var date = document.querySelector('.review-date')
+          card = date && date.closest('.ipc-list-card, article')
         } else if (isTMDb) {
-          card = document.querySelector('#review-card-list [data-object-id]');
+          card = document.querySelector('#review-card-list [data-object-id]')
         } else if (isMyAnimeList) {
-          card = leadsOn ? null : document.querySelector('.review-element');
+          card = leadsOn ? null : document.querySelector('.review-element')
         } else if (isMetacritic && !leadsOn) {
-          var footer = document.querySelector('.review-footer--user');
-          card = footer && footer.closest('.c-reviews-container > *');
+          var footer = document.querySelector('.review-footer--user')
+          card = footer && footer.closest('.c-reviews-container > *')
         } else if (!leadsOn) {
-          card = document.querySelector('review-card-audience, review-card-critic');
+          card = document.querySelector('review-card-audience, review-card-critic')
         }
-        if (!card || (card.textContent || '').trim().length < 60 || card.getClientRects().length === 0) return null;
-        return card.getBoundingClientRect().height > 0 ? card : null;
+        if (!card || (card.textContent || '').trim().length < 60 || card.getClientRects().length === 0) return null
+        return card.getBoundingClientRect().height > 0 ? card : null
       }
 
       // A visible element whose top is in the viewport: the heading has been scrolled to.
       function onScreen(el) {
-        if (!el || el.getClientRects().length === 0) return false;
-        var top = el.getBoundingClientRect().top;
-        return top >= -2 && top <= window.innerHeight * 0.9;
+        if (!el || el.getClientRects().length === 0) return false
+        var top = el.getBoundingClientRect().top
+        return top >= -2 && top <= window.innerHeight * 0.9
       }
 
       function findHeading() {
-        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
+        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button')
         for (var i = 0; i < nodes.length; i++) {
-          if (heading.test(nodes[i].textContent || '') && nodes[i].getClientRects().length > 0) return nodes[i];
+          if (heading.test(nodes[i].textContent || '') && nodes[i].getClientRects().length > 0) return nodes[i]
         }
-        return null;
+        return null
       }
 
       // The first review under the heading: the first visible element after it with a few lines of text.
       function firstReview(h) {
-        var scope = h;
+        var scope = h
         for (var up = 0; up < 4 && scope; up++) {
-          var el = scope.nextElementSibling;
+          var el = scope.nextElementSibling
           for (var seen = 0; el && seen < 40; seen++) {
-            if ((el.textContent || '').trim().length >= 60 && el.getClientRects().length > 0) return el;
-            el = el.nextElementSibling;
+            if ((el.textContent || '').trim().length >= 60 && el.getClientRects().length > 0) return el
+            el = el.nextElementSibling
           }
-          scope = scope.parentElement;
+          scope = scope.parentElement
         }
-        return null;
+        return null
       }
 
       function finish(reason) {
-        if (done) return;
-        done = true;
-        clearInterval(interval);
+        if (done) return
+        done = true
+        clearInterval(interval)
         window.webkit.messageHandlers.painted.postMessage({
           reason: reason,
           headingMs: headingAt ? headingAt - started : -1,
           readyMs: Date.now() - started,
           pageMs: Math.round(performance.now())
-        });
+        })
       }
 
       // Ready once the next two frames have been drawn, so what is laid out is on screen when the panel opens. Should frames not be drawn,
       // a quarter of a second does instead, so the panel always opens.
       function finishAfterPaint(reason) {
-        if (done || painting) return;
-        painting = true;
-        clearInterval(interval);
-        requestAnimationFrame(function () { requestAnimationFrame(function () { finish(reason); }); });
-        setTimeout(function () { finish(reason); }, 250);
+        if (done || painting) return
+        painting = true
+        clearInterval(interval)
+        requestAnimationFrame(function () { requestAnimationFrame(function () { finish(reason); }); })
+        setTimeout(function () { finish(reason); }, 250)
       }
 
       // Every 60 ms, look only at the heading, the first review and the scroll position. Ready when the heading is on screen, the first
       // review has text, and those have not moved for 120 ms. A hard cap of 1.2 s after the heading first shows ends the wait regardless.
       function check() {
-        if (done || painting) return;
-        var now = Date.now();
-        if (firstCard()) return finishAfterPaint('card');
-        if (!headingNode || headingNode.getClientRects().length === 0) headingNode = findHeading();
+        if (done || painting) return
+        var now = Date.now()
+        if (firstCard()) return finishAfterPaint('card')
+        if (!headingNode || headingNode.getClientRects().length === 0) headingNode = findHeading()
         if (!headingNode) {
           if (leadsOn) {
-            if (now - started >= 8000) finish('no-heading');
+            if (now - started >= 8000) finish('no-heading')
           } else if (now - started >= 6000 || (now - started >= 2500 && document.readyState === 'complete')) {
-            finish('no-heading');
+            finish('no-heading')
           }
-          return;
+          return
         }
-        if (!headingAt) headingAt = now;
-        var review = firstReview(headingNode);
-        var h = headingNode.getBoundingClientRect();
-        var signature = Math.round(h.top) + ',' + Math.round(window.scrollY);
+        if (!headingAt) headingAt = now
+        var review = firstReview(headingNode)
+        var h = headingNode.getBoundingClientRect()
+        var signature = Math.round(h.top) + ',' + Math.round(window.scrollY)
         if (review) {
-          var r = review.getBoundingClientRect();
-          signature += '|' + Math.round(r.top) + ',' + Math.round(r.height);
+          var r = review.getBoundingClientRect()
+          signature += '|' + Math.round(r.top) + ',' + Math.round(r.height)
         }
         if (signature === lastSignature) { stableFor += 60; } else { stableFor = 0; lastSignature = signature; }
-        var visible = onScreen(headingNode);
-        if (visible && review && stableFor >= 120) return finish('stable');
-        if (visible && now - headingAt >= 1200) return finish('cap');
-        if (!visible && now - headingAt >= 8000) finish('heading-off-screen');
+        var visible = onScreen(headingNode)
+        if (visible && review && stableFor >= 120) return finish('stable')
+        if (visible && now - headingAt >= 1200) return finish('cap')
+        if (!visible && now - headingAt >= 8000) finish('heading-off-screen')
       }
 
-      interval = setInterval(check, 60);
-      check();
-    })();
+      interval = setInterval(check, 60)
+      check()
+    })()
     """#
 
     /// Letterboxd's reviews have no heading the script can find, so its page reports ready after its load and two frames, as it always did.
     static let loadedScript = #"""
     (function () {
-      var sent = false;
+      var sent = false
       function post() {
         if (sent) { return; }
-        sent = true;
-        window.webkit.messageHandlers.painted.postMessage('painted');
+        sent = true
+        window.webkit.messageHandlers.painted.postMessage('painted')
       }
       // Two frames after the load, or a quarter of a second should frames not come (a page loading behind another one).
       function painted() {
-        requestAnimationFrame(function () { requestAnimationFrame(post); });
-        setTimeout(post, 250);
+        requestAnimationFrame(function () { requestAnimationFrame(post); })
+        setTimeout(post, 250)
       }
       if (document.readyState === 'complete') { painted(); } else { window.addEventListener('load', painted); }
-    })();
+    })()
     """#
 }
 

@@ -41,13 +41,13 @@ enum YouTubeLink {
         allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
         <script>
         function post(m){ try { window.webkit.messageHandlers.trailer.postMessage(m); } catch (e) {} }
-        var player;
+        var player
         function onYouTubeIframeAPIReady(){
           player = new YT.Player('player', { events: {
             onReady: function(e){ post({event:'ready', duration: e.target.getDuration()}); },
             onError: function(e){ post({event:'error', code: e.data}); },
             onStateChange: function(e){ post({event:'state', state: e.data}); }
-          }});
+          }})
         }
         </script>
         <script src="https://www.youtube.com/iframe_api" onerror="post({event:'error', code:-1})"></script>

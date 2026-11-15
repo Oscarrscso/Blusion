@@ -108,65 +108,66 @@ enum ReviewPageRules {
 
     private static let myAnimeListLayoutScript = """
     (function () {
-      if (!/(^|\\.)myanimelist\\.net$/.test(location.hostname)) return;
+      if (!/(^|\\.)myanimelist\\.net$/.test(location.hostname)) return
       // The hidden cookie banner's focus trap cancels every touchstart outside it, so no swipe scrolls the page. Touch and wheel
       // listeners are made passive, so none can stop a scroll.
       // The trap also catches every click on its way down, at the document, and cancels it, so no button (Read more) or link
       // answered a tap. While the banner is in the page, a click listener the document or window catches first cannot cancel or
       // stop the click; the page's own handlers, which take clicks on their way up, are left as they are.
-      var add = EventTarget.prototype.addEventListener;
-      var remove = EventTarget.prototype.removeEventListener;
-      var wrapped = new WeakMap();
-      var banner = '#qc-cmp2-container, .qc-cmp2-container';
+      var add = EventTarget.prototype.addEventListener
+      var remove = EventTarget.prototype.removeEventListener
+      var wrapped = new WeakMap()
+      var banner = '#qc-cmp2-container, .qc-cmp2-container'
       function capturing(options) {
-        return typeof options === 'object' && options !== null ? !!options.capture : !!options;
+        return typeof options === 'object' && options !== null ? !!options.capture : !!options
       }
       function catchesClicksFirst(target, type, options) {
-        return type === 'click' && (target === document || target === window) && capturing(options);
+        return type === 'click' && (target === document || target === window) && capturing(options)
       }
       function uncancellable(listener) {
-        if (wrapped.has(listener)) return wrapped.get(listener);
+        if (wrapped.has(listener)) return wrapped.get(listener)
         var wrapper = function (event) {
           var call = function () {
-            return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event);
-          }.bind(this);
-          if (!document.querySelector(banner)) return call();
-          var ignore = function () {};
-          event.preventDefault = ignore;
-          event.stopPropagation = ignore;
-          event.stopImmediatePropagation = ignore;
+            return typeof listener === 'function' ? listener.call(this, event) : listener.handleEvent(event)
+          }.bind(this)
+          if (!document.querySelector(banner)) return call()
+          var ignore = function () {}
+          event.preventDefault = ignore
+          event.stopPropagation = ignore
+          event.stopImmediatePropagation = ignore
           try { return call(); } finally {
-            delete event.preventDefault;
-            delete event.stopPropagation;
-            delete event.stopImmediatePropagation;
+            delete event.preventDefault
+            delete event.stopPropagation
+            delete event.stopImmediatePropagation
           }
-        };
-        wrapped.set(listener, wrapper);
-        return wrapper;
+        }
+        wrapped.set(listener, wrapper)
+        return wrapper
       }
       EventTarget.prototype.addEventListener = function (type, listener, options) {
         if (type === 'touchstart' || type === 'touchmove' || type === 'wheel') {
           options = typeof options === 'object' && options !== null ? Object.assign({}, options, { passive: true })
-            : { capture: !!options, passive: true };
+            : { capture: !!options, passive: true }
         } else if (listener && catchesClicksFirst(this, type, options)) {
-          listener = uncancellable(listener);
+          listener = uncancellable(listener)
         }
-        return add.call(this, type, listener, options);
-      };
+        return add.call(this, type, listener, options)
+      }
       EventTarget.prototype.removeEventListener = function (type, listener, options) {
-        if (listener && catchesClicksFirst(this, type, options) && wrapped.has(listener)) listener = wrapped.get(listener);
-        return remove.call(this, type, listener, options);
-      };
-    })();
+        if (listener && catchesClicksFirst(this, type, options) && wrapped.has(listener)) listener = wrapped.get(listener)
+        return remove.call(this, type, listener, options)
+      }
+    })()
     """
 
     private static let tmdbLayoutScript = """
     (function () {
-      if (!/(^|\\.)themoviedb\\.org$/.test(location.hostname)) return;
-      var style = document.createElement('style');
-      style.textContent = 'main{margin-top:0 !important}';
-      (document.head || document.documentElement).appendChild(style);
-    })();
+      if (!/(^|\\.)themoviedb\\.org$/.test(location.hostname)) return
+      var style = document.createElement('style')
+      style.textContent = 'main{margin-top:0 !important}'
+      var parent = document.head || document.documentElement
+      parent.appendChild(style)
+    })()
     """
 
     /// Whether a site's page is shown in the dark treatment, and its web view in dark mode.
@@ -176,11 +177,12 @@ enum ReviewPageRules {
 
     private static let invertedDarkScript = """
     (function () {
-      var style = document.createElement('style');
+      var style = document.createElement('style')
       style.textContent = 'html,body{background:__BLUSION_GROUND__ !important}html{filter:invert(1) hue-rotate(180deg) !important}' +
-        'img,video,picture,svg image,[role=img]{filter:invert(1) hue-rotate(180deg) !important}';
-      (document.head || document.documentElement).appendChild(style);
-    })();
+        'img,video,picture,svg image,[role=img]{filter:invert(1) hue-rotate(180deg) !important}'
+      var parent = document.head || document.documentElement
+      parent.appendChild(style)
+    })()
     """
 
     /// Sends a "Page Not Found" to `fallback`, the site's search for the title. Nil when the address cannot be written into a script.
@@ -191,66 +193,66 @@ enum ReviewPageRules {
         return """
         (function () {
           if (/page not found/i.test(document.title)) { location.replace(\(target)); }
-        })();
+        })()
         """
     }
 
     private static let letterboxdScript = """
     (function () {
       if (/^\\/film\\/[^\\/]+\\/?$/.test(location.pathname)) {
-        location.replace(location.pathname.replace(/\\/?$/, '/') + 'reviews/');
+        location.replace(location.pathname.replace(/\\/?$/, '/') + 'reviews/')
       }
-    })();
+    })()
     """
 
     /// MyAnimeList: a search goes on to its first anime's reviews, a title's page to its reviews, and its reviews page scrolls to the
     /// first review.
     private static let myAnimeListScript = """
     (function () {
-      var path = location.pathname;
+      var path = location.pathname
       if (/^\\/anime\\.php$/.test(path)) {
         // The results first, so a link in the page's header is not taken for one.
-        var scopes = [document.querySelector('.content-main'), document.querySelector('#content'), document];
+        var scopes = [document.querySelector('.content-main'), document.querySelector('#content'), document]
         for (var s = 0; s < scopes.length; s++) {
-          if (!scopes[s]) continue;
-          var links = scopes[s].querySelectorAll('a[href]');
+          if (!scopes[s]) continue
+          var links = scopes[s].querySelectorAll('a[href]')
           for (var i = 0; i < links.length; i++) {
-            var match = (links[i].getAttribute('href') || '').match(/^(?:https:\\/\\/myanimelist\\.net)?(\\/anime\\/[0-9]+\\/[^\\/?#]+)/);
+            var match = (links[i].getAttribute('href') || '').match(/^(?:https:\\/\\/myanimelist\\.net)?(\\/anime\\/[0-9]+\\/[^\\/?#]+)/)
             if (match) { location.replace(match[1] + '/reviews'); return; }
           }
         }
-        return;
+        return
       }
       if (/^\\/anime\\/[0-9]+(\\/[^\\/]+)?\\/?$/.test(path)) {
-        location.replace(path.replace(/\\/?$/, '') + (/^\\/anime\\/[0-9]+\\/?$/.test(path) ? '/_' : '') + '/reviews');
-        return;
+        location.replace(path.replace(/\\/?$/, '') + (/^\\/anime\\/[0-9]+\\/?$/.test(path) ? '/_' : '') + '/reviews')
+        return
       }
-      var tries = 0;
+      var tries = 0
       var timer = setInterval(function () {
-        tries += 1;
-        var review = document.querySelector('.review-element');
+        tries += 1
+        var review = document.querySelector('.review-element')
         if (review) { review.scrollIntoView({ block: 'start' }); clearInterval(timer); return; }
         if (tries >= 20) { clearInterval(timer); }
-      }, 300);
-    })();
+      }, 300)
+    })()
     """
 
     private static let reviewsHeadingScript = """
     (function () {
-      var heading = /^\\s*(user|audience) reviews?\\s*$/i;
-      var tries = 0;
+      var heading = /^\\s*(user|audience) reviews?\\s*$/i
+      var tries = 0
       var timer = setInterval(function () {
-        tries += 1;
-        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button');
+        tries += 1
+        var nodes = document.querySelectorAll('h1, h2, h3, h4, h5, a, span, button')
         for (var i = 0; i < nodes.length; i++) {
           if (heading.test(nodes[i].textContent || '')) {
-            nodes[i].scrollIntoView({ block: 'start' });
-            clearInterval(timer);
-            return;
+            nodes[i].scrollIntoView({ block: 'start' })
+            clearInterval(timer)
+            return
           }
         }
         if (tries >= 20) { clearInterval(timer); }
-      }, 500);
-    })();
+      }, 500)
+    })()
     """
 }
