@@ -25,8 +25,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     let trailer: (CGFloat) -> Trailer
     @ViewBuilder let synopsis: Synopsis
     @ViewBuilder let information: Information
-    /// True when the overview over the picture is cut short at its three lines. Only then is the whole synopsis set under the hero: one
-    /// that fits is already read in full above, and a second copy under it said the same thing twice.
+    /// True when the overview runs past its three lines. Then the overview leaves the picture and the whole synopsis is set under the hero,
+    /// so the page carries one copy. Stays true until the description changes, because a removed overview is no longer measured.
     @State private var overviewIsCut = false
 
     /// The hero is extended below its former height so its bottom-aligned title, overview, ratings and actions sit noticeably lower.
@@ -74,6 +74,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             .frame(height: heroHeight)
             .background { artwork }
+            .onChange(of: model.detail.preview.description) { overviewIsCut = false }
     }
 
     private var artwork: some View {
@@ -131,13 +132,16 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         }
     }
 
-    /// The overview, cut to three lines and not expandable: its full text, and More, are in the details below the hero.
+    /// The overview over the picture, three lines at most. One that runs past them leaves the picture: its full text is then the synopsis
+    /// set under the hero, so the page shows it once.
     @ViewBuilder
     private var overview: some View {
         if let description = model.detail.preview.description, !description.isEmpty {
-            JustifiedText(text: description, role: .reading, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("detail.overview")
+            if !overviewIsCut {
+                JustifiedText(text: description, role: .reading, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("detail.overview")
+            }
         } else if model.isLoading {
             DetailSkeletonParagraph(lines: 3)
                 .accessibilityElement(children: .ignore)
