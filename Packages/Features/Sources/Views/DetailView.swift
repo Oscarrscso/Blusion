@@ -180,7 +180,7 @@ struct DetailView: View {
                             DetailTrailerPanel(model: model, width: width, playerIsCovered: playerIsCovered)
                         } synopsis: {
                             DetailSynopsis(description: model.detail.preview.description, isExpanded: $isDescriptionExpanded,
-                                           isTruncated: $isDescriptionTruncated, foldedLines: 5, isLoading: model.isLoading)
+                                           isTruncated: $isDescriptionTruncated, isLoading: model.isLoading)
                         } information: {
                             // Information appears below Reviews and Cast & Crew on both platforms.
                             EmptyView()

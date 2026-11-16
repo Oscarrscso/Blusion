@@ -5,9 +5,9 @@ import UIKit
 
 #if targetEnvironment(macCatalyst)
 /// The title page's hero on a Mac. The picture runs the full width of the window, darker on its left, and the title, the actions and the
-/// ratings sit over its lower left edge. Beneath it the trailer's panel and the synopsis share a column, with the information beside them
-/// when the window is wide enough for two. The page supplies the controls, the panel, the synopsis and the information, so the state they
-/// keep stays on the page.
+/// ratings and a single expandable synopsis sit over its lower left edge. Beneath it the trailer's panel and reviews share a column,
+/// with the information beside them when the window is wide enough for two. The page supplies the controls, the panel, the synopsis and
+/// the information, so the state they keep stays on the page.
 struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Information: View>: View {
     let model: DetailViewModel
     let scroll: DetailHeroScrollState
@@ -25,11 +25,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     let trailer: (CGFloat) -> Trailer
     @ViewBuilder let synopsis: Synopsis
     @ViewBuilder let information: Information
-    /// True when the overview runs past its three lines. Then the overview leaves the picture and the whole synopsis is set under the hero,
-    /// so the page carries one copy. Stays true until the description changes, because a removed overview is no longer measured.
-    @State private var overviewIsCut = false
 
-    /// The hero is extended below its former height so its bottom-aligned title, overview, ratings and actions sit noticeably lower.
+    /// The hero's minimum height; an unfolded synopsis can grow it without clipping the controls.
     private var heroHeight: CGFloat { TitleHero.macHeight(pageHeight: size.height) }
     /// The widest the title, the actions and the ratings are, over the picture's lower left edge.
     private static var textWidth: CGFloat { TitleHero.macBlockWidth }
@@ -37,23 +34,23 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     private static var logoBox: CGSize { CGSize(width: 420, height: 120) }
     /// The least height a wide, thin logo is drawn at; it may grow to the title column's width to reach it.
     private static var logoMinHeight: CGFloat { 64 }
-    /// The page's width from which the synopsis and the information sit side by side.
+    /// The page's width from which the panels and the information sit side by side.
     private static var twoColumnWidth: CGFloat { 900 }
-    /// The information's column beside the synopsis, and the gap between them.
+    /// The information's column beside the panels, and the gap between them.
     private static var informationWidth: CGFloat { 300 }
     private static var columnGap: CGFloat { 48 }
-    /// The widest the synopsis and the trailer's panel run, so their lines stay readable on a wide window.
+    /// The widest the panels run, so their lines stay readable on a wide window.
     private static var detailsMax: CGFloat { TitleHero.macBlockWidth }
 
     /// The page's width less its margins.
     private var contentWidth: CGFloat { max(0, size.width - contentMargin * 2) }
     private var hasTwoColumns: Bool { contentWidth >= Self.twoColumnWidth }
-    /// The synopsis and the trailer's panel share this width. The information follows the cast on the page, so it takes no column here.
+    /// The panels share this width. The information follows the cast on the page, so it takes no column here.
     private var detailsWidth: CGFloat {
         min(Self.detailsMax, contentWidth)
     }
 
-    /// The trailer's panel fades in and grows from its top edge, so the synopsis moves down with it rather than jumping.
+    /// The trailer's panel fades in and grows from its top edge, so the following content moves down rather than jumping.
     private static var trailerTransition: AnyTransition {
         .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
     }
@@ -61,7 +58,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     @ViewBuilder
     var body: some View {
         hero
-        if showsDetails {
+        if showsDetails && (model.trailer.showsPanel || model.openedReviews != nil) {
             details
                 .transition(.opacity)
         }
@@ -71,10 +68,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
     /// under the overview, and nowhere else on the page.
     private var hero: some View {
         textColumn
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-            .frame(height: heroHeight)
+            .padding(.top, Theme.Spacing.xxl)
+            .frame(maxWidth: .infinity, minHeight: heroHeight, alignment: .bottomLeading)
             .background { artwork }
-            .onChange(of: model.detail.preview.description) { overviewIsCut = false }
     }
 
     private var artwork: some View {
@@ -106,7 +102,8 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             titleArt
             metaLine
             if showsDetails {
-                overview
+                synopsis
+                    .accessibilityIdentifier("detail.overview")
             }
             controls
             if showsDetails {
@@ -132,24 +129,6 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
         }
     }
 
-    /// The overview over the picture, three lines at most. One that runs past them leaves the picture: its full text is then the synopsis
-    /// set under the hero, so the page shows it once.
-    @ViewBuilder
-    private var overview: some View {
-        if let description = model.detail.preview.description, !description.isEmpty {
-            if !overviewIsCut {
-                JustifiedText(text: description, role: .reading, color: UIColor.white.withAlphaComponent(0.85), lineLimit: 3, isTruncated: $overviewIsCut)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("detail.overview")
-            }
-        } else if model.isLoading {
-            DetailSkeletonParagraph(lines: 3)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Loading synopsis")
-                .transition(.opacity)
-        }
-    }
-
     private var titleArt: some View {
         HeroTitleArt(name: model.detail.name, slot: logoSlot, alignment: .leading, compact: false, logoBox: Self.logoBox,
                      logoMinHeight: Self.logoMinHeight, logoStretchWidth: Self.textWidth)
@@ -162,14 +141,13 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             .accessibilityIdentifier("detail.title")
     }
 
-    /// Beneath the hero: the trailer's panel and the synopsis in one column, and the information beside them on a wide window or under
+    /// Beneath the hero: the trailer's panel and reviews in one column, and the information beside them on a wide window or under
     /// them on a narrow one. One layout serves both widths, so the trailer's player keeps its place in the view tree when the window
     /// crosses the two-column width; a different container there would rebuild the player during playback.
     @ViewBuilder
     private var details: some View {
         layout {
-            // With no trailer and an overview that fits above, the column would be empty, so the information leads instead.
-            if model.trailer.showsPanel || overviewIsCut || model.openedReviews != nil { detailsColumn }
+            detailsColumn
             information
                 .frame(maxWidth: hasTwoColumns ? Self.informationWidth : Self.detailsMax, alignment: .leading)
         }
@@ -185,8 +163,7 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
             : AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xl))
     }
 
-    /// The trailer's panel, when it has one to show, above the synopsis. The panel is the same view the iPhone page places above the
-    /// synopsis, so the two read in the same order.
+    /// The trailer's panel, when it has one to show, above any opened reviews.
     private var detailsColumn: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             if model.trailer.showsPanel {
@@ -198,7 +175,6 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
                 DetailReviewsPanel(reviews: reviews, shown: model.shownReviews, item: model.detail.preview, isLoading: model.reviewsLoading,
                                    onLoaded: model.reviewsDidLoad, onClose: model.closeReviews)
             }
-            if overviewIsCut { synopsis }
         }
         .frame(width: detailsWidth, alignment: .leading)
     }
