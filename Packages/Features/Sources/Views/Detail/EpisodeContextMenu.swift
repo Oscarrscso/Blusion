@@ -43,48 +43,22 @@ struct EpisodeContextMenu<Content: View, Preview: View>: UIViewControllerReprese
             // Leave room beside the card for the native palette and its separated action.
             let window = interaction.view?.window
             let viewport = window.map { $0.bounds.inset(by: $0.safeAreaInsets).size } ?? owner.previewSize
-            // Reserve vertical placement margins as well as room beside the card for the actions.
-            let maximumHeight = max(1, min(owner.previewSize.height, viewport.height) - 64)
-            var width = max(1, min(owner.previewSize.width, viewport.width - 320))
+            let isLandscape = viewport.width > viewport.height
+            let maximumHeight = max(1, min(owner.previewSize.height, viewport.height) - (isLandscape ? 64 : 360))
+            let width = max(1, min(owner.previewSize.width, viewport.width - (isLandscape ? 320 : 32)))
             let controller = UIHostingController(rootView: AnyView(owner.preview(width).environment(\.self, owner.environment)))
             controller.safeAreaRegions = []
-            var size = controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
-            var shortestSize = CGSize(width: width, height: size.height)
-            let minimumWidth = min(width, 260)
-            // Measure the full title and synopsis, keeping the widest complete card that fits.
-            // Wrapping can make a narrower card taller, so retain the shortest if none fits.
-            while size.height > maximumHeight && width > minimumWidth {
-                width = max(minimumWidth, width - 16)
-                controller.rootView = AnyView(owner.preview(width).environment(\.self, owner.environment))
-                size = controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
-                if size.height < shortestSize.height { shortestSize = CGSize(width: width, height: size.height) }
-            }
-            if size.height > maximumHeight {
-                width = shortestSize.width
-                size = shortestSize
-            }
-            // Shrink the complete card before resorting to scrolling. Narrowing alone adds
-            // wrapped lines and often cannot make even an ordinary synopsis fit.
-            let scale = max(0.75, min(1, maximumHeight / max(1, size.height)))
-            let cardSize = CGSize(width: width, height: size.height)
-            let fittedSize = CGSize(width: width * scale, height: min(size.height * scale, maximumHeight))
-            // Preserve the measured layout when UIKit adjusts the preview's bounds. Reflowing
-            // at a smaller width after measurement can add lines and clip previously fitting text.
+            let size = controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+            let fittedSize = CGSize(width: width, height: min(size.height, maximumHeight))
+            // Keep text at its chosen size. Long previews scroll inside the available space.
             controller.rootView = AnyView(GeometryReader { geometry in
-                let widthScale = geometry.size.width / cardSize.width
-                let fitScale = min(widthScale, geometry.size.height / max(1, cardSize.height))
-                let contentScale = max(min(widthScale, 0.75), fitScale)
                 ScrollView {
-                    owner.preview(cardSize.width)
+                    owner.preview(geometry.size.width)
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(width: cardSize.width, height: cardSize.height, alignment: .top)
-                        .scaleEffect(contentScale, anchor: .top)
-                        .frame(width: geometry.size.width, height: cardSize.height * contentScale, alignment: .top)
                 }
                 .scrollIndicators(.visible, axes: .vertical)
-                .scrollIndicatorsFlash(onAppear: true)
-                .frame(width: geometry.size.width, height: geometry.size.height)
                 .scrollBounceBehavior(.basedOnSize)
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
             .clipShape(RoundedRectangle(cornerRadius: owner.previewCornerRadius, style: .continuous))
             .environment(\.self, owner.environment))

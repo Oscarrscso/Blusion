@@ -265,6 +265,8 @@ struct DetailView: View {
                                                                contentMargin: contentMargin,
                                                                isHoldingEpisode: $isHoldingEpisode, play: { showStreams($0, from: $1) },
                                                                playAtQuality: { showStreams($0, from: .episode, mode: .quality($1)) },
+                                                               showStreamSelector: { showStreams($0, from: .episode, mode: .streamSelector) },
+                                                               playWithInfuse: { showStreams($0, from: .episode, mode: .infuse) },
                                                                loadingRequest: streams.loadingRequest, loadingTrigger: loadingTrigger,
                                                                unavailableStreams: unavailableStreams)
                                             }

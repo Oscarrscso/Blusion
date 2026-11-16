@@ -16,6 +16,8 @@ struct DetailEpisodes: View {
     let play: (StreamRequest, StreamTrigger) -> Void
     /// Highest Quality or Data Saver from an episode's hold menu: the best stream at that quality starts.
     let playAtQuality: (StreamRequest, PlayQuality) -> Void
+    let showStreamSelector: (StreamRequest) -> Void
+    let playWithInfuse: (StreamRequest) -> Void
     /// The request whose streams are loading, from Play, Shuffle or an episode. Shuffle and that episode's card take no taps then; any
     /// other episode's card loads its own streams in their place.
     var loadingRequest: StreamRequest?
@@ -325,29 +327,12 @@ struct DetailEpisodes: View {
         // An episode that has not aired cannot be opened: its card shows the air date instead.
         .disabled(airsLater || hasNoStreams)
         .titleTapHaptic()
-        return Group {
-            if isLandscape {
-                EpisodeContextMenu(content: card, preview: { landscapePreview(video, width: $0) },
-                                   previewSize: CGSize(width: max(1, min(400, pageWidth * 0.55)),
-                                                       height: pageHeight),
-                                   previewCornerRadius: previewCornerRadius,
-                                   menu: { landscapeEpisodeMenu(video) }, isPresented: $isHoldingEpisode)
-                    .frame(width: width)
-            } else {
-                card.contextMenu {
-                    episodeActions(video)
-                } preview: {
-                    episodePreview(video, width: pageWidth - contentMargin * 2)
-                        .onAppear { isHoldingEpisode = true }
-                        .onDisappear { isHoldingEpisode = false }
-                }
-            }
-        }
-        .accessibilityIdentifier("detail.episode.\(video.id)")
-    }
-
-    private func landscapePreview(_ video: Video, width: CGFloat) -> some View {
-        episodePreview(video, width: width)
+        return EpisodeContextMenu(content: card, preview: { episodePreview(video, width: $0) },
+                                  previewSize: CGSize(width: max(1, min(400, pageWidth - contentMargin * 2)), height: pageHeight),
+                                  previewCornerRadius: previewCornerRadius,
+                                  menu: { episodeMenu(video) }, isPresented: $isHoldingEpisode)
+            .frame(width: width)
+            .accessibilityIdentifier("detail.episode.\(video.id)")
     }
 
     /// Portrait and landscape share the same stacked card, padding and panel treatment.
@@ -357,8 +342,8 @@ struct DetailEpisodes: View {
             .environment(ratings)
     }
 
-    /// The same actions as the portrait menu, supplied directly to UIKit for the sized landscape preview (including on Catalyst).
-    private func landscapeEpisodeMenu(_ video: Video) -> UIMenu {
+    /// One native action list for every episode hold, in either orientation.
+    private func episodeMenu(_ video: Video) -> UIMenu {
         let request = model.request(for: video)
         let watched = model.isWatched(video)
         let download = model.downloadManager?.item(for: request)
@@ -398,7 +383,23 @@ struct DetailEpisodes: View {
                 await titleActions.refresh()
             }
         }
-        var sections = [controls, UIMenu(options: .displayInline, children: [watchedThroughAction])]
+        var sections = [controls]
+        if canPlay(video, request) {
+            let infuse = UIAction(title: "Play with Infuse", image: UIImage(systemName: "play.rectangle.on.rectangle")) { _ in
+                Task { @MainActor in
+                    Haptics.play(.buttons)
+                    playWithInfuse(request)
+                }
+            }
+            let selector = UIAction(title: "Stream Selector", image: UIImage(systemName: "arrow.up.right.square")) { _ in
+                Task { @MainActor in
+                    Haptics.play(.buttons)
+                    showStreamSelector(request)
+                }
+            }
+            sections.append(UIMenu(options: .displayInline, children: [infuse, selector]))
+        }
+        sections.append(UIMenu(options: .displayInline, children: [watchedThroughAction]))
         // A series has no Best Blurays disc, so Highest Quality carries no mark.
         if canPlay(video, request) { sections.append(PlayQualityMenu.menu(disc: nil) { playAtQuality(request, $0) }) }
         return UIMenu(children: sections)
@@ -433,50 +434,6 @@ struct DetailEpisodes: View {
             caption?.draw(at: CGPoint(x: (size.width - captionSize.width) / 2, y: side + 2), withAttributes: paletteCaptionAttributes)
         }
         return image.withRenderingMode(mode)
-    }
-
-    @ViewBuilder
-    private func episodeActions(_ video: Video) -> some View {
-        let request = model.request(for: video)
-        let watched = model.isWatched(video)
-        let download = model.downloadManager?.item(for: request)
-        // The palette holds Watched and Download with their labels, and the IMDb mark alone. Each symbol fills while its state holds.
-        ControlGroup {
-            Button("Watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle") {
-                Task {
-                    await model.setWatched(!watched, for: request)
-                    await titleActions.refresh()
-                }
-            }
-            if let download {
-                Button("Delete", systemImage: "trash", role: .destructive) {
-                    Haptics.play(.buttons)
-                    Task { await model.downloadManager?.delete(download.id) }
-                }
-            } else {
-                Button("Download", systemImage: "arrow.down.circle") {
-                    Haptics.play(.buttons)
-                    Task { await model.download(request) }
-                }
-            }
-            Button {
-                guard let ratings else { return }
-                Task { await EpisodeIMDbReviews.open(request, ratings: ratings) }
-            } label: {
-                ReviewSiteIcon(site: .imdb, size: Self.menuLogoSize, keepsColour: true)
-            }
-            .accessibilityLabel("IMDb")
-        }
-        Button("All previous episodes watched",
-               systemImage: model.isWatchedThrough(video) ? "checkmark.circle.fill" : "checkmark.circle") {
-            Task {
-                await model.markEpisodesWatched(through: video)
-                await titleActions.refresh()
-            }
-        }
-        if canPlay(video, request) {
-            PlayQualityMenuItems(disc: nil) { playAtQuality(request, $0) }
-        }
     }
 
     /// An episode that has aired and has streams, which its card would play.
