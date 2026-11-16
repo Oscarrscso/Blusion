@@ -330,6 +330,7 @@ struct DetailEpisodes: View {
         return EpisodeContextMenu(content: card, preview: { episodePreview(video, width: $0) },
                                   previewSize: CGSize(width: max(1, min(400, pageWidth - contentMargin * 2)), height: pageHeight),
                                   previewCornerRadius: previewCornerRadius,
+                                  secondaryAction: { showStreamSelector(request) },
                                   menu: { episodeMenu(video) }, isPresented: $isHoldingEpisode)
             .frame(width: width)
             .accessibilityIdentifier("detail.episode.\(video.id)")
