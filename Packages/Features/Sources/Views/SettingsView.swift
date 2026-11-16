@@ -567,7 +567,7 @@ func SettingsSection<Content: View>(_ title: LocalizedStringKey, @ViewBuilder co
 /// A native list with app-owned row backgrounds, so its corners can be adjusted independently.
 struct SettingsList<Content: View>: View {
     /// Mac Settings' choice of page. With one, each row draws its own background, so the chosen row can be lit (see `SettingsView`).
-    var selection: Binding<SettingsDestination?>? = nil
+    var selection: Binding<SettingsDestination?>?
     @ViewBuilder let content: () -> Content
     @Environment(\.layoutMetrics) private var metrics
 

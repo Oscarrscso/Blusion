@@ -61,7 +61,8 @@ struct BlusionTVView: View {
         let isAuto = model.isAuto(channel)
         return VStack(alignment: .leading, spacing: metrics.headerSpacing) {
             HStack(spacing: Theme.Spacing.s) {
-                SectionHeader(channel.name, subtitle: "\(channel.shows.count == 1 ? "1 show" : "\(channel.shows.count) shows") · \(isAuto ? "Auto" : channel.order.title)")
+                SectionHeader(channel.name,
+                    subtitle: "\(channel.shows.count == 1 ? "1 show" : "\(channel.shows.count) shows") · \(isAuto ? "Auto" : channel.order.title)")
                     .contextMenu {
                         TVChannelMenuItems(channel: channel, isAuto: isAuto, editing: $editing, deleting: $deleting) { refresh(channel) }
                     }

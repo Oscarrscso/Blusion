@@ -11,7 +11,7 @@ struct TitleDestination: Hashable {
     var artwork: TMDbArtwork?
     var artworkChecked = false
     /// Carries the widget's effective choice to the detail page, including an explicit Off override.
-    var usesHeroPosters: Bool? = nil
+    var usesHeroPosters: Bool?
     /// Opens with no animation, for a source whose picture and logo the title page repeats in the same place (Home's spotlight): only
     /// the content below changes. `sourceID` is unused then.
     var opensInstantly = false

@@ -456,7 +456,10 @@ final class StreamPickerViewModel {
         #if canImport(OSLog)
         let ranked = AutoStreamRanking.ranked(listing.items, duration: request.expectedDuration, preferences: rankingPreferences)
         for explanation in AutoStreamRanking.explain(ranked) {
-            autoPickLog.debug("\(explanation.rank, privacy: .public). \(explanation.title, privacy: .private): \(explanation.reasons.joined(separator: "; "), privacy: .public)")
+            autoPickLog.debug("""
+                \(explanation.rank, privacy: .public). \(explanation.title, privacy: .private): \
+                \(explanation.reasons.joined(separator: "; "), privacy: .public)
+                """)
         }
         #endif
     }

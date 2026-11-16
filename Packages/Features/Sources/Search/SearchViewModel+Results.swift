@@ -86,7 +86,8 @@ extension SearchViewModel {
     }
 
     var availableGenres: [String] {
-        MediaGenres.normalised(combinedResults.flatMap { resolvedGenres[$0.identity] ?? $0.genres }).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        MediaGenres.normalised(combinedResults.flatMap { resolvedGenres[$0.identity] ?? $0.genres })
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     var availableYears: [Int] { Array(Set(combinedResults.compactMap { SearchResults.year(of: $0) })).sorted(by: >) }

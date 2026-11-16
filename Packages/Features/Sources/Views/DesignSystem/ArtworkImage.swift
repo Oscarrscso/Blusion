@@ -487,7 +487,7 @@ struct TitleBackdropRequest: Equatable, Sendable {
 
 extension EnvironmentValues {
     /// The title page's Blurred background, while it has one. `BottomFade` fades into it in place of the page's colour.
-    @Entry var pageBackdrop: UIImage? = nil
+    @Entry var pageBackdrop: UIImage?
 }
 
 private extension CGImagePropertyOrientation {

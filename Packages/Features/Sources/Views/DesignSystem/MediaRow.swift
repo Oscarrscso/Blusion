@@ -368,8 +368,7 @@ struct MediaGrid: View {
                         guard let viewport = proxy.bounds(of: .scrollView) else { return true }
                         return viewport.intersects(CGRect(origin: .zero, size: proxy.size))
                     } action: { visible in
-                        if visible { visibleIDs.insert(item.identity) }
-                        else { visibleIDs.remove(item.identity) }
+                        if visible { visibleIDs.insert(item.identity) } else { visibleIDs.remove(item.identity) }
                     }
                     .onDisappear { visibleIDs.remove(item.identity) }
             }

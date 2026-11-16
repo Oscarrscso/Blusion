@@ -148,7 +148,8 @@ public struct PlaybackPlan: Sendable, Equatable, Identifiable, Hashable {
     /// `nil` when `chosen` isn't playable. The retry follows the same policy that routed the streams, so Settings decides it too.
     public static func make(request: StreamRequest, chosen: RankedStream, from listing: StreamListing) -> PlaybackPlan? {
         guard let first = PlaybackCandidate(chosen) else { return nil }
-        let rest = AutoStreamRanking.ranked(listing.playable.filter { $0.id != chosen.id }, duration: request.expectedDuration, preferences: listing.preferences).compactMap { PlaybackCandidate($0.item) }
+        let rest = AutoStreamRanking.ranked(listing.playable.filter { $0.id != chosen.id }, duration: request.expectedDuration,
+            preferences: listing.preferences).compactMap { PlaybackCandidate($0.item) }
         // Different addons often return the same URL. Retry it only once with the same headers.
         var candidates = [first]
         for candidate in rest where candidate.cacheStatus != .uncached {

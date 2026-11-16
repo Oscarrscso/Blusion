@@ -199,7 +199,8 @@ final class AppEnvironment {
                                               hardwareAV1: AVHardware.decodesAV1InHardware, persistent: !uiTesting)
         DownloadBackgroundEvents.manager = downloadManager
         Task { await downloadManager.start() }
-        let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService, settings: settings, progress: progress, library: library,
+        let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService,
+            settings: settings, progress: progress, library: library,
                                    makeEngine: makeEngine, preloadStream: preloadStream, fallbackEngineLinked: true, aetherEngineLinked: true,
                                    decodesAV1InHardware: AVHardware.decodesAV1InHardware,
                                    widgets: widgets, widgetContent: widgetContent,

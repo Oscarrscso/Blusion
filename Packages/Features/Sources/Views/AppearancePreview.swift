@@ -287,7 +287,10 @@ private enum Samples {
     static let synopsis = "A team of explorers travels beyond the solar system to find a future for humanity. Their journey takes them "
         + "through a wormhole and across worlds where time passes differently."
     static let review = try? JSONDecoder().decode(TMDbReview.self, from: Data("""
-        {"id":"appearance-preview","author":"Alex","content":"A beautiful film with a memorable story and an incredible soundtrack. The pacing never lets up, and the ending stays with you long after the credits roll.","author_details":{"rating":8}}
+        {"id":"appearance-preview","author":"Alex",
+        "content":"A beautiful film with a memorable story and an incredible soundtrack. \
+        The pacing never lets up, and the ending stays with you long after the credits roll.",
+        "author_details":{"rating":8}}
         """.utf8))
     static let stream: RankedStream = {
         let url = URL(string: "https://example.com/interstellar.mkv")!

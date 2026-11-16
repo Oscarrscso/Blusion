@@ -10,7 +10,7 @@ struct PlayerSettingsPage: View {
     let model: SettingsViewModel
     var aetherEngineLinked = false
     enum Detail: String, CaseIterable { case subtitles = "Subtitles", picture = "Picture", controls = "Controls" }
-    var detail: Detail? = nil
+    var detail: Detail?
     @State private var infuseInstalled = true
     @Environment(\.scenePhase) private var scenePhase
 

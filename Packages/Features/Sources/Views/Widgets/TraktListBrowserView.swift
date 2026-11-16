@@ -310,7 +310,8 @@ struct TraktListRow: View {
         .glassCardSurface(cornerRadius: Theme.Radius.card)
         .overlay {
             if isSelected {
-                RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .panels), style: .continuous).strokeBorder(.white.opacity(0.8), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .panels),
+                    style: .continuous).strokeBorder(.white.opacity(0.8), lineWidth: 1.5)
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .panels), style: .continuous))

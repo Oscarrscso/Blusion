@@ -19,7 +19,7 @@ struct CollectionShelf<Item, Cell: View>: UIViewRepresentable {
     let heightKey: String
     /// Changing it scrolls the row back to its first card.
     var scrollToStart: Int = 0
-    var onVisibleRange: ((ClosedRange<Int>?) -> Void)? = nil
+    var onVisibleRange: ((ClosedRange<Int>?) -> Void)?
     @ViewBuilder let cell: (Int, Item) -> Cell
 
     func makeCoordinator() -> Coordinator { Coordinator() }

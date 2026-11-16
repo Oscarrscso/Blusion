@@ -43,8 +43,7 @@ final class NativeDolbyAudio {
             let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
             let playing = player.timeControlStatus == .playing
             Task { @MainActor in
-                if waiting { onWaiting(true) }
-                else if playing { onWaiting(false) }
+                if waiting { onWaiting(true) } else if playing { onWaiting(false) }
             }
         }
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] time in

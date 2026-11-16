@@ -231,7 +231,8 @@ struct MediaCard: View {
                                      logo: item.logo ?? resolvedHeroArtwork?.logo,
                                      maxPixelSize: PosterQuality.heroPosterPixelSize,
                                      logoAlignment: usesLandscapeArtwork ? .center : .bottom,
-                                     logoBottomInset: usesLandscapeArtwork ? 0 : (showsRating && ratingsStore?.occupiesPosterBottom == true ? Theme.Spacing.xl + Theme.Spacing.s : Theme.Spacing.m),
+                                     logoBottomInset: usesLandscapeArtwork ? 0
+                                        : (showsRating && ratingsStore?.occupiesPosterBottom == true ? Theme.Spacing.xl + Theme.Spacing.s : Theme.Spacing.m),
                                      showsLogo: usesLandscapeArtwork || resolvedHeroArtwork?.portraitHidesLogo != true,
                                      acceptsAnyCachedSize: false, usesHeroLogo: true, artworkIsReady: $heroImageIsReady)
                         .id(heroArtworkURL)
@@ -332,8 +333,8 @@ struct MediaCard: View {
 struct CardPlaceholder: View {
     let aspect: CardAspect
     var size: CardSize = .medium
-    var showsTitle: Bool? = nil
-    var width: CGFloat? = nil
+    var showsTitle: Bool?
+    var width: CGFloat?
     var fill: AnyShapeStyle = AnyShapeStyle(Theme.surface)
     private var stretches = false
     @Environment(\.layoutMetrics) private var metrics
@@ -575,7 +576,8 @@ private struct PressableCardLabel: View {
             .scaleEffect(configuration.isPressed && !reduceMotion ? (tracksPointer ? 0.985 : 0.96) : 1)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.75), value: configuration.isPressed)
-            .pointerInteraction(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .artwork), lifts: lifts && !configuration.isPressed, showsFocus: showsFocus, systemHighlight: addsSystemHighlight,
+            .pointerInteraction(cornerRadius: Theme.Radius.card * metrics.cornerScale(for: .artwork),
+                lifts: lifts && !configuration.isPressed, showsFocus: showsFocus, systemHighlight: addsSystemHighlight,
                                 tracksPointer: tracksPointer)
     }
 }

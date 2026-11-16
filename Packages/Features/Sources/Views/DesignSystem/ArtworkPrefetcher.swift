@@ -14,7 +14,7 @@ final class ArtworkPrefetcher {
         let url: URL
         let maxPixelSize: CGFloat
         /// The picture the card shows, at the same size, when `url` does not load. It is loaded then, so the card finds it ready too.
-        var fallback: URL? = nil
+        var fallback: URL?
     }
 
     private var wanted: Set<Request> = []
@@ -66,10 +66,10 @@ struct ArtworkShelf {
     let items: [MetaPreview]
     let aspect: CardAspect
     var size: CardSize = .medium
-    var width: CGFloat? = nil
+    var width: CGFloat?
     var usesBetterPosters = false
     /// The shelf's own Hero posters setting. Nil takes the environment's (a row's), then the Settings'.
-    var heroOverride: Bool? = nil
+    var heroOverride: Bool?
 }
 
 /// Resolves and downloads buffered titles of one or more shelves independently of SwiftUI creating their offscreen card views.

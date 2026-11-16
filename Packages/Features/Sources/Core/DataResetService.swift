@@ -30,12 +30,28 @@ struct DataResetService: Sendable {
         var warning: String {
             switch self {
             case .downloads: return "Removes downloaded videos and subtitles from this device. Videos in use are deleted after playback closes."
-            case .history: return "Clears watch progress, watched marks and the playback session on this device. Nothing is removed from Trakt; the next sync can restore this history."
+            case .history: return """
+                Clears watch progress, watched marks and the playback session on this device. Nothing is removed from Trakt; the next sync can \
+                restore this history.
+                """
             case .library: return "Clears saved titles on this device. Nothing is removed from Trakt; the next sync can restore these titles."
-            case .settings: return "Restores this device’s playback, appearance, haptics, download and Performance preferences, turns Ghost Mode off and clears the streaming server. Accounts, rating-service keys, named looks, history, saved titles, addons and Home layout are kept."
-            case .widgets: return "Returns Home to the automatic layout and clears widget shuffle choices. If Widget Sync is configured, this can reset Home on your other devices."
-            case .addons: return "Removes every installed addon and its saved link. This can also remove links shared through iCloud Keychain. You’ll need to add the addons again."
-            case .everything: return "Erases this device’s history, saved titles, downloads, preferences, accounts, named looks, search history and all addons, and disconnects Trakt and Widget Sync. The Home reset and removed addon links can affect other devices. Trakt’s remote history and saved titles are kept and can return if you reconnect. Built-in API configuration is kept."
+            case .settings: return """
+                Restores this device’s playback, appearance, haptics, download and Performance preferences, turns Ghost Mode off and clears the \
+                streaming server. Accounts, rating-service keys, named looks, history, saved titles, addons and Home layout are kept.
+                """
+            case .widgets: return """
+                Returns Home to the automatic layout and clears widget shuffle choices. If Widget Sync is configured, this can reset Home on your \
+                other devices.
+                """
+            case .addons: return """
+                Removes every installed addon and its saved link. This can also remove links shared through iCloud Keychain. You’ll need to add \
+                the addons again.
+                """
+            case .everything: return """
+                Erases this device’s history, saved titles, downloads, preferences, accounts, named looks, search history and all addons, and \
+                disconnects Trakt and Widget Sync. The Home reset and removed addon links can affect other devices. Trakt’s remote history and \
+                saved titles are kept and can return if you reconnect. Built-in API configuration is kept.
+                """
             }
         }
     }
@@ -87,8 +103,7 @@ struct DataResetService: Sendable {
         case .settings:
             result = await resetPreferences(preservingAccounts: true)
         case .widgets:
-            do { try await services.widgets.resetLayout() }
-            catch { result.failures.append("Home was reset locally, but the shared layout could not be reset.") }
+            do { try await services.widgets.resetLayout() } catch { result.failures.append("Home was reset locally, but the shared layout could not be reset.") }
             if await services.widgets.load() != nil { result.failures.append("The local Home layout could not be reset.") }
             await services.widgetShuffle.clear()
             await services.widgetContent.forgetEverything()

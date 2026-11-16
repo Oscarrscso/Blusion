@@ -168,7 +168,8 @@ struct DescribedSearchService: Sendable {
             let filters = reported?.filters ?? factFilters
             let checked = filters.genres.isEmpty && filters.excludedGenres.isEmpty ? items : await resolveGenres(items)
             guard !Task.isCancelled else { return }
-            for item in checked where Self.fits(item, filters: filters) && Self.fitsGenres(item, filters: filters, requireKnown: true) && output.count < Self.limit && seen.insert(item.identity).inserted {
+            for item in checked where Self.fits(item, filters: filters) && Self.fitsGenres(item, filters: filters,
+                requireKnown: true) && output.count < Self.limit && seen.insert(item.identity).inserted {
                 output.append(item)
             }
             await update(stage)

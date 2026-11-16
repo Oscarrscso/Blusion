@@ -224,7 +224,7 @@ private struct BrowsingBackNavigation: ViewModifier {
 /// the top corner in phone landscape. Pops the showing tab's stack as the back swipe does, so a title opened from the spotlight closes
 /// with no animation.
 struct RoundBackButton: View {
-    var action: (() -> Void)? = nil
+    var action: (() -> Void)?
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
 

@@ -228,8 +228,8 @@ final class PlayerViewModel {
         if let id = plan.downloadID {
             services.downloads?.opened(id)
             if persistsSession, !isPrivateSession() {
-                if let snapshot = await snapshotStore.load(), snapshot.downloadID == id { pendingResume = snapshot }
-                else if !isClosed, !Task.isCancelled, !isPrivateSession() {
+                if let snapshot = await snapshotStore.load(), snapshot.downloadID == id { pendingResume = snapshot } else if !isClosed,
+                    !Task.isCancelled, !isPrivateSession() {
                     let snapshot = PlaybackSnapshot(downloadID: id, request: plan.request, stream: PlaybackStreamIdentity(kind: .direct))
                     try? await snapshotStore.save(snapshot)
                 }

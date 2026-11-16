@@ -1,9 +1,6 @@
 #if canImport(UIKit)
 import SwiftUI
 import UIKit
-import UIKit.UIGestureRecognizerSubclass
-
-/// Recognise each tap immediately. UIKit's tap count distinguishes a second tap without delaying the first.
 struct PictureTapGesture: UIGestureRecognizerRepresentable {
     let tapped: (CGPoint, Int) -> Void
 

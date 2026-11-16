@@ -395,7 +395,8 @@ public struct StreamQuality: Sendable, Equatable {
     private static let dtsxPattern = #"\bdts[ .:\-]?(?:x|hd[ .\-]?ma[ .:\-]?x)\b"#
     private static let audioBitratePattern = #"([0-9]+(?:\.[0-9]+)?)\s*(?:kbps|kb/s|kbit/s)\b"#
     // Modest, bounded reputation bonus; unknown groups and filename languages remain neutral.
-    private static let groupPattern = #"(?:-|\bgroup\s*[:=]\s*)(?:framestor|epsilon|wildcat|cinephiles|hdt|bhdstudio|ctrlhd|don|d-z0n3|ebp|ntb|flux|cmrg|playweb|successfulcrab)(?![a-z0-9])"#
+    private static let groupPattern = #"(?:-|\bgroup\s*[:=]\s*)(?:framestor|epsilon|wildcat|cinephiles|hdt|bhdstudio|ctrlhd|don|d-z0n3|ebp|ntb|"#
+        + #"flux|cmrg|playweb|successfulcrab)(?![a-z0-9])"#
     private static let remuxPattern = #"\bremux\b"#
     private static let bitDepthPattern = #"\b(8|10|12)[ .\-]?bits?\b"#
     private static let highBitDepthPattern = #"\bhi10p?\b"#

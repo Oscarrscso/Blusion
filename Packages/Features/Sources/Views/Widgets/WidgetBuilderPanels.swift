@@ -732,7 +732,8 @@ private struct ChoiceRow: View {
             .frame(minHeight: 44)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(isSelected ? Theme.surface : Color.clear, in: RoundedRectangle(cornerRadius: Theme.Radius.small * metrics.cornerScale(for: .panels), style: .continuous))
+            .background(isSelected ? Theme.surface : Color.clear,
+                in: RoundedRectangle(cornerRadius: Theme.Radius.small * metrics.cornerScale(for: .panels), style: .continuous))
         }
         #if targetEnvironment(macCatalyst)
         .buttonStyle(.settingsHover)

@@ -614,8 +614,7 @@ struct DetailView: View {
             if mode == .normal {
                 let wasSpecial = playOpeningMode != .normal && streams.request != nil
                 playOpeningMode = .normal
-                if wasSpecial { streams.open(request, from: trigger) }
-                else { streams.show(request, from: trigger) }
+                if wasSpecial { streams.open(request, from: trigger) } else { streams.show(request, from: trigger) }
             } else {
                 // Explicit choices replace any existing picker and never change the saved player preference.
                 playOpeningMode = mode

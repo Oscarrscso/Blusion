@@ -30,8 +30,7 @@ public actor SwiftDataDownloadStore: DownloadStore {
         for row in rows where !ids.contains(row.id) { context.delete(row) }
         for item in items {
             let data = try JSONEncoder().encode(item)
-            if let row = rows.first(where: { $0.id == item.id }) { row.metadata = data }
-            else { context.insert(DownloadEntity(id: item.id, metadata: data)) }
+            if let row = rows.first(where: { $0.id == item.id }) { row.metadata = data } else { context.insert(DownloadEntity(id: item.id, metadata: data)) }
         }
         try context.save()
     }

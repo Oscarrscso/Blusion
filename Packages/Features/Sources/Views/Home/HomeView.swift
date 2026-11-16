@@ -384,7 +384,8 @@ struct HomeView: View {
             }
             #else
             withWidgetMenu(ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback,
-                                               onRemove: removeContinue, onMarkWatched: markContinueWatched, title: section.widget.title, hideTitle: section.widget.hideTitle,
+                                               onRemove: removeContinue, onMarkWatched: markContinueWatched, title: section.widget.title,
+                                                   hideTitle: section.widget.hideTitle,
                                                launcher: launcher),
                            section, removable: false)
             #endif
@@ -415,7 +416,8 @@ struct HomeView: View {
     }
 
     private var continueRow: some View {
-        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue, onMarkWatched: markContinueWatched,
+        ContinueWatchingRow(items: model.continueEntries, state: model.continueState, retry: refreshPlayback, onRemove: removeContinue,
+            onMarkWatched: markContinueWatched,
                             launcher: launcher)
     }
 

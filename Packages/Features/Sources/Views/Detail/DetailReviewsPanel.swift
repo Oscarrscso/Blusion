@@ -47,7 +47,7 @@ struct DetailReviewsPanel: View {
     var onLoaded: () -> Void = {}
     let onClose: () -> Void
     /// Embedded panels can fit their page to the available scroll viewport.
-    var viewportHeight: CGFloat? = nil
+    var viewportHeight: CGFloat?
     /// Overrides whether the white site name appears in the panel header. Nil follows the rating row's two-site rule.
     var showsSiteName: Bool?
     /// The id the page scrolls to when the reviews open, so they are in view.
@@ -134,7 +134,8 @@ struct DetailReviewsPanel: View {
                 // reports its load.
                 ForEach(pages, id: \.site) { page in
                     let isVisible = page.site == visible.site
-                    ReviewWebView(site: page.site, url: page.url, item: item, background: appearance.pageBackgroundRGB, onLoaded: page.site == reviews.site ? onLoaded : {})
+                    ReviewWebView(site: page.site, url: page.url, item: item, background: appearance.pageBackgroundRGB,
+                        onLoaded: page.site == reviews.site ? onLoaded : {})
                         .opacity(isVisible && !showsSkeleton ? 1 : 0)
                         .allowsHitTesting(isVisible && !showsSkeleton)
                         .accessibilityHidden(!isVisible || showsSkeleton)

@@ -235,7 +235,10 @@ private struct GeneratedReviewThemeGroups {
 @available(iOS 26.0, macOS 26.0, *)
 @Generable
 private struct GeneratedReviewThemeGroup {
-    @Guide(description: "One clear, specific, self-contained opinion about the filmmaking and why it is praised or criticised. Write fresh natural English, never a raw quote or fragment.")
+    @Guide(description: """
+        One clear, specific, self-contained opinion about the filmmaking and why it is praised or criticised. Write fresh natural English, \
+        never a raw quote or fragment.
+        """)
     var phrase: String
     @Guide(description: "The unique zero-based indices of the supplied sources supporting this opinion", .maximumCount(12))
     var sources: [Int]
@@ -251,7 +254,10 @@ private struct GeneratedReviewParagraph {
 @available(iOS 26.0, macOS 26.0, *)
 @Generable
 private struct GeneratedReviewSummarySentence {
-    @Guide(description: "One complete, grammatically coherent critical observation explaining a film aspect, in your own words, not a copied quote, headline or plot summary")
+    @Guide(description: """
+        One complete, grammatically coherent critical observation explaining a film aspect, in your own words, not a copied quote, \
+        headline or plot summary
+        """)
     var text: String
     @Guide(description: "Zero-based indices of the evidence sources supporting this sentence's claims", .maximumCount(12))
     var sources: [Int]

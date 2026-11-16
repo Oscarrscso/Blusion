@@ -372,9 +372,13 @@ public final class PlaybackCoordinator {
             self?.resolveStart(false)
         }
         let started = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            if hasStartedCurrent { continuation.resume(returning: true) }
-            else if stopped || startFailure != nil { continuation.resume(returning: false) }
-            else { startContinuation = continuation }
+            if hasStartedCurrent {
+                continuation.resume(returning: true)
+            } else if stopped || startFailure != nil {
+                continuation.resume(returning: false)
+            } else {
+                startContinuation = continuation
+            }
         }
         timer.cancel()
         return started

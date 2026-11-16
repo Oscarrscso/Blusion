@@ -16,7 +16,7 @@ struct CollectionBlock {
     /// Space under this block, before the next one.
     var spacingAfter: CGFloat = 0
     /// Grids only: the indices of the cards on screen, whenever they change.
-    var onVisibleRange: ((ClosedRange<Int>?) -> Void)? = nil
+    var onVisibleRange: ((ClosedRange<Int>?) -> Void)?
 }
 
 /// The Mac's scrolling page for grids of titles (Discover, Library, See All): a `UICollectionView` whose cells host SwiftUI.
@@ -34,9 +34,9 @@ struct CollectionPage: UIViewRepresentable {
     /// Changing it puts the page at the top at once, with no animation.
     var jumpToTop: Int = 0
     /// True while the page scrolls, false once it has settled.
-    var onScrollingChange: ((Bool) -> Void)? = nil
+    var onScrollingChange: ((Bool) -> Void)?
     /// The page's scroll position below its top inset, for the navigation bar's fade.
-    var onScrollOffset: ((_ offset: CGFloat, _ maxOffset: CGFloat) -> Void)? = nil
+    var onScrollOffset: ((_ offset: CGFloat, _ maxOffset: CGFloat) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -324,7 +324,7 @@ struct MacTitleGrid {
     var aspect: CardAspect = .poster
     var fillsWidth = false
     var usesBetterPosters = false
-    var onLastAppear: (() -> Void)? = nil
+    var onLastAppear: (() -> Void)?
     var spacingAfter: CGFloat = 0
     let card: (Int, MetaPreview) -> AnyView
 }

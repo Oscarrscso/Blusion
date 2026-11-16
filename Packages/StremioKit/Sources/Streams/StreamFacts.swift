@@ -63,7 +63,13 @@ public struct StreamFacts: Sendable, Equatable {
             if quality.hasFullEnhancementLayer { text += " (FEL)" }
             parts.append(text)
         }
-        if quality.isHDR10Plus { parts.append("HDR10+") } else if quality.isHLG { parts.append("HLG") } else if quality.isHDR, !quality.isDolbyVision { parts.append("HDR") }
+        if quality.isHDR10Plus {
+            parts.append("HDR10+")
+        } else if quality.isHLG {
+            parts.append("HLG")
+        } else if quality.isHDR, !quality.isDolbyVision {
+            parts.append("HDR")
+        }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 }

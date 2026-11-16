@@ -45,7 +45,7 @@ struct HeroSection: View {
 
 extension EnvironmentValues {
     /// Shared artwork zoom state; only the artwork modifier observes its changing offset.
-    @Entry var homeHeroScroll: DetailHeroScrollState? = nil
+    @Entry var homeHeroScroll: DetailHeroScrollState?
 }
 
 /// A paging carousel of full-resolution portrait or landscape heroes, each clipped to its own page.
@@ -506,7 +506,10 @@ private struct HeroPage: View {
             await PlayColourStore.shared.read(identity: item.identity, pictures: PlayColourStore.pictures(for: item),
                                               logos: PlayColourStore.logos(for: item))
         }
-        .task(id: "\(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoCandidates.map(\.absoluteString).joined(separator: "|"))|\(artworkChecked)|\(keepsPicture)|\(distance <= 1)") {
+        .task(id: """
+            \(heroURL?.absoluteString ?? "-")|\(heroPixelSize)|\(logoCandidates.map(\.absoluteString).joined(separator: "|"))|\
+            \(artworkChecked)|\(keepsPicture)|\(distance <= 1)
+            """) {
             // Out of the window the page lets go of its picture (its logo stays in the shared store) so memory stays bounded.
             guard keepsPicture else { hero.release(keeping: []); return }
             // After a rotation the other orientation's picture goes too.

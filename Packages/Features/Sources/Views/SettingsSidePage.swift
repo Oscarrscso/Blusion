@@ -29,7 +29,7 @@ final class SettingsSidePage {
 }
 
 extension EnvironmentValues {
-    @Entry var settingsSidePage: SettingsSidePage? = nil
+    @Entry var settingsSidePage: SettingsSidePage?
     @Entry var showsSettingsColumnTitle = false
     @Entry var settingsColumnDepth = 0
 }
@@ -106,7 +106,7 @@ enum SettingsColumnTitleLayout {
 /// Each settings column owns its heading, even when its navigation bar is hidden.
 struct SettingsColumnHeading: ViewModifier {
     let title: String
-    var action: AnyView? = nil
+    var action: AnyView?
     @Environment(\.showsSettingsColumnTitle) private var showsTitle
     @Environment(\.usesSettingsTypography) private var usesSettingsTypography
     @Environment(\.layoutMetrics) private var metrics

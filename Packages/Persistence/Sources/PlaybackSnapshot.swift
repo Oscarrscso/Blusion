@@ -313,7 +313,8 @@ public struct PlaybackSnapshot: Codable, Sendable, Equatable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(downloadID: try container.decodeIfPresent(UUID.self, forKey: .downloadID), version: (try? container.decode(Int.self, forKey: .version)) ?? PlaybackSnapshot.currentVersion,
+        self.init(downloadID: try container.decodeIfPresent(UUID.self, forKey: .downloadID), version: (try? container.decode(Int.self,
+            forKey: .version)) ?? PlaybackSnapshot.currentVersion,
                   request: try container.decode(StreamRequest.self, forKey: .request),
                   stream: try container.decode(PlaybackStreamIdentity.self, forKey: .stream),
                   addonID: try container.decodeIfPresent(String.self, forKey: .addonID),

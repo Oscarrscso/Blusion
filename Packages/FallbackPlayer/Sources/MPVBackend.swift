@@ -744,8 +744,11 @@ public final class MPVBackend: FallbackBackend {
         if let profile = read.int("current-tracks/video/dolby-vision-profile"), profile > 0 {
             let level = read.int("current-tracks/video/dolby-vision-level").map { ", level \($0)" } ?? ""
             stats.dolbyVision = "Profile \(profile)\(level)"
-            if profile == 7 { stats.notes.append("Dolby Vision profile 7: the base layer and its RPU are applied; the enhancement layer (MEL/FEL) is not decoded.") }
-            else { stats.notes.append("Dolby Vision RPU metadata is applied by libplacebo (tone-mapped by mpv, not by the display's Dolby Vision decoder).") }
+            if profile == 7 {
+                stats.notes.append("Dolby Vision profile 7: the base layer and its RPU are applied; the enhancement layer (MEL/FEL) is not decoded.")
+            } else {
+                stats.notes.append("Dolby Vision RPU metadata is applied by libplacebo (tone-mapped by mpv, not by the display's Dolby Vision decoder).")
+            }
         }
         stats.audioCodec = read.string("audio-codec") ?? read.string("current-tracks/audio/codec")
         if let channels = read.int("audio-params/channel-count") {

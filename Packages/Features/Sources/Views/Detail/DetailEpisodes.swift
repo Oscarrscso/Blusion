@@ -387,8 +387,7 @@ struct DetailEpisodes: View {
                                       attributes: download == nil ? [] : .destructive) { _ in
             Task { @MainActor in
                 Haptics.play(.buttons)
-                if let download { await model.downloadManager?.delete(download.id) }
-                else { await model.download(request) }
+                if let download { await model.downloadManager?.delete(download.id) } else { await model.download(request) }
             }
         }
         let imdbMode: UIImage.RenderingMode = ratings?.showsColouredLogos == true ? .alwaysOriginal : .alwaysTemplate

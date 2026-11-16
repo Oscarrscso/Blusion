@@ -398,8 +398,15 @@ struct ReviewSummaryPipeline: ReviewSummarizing {
 
     static func prompt(for sources: [String], merging: Bool) -> String {
         let task = merging
-            ? "Combine genuinely equivalent supported opinions within each kind. Rewrite them as complete, specific observations about filmmaking, not quotations. Preserve source indices, disagreement and distinct-review counts. Do not manufacture agreement."
-            : "Identify what the reviewer thinks about acting, writing, plot, character work, pacing, direction, visuals or other specific craft, and WHY. Summarise the opinion in your own complete words rather than copying snippets. Ignore generic enthusiasm, plot recaps and incomplete or irrelevant remarks. Keep source indices exact."
+            ? """
+                Combine genuinely equivalent supported opinions within each kind. Rewrite them as complete, specific observations about \
+                filmmaking, not quotations. Preserve source indices, disagreement and distinct-review counts. Do not manufacture agreement.
+                """
+            : """
+                Identify what the reviewer thinks about acting, writing, plot, character work, pacing, direction, visuals or other specific craft, \
+                and WHY. Summarise the opinion in your own complete words rather than copying snippets. Ignore generic enthusiasm, plot recaps and \
+                incomplete or irrelevant remarks. Keep source indices exact.
+                """
         return task + "\n\n" + sources.enumerated().map { "Source \($0.offset):\n\($0.element)" }.joined(separator: "\n\n")
     }
 

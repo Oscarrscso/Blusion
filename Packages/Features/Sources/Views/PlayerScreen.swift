@@ -490,7 +490,7 @@ struct PlayerContent: View {
             if finished { Task { await handleEnd() } }
         }
         // Timeline and picture swipes share feedback, including one step per ten seconds crossed.
-        .onChange(of: model.isScrubbing) { _, scrubbing in
+        .onChange(of: model.isScrubbing) { _, _ in
             Haptics.play(.playerGestures)
         }
         .onChange(of: Int(model.position / 10)) { _, _ in

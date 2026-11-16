@@ -6,7 +6,7 @@ import UIKit
 struct DetailSkeletonLine: View {
     @Environment(\.layoutMetrics) private var metrics
     var font: Font = .body
-    var width: CGFloat? = nil
+    var width: CGFloat?
 
     var body: some View {
         Text(" ")

@@ -99,9 +99,9 @@ struct BrowseFilterBar<Menus: View>: View {
     let identifier: String
     let clearAll: () -> Void
     /// Mac only: the page's heading, drawn at the start of the menus' row. iPhone pages draw their own title above the bar.
-    var heading: Text? = nil
+    var heading: Text?
     /// Mac only: a mark before the heading, such as a streaming service's logo.
-    var headingMark: AnyView? = nil
+    var headingMark: AnyView?
     @ViewBuilder let menus: Menus
     @Environment(\.layoutMetrics) private var metrics
 

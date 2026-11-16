@@ -195,8 +195,7 @@ public final class DownloadManager {
         if !audio.isEmpty { values["Audio"] = audio.joined(separator: ", ") }
         var hdr: [String] = []
         if quality.isDolbyVision { hdr.append("Dolby Vision") }
-        if quality.isHDR10Plus { hdr.append("HDR10+") }
-        else if quality.isHDR { hdr.append("HDR10") }
+        if quality.isHDR10Plus { hdr.append("HDR10+") } else if quality.isHDR { hdr.append("HDR10") }
         if quality.isHLG { hdr.append("HLG") }
         if !hdr.isEmpty { values["Dynamic Range"] = hdr.joined(separator: ", ") }
         if quality.isRemux { values["Release"] = "Remux" }
@@ -244,8 +243,7 @@ public final class DownloadManager {
         guard let i = index(id), items[i].state != .complete, pausing.insert(id).inserted else { return }
         defer {
             pausing.remove(id)
-            if isDeleting(id) { Task { await remove(id) } }
-            else { Task { await pump() } }
+            if isDeleting(id) { Task { await remove(id) } } else { Task { await pump() } }
         }
         items[i].state = .paused; items[i].failure = nil
         transferSpeeds[id] = nil; rateSamples[id] = nil
@@ -254,8 +252,7 @@ public final class DownloadManager {
         if let task = active[id] {
             // didCompleteWithError carries any available resume data. Keep active until that event is consumed.
             if let data = await task.cancelByProducingResumeData(), index(id) != nil, !isDeleting(id) {
-                do { try await saveResume(data, id: id, task: task) }
-                catch { await fail(id, "Could not save resume data") }
+                do { try await saveResume(data, id: id, task: task) } catch { await fail(id, "Could not save resume data") }
             }
         }
         await pump()
@@ -280,8 +277,7 @@ public final class DownloadManager {
         if items[i].state != .complete { items[i].state = .paused }
         retryTasks.removeValue(forKey: id)?.cancel()
         subtitleTasks.removeValue(forKey: id)?.cancel()
-        do { try await persist() }
-        catch { errorMessage = "Could not save deletion"; return }
+        do { try await persist() } catch { errorMessage = "Could not save deletion"; return }
         // Open in the player: removed once it closes (`closed`).
         if playing.contains(id) { return }
         active[id]?.cancel()
@@ -309,8 +305,7 @@ public final class DownloadManager {
         for id in items.map(\.id) {
             errorMessage = nil
             await delete(id)
-            if errorMessage != nil { failed += 1 }
-            else if index(id) != nil { pending += 1 }
+            if errorMessage != nil { failed += 1 } else if index(id) != nil { pending += 1 }
         }
         return (failed, pending)
     }
@@ -347,8 +342,7 @@ public final class DownloadManager {
         preparing.insert(id)
         defer {
             preparing.remove(id)
-            if isDeleting(id) { Task { await remove(id) } }
-            else if active.count < 3 { Task { await pump() } }
+            if isDeleting(id) { Task { await remove(id) } } else if active.count < 3 { Task { await pump() } }
         }
         do {
             var credential = try await credential(id)
@@ -361,8 +355,7 @@ public final class DownloadManager {
             // A suffix already being downloaded keeps its own opaque resume data and the same verified base prefix.
             let resume: Data?
             if offset == (credential.resumeOffset ?? 0), credential.resumeCellular == settings.downloadsAllowCellular,
-               let encoded = try await secrets.get(key(id) + ".resume") { resume = Data(base64Encoded: encoded) }
-            else { resume = nil }
+               let encoded = try await secrets.get(key(id) + ".resume") { resume = Data(base64Encoded: encoded) } else { resume = nil }
             credential.usesResumeData = resume != nil
             try await save(credential, id: id)
             try enoughSpace(max(item.expected - (resume == nil ? offset : item.received), 0), excluding: id)
@@ -433,18 +426,15 @@ public final class DownloadManager {
                 return
             }
             guard items[i].state == .downloading else { try? FileManager.default.removeItem(at: incoming); return }
-            do { try await finish(id, incoming: incoming, response: response) }
-            catch {
+            do { try await finish(id, incoming: incoming, response: response) } catch {
                 try? FileManager.default.removeItem(at: incoming)
-                if error is DownloadError { await fail(id, "Invalid media response") }
-                else { await fail(id, "Could not save media") }
+                if error is DownloadError { await fail(id, "Invalid media response") } else { await fail(id, "Could not save media") }
             }
         case .finished(let id, let taskID, let code, let resume, let response):
             guard active[id]?.taskIdentifier == taskID || (reconciling && active[id] == nil && index(id) != nil) else { return }
             let task = active[id]
             if let resume, index(id) != nil, !isDeleting(id) {
-                do { try await saveResume(resume, id: id, task: task) }
-                catch { await fail(id, "Could not save resume data") }
+                do { try await saveResume(resume, id: id, task: task) } catch { await fail(id, "Could not save resume data") }
             }
             active[id] = nil
             transferSpeeds[id] = nil; rateSamples[id] = nil
@@ -506,8 +496,7 @@ public final class DownloadManager {
                 preparing.insert(id)
                 defer {
                     preparing.remove(id)
-                    if isDeleting(id) { Task { await remove(id) } }
-                    else { Task { await pump() } }
+                    if isDeleting(id) { Task { await remove(id) } } else { Task { await pump() } }
                 }
                 do { try await refresh(id) } catch {
                     retryTasks[id] = nil
@@ -559,7 +548,7 @@ public final class DownloadManager {
         var source = incoming
         if response.status == 206, credential.offset > 0 {
             guard let range = response.range, let parsed = Self.range(range),
-                  (credential.usesResumeData == true ? parsed.0 >= credential.offset : parsed.0 == credential.offset),
+                  credential.usesResumeData == true ? parsed.0 >= credential.offset : parsed.0 == credential.offset,
                   parsed.1 >= parsed.0, incomingSize == parsed.2 - credential.offset, parsed.1 + 1 == parsed.2,
                   credential.total <= 0 || credential.total == parsed.2,
                   let validator = credential.validator, validator == response.validator,
@@ -644,8 +633,7 @@ public final class DownloadManager {
                 let data = try await streams.client.get(option.url, headers: sameOrigin ? credential.headers : [:],
                                                         limits: FetchLimits(maxBytes: 8 * 1024 * 1024)).data
                 let ext: String
-                if data.starts(with: [0x50, 0x47]) { ext = "sup" }
-                else { ext = try SubtitleParser.parse(data: data).format.rawValue }
+                if data.starts(with: [0x50, 0x47]) { ext = "sup" } else { ext = try SubtitleParser.parse(data: data).format.rawValue }
                 let tags = (track.isForced ? ".forced" : "") + (track.isHearingImpaired ? ".sdh" : "")
                 let path = id.uuidString + ".sub-\(UUID().uuidString)\(tags).\(ext)"
                 try enoughSpace(Int64(data.count), excluding: id)

@@ -265,7 +265,7 @@ struct LandscapeTabControls: View {
     private var tabDrag: some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .named("landscapeTabs"))
             .onChanged { drag in
-                guard (!collapsed || drag.translation.width > 8), abs(drag.translation.width) > abs(drag.translation.height) else { return }
+                guard !collapsed || drag.translation.width > 8, abs(drag.translation.width) > abs(drag.translation.height) else { return }
                 // Open the whole panel once; reversing a held drag must not slice through its glass.
                 if collapsed { onReveal() }
                 // Boundaries sit halfway between the existing 44-point buttons, including Home's separate circle.

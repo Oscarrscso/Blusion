@@ -71,7 +71,8 @@ private struct PrimaryActionButton: View {
                 .glassHover(ScaledCapsule(scale: metrics.cornerScale(for: .playButton)))
         }
         .finishedButtonStyle(glass, finish: appearance.buttonFinish, fill: solidFill ?? (.white, .black))
-        .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
+        .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule
+            : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
         .buttonOutline(playBorderShape)
         .controlSize(.large)
         .frame(height: CircleActionButton.diameter)
@@ -85,7 +86,8 @@ private struct PrimaryActionButton: View {
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
         }
         .finishedButtonStyle(glass, finish: appearance.buttonFinish, fill: solidFill ?? (.white, .black))
-        .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
+        .buttonBorderShape(metrics.cornerScale(for: .playButton) == 1 ? .capsule
+            : .roundedRectangle(radius: Theme.Radius.surface * metrics.cornerScale(for: .playButton)))
         .buttonOutline(playBorderShape)
         // A main action is one size up from the controls around it.
         .controlSize(controlSize == .regular ? .large : controlSize)

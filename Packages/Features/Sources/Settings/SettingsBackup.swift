@@ -29,7 +29,8 @@ enum SettingsBackup {
         var errorDescription: String? { "Invalid settings file." }
     }
 
-    static func export(settings: PlaybackSettings, widgets: [HomeWidget]?, shuffle: WidgetShuffleSettings = WidgetShuffleSettings(), defaults: UserDefaults = .standard) throws -> Data {
+    static func export(settings: PlaybackSettings, widgets: [HomeWidget]?, shuffle: WidgetShuffleSettings = WidgetShuffleSettings(),
+        defaults: UserDefaults = .standard) throws -> Data {
         let saved = try object(settings)
         let root: [String: Any] = [
             "format": "blusionSettings", "version": 1,
@@ -64,7 +65,8 @@ enum SettingsBackup {
               let version = root["version"] as? NSNumber,
               CFGetTypeID(version) != CFBooleanGetTypeID(), version.doubleValue == 1 else { throw InvalidBackup() }
         var saved = try object(current)
-        var skipped = root.keys.filter { !["format", "version", "appearance", "player", "haptics", "playback", "downloads", "general", "widgets", "widgetShuffle"].contains($0) }.count
+        var skipped = root.keys.filter { !["format", "version", "appearance", "player", "haptics", "playback", "downloads", "general",
+            "widgets", "widgetShuffle"].contains($0) }.count
         for section in ["playback", "downloads"] {
             if let value = root[section] {
                 guard let values = value as? [String: Any] else { throw InvalidBackup() }

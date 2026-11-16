@@ -41,7 +41,7 @@ struct SearchView: View {
         .task {
             await model.refreshAvailability()
             model.prewarmAI()
-            if (model.phase == .idle || model.aiPhase == .idle), !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if model.phase == .idle || model.aiPhase == .idle, !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 model.queryDidChange()
             }
         }

@@ -233,7 +233,7 @@ extension View {
 
 extension EnvironmentValues {
     /// Nil follows Appearance; a widget can explicitly turn hero posters on or off.
-    @Entry var heroPosterOverride: Bool? = nil
+    @Entry var heroPosterOverride: Bool?
     @Entry var isLandscape = false
     /// True only for a phone turned sideways. A Mac window is never a phone, so its bar and spotlight keep the portrait rules there.
     @Entry var isPhoneLandscape = false
@@ -242,7 +242,7 @@ extension EnvironmentValues {
     /// Home supplies its width too, so the portrait spotlight is the same height as the title page's picture.
     @Entry var heroContainerWidth: CGFloat = 390
     /// Whether Home is scrolling, as an object: only the views that read `isScrolling` redraw when a scroll starts or stops, not all of Home.
-    @Entry var homeScroll: HomeScrollState? = nil
+    @Entry var homeScroll: HomeScrollState?
     /// An offscreen Home section must not activate cards inside its horizontal scroll view.
     @Entry var loadsVisibleArtwork = true
     /// The safe-area insets of the window this view is in, as its root measured them. A screen that runs under the bars or the notch reads

@@ -18,7 +18,7 @@ struct PageReveal {
 extension EnvironmentValues {
     /// Set by a page that scrolls: the title page, the stream picker and the player's Info panel. Nil elsewhere, where an opening section
     /// stays where it is.
-    @Entry var pageReveal: PageReveal? = nil
+    @Entry var pageReveal: PageReveal?
 }
 
 /// Hands its content the page's reveal, for a section drawn inside the view that sets it.

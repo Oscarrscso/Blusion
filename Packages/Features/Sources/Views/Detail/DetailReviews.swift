@@ -176,7 +176,8 @@ struct DetailReviews: View {
             .font(Theme.Typography.microStrong)
             .foregroundStyle(.white)
             .frame(width: 24, height: 24)
-            .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)), in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
+            .buttonSurface(.regular.interactive().tint((Theme.playControlColour(hex: playColourHex) ?? .clear)),
+                in: ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
             .contentShape(ScaledCapsule(scale: metrics.circularButtonScale(for: .actionButtons)))
             .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12 * metrics.circularButtonScale(for: .actionButtons)))
             .clipShape(RoundedRectangle(cornerRadius: 12 * metrics.circularButtonScale(for: .actionButtons)))
@@ -400,11 +401,11 @@ private struct FoldingWidth: ViewModifier, Animatable {
 /// formatting to Markdown so JustifiedText keeps native typography, links and sizing.
 private enum ReviewTextMarkup {
     /// Compiled once: a review card converts its text every time it is drawn.
-    private static let links = try! NSRegularExpression(
+    private static let links = try? NSRegularExpression(
         pattern: #"<a\b[^>]*\bhref\s*=\s*["'](https?://[^"']+)["'][^>]*>(.*?)</a\s*>"#,
         options: [.caseInsensitive, .dotMatchesLineSeparators]
     )
-    private static let entities = try! NSRegularExpression(pattern: #"&(#(?:[xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z]+);"#)
+    private static let entities = try? NSRegularExpression(pattern: #"&(#(?:[xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z]+);"#)
     /// The converted text of the reviews on show, so a card that is drawn again does not convert its review again. `NSCache` is
     /// thread-safe.
     nonisolated(unsafe) private static let converted: NSCache<NSString, NSString> = {
@@ -425,8 +426,8 @@ private enum ReviewTextMarkup {
         var text = raw
 
         // Preserve safe HTML links using the Markdown links JustifiedText already handles.
-        text = links.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
-                                              withTemplate: "[$2]($1)")
+        text = links?.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                              withTemplate: "[$2]($1)") ?? text
 
         let tags: [(String, String)] = [
             (#"(?i)<\s*br\s*/?\s*>"#, "\n"),
@@ -453,7 +454,7 @@ private enum ReviewTextMarkup {
             "ldquo": "“", "rdquo": "”", "bull": "•", "copy": "©"
         ]
         let original = text as NSString
-        for match in entities.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+        for match in (entities?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []).reversed() {
             let entity = original.substring(with: match.range(at: 1))
             let replacement: String?
             if entity.hasPrefix("#") {
