@@ -48,15 +48,8 @@ struct DetailEpisodes: View {
         }
     }
 
-    /// The space inside an episode's menu preview, so the menu's rounded corners do not cut into the still or the text.
-    private static let previewPadding: CGFloat = Theme.Spacing.m
-    /// The corner radius of the panel the system draws an episode's menu preview in: 32 pt, measured on an iPhone on iOS 27. The system
-    /// does not say what it is and does not let a preview set it. The preview's hairline uses it, so it follows the panel's edge.
-    private static let previewPanelRadius: CGFloat = 32
-    /// The still's corner radius in the preview: the panel's less the padding between them, so the two corners share a centre and the
-    /// gap between the still and the panel is the same round the corner as along the sides. With the panel's own radius the gap grew
-    /// at the corners, which read as slightly off.
-    private static let previewStillRadius: CGFloat = previewPanelRadius - previewPadding
+    /// The preview has one surface; its artwork, clipping and outline use this already-scaled radius.
+    private var previewCornerRadius: CGFloat { Theme.Radius.surface * metrics.cornerScale(for: .panels) }
     /// The IMDb mark in the episode menus, in points. Both menus draw it at this size: the asset is 48 points, far larger than the check marks.
     private static let menuLogoSize: CGFloat = 16
 
@@ -337,7 +330,7 @@ struct DetailEpisodes: View {
                 EpisodeContextMenu(content: card, preview: { landscapePreview(video, width: $0) },
                                    previewSize: CGSize(width: max(1, min(400, pageWidth * 0.55)),
                                                        height: pageHeight),
-                                   previewCornerRadius: Self.previewPanelRadius,
+                                   previewCornerRadius: previewCornerRadius,
                                    menu: { landscapeEpisodeMenu(video) }, isPresented: $isHoldingEpisode)
                     .frame(width: width)
             } else {
@@ -345,7 +338,6 @@ struct DetailEpisodes: View {
                     episodeActions(video)
                 } preview: {
                     episodePreview(video, width: pageWidth - contentMargin * 2)
-                        .glassHairline(RoundedRectangle(cornerRadius: Self.previewPanelRadius * metrics.cornerScale(for: .panels), style: .continuous))
                         .onAppear { isHoldingEpisode = true }
                         .onDisappear { isHoldingEpisode = false }
                 }
@@ -360,9 +352,8 @@ struct DetailEpisodes: View {
 
     /// Portrait and landscape share the same stacked card, padding and panel treatment.
     private func episodePreview(_ video: Video, width: CGFloat) -> some View {
-        episodeCard(video, width: max(1, width - Self.previewPadding * 2), airsLater: !video.hasAired(),
-                    stillRadius: Self.previewStillRadius, showsWholeOverview: true)
-            .padding(Self.previewPadding)
+        episodeCard(video, width: max(1, width), airsLater: !video.hasAired(),
+                    stillRadius: previewCornerRadius, showsWholeOverview: true)
             .environment(ratings)
     }
 
@@ -666,7 +657,7 @@ struct EpisodeRow: View {
             }
         }
         .animation(Theme.Motion.quick, value: isLoadingStreams)
-        .mediaArtwork(cornerRadius: stillRadius)
+        .mediaArtwork(cornerRadius: stillRadius, resolvedCornerRadius: showsWholeOverview ? stillRadius : nil)
     }
 
     /// Keep the synopsis's full space; move only the lower rule into the middle of the gap above the metadata.

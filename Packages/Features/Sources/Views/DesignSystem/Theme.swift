@@ -313,8 +313,8 @@ extension View {
     }
 
     /// The same inset, one-pixel hairline for posters, cards and tiles. Full-screen hero artwork does not use it.
-    func mediaArtwork(cornerRadius: CGFloat = Theme.Radius.card) -> some View {
-        modifier(MediaArtworkModifier(cornerRadius: cornerRadius))
+    func mediaArtwork(cornerRadius: CGFloat = Theme.Radius.card, resolvedCornerRadius: CGFloat? = nil) -> some View {
+        modifier(MediaArtworkModifier(cornerRadius: cornerRadius, resolvedCornerRadius: resolvedCornerRadius))
     }
 }
 
@@ -375,13 +375,14 @@ struct CardOutline<S: InsettableShape>: View {
 
 private struct MediaArtworkModifier: ViewModifier {
     let cornerRadius: CGFloat
+    var resolvedCornerRadius: CGFloat?
     /// Appearance's corners scale every artwork's radius alike.
     @Environment(\.layoutMetrics) private var metrics
     /// Appearance's Outline sets the hairline's strength (or turns it off), and its Artwork tone the picture's colour.
     @Environment(\.appAppearance) private var appearance
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius * metrics.cornerScale(for: .artwork), style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: resolvedCornerRadius ?? cornerRadius * metrics.cornerScale(for: .artwork), style: .continuous)
         content
             .artworkTone(appearance.artworkTone)
             .clipShape(shape)
