@@ -55,18 +55,17 @@ struct AppearanceTextPage: View {
     var body: some View {
         AppearanceSectionPage(title: "Text", section: .text) { controls in
             Section {
-                controls.preview([.text], contentPadding: Theme.Spacing.m, verticalPadding: Theme.Spacing.m)
+                controls.preview([.text], verticalPadding: Theme.Spacing.m)
             }
             Section {
                 controls.menu("App text size", \.textSize, id: "text.reading.textSize")
             }
-            Section {
-                ForEach(AppearancePreferences.TextRole.allCases) { role in
+            ForEach(AppearancePreferences.TextRole.allCases) { role in
+                Section {
                     DisclosureGroup(isExpanded: Binding(get: { expandedRoles.contains(role) }, set: { expanded in
                         if expanded { expandedRoles.insert(role) } else { expandedRoles.remove(role) }
                     })) {
-                        controls.preview([sample(for: role)], contentPadding: Theme.Spacing.m, verticalPadding: Theme.Spacing.m)
-                        TextRoleOptions(role: role, controls: controls)
+                        EmptyView()
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(role.label)
@@ -82,6 +81,10 @@ struct AppearanceTextPage: View {
                         .settingsHover()
                     }
                     .accessibilityIdentifier("settings.appearance.text.\(role.rawValue)")
+                    if expandedRoles.contains(role) {
+                        controls.preview([sample(for: role)], verticalPadding: Theme.Spacing.m)
+                        TextRoleOptions(role: role, controls: controls)
+                    }
                 }
             }
         }
