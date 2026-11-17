@@ -2,14 +2,27 @@ name: Publish alpha release
 on:
   push:
     branches: [main]
+  schedule:
+    # After the 02:23 UTC public sync, so the newest v.* release already exists.
+    - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Replace Blusion.ipa on the newest release
+        type: boolean
+        default: false
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: publish-alpha-release
+  cancel-in-progress: false
 jobs:
   release:
-    if: github.repository == 'Oscarrscso/Blusion' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'schedule' && github.repository == 'Oscarrscso/Blusion' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -47,7 +60,14 @@ jobs:
           notes += [f"- {group}: {count} file{'s' if count != 1 else ''} updated." for group, count in sorted(groups.items())]
           if previous.returncode == 0:
               notes += ["", f"[Full changes](https://github.com/{os.environ['GITHUB_REPOSITORY']}/compare/{baseline}...{version})"]
-          notes += ["", "### Build", "", "Source code only; no prebuilt app is attached. See the [build instructions](https://github.com/Oscarrscso/Blusion#build)."]
+          notes += [
+              "",
+              "### Install",
+              "",
+              "The nightly build attaches an unsigned iPhone app, `Blusion.ipa`. It is not signed with an Apple Developer certificate. Install it with AltStore, SideStore or Sideloadly, which sign it using your Apple ID.",
+              "",
+              "To build from source, see the [build instructions](https://github.com/Oscarrscso/Blusion#build).",
+          ]
           Path(os.environ["RUNNER_TEMP"], "release-notes.md").write_text("\n".join(notes) + "\n")
           PY
       - name: Publish alpha release once
@@ -63,3 +83,147 @@ jobs:
               --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
           gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,url
+  select:
+    needs: release
+    if: >-
+      always() &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.repository == 'Oscarrscso/Blusion' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      build: ${{ steps.pick.outputs.build }}
+    steps:
+      - name: Choose the newest release
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Boolean inputs exist only on workflow_dispatch. A schedule run leaves this false.
+          REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+
+          raw = subprocess.check_output([
+              "gh", "api", "--paginate", f"repos/{os.environ['GITHUB_REPOSITORY']}/releases",
+          ], text=True)
+          decoder = json.JSONDecoder()
+          releases = []
+          index = 0
+          while index < len(raw):
+              while index < len(raw) and raw[index].isspace():
+                  index += 1
+              if index >= len(raw):
+                  break
+              page, index = decoder.raw_decode(raw, index)
+              releases.extend(page if isinstance(page, list) else [page])
+          versions = []
+          for release in releases:
+              match = re.fullmatch(r"v\.(\d+)a", release.get("tag_name") or "")
+              if match:
+                  versions.append((int(match.group(1)), release))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              if not versions:
+                  output.write("build=false\n")
+                  print("No v.*a release; skipping the IPA build")
+              else:
+                  release = max(versions, key=lambda item: item[0])[1]
+                  tag = release.get("tag_name")
+                  names = [asset.get("name") for asset in release.get("assets") or []]
+                  has_ipa = "Blusion.ipa" in names
+                  rebuild = os.environ.get("REBUILD") == "true"
+                  build = "true" if rebuild or not has_ipa else "false"
+                  output.write(f"tag={tag}\nbuild={build}\n")
+                  if build == "true":
+                      print(f"Will build Blusion.ipa for {tag}" + (" (replacing the existing asset)" if has_ipa else ""))
+                  else:
+                      print(f"{tag} already has Blusion.ipa; skipping")
+          PY
+  build:
+    needs: select
+    if: needs.select.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.select.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          selected=""
+          if [[ -d /Applications/Xcode.app ]]; then
+            version="$(/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -version 2>/dev/null | head -n 1 || true)"
+            case "$version" in
+              "Xcode 26"*) selected="/Applications/Xcode.app" ;;
+            esac
+          fi
+          if [[ -z "$selected" ]]; then
+            shopt -s nullglob
+            candidates=(/Applications/Xcode_26*.app)
+            shopt -u nullglob
+            if [[ ${#candidates[@]} -gt 0 ]]; then
+              # GNU sort -V. macOS /usr/bin/sort has no -V, so fall back to the same ordering.
+              if printf '' | sort -V >/dev/null 2>&1; then
+                selected="$(printf '%s\n' "${candidates[@]}" | sort -V | tail -n 1)"
+              else
+                selected="$(printf '%s\n' "${candidates[@]}" | python3 -c 'import re,sys; rows=[line for line in sys.stdin.read().splitlines() if line]; key=lambda path: [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", path)]; print(sorted(rows, key=key)[-1])')"
+              fi
+            fi
+          fi
+          [[ -n "$selected" && -d "$selected" ]] || { echo "Xcode 26 is not installed"; exit 1; }
+          sudo xcode-select -s "$selected/Contents/Developer"
+          xcodebuild -version | head -n 1 | grep -q '^Xcode 26' || { xcodebuild -version; echo "Xcode 26 is required"; exit 1; }
+          echo "Selected ${selected}"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build unsigned IPA
+        env:
+          BLUSION_RELEASE_TAG: ${{ needs.select.outputs.tag }}
+        run: bash scripts/build-unsigned-ipa.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Blusion.ipa
+          path: build/Blusion.ipa
+          if-no-files-found: error
+          compression-level: 0
+  upload:
+    needs: [select, build]
+    if: needs.select.outputs.build == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Blusion.ipa
+          path: dist
+      - name: Attach Blusion.ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ipa="$(find dist -name Blusion.ipa -type f -print -quit)"
+          [[ -n "$ipa" ]] || { echo "Blusion.ipa was not downloaded"; exit 1; }
+          # The long upload uses a temporary name, so Blusion.ipa stays available if it fails.
+          tmp="Blusion.ipa.${GITHUB_RUN_ID}"
+          cp "$ipa" "${RUNNER_TEMP}/${tmp}"
+          gh release upload "$TAG" "${RUNNER_TEMP}/${tmp}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" "$ipa" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx 'Blusion.ipa'
+          gh release delete-asset "$TAG" "$tmp" --repo "$GITHUB_REPOSITORY" --yes
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
+            --jq '{tag: .tagName, ipa: [.assets[] | select(.name == "Blusion.ipa") | {name, size}]}'

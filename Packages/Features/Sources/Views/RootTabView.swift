@@ -255,10 +255,10 @@ public struct RootTabView: View {
         }
     }
 
-    /// The page's events, alerts and environment, split from `tabs` so the compiler type-checks each chain in reasonable time.
-    public var body: some View {
+    /// Alerts, launch work and other page events. Split from `body` so each chain type-checks in reasonable time.
+    private var events: some View {
         @Bindable var router = router
-        tabs
+        return tabs
         .onChange(of: router.tab) { _, _ in
             landscapeTabs.reset()
             landscapeTabs.clearPageTitle()
@@ -325,6 +325,11 @@ public struct RootTabView: View {
             ReviewPageRules.prewarm()
             #endif
         }
+    }
+
+    /// Mac controls and the values pages read from the environment. Split from `body` so each chain type-checks.
+    private var placed: some View {
+        events
         #if targetEnvironment(macCatalyst)
         .ignoresSafeArea(.container, edges: .top)
         .overlay(alignment: .top) {
@@ -346,6 +351,11 @@ public struct RootTabView: View {
         .environment(\.landscapeControlInset, landscapeEdgeInset)
         .environment(\.usesEditorialTabBar, usesEditorialTabBar)
         .environment(\.windowSafeArea, windowSafeArea)
+    }
+
+    /// Safe area and appearance. The geometry reads stay outside `placed` so this chain stays small enough to type-check.
+    public var body: some View {
+        placed
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         // The full screen width (this sits inside the edge-to-edge line below), for the landscape buttons' side gap.
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
