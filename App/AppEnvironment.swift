@@ -198,6 +198,7 @@ final class AppEnvironment {
                                               subtitles: subtitleService, fallback: true,
                                               hardwareAV1: AVHardware.decodesAV1InHardware, persistent: !uiTesting)
         DownloadBackgroundEvents.manager = downloadManager
+        if !uiTesting { downloadManager.notifications = DownloadNotificationCenter() }
         Task { await downloadManager.start() }
         let indexedLibrary: any LibraryStore = uiTesting ? library : SpotlightIndexingLibrary(library)
         let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService,

@@ -42,6 +42,8 @@ final class AppRouter {
     /// The Mac Widgets tab's stack. The widgets manager registers its own editor destinations, so the stack holds nothing else.
     var widgetsPath = NavigationPath()
     var demoPlan: PlaybackPlan?
+    /// A finished download opened from its notification.
+    var downloadPlan: PlaybackPlan?
     var addonInstallText: String?
     var userStateRevision = 0
     /// The depth of `homePath` once a title opened from Home's spotlight is on it. When the path falls below that depth, the spotlight's

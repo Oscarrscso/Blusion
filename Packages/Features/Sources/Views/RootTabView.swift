@@ -316,6 +316,7 @@ public struct RootTabView: View {
             addonLink = nil
         }
         .fullScreenCover(item: $router.demoPlan) { PlayerScreen(plan: $0, services: services) }
+        .fullScreenCover(item: $router.downloadPlan) { PlayerScreen(plan: $0, services: services) }
         .onReceive(NotificationCenter.default.publisher(for: AppShortcutInbox.didReceive)) { _ in
             Task { await applyShortcutRequests() }
         }
@@ -390,6 +391,13 @@ public struct RootTabView: View {
                 router.showBlusionTV()
             case .openDetail(let type, let contentID):
                 router.showDetail(type: type, contentID: contentID)
+            case .openDownload(let id):
+                if let plan = await services.downloads?.plan(for: id) {
+                    router.downloadPlan = plan
+                } else {
+                    router.opensDownloads = true
+                    router.showLibraryRoot()
+                }
             }
         }
     }

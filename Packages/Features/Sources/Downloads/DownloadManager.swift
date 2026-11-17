@@ -39,6 +39,8 @@ public final class DownloadManager {
     private(set) var transferSpeeds: [UUID: Double] = [:]
     private var rateSamples: [UUID: (bytes: Int64, date: Date)] = [:]
     private var lastSaved: [UUID: Date] = [:]
+    /// Permission on the first queued download, and a local notification when a file is ready. Nil in tests.
+    public var notifications: (any DownloadNotifications)?
 
     /// SecretStore is the only app-owned persistent location of request/response credentials and matching material.
     private struct Credential: Codable {
@@ -163,6 +165,7 @@ public final class DownloadManager {
         let route = PlaybackPolicy.route(for: ranked.stream, container: container, quality: ranked.quality, config: config)
         let usesFallback: Bool
         if case .fallback = route { usesFallback = true } else { usesFallback = false }
+        await notifications?.prepareForFirstDownload()
         var safeRequest = request
         safeRequest.title = Self.displayText(request.title)
         safeRequest.seriesName = request.seriesName.map(Self.displayText)
@@ -598,6 +601,8 @@ public final class DownloadManager {
         transferSpeeds[id] = nil; rateSamples[id] = nil
         try await persist()
         try await secrets.remove(key(id) + ".resume")
+        let finished = items[current].request
+        await notifications?.noteFinishedDownload(id: id, title: DownloadFinishCopy.title(of: finished))
         // Subtitle work cannot hold up the queue or progress from the other media transfers.
         subtitleTasks[id] = Task { [weak self] in
             guard let self else { return }

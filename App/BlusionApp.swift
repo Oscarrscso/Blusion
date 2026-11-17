@@ -1,5 +1,6 @@
 import CoreSpotlight
 import SwiftUI
+import UserNotifications
 import Features
 import StremioKit
 import UIKit
@@ -303,7 +304,21 @@ enum DownloadBackgroundEvents {
     }
 }
 
-final class DownloadAppDelegate: NSObject, UIApplicationDelegate {
+final class DownloadAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let raw = response.notification.request.content.userInfo["download"] as? String, let id = UUID(uuidString: raw) else { return }
+        await AppShortcutInbox.shared.submit(.openDownload(id))
+    }
+
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
         guard identifier == DownloadSession.identifier else { completionHandler(); return }
