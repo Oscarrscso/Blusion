@@ -1,7 +1,7 @@
 #if canImport(UIKit)
 import SwiftUI
 
-/// Keep the system's glass track, sliding selection lens and native segment edges.
+/// Keep the native sliding selection; custom corner values clip its track to the filters group.
 struct CornerSegmentedPicker<Selection: Hashable>: View {
     let title: String
     let options: [Selection]
@@ -9,6 +9,7 @@ struct CornerSegmentedPicker<Selection: Hashable>: View {
     var symbols: [String] = []
     var showsTitles = true
     let label: (Selection) -> String
+    @Environment(\.layoutMetrics) private var metrics
 
     init(_ title: String, options: [Selection], selection: Binding<Selection>, symbols: [String] = [],
          showsTitles: Bool = true, label: @escaping (Selection) -> String) {
@@ -21,6 +22,14 @@ struct CornerSegmentedPicker<Selection: Hashable>: View {
     }
 
     var body: some View {
+        if metrics.cornerScale(for: .filters) == 1 {
+            picker
+        } else {
+            picker.clipShape(ScaledCapsule(scale: metrics.cornerScale(for: .filters)))
+        }
+    }
+
+    private var picker: some View {
         Picker(title, selection: $selection) {
             ForEach(options.indices, id: \.self) { index in
                 segment(index).tag(options[index])

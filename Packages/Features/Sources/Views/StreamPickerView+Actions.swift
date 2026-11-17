@@ -19,6 +19,7 @@ extension StreamPickerView {
     private var closeButton: some View {
         if isEmbedded, let onClose {
             let side = autoPickButtonHeight > 0 ? autoPickButtonHeight : 34
+            let radius = side / 2 * min(metrics.cornerScale(for: .actionButtons), 1)
             Button {
                 Haptics.play(.buttons)
                 onClose()
@@ -28,7 +29,11 @@ extension StreamPickerView {
                     .foregroundStyle(Theme.faintText)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .glassCircleButton(.small)
+            .buttonStyle(HoverGlassButtonStyle())
+            .buttonBorderShape(.roundedRectangle(radius: radius))
+            // swiftlint:disable:next fixed_view_corner_shape -- Radius above uses the actionButtons cornerScale.
+            .buttonOutline(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .controlSize(.small)
             .frame(width: side, height: side)
             .accessibilityLabel("Back to details")
             .help("Back to details")
