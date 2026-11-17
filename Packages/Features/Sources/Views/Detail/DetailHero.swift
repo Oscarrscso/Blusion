@@ -263,11 +263,7 @@ private struct DetailHeroScrollTransform: ViewModifier {
             .scaleEffect(1 + 0.28 * (scrollDown / (scrollDown + 180)), anchor: .top)
             .frame(height: visibleHeight + scrollPull, alignment: .top)
             .clipped()
-            .overlay(alignment: .bottom) {
-                BottomFade(length: TitleHero.fadeLength(height: heroHeight, visible: visibleHeight + scrollPull),
-                           strength: TitleHero.fadeStrength)
-                    .padding(.bottom, -TitleHero.fadeOverscan)
-            }
+            .modifier(PortraitHeroFade(length: TitleHero.fadeLength(height: heroHeight, visible: visibleHeight + scrollPull)))
             .offset(y: -scrollPull)
     }
 }

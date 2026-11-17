@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var heroScroll = DetailHeroScrollState()
     /// Keep each spotlight's selection while its lazy section is offscreen, and when a title opened from it is popped back to Home.
     @State private var heroPages: [String: String] = [:]
+    @State private var backdrop: UIImage?
     /// The status bar's height, the top safe area Home's content starts beneath. The navigation bar sits below it, not included.
     @State private var topInset: CGFloat = 0
     /// The page's own side safe-area inset, as its geometry reports it: the notch's inset on a phone held in landscape, zero elsewhere.
@@ -24,6 +25,7 @@ struct HomeView: View {
     @State private var screenHeight: CGFloat = 0
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
+    @Environment(\.appAppearance) private var appearance
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isLandscape) private var isLandscape
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
@@ -55,6 +57,7 @@ struct HomeView: View {
                 .environment(\.homeScroll, scroll)
                 .environment(\.homeHeroScroll, heroScroll)
                 .environment(\.layoutMetrics, homeMetrics)
+                .environment(\.pageBackdrop, usesShowcaseBackdrop ? backdrop : nil)
         }
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
             .onGeometryChange(for: CGFloat.self) { max($0.safeAreaInsets.leading, $0.safeAreaInsets.trailing) } action: { sideInset = $0 }
@@ -97,6 +100,9 @@ struct HomeView: View {
             // Command-R on Mac reloads everything Home shows (see `HomeViewModel.refresh()`).
             .onChange(of: router.homeRefreshRevision) { _, _ in Task { await model.refresh() } }
             .onChange(of: lowPerformanceMode) { _, _ in Task { await model.load() } }
+            .onChange(of: usesShowcaseBackdrop) { _, enabled in
+                if !enabled { backdrop = nil }
+            }
             // Coming back from Settings or the Widgets tab: addons or widgets may have changed, and Home's own copy of them with them.
             .onChange(of: router.tab) { old, _ in
                 if old == .settings || old == .widgets { Task { await model.load() } }
@@ -161,6 +167,28 @@ struct HomeView: View {
     private var heroIsFirst: Bool {
         guard let first = model.sections.first, case .hero = first.widget.content else { return false }
         return first.widget.hideTitle
+    }
+
+    private var usesShowcaseBackdrop: Bool {
+        appearance.blursBackground && !model.isOffline && model.sections.contains { section in
+            guard case .hero = section.widget.content, case .loaded(let items) = section.state else { return false }
+            return !items.isEmpty
+        }
+    }
+
+    private var backdropLayer: some View {
+        ZStack {
+            if usesShowcaseBackdrop, let backdrop {
+                Image(uiImage: backdrop)
+                    .resizable()
+                    .id(ObjectIdentifier(backdrop))
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     /// `isPhoneLandscape` is also true on an iPad turned sideways, so the device is checked as well. A phone in landscape has no room for
@@ -238,6 +266,7 @@ struct HomeView: View {
                 scroll.isScrolling = false
                 navigation?.forget(navigationScrollID)
             }
+            .background { backdropLayer }
             .screenBackground()
             .ignoresSafeArea(.container, edges: ignoredEdges)
     }
@@ -296,6 +325,7 @@ struct HomeView: View {
             }
             .onDisappear { scroll.isScrolling = false }
             .contentMargins(.top, 0, for: .scrollContent)
+            .background { backdropLayer }
             .screenBackground()
             .modifier(HeroScrollEdgeModifier(scroll: heroScroll))
             .scrollEdgeEffectHidden(isPhoneInLandscape, for: .bottom)
@@ -349,7 +379,7 @@ struct HomeView: View {
     private func sectionView(_ section: HomeViewModel.Section) -> some View {
         switch section.widget.content {
         case .hero:
-            HeroSection(section: section, pageID: $heroPages[section.id], onRetry: { retry(section) },
+            HeroSection(section: section, pageID: $heroPages[section.id], backdrop: $backdrop, onRetry: { retry(section) },
                         menu: AnyView(widgetMenu(section)))
                 .padding(.bottom, Theme.Spacing.s - metrics.shelfSpacing)
         case .banner(let row):

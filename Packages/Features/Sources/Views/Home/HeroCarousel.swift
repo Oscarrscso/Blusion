@@ -8,6 +8,7 @@ import UIKit
 struct HeroSection: View {
     let section: HomeViewModel.Section
     @Binding var pageID: String?
+    @Binding var backdrop: UIImage?
     let onRetry: () -> Void
     let menu: AnyView
     @Environment(\.layoutMetrics) private var metrics
@@ -29,7 +30,7 @@ struct HeroSection: View {
             HeroPlaceholder()
                 .contextMenu { menu }
         case .loaded(let items) where !items.isEmpty:
-            HeroCarousel(items: items, pageID: $pageID, menu: menu)
+            HeroCarousel(items: items, pageID: $pageID, backdrop: $backdrop, menu: menu)
         case .loaded:
             if let issue = section.issue {
                 IssueMessage(issue: issue)
@@ -53,6 +54,7 @@ struct HeroCarousel: View {
     let items: [MetaPreview]
     /// Home owns the selection so scrolling this lazy section away does not reset it.
     @Binding var pageID: String?
+    @Binding var backdrop: UIImage?
     let menu: AnyView
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
@@ -75,11 +77,9 @@ struct HeroCarousel: View {
     @State private var isHoveringSpotlight = false
     #endif
 
-    /// How many pages ahead of (and behind) the one on screen load their full-quality picture: four in portrait, two in landscape, where the
-    /// pictures are decoded larger and too big to hold more. The nearest page and its neighbour start at once; the rest of the window
-    /// follows. Pages beyond it let go of their picture and show whatever is still cached, else their poster, until a swipe brings them in
-    /// range.
-    static func loadWindow(isLandscape: Bool) -> Int { 0 }
+    /// Keep the neighbouring pictures ready for a swipe, while pages farther away release theirs.
+    static func loadWindow(isLandscape: Bool) -> Int { 1 }
+    static let backdropAnimation = Animation.easeInOut(duration: 1.2)
 
     /// True on a Mac build. The spotlight keeps its landscape form in every window shape there, rather than following the window's aspect.
     static var isMacCatalyst: Bool {
@@ -154,7 +154,8 @@ struct HeroCarousel: View {
                         ForEach(Array(items.enumerated()), id: \.element.identity) { index, item in
                             HeroPage(item: item, artworkHeight: height - captionBelow,
                                      cachedArtwork: ratings.cachedHeroArtwork(for: item),
-                                     cachedCertification: ratings.cachedCertification(for: item), distance: abs(index - currentIndex))
+                                     cachedCertification: ratings.cachedCertification(for: item), distance: abs(index - currentIndex),
+                                     backdrop: $backdrop)
                                 .frame(width: geometry.size.width, height: height)
                                 .clipped()
                                 .tag(Optional(item.identity))
@@ -301,10 +302,14 @@ private struct HeroPage: View {
     let artworkHeight: CGFloat
     /// Pages between this one and the one on screen. Only pages inside `HeroCarousel.loadWindow(isLandscape:)` load their picture.
     let distance: Int
+    @Binding var backdrop: UIImage?
+    @Environment(\.appAppearance) private var appearance
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.loadsVisibleArtwork) private var sectionIsVisible
     @Environment(AppRouter.self) private var router
     @Environment(\.layoutMetrics) private var metrics
     @Environment(\.heroContainerWidth) private var containerWidth
+    @Environment(\.heroContainerHeight) private var containerHeight
     @Environment(\.isPhoneLandscape) private var isPhoneLandscape
     /// The landscape form: a phone turned sideways, or any Mac window.
     private var isLandscape: Bool { isPhoneLandscape || HeroCarousel.isMacCatalyst }
@@ -324,19 +329,19 @@ private struct HeroPage: View {
     @State private var detailsSettled = false
 
     init(item: MetaPreview, artworkHeight: CGFloat, cachedArtwork: TMDbArtwork?, cachedCertification: String?,
-         distance: Int) {
+         distance: Int, backdrop: Binding<UIImage?>) {
         self.distance = distance
         self.item = item
         self.artworkHeight = artworkHeight
+        _backdrop = backdrop
         _heroArtwork = State(initialValue: cachedArtwork)
         _artworkChecked = State(initialValue: cachedArtwork != nil)
         _certification = State(initialValue: cachedCertification)
     }
 
     private var isInWindow: Bool { sectionIsVisible && distance == 0 }
-    /// The page on show keeps its picture while Home is scrolled past the spotlight, so a hard swipe back to the top never meets the
-    /// spotlight while its picture decodes again, black at the top of the screen. Only that one picture is kept.
-    private var keepsPicture: Bool { distance == 0 }
+    /// Keep the selected page and its neighbours ready, even while the showcase is scrolled offscreen.
+    private var keepsPicture: Bool { distance <= HeroCarousel.loadWindow(isLandscape: isLandscape) }
     /// The nearest two pages jump the queue; the next one waits behind them.
     private var loadPriority: TaskPriority { distance <= 1 ? .high : .medium }
 
@@ -355,6 +360,20 @@ private struct HeroPage: View {
     private var pictureSlot: HeroSlot { hero.slot(url: heroURL, maxPixelSize: heroPixelSize, lookupFinished: artworkChecked) }
     private var logoSlot: HeroSlot { hero.slot(url: logoURL, maxPixelSize: HeroLoader.logoPixelSize, lookupFinished: artworkChecked) }
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
+
+    private var backdropRequest: TitleBackdropRequest? {
+        guard appearance.blursBackground, distance == 0, containerWidth > 0, isRevealed,
+              case .ready(let image) = pictureSlot else { return nil }
+        // Use the resting frame so pulling the showcase does not render a new background on every scroll frame.
+        let pageHeight = metrics.spotlightHeight(isLandscape: isLandscape, containerWidth: containerWidth,
+                                                containerHeight: containerHeight, captionBelow: captionBelow)
+        let pictureHeight = pageHeight - captionBelow
+        let height = isLandscape ? pageHeight : TitleHero.pictureHeight(pictureHeight)
+        let bottom = isLandscape ? height : TitleHero.visibleHeight(
+            pictureHeight, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: containerWidth - metrics.contentMargin * 2))
+        return TitleBackdropRequest(image: image, frame: CGSize(width: containerWidth, height: height), visibleBottom: bottom,
+                                    alignsTop: !isLandscape, pageWidth: containerWidth, scale: displayScale)
+    }
 
     /// The metadata line, built by the shared store from the same details as the title page's. Its score is IMDb's own when the dataset on
     /// the device has the title, else the catalog's, as on the title page. Without the store, the item's own line.
@@ -477,8 +496,8 @@ private struct HeroPage: View {
         }
         // No hover highlight: the showcase stays as it is under the pointer, and its page chevrons are its hover feedback.
         .coordinateSpace(name: "hero/\(item.identity)")
-        .task(id: "\(ratings.reviewServicesRevision)|\(isInWindow)") {
-            guard isInWindow else { return }
+        .task(id: "\(ratings.reviewServicesRevision)|\(sectionIsVisible && keepsPicture)") {
+            guard sectionIsVisible && keepsPicture else { return }
             let loaded = await ratings.heroArtwork(for: item)
             guard !Task.isCancelled else { return }
             heroArtwork = loaded
@@ -516,6 +535,12 @@ private struct HeroPage: View {
             hero.release(keeping: heroURL.map { [($0, heroPixelSize)] } ?? [])
             await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
                             logoFallbacks: Array(logoCandidates.dropFirst()))
+        }
+        .task(id: backdropRequest) {
+            guard let request = backdropRequest else { return }
+            let rendered = await Task.detached(priority: .userInitiated) { request.render() }.value
+            guard !Task.isCancelled, let rendered else { return }
+            withAnimation(HeroCarousel.backdropAnimation) { backdrop = rendered }
         }
     }
 
@@ -558,12 +583,7 @@ private struct HeroPage: View {
                     .frame(height: TitleHero.pictureHeight(artworkHeight))
                     .frame(height: visibleHeight, alignment: .top)
                     .clipped()
-                    .overlay(alignment: .bottom) {
-                        // Runs a little past the picture's bottom edge (the picture's height is fractional), so no row of picture shows under it.
-                        BottomFade(length: TitleHero.fadeLength(height: artworkHeight, visible: visibleHeight),
-                                   strength: TitleHero.fadeStrength)
-                            .padding(.bottom, -TitleHero.fadeOverscan)
-                    }
+                    .modifier(PortraitHeroFade(length: TitleHero.fadeLength(height: artworkHeight, visible: visibleHeight)))
                     .allowsHitTesting(false)
             }
         }

@@ -313,7 +313,7 @@ public struct AppearancePreferences: Sendable, Equatable, Codable {
     /// The synopsis opens unfolded.
     var expandsSynopsis = false
     /// The hero picture runs down the whole page as an episode card's still runs under its text, in place of the fade to the page's colour.
-    var blursBackground = false
+    var blursBackground = true
     /// The title page's sections below Play, synopsis and ratings.
     var showsReviews = true
     var showsCast = true

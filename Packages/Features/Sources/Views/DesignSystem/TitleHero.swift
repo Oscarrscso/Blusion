@@ -14,9 +14,8 @@ enum TitleHero {
     static let zoom: CGFloat = 1.15
     /// The length of the bottom fade, as a share of the unzoomed hero height. The fade keeps that length however far the picture runs.
     static let fadeShare = 0.42
-    static let fadeStrength = 1.0
-    /// How far the bottom fade runs past the picture's bottom edge, so no row of picture pixels shows under it while the page moves.
-    static let fadeOverscan: CGFloat = 2
+    /// Finish the fade before the clipped edge, including when the picture ends on a fractional point.
+    static let fadeClearance: CGFloat = 2
     /// The tallest logo, bottom-aligned above the gap to the text.
     static let logoMaxHeight: CGFloat = 150
     /// Cap portrait logos even when an overlay proposes an unconstrained width.
@@ -116,7 +115,7 @@ enum TitleHero {
         return min(min(width, logoMaxWidth) / image.size.width, logoMaxHeight / image.size.height) * image.size.height
     }
 
-    /// How much of the zoomed picture shows: it ends, fully faded to black, half way up the logo (which sits `logoTextGap` above the
+    /// How much of the zoomed picture shows: it ends, fully faded into the page, half way up the logo (which sits `logoTextGap` above the
     /// picture's edge, lowered by `portraitDrop`, and is `logoHeight` tall), so the fade never ends short of the logo or runs behind all of it.
     static func visibleHeight(_ height: CGFloat, logoHeight: CGFloat) -> CGFloat {
         min(pictureHeight(height), max(1, height + portraitDrop - logoTextGap - logoHeight / 2))
@@ -124,6 +123,26 @@ enum TitleHero {
 
     /// The bottom fade's share of the visible picture, `fadeShare` of the hero height.
     static func fadeLength(height: CGFloat, visible: CGFloat) -> Double { fadeShare * Double(height / max(visible, 1)) }
+}
+
+/// The shared portrait artwork's fade into the page beneath it.
+struct PortraitHeroFade: ViewModifier {
+    let length: Double
+
+    func body(content: Content) -> some View {
+        let start = max(0, 1 - length)
+        content.mask {
+            LinearGradient(stops: [
+                .init(color: .white, location: start),
+                .init(color: .white.opacity(0.90), location: start + (1 - start) * 0.18),
+                .init(color: .white.opacity(0.68), location: start + (1 - start) * 0.40),
+                .init(color: .white.opacity(0.38), location: start + (1 - start) * 0.65),
+                .init(color: .white.opacity(0.12), location: start + (1 - start) * 0.85),
+                .init(color: .clear, location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            .padding(.bottom, TitleHero.fadeClearance)
+        }
+    }
 }
 
 /// The settle as a modifier, so its keyframes are built in a plain type rather than in a generic `View` extension (see `View.heroSettle`).

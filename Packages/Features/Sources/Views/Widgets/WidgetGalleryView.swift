@@ -207,7 +207,7 @@ struct WidgetGalleryView: View {
                 ForEach(GallerySamples.items) { MediaCard(item: $0) }
             }
         case .spotlight:
-            HeroCarousel(items: GallerySamples.items, pageID: $spotlightPage, menu: AnyView(EmptyView()))
+            HeroCarousel(items: GallerySamples.items, pageID: $spotlightPage, backdrop: .constant(nil), menu: AnyView(EmptyView()))
         case .banner:
             HeroBanner(items: GallerySamples.items, row: RowConfiguration(source: .unsupported(kind: "")))
         default:

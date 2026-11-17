@@ -498,9 +498,11 @@ struct BottomFade: View {
                 Image(uiImage: backdrop)
                     .resizable()
                     .mask { gradient(.black) }
+                    .id(ObjectIdentifier(backdrop))
                     .transition(.opacity)
             } else {
                 gradient(appearance.pageBackground)
+                    .transition(.opacity)
             }
         }
         .allowsHitTesting(false)
