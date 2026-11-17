@@ -323,6 +323,7 @@ private struct HeroPage: View {
     /// Set once the TMDb artwork lookup has finished, so a title with no logo can fall back to its name. Starts set when the artwork is known.
     @State private var artworkChecked: Bool
     @State private var hero = HeroLoader()
+    @State private var backdropPlaceholder: UIImage?
     /// The age rating in the metadata line. Starts from the one already looked up this session.
     @State private var certification: String?
     /// Set once the title's details have answered, or could not, so the grey lines give way to the metadata line and the synopsis.
@@ -362,8 +363,15 @@ private struct HeroPage: View {
     private var isRevealed: Bool { HeroLoader.isRevealed(pictureSlot, logoSlot) }
 
     private var backdropRequest: TitleBackdropRequest? {
-        guard appearance.blursBackground, distance == 0, containerWidth > 0, isRevealed,
-              case .ready(let image) = pictureSlot else { return nil }
+        guard appearance.blursBackground, distance == 0, containerWidth > 0 else { return nil }
+        let image: UIImage
+        if case .ready(let picture) = pictureSlot {
+            image = picture
+        } else if let placeholder = backdropPlaceholder {
+            image = placeholder
+        } else {
+            return nil
+        }
         // Use the resting frame so pulling the showcase does not render a new background on every scroll frame.
         let pageHeight = metrics.spotlightHeight(isLandscape: isLandscape, containerWidth: containerWidth,
                                                 containerHeight: containerHeight, captionBelow: captionBelow)
@@ -535,6 +543,19 @@ private struct HeroPage: View {
             hero.release(keeping: heroURL.map { [($0, heroPixelSize)] } ?? [])
             await hero.load(priority: loadPriority, picture: heroURL, pictureSize: heroPixelSize, logo: logoURL, logoSize: HeroLoader.logoPixelSize,
                             logoFallbacks: Array(logoCandidates.dropFirst()))
+        }
+        .task(id: "backdrop-placeholder|\(keepsPicture)") {
+            guard keepsPicture, let url = HeroPicture.standInURL(for: item, backdropOnly: HeroCarousel.isMacCatalyst) else {
+                backdropPlaceholder = nil
+                return
+            }
+            if let cached = ImagePipeline.shared.cachedImageAtAnySize(for: url) {
+                backdropPlaceholder = cached
+            } else {
+                let image = try? await ImagePipeline.shared.image(for: url, maxPixelSize: TitleHero.placeholderPixelSize, priority: loadPriority)
+                guard !Task.isCancelled else { return }
+                backdropPlaceholder = image
+            }
         }
         .task(id: backdropRequest) {
             guard let request = backdropRequest else { return }
