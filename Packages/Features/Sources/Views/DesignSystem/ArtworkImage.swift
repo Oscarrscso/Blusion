@@ -418,13 +418,15 @@ enum ExtendedArtworkRenderer {
     /// A thin strip from the visible picture's bottom or leading edge, with the card's blur and a dark charcoal veil.
     /// Bottom colours run down the page; leading-edge colours run across it, retaining their top-to-bottom order.
     static func backdrop(_ request: TitleBackdropRequest) -> UIImage? {
-        let scale = request.scale
+        // A blurred background needs few pixels; cap the new two-dimensional rendering work.
+        let scale = min(request.scale, 320 / max(1, request.pageWidth))
         let pageWidth = (request.pageWidth * scale).rounded()
         let frameWidth = request.frame.width * scale, frameHeight = request.frame.height * scale
         guard pageWidth >= 1, frameWidth >= 1, frameHeight >= 1,
               var picture = request.image.cgImage.map({ CIImage(cgImage: $0) }) ?? request.image.ciImage else { return nil }
         picture = picture.oriented(CGImagePropertyOrientation(request.image.imageOrientation))
         picture = picture.transformed(by: CGAffineTransform(translationX: -picture.extent.minX, y: -picture.extent.minY))
+        picture = PosterBackdropColours.repair(picture, source: request.image, context: context)
         let imageWidth = picture.extent.width, imageHeight = picture.extent.height
         guard imageWidth >= 1, imageHeight >= 1 else { return nil }
 
@@ -442,7 +444,8 @@ enum ExtendedArtworkRenderer {
                 .intersection(picture.extent)
         guard bandRect.width >= 1, bandRect.height >= 1 else { return nil }
 
-        let stripSize = request.samplesLeadingEdge ? CGSize(width: 1, height: bottom) : CGSize(width: frameWidth, height: 1)
+        let stripSize = request.samplesLeadingEdge ? CGSize(width: 1, height: bottom)
+            : CGSize(width: frameWidth, height: max(1, bottom * band))
         let scaler = CIFilter.lanczosScaleTransform()
         scaler.inputImage = picture.cropped(to: bandRect)
             .transformed(by: CGAffineTransform(translationX: -bandRect.minX, y: -bandRect.minY))
@@ -451,13 +454,27 @@ enum ExtendedArtworkRenderer {
         scaler.aspectRatio = Float(stripSize.width / bandRect.width * bandRect.height / stripSize.height)
         guard let strip = scaler.outputImage?.cropped(to: CGRect(origin: .zero, size: stripSize)) else { return nil }
 
-        let blur = CIFilter.gaussianBlur()
-        blur.inputImage = strip
-            .transformed(by: CGAffineTransform(translationX: request.samplesLeadingEdge ? 0 : pageWidth + request.trailingOverhang * scale - frameWidth, y: 0))
-            .clampedToExtent()
+        let height = request.samplesLeadingEdge ? bottom : frameHeight
+        let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: height)
+        let canvas: CIImage
+        if request.samplesLeadingEdge {
+            canvas = strip.clampedToExtent()
+        } else {
+            // Mirror the edge band as the card does: colours continue away from the edge instead of flattening into one row.
+            canvas = strip.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -height / stripSize.height,
+                                                            tx: pageWidth + request.trailingOverhang * scale - frameWidth, ty: height))
+                .clampedToExtent()
+        }
+        let spread = CIFilter.smoothLinearGradient()
+        spread.point0 = request.samplesLeadingEdge ? CGPoint(x: pageWidth, y: 0) : CGPoint(x: 0, y: height)
+        spread.point1 = .zero
+        spread.color0 = CIColor(red: 0, green: 0, blue: 0)
+        spread.color1 = CIColor(red: 1, green: 1, blue: 1)
+        let blur = CIFilter.maskedVariableBlur()
+        blur.inputImage = canvas
+        blur.mask = spread.outputImage
         blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
 
-        let bounds = CGRect(x: 0, y: 0, width: request.samplesLeadingEdge ? 1 : pageWidth, height: stripSize.height)
         let veil = CIImage(color: CIColor(red: backdropVeilGrey, green: backdropVeilGrey, blue: backdropVeilGrey, alpha: backdropVeilAmount))
             .cropped(to: bounds)
         guard let blurred = blur.outputImage,
