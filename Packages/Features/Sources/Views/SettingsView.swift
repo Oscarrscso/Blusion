@@ -515,22 +515,30 @@ struct SettingsRow: View {
     let title: String
     /// What the area is set to now. A row with no state of its own to report has none.
     var summary: String?
-    let systemImage: String
+    var systemImage: String?
 
     var body: some View {
-        Label {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                if let summary {
-                    Text(summary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+        Group {
+            if let systemImage {
+                Label { text } icon: { Image(systemName: systemImage) }
+            } else {
+                text
             }
-        } icon: {
-            Image(systemName: systemImage)
         }
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+            if let summary {
+                Text(summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -577,12 +585,14 @@ struct SettingsList<Content: View>: View {
                 List(selection: selection) {
                     content()
                         .modifier(SettingsListHover())
+                        .settingsRowBounds()
                         .listRowSeparator(.hidden)
                 }
             } else {
                 List {
                     content()
                         .modifier(SettingsListHover())
+                        .settingsRowBounds()
                         .listRowBackground(SettingsRowBackground())
                         .listRowSeparator(.hidden)
                 }
@@ -591,6 +601,7 @@ struct SettingsList<Content: View>: View {
         .listStyle(.grouped)
         .contentMargins(.horizontal, metrics.pageMargin, for: .scrollContent)
         .listRowSpacing(4)
+        .settingsLayoutDiagnostics()
     }
 }
 

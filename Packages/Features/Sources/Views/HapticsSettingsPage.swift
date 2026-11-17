@@ -282,6 +282,7 @@ private struct HapticPlacePage: View {
                 ShelfScroll(margin: 0, spacing: Theme.Spacing.s, lazy: false) {
                     ForEach(1...10, id: \.self) { number in
                         Text("Poster \(number)")
+                            // swiftlint:disable:next settings_fixed_row_width -- Sample poster in the shelf haptics preview, not a row width.
                             .frame(width: 100, height: 120)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 12 * metrics.cornerScale(for: .settingsRows)))
                             .reportsShelfEdge(id: number)

@@ -62,24 +62,10 @@ struct AppearanceTextPage: View {
             }
             ForEach(AppearancePreferences.TextRole.allCases) { role in
                 Section {
-                    DisclosureGroup(isExpanded: Binding(get: { expandedRoles.contains(role) }, set: { expanded in
+                    SettingsDisclosureRow(title: role.label, summary: controls.current.textRoleSummary(role),
+                                          isExpanded: Binding(get: { expandedRoles.contains(role) }, set: { expanded in
                         if expanded { expandedRoles.insert(role) } else { expandedRoles.remove(role) }
-                    })) {
-                        EmptyView()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(role.label)
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                            Text(controls.current.textRoleSummary(role))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .padding(.vertical, 2)
-                        .settingsHover()
-                    }
+                    }))
                     .accessibilityIdentifier("settings.appearance.text.\(role.rawValue)")
                     if expandedRoles.contains(role) {
                         controls.preview([sample(for: role)], verticalPadding: Theme.Spacing.m)
@@ -298,6 +284,7 @@ struct AppearanceTitlePagesPage: View {
                                 controls.choice(keyPath).wrappedValue.toggle()
                             } label: {
                                 Image(systemName: visible ? "eye" : "eye.slash")
+                                    // swiftlint:disable:next settings_fixed_row_width -- Icon hit target, not a row width.
                                     .frame(width: 44, height: 44)
                                     .contentShape(Rectangle())
                             }

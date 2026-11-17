@@ -539,6 +539,7 @@ struct AcknowledgementsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         if item.name == "TMDB" {
                             Image("ReviewTMDB").resizable().scaledToFit()
+                                // swiftlint:disable:next settings_fixed_row_width -- Acknowledgement logo, not a row width.
                                 .frame(width: 80, height: 35)
                                 .accessibilityLabel("TMDB")
                         }
