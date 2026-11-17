@@ -195,6 +195,7 @@ public struct RootTabView: View {
         .background { appearance.pageBackground.ignoresSafeArea() }
         .scrollEdgeEffectHidden(isPhoneLandscape || Self.isMacCatalyst, for: .top)
         .scrollEdgeEffectHidden(isPhoneInLandscape, for: .bottom)
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
         .pageTopBar(hidden: isPhoneLandscape)
         .tabBarMinimizeBehavior(Self.isMacCatalyst || isPhoneInLandscape || !appearance.minimisesTabBar ? .never : .onScrollDown)
         .pageTabBar(hidden: isPhoneInLandscape)
