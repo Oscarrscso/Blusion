@@ -199,8 +199,9 @@ final class AppEnvironment {
                                               hardwareAV1: AVHardware.decodesAV1InHardware, persistent: !uiTesting)
         DownloadBackgroundEvents.manager = downloadManager
         Task { await downloadManager.start() }
+        let indexedLibrary: any LibraryStore = uiTesting ? library : SpotlightIndexingLibrary(library)
         let services = AppServices(registry: registry, client: client, browse: browse, streams: streamService, subtitles: subtitleService,
-            settings: settings, progress: progress, library: library,
+            settings: settings, progress: progress, library: indexedLibrary,
                                    makeEngine: makeEngine, preloadStream: preloadStream, fallbackEngineLinked: true, aetherEngineLinked: true,
                                    decodesAV1InHardware: AVHardware.decodesAV1InHardware,
                                    widgets: widgets, widgetContent: widgetContent,

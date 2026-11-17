@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftUI
 import Features
 import StremioKit
@@ -134,6 +135,10 @@ struct RootView: View {
             await reloadReviewServices()
             await environment.seedDefaultAddons()
             isReady = true
+            if !environment.isUITesting {
+                let saved = await environment.services.library.all()
+                await LibrarySpotlightIndexer.sync(saved)
+            }
             Task { await hideSplash() }
             refreshIMDbDataset()
             #if targetEnvironment(macCatalyst)
@@ -184,6 +189,11 @@ struct RootView: View {
             }
         }
         // The player app calls back here with where the viewer stopped (blusion://x-callback-url/handoff/...).
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                  let title = LibrarySpotlightCatalog.detail(for: identifier) else { return }
+            Task { await AppShortcutInbox.shared.submit(.openDetail(type: title.type, contentID: title.contentID)) }
+        }
         .onOpenURL { url in
             if let link = AddonLink.installText(from: url) {
                 addonLink = link

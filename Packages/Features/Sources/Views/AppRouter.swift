@@ -228,6 +228,12 @@ final class AppRouter {
         tab = .home
     }
 
+    /// A title opened from Spotlight, on Home. Detail loads the rest of the metadata.
+    func showDetail(type: String, contentID: String) {
+        homePath = NavigationPath([MetaPreview(id: contentID, type: type)])
+        tab = .home
+    }
+
     /// The Settings tab, on its first screen.
     func showSettings() { showSettings(.settings) }
 

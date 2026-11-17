@@ -388,6 +388,8 @@ public struct RootTabView: View {
                 router.showLibraryRoot()
             case .openBlusionTV:
                 router.showBlusionTV()
+            case .openDetail(let type, let contentID):
+                router.showDetail(type: type, contentID: contentID)
             }
         }
     }
