@@ -353,6 +353,9 @@ enum ExtendedArtworkRenderer {
     /// A darker charcoal veil for title-page poster backdrops so bright posters cannot wash out `Theme.metaText`, `Theme.faintText`,
     /// `Theme.surface`, and section dividers, while saturated poster colours remain recognizable.
     private static let backdropVeilAmount = 0.75, backdropVeilGrey = 0.06
+    /// The widest blur on a page's background, as a share of its width: far enough from the picture's edge for no column of colour to
+    /// stand apart, while colours still stay on their own side.
+    private static let backdropWidestBlur = 0.25
 
     static func render(_ image: UIImage, size: CGSize, scale: CGFloat) -> UIImage? {
         let width = (size.width * scale).rounded(), height = (size.height * scale).rounded()
@@ -416,7 +419,8 @@ enum ExtendedArtworkRenderer {
     }
 
     /// A thin strip from the visible picture's bottom or leading edge, with the card's blur and a dark charcoal veil.
-    /// Bottom colours run down the page; leading-edge colours run across it, retaining their top-to-bottom order.
+    /// Bottom colours run down the page from where the picture ends, fanning out as they go; leading-edge colours run across it,
+    /// retaining their top-to-bottom order.
     static func backdrop(_ request: TitleBackdropRequest) -> UIImage? {
         // A blurred background needs few pixels; cap the new two-dimensional rendering work.
         let scale = min(request.scale, 320 / max(1, request.pageWidth))
@@ -454,26 +458,55 @@ enum ExtendedArtworkRenderer {
         scaler.aspectRatio = Float(stripSize.width / bandRect.width * bandRect.height / stripSize.height)
         guard let strip = scaler.outputImage?.cropped(to: CGRect(origin: .zero, size: stripSize)) else { return nil }
 
-        let height = request.samplesLeadingEdge ? bottom : frameHeight
-        let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: height)
-        let canvas: CIImage
-        if request.samplesLeadingEdge {
-            canvas = strip.clampedToExtent()
-        } else {
-            // Mirror the edge band as the card does: colours continue away from the edge instead of flattening into one row.
-            canvas = strip.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -height / stripSize.height,
-                                                            tx: pageWidth + request.trailingOverhang * scale - frameWidth, ty: height))
-                .clampedToExtent()
-        }
-        let spread = CIFilter.smoothLinearGradient()
-        spread.point0 = request.samplesLeadingEdge ? CGPoint(x: pageWidth, y: 0) : CGPoint(x: 0, y: height)
-        spread.point1 = .zero
-        spread.color0 = CIColor(red: 0, green: 0, blue: 0)
-        spread.color1 = CIColor(red: 1, green: 1, blue: 1)
         let blur = CIFilter.maskedVariableBlur()
-        blur.inputImage = canvas
-        blur.mask = spread.outputImage
-        blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
+        let height: CGFloat
+        if request.samplesLeadingEdge {
+            height = bottom
+            let spread = CIFilter.smoothLinearGradient()
+            spread.point0 = CGPoint(x: pageWidth, y: 0)
+            spread.point1 = .zero
+            spread.color0 = CIColor(red: 0, green: 0, blue: 0)
+            spread.color1 = CIColor(red: 1, green: 1, blue: 1)
+            blur.inputImage = strip.clampedToExtent()
+            blur.mask = spread.outputImage
+            blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
+        } else {
+            // Laid out as the page shows it at rest, so the band continues from where the picture ends on screen. Without the page's
+            // height, the background starts at the picture's edge. Core Image counts up from the bottom.
+            height = request.pageHeight > 0 ? max(1, (request.pageHeight * scale).rounded()) : frameHeight
+            let edge = request.pageHeight > 0 ? max(0, height - bottom) : height
+            let shift = pageWidth + request.trailingOverhang * scale - frameWidth
+            // The card's extension: the edge band mirrored and stretched below the edge, so its colours meet the picture without a seam
+            // and each stays under its own column. Above the edge, where the picture scrolls away, the band runs on upright.
+            var canvas = strip.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: -edge / stripSize.height, tx: shift, ty: edge))
+                .cropped(to: CGRect(x: shift, y: 0, width: frameWidth, height: edge))
+            if height - edge >= 1 {
+                canvas = strip.transformed(by: CGAffineTransform(a: 1, b: 0, c: 0, d: (height - edge) / stripSize.height, tx: shift, ty: edge))
+                    .cropped(to: CGRect(x: shift, y: edge, width: frameWidth, height: height - edge))
+                    .composited(over: canvas)
+            }
+            // The card's blur, fanning out from the edge: as blurred at the edge as the card's is at its seam, then widening at the
+            // card's rate for as far as the page runs, up to `backdropWidestBlur`.
+            let still = pageWidth * 9 / 16
+            let seam = (1 - blurStart) / (blurEnd - blurStart)
+            let least = still * blurRadius * seam * seam * (3 - 2 * seam)
+            let widening = (still * blurRadius - least) / (still * (blurEnd - 1))
+            let most = max(least, pageWidth * backdropWidestBlur)
+            let reach = max(1, (most - least) / widening)
+            let fan = [-1.0, 1.0].compactMap { direction -> CIImage? in
+                let ramp = CIFilter.linearGradient()
+                ramp.point0 = CGPoint(x: 0, y: edge)
+                ramp.point1 = CGPoint(x: 0, y: edge + direction * reach)
+                ramp.color0 = CIColor(red: least / most, green: least / most, blue: least / most)
+                ramp.color1 = CIColor(red: 1, green: 1, blue: 1)
+                return ramp.outputImage?.cropped(to: direction > 0 ? CGRect(x: 0, y: edge, width: pageWidth, height: height - edge)
+                                                     : CGRect(x: 0, y: 0, width: pageWidth, height: edge))
+            }
+            blur.inputImage = canvas.clampedToExtent()
+            blur.mask = fan.reduce(CIImage.empty()) { $1.composited(over: $0) }
+            blur.radius = Float(most)
+        }
+        let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: height)
 
         let veil = CIImage(color: CIColor(red: backdropVeilGrey, green: backdropVeilGrey, blue: backdropVeilGrey, alpha: backdropVeilAmount))
             .cropped(to: bounds)
@@ -497,12 +530,14 @@ struct TitleBackdropRequest: Equatable, Sendable {
     /// How far the frame's trailing edge runs past the page's.
     var trailingOverhang: CGFloat = 0
     var pageWidth: CGFloat = 0
+    /// The height of the page the background fills, which it is drawn at so the picture's edge falls where the page shows it.
+    var pageHeight: CGFloat = 0
     var scale: CGFloat = 1
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.image === rhs.image && lhs.frame == rhs.frame && lhs.visibleBottom == rhs.visibleBottom && lhs.alignsTop == rhs.alignsTop
             && lhs.samplesLeadingEdge == rhs.samplesLeadingEdge && lhs.trailingOverhang == rhs.trailingOverhang
-            && lhs.pageWidth == rhs.pageWidth && lhs.scale == rhs.scale
+            && lhs.pageWidth == rhs.pageWidth && lhs.pageHeight == rhs.pageHeight && lhs.scale == rhs.scale
     }
 
     func render() -> UIImage? { ExtendedArtworkRenderer.backdrop(self) }

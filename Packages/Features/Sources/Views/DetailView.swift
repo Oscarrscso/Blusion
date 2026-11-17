@@ -55,9 +55,10 @@ struct DetailView: View {
     /// Loads the hero picture and logo together, and reveals them together. Starts with what the spotlight showed, when it opened this title.
     @State private var hero: HeroLoader
     @State private var fullResolutionHero: (url: URL, image: UIImage)?
-    /// Appearance's Blurred background, once rendered from the hero picture, and the width the page draws it at.
+    /// Appearance's Blurred background, once rendered from the hero picture, and the size the page draws it at.
     @State private var backdrop: UIImage?
     @State private var backdropWidth: CGFloat = 0
+    @State private var backdropHeight: CGFloat = 0
     @Environment(\.displayScale) private var displayScale
     private var globalHeroPosters: Bool { appearance.usesHeroPosters }
     private let heroPostersOverride: Bool?
@@ -701,7 +702,10 @@ struct DetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { backdropWidth = $0 }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+            backdropWidth = size.width
+            backdropHeight = size.height
+        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -731,6 +735,7 @@ struct DetailView: View {
         }
         #endif
         request.pageWidth = backdropWidth
+        request.pageHeight = backdropHeight
         request.scale = displayScale
         return request
     }

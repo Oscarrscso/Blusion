@@ -380,7 +380,8 @@ private struct HeroPage: View {
         let bottom = isLandscape ? height : TitleHero.visibleHeight(
             pictureHeight, logoHeight: TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: containerWidth - metrics.contentMargin * 2))
         return TitleBackdropRequest(image: image, frame: CGSize(width: containerWidth, height: height), visibleBottom: bottom,
-                                    alignsTop: !isLandscape, pageWidth: containerWidth, scale: displayScale)
+                                    alignsTop: !isLandscape, pageWidth: containerWidth, pageHeight: containerHeight,
+                                    scale: displayScale)
     }
 
     /// The metadata line, built by the shared store from the same details as the title page's. Its score is IMDb's own when the dataset on
