@@ -163,9 +163,9 @@ struct DescribedSearchService: Sendable {
             guard !Task.isCancelled else { return }
             await onUpdate(AISearchUpdate(items: output, stage: stage, issue: issue, plan: reported))
         }
-        func publish(_ items: [MetaPreview], stage: AISearchUpdate.Stage) async {
+        func publish(_ items: [MetaPreview], stage: AISearchUpdate.Stage, filters suppliedFilters: DescribedSearch? = nil) async {
             guard !Task.isCancelled else { return }
-            let filters = reported?.filters ?? factFilters
+            let filters = suppliedFilters ?? reported?.filters ?? factFilters
             let checked = filters.genres.isEmpty && filters.excludedGenres.isEmpty ? items : await resolveGenres(items)
             guard !Task.isCancelled else { return }
             for item in checked where Self.fits(item, filters: filters) && Self.fitsGenres(item, filters: filters,
@@ -413,7 +413,8 @@ struct DescribedSearchService: Sendable {
                     : plan.titleSequelsOnly ? matches.filter { Self.isNamedOrSequel($0, name) } : matches
                 if plan.titlesFromWords {
                     // The words' own filters ("Scary Movie" reads horror, "1917" a year) never hide the title they name.
-                    await publish(found.filter { !excluded.contains($0.identity) && considered.insert($0.identity).inserted }, stage: .titles)
+                    await publish(found.filter { !excluded.contains($0.identity) && considered.insert($0.identity).inserted },
+                                  stage: .titles, filters: DescribedSearch())
                 } else {
                     await consume(found.map { AISearchCandidate(item: $0, evidence: "Database title search: \(name)") }, stage: .titles)
                 }

@@ -167,7 +167,9 @@ struct ReviewSummaryPipeline: ReviewSummarizing {
                 let sentence: String
                 let score: Int
             }
+            var seen = Set<String>()
             let candidates: [Candidate] = sentences.enumerated().compactMap { index, sentence in
+                guard seen.insert(sentence).inserted else { return nil }
                 let complete = sentence + "."
                 // Oversized sentences are skipped, not truncated at arbitrary character positions.
                 guard complete.utf8.count <= min(maximumBytes, 380), sentence.split(whereSeparator: \.isWhitespace).count >= 2 else {

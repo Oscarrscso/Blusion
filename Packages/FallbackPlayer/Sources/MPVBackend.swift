@@ -508,10 +508,9 @@ public final class MPVBackend: FallbackBackend {
         set("video-scale-y", "1")
         set("pause", "yes")
         set("start", startPosition > 0 ? String(startPosition) : "0")
-        // List options accept `%length%value` entries so commas inside header values survive.
+        // mpv string lists use backslash escaping, including commas inside header values.
         let fields = headers.map { name, value -> String in
-            let entry = "\(name): \(value)"
-            return "%\(entry.utf8.count)%\(entry)"
+            "\(name): \(value)".replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: ",", with: "\\,")
         }.joined(separator: ",")
         set("http-header-fields", fields)
         command(["loadfile", url.absoluteString, "replace"])

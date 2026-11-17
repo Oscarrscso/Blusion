@@ -161,12 +161,10 @@ struct RootView: View {
             let sync = environment.services.traktSync
             if phase == .background {
                 // Playback positions wait before being sent; leaving the app would otherwise strand them until it is next opened.
-                let application = UIApplication.shared
-                var task = UIBackgroundTaskIdentifier.invalid
-                task = application.beginBackgroundTask { application.endBackgroundTask(task) }
+                let task = BackgroundFlushTask()
                 Task {
                     await sync.flush()
-                    application.endBackgroundTask(task)
+                    task.end()
                 }
             } else if phase == .active {
                 Task { await sync.resume() }
@@ -210,6 +208,21 @@ struct RootView: View {
             await Task.yield()
             if await PlaybackHandoffCenter(services: environment.services).handle(url) { userStateRevision += 1 }
         }
+    }
+}
+
+@MainActor
+private final class BackgroundFlushTask {
+    private var identifier = UIBackgroundTaskIdentifier.invalid
+
+    init() {
+        identifier = UIApplication.shared.beginBackgroundTask { [weak self] in self?.end() }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }
 

@@ -164,6 +164,10 @@ public enum PlaybackPolicy {
         let known = sniffed ?? ContainerSniffer.container(url: url, filename: stream.behaviorHints.filename)
         if quality.videoIsUndecodable { return .unsupported(known) }
         if let known {
+            // AVFoundation cannot consume header-protected HLS segments through the custom resource loader.
+            if known == .hls, !(stream.behaviorHints.proxyHeaders?.request ?? [:]).isEmpty {
+                return fallback(url, .container(known), known: known, config: config)
+            }
             guard known.isNativelyPlayable else { return fallback(url, .container(known), known: known, config: config) }
             if quality.audioNeedsFallbackEngine { return fallback(url, .audioCodec, known: known, config: config) }
             // Without the fallback engine AVPlayer still gets the try, as it did before.
