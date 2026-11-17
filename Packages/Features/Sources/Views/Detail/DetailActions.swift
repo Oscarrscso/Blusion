@@ -247,7 +247,7 @@ struct DetailActions: View {
         return NativeDownloadButton(manager: manager, item: item,
                                     isLoading: request.map { manager?.loadingRequests.contains($0.identity) == true } ?? false,
                                     isAvailable: request != nil && (!hasNoStreams || item != nil),
-                                    glass: .regular.interactive(), progressColour: playColour ?? .accentColor) {
+                                    glass: CircleActionButton.glass, progressColour: playColour ?? .accentColor) {
             guard let request else { return }
             Task { await model.download(request) }
         }

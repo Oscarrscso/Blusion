@@ -356,6 +356,9 @@ struct CircleActionButton: View {
     #else
     static let diameter: CGFloat = 50
     #endif
+    /// The glass of the title page's round actions and Download: a neutral dark tint, so they stay readable over bright blurred posters
+    /// (#93). It is not a Play colour, so it takes no artwork tint.
+    static let glass: Glass = .regular.interactive().tint(.black.opacity(0.32))
 
     init(title: String, systemImage: String, isOn: Bool = false, onTitle: String? = nil, onSystemImage: String? = nil,
          quietRevision: Int = 0, onColour: Color? = nil, exactSize: Bool = false, action: @escaping () -> Void, isLoading: Bool = false) {
@@ -421,9 +424,9 @@ private struct CircleActionSizing: ViewModifier {
 
     func body(content: Content) -> some View {
         if exact {
-            content.buttonStyle(FixedGlassButtonStyle())
+            content.buttonStyle(FixedGlassButtonStyle(glass: CircleActionButton.glass))
         } else {
-            content.glassCircleButton()
+            content.glassCircleButton(glass: CircleActionButton.glass)
                 .frame(width: CircleActionButton.diameter, height: CircleActionButton.diameter)
         }
     }

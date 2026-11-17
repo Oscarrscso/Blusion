@@ -162,7 +162,7 @@ private struct PlayRowSample: View {
             }
             .buttonStyle(.titlePlay(colour: Samples.playColour))
         } circles: {
-            NativeDownloadButton(manager: nil, item: nil, glass: .regular.interactive(),
+            NativeDownloadButton(manager: nil, item: nil, glass: CircleActionButton.glass,
                                  progressColour: Samples.playColour ?? .accentColor) {}
             CircleActionButton(title: "Save", systemImage: "bookmark", onColour: Samples.playColour, exactSize: true) {}
                 .environment(\.showsHover, lightsOne)
