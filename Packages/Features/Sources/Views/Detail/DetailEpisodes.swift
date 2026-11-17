@@ -132,10 +132,10 @@ struct DetailEpisodes: View {
     }
 
     /// The season name with its chevron. Choosing opens the list of seasons, and the mark-as-watched action for the selected one.
-    /// On Mac the control is as wide as Cast: half a cast card. On iPhone and iPad it sizes to its label.
+    /// The Season control follows half the current episode card width on every platform.
     private var seasonMenu: some View {
         let shape = RoundedRectangle(cornerRadius: Self.secondaryControlHeight / 2 * metrics.circularButtonScale(for: .actionButtons), style: .continuous)
-        let width = macSeasonControlWidth
+        let width = episodeWidth(pageWidth: pageWidth) / 2
         return Menu {
             ForEach(model.seasons, id: \.self) { season in
                 Button(season == 0 ? "Specials" : "Season \(season)") {
@@ -176,16 +176,6 @@ struct DetailEpisodes: View {
         .buttonBorderShape(.roundedRectangle(radius: Self.secondaryControlHeight / 2 * metrics.circularButtonScale(for: .actionButtons)))
         .frame(width: width, height: Self.secondaryControlHeight)
         .accessibilityIdentifier("detail.seasonPicker")
-    }
-
-    /// On Mac, the Season control's width: the same half cast card as the Cast control. Nil on iPhone and iPad, so the control keeps
-    /// the width of its label. Nil too when the page is too narrow for a card.
-    private var macSeasonControlWidth: CGFloat? {
-        guard CastCardLayout.usesHalfCardControl else { return nil }
-        let card = CastCardLayout.shelfCardWidth(pageWidth: pageWidth, margin: contentMargin,
-                                                  spacing: metrics.cardSpacing, maximum: metrics.posterWidth)
-        let width = CastCardLayout.controlWidth(shelfCardWidth: card, halfCard: true)
-        return width > 0 ? width : nil
     }
 
     /// The space between Shuffle and the width toggle. With an episode picked, a tap there names the episode Shuffle plays next, very
