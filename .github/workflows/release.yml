@@ -1,14 +1,12 @@
 name: Publish alpha release
 on:
-  push:
-    branches: [main]
   schedule:
-    # After the 02:23 UTC public sync, so the newest v.* release already exists.
+    # After the 02:23 UTC public sync, so main has the newest source.
     - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       rebuild:
-        description: Replace Blusion.ipa on the newest release
+        description: Build even when main has no new commit since the last release
         type: boolean
         default: false
 permissions:
@@ -17,134 +15,86 @@ concurrency:
   group: publish-alpha-release
   cancel-in-progress: false
 jobs:
-  release:
-    if: github.event_name != 'schedule' && github.repository == 'Oscarrscso/Blusion' && github.ref == 'refs/heads/main'
+  select:
+    if: github.repository == 'Oscarrscso/Blusion' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      build: ${{ steps.pick.outputs.build }}
+      create: ${{ steps.pick.outputs.create }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Prepare version and public change summary
+      - name: Decide whether this commit needs a release
+        id: pick
+        env:
+          # Boolean inputs exist only on workflow_dispatch. A schedule run leaves this false.
+          REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild }}
         run: |
           python3 - <<'PY'
-          from collections import Counter
-          from pathlib import Path
           import os
           import re
           import subprocess
+          from pathlib import Path
 
           def git(*args):
               return subprocess.check_output(["git", *args], text=True).strip()
 
-          version = re.search(r" Blusion (v\.[0-9]+a) </h1>", Path("README.md").read_text()).group(1)
-          with open(os.environ["GITHUB_ENV"], "a") as output:
-              output.write(f"VERSION={version}\n")
-          previous = subprocess.run(["git", "describe", "--tags", "--match", "v.*", "--abbrev=0", "HEAD^"], capture_output=True, text=True)
-          baseline = previous.stdout.strip() if previous.returncode == 0 else git("hash-object", "-t", "tree", "/dev/null")
-          changes = git("diff", "--name-only", baseline, "HEAD").splitlines()
-          groups = Counter()
-          for path in changes:
-              parts = path.split("/")
-              if path.startswith("Packages/Features/Sources/") and len(parts) > 3:
-                  group = "App interface" if parts[3] == "Views" else parts[3]
-              elif path.startswith("Packages/"):
-                  group = {"StremioKit": "Metadata and addons", "PlayerKit": "Playback", "AetherPlayer": "Playback", "FallbackPlayer": "Playback", "PlaybackGeometry": "Playback", "Persistence": "Saved data"}.get(parts[1], parts[1])
-              else:
-                  group = {"App": "App startup and assets", "scripts": "Build tools", "Config": "Build configuration", "project.yml": "Build configuration", ".github": "Release automation", "docs": "Documentation", "README.md": "Documentation"}.get(parts[0], "Repository maintenance")
-              groups[group] += 1
-          notes = [f"Alpha source release **{version}**. The number is the app source commit count at sync time.", "", "### Changes"]
-          notes += [f"- {group}: {count} file{'s' if count != 1 else ''} updated." for group, count in sorted(groups.items())]
-          if previous.returncode == 0:
-              notes += ["", f"[Full changes](https://github.com/{os.environ['GITHUB_REPOSITORY']}/compare/{baseline}...{version})"]
-          notes += [
-              "",
-              "### Install",
-              "",
-              "The nightly build attaches an unsigned iPhone app, `Blusion.ipa`. It is not signed with an Apple Developer certificate. Install it with AltStore, SideStore or Sideloadly, which sign it using your Apple ID.",
-              "",
-              "To build from source, see the [build instructions](https://github.com/Oscarrscso/Blusion#build).",
-          ]
-          Path(os.environ["RUNNER_TEMP"], "release-notes.md").write_text("\n".join(notes) + "\n")
-          PY
-      - name: Publish alpha release once
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $VERSION already exists."
-          else
-            gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --title "$VERSION" --prerelease \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
-          fi
-          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,url
-  select:
-    needs: release
-    if: >-
-      always() &&
-      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
-      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
-      github.repository == 'Oscarrscso/Blusion' &&
-      github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      tag: ${{ steps.pick.outputs.tag }}
-      build: ${{ steps.pick.outputs.build }}
-    steps:
-      - name: Choose the newest release
-        id: pick
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Boolean inputs exist only on workflow_dispatch. A schedule run leaves this false.
-          REBUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          import subprocess
+          readme = Path("README.md").read_text()
+          found = re.search(r" Blusion (v\.[0-9]+a) </h1>", readme)
+          if not found:
+              raise SystemExit("README is missing the v.<count>a version")
+          version = found.group(1)
+          head = git("rev-parse", "HEAD")
 
-          raw = subprocess.check_output([
-              "gh", "api", "--paginate", f"repos/{os.environ['GITHUB_REPOSITORY']}/releases",
-          ], text=True)
-          decoder = json.JSONDecoder()
-          releases = []
-          index = 0
-          while index < len(raw):
-              while index < len(raw) and raw[index].isspace():
-                  index += 1
-              if index >= len(raw):
-                  break
-              page, index = decoder.raw_decode(raw, index)
-              releases.extend(page if isinstance(page, list) else [page])
-          versions = []
-          for release in releases:
-              match = re.fullmatch(r"v\.(\d+)a", release.get("tag_name") or "")
-              if match:
-                  versions.append((int(match.group(1)), release))
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              if not versions:
-                  output.write("build=false\n")
-                  print("No v.*a release; skipping the IPA build")
+          # A tag on this commit means it is already released. Do not use HEAD^:
+          # that would treat the released commit itself as a new commit.
+          previous = subprocess.run(
+              ["git", "describe", "--tags", "--match", "v.*", "--abbrev=0", "HEAD"],
+              capture_output=True, text=True,
+          )
+          if previous.returncode != 0:
+              changed = True
+              print("No previous v.* release")
+          else:
+              baseline = previous.stdout.strip()
+              baseline_commit = git("rev-parse", f"{baseline}^{{commit}}")
+              changed = baseline_commit != head
+              if changed:
+                  print(f"New commits since {baseline}")
               else:
-                  release = max(versions, key=lambda item: item[0])[1]
-                  tag = release.get("tag_name")
-                  names = [asset.get("name") for asset in release.get("assets") or []]
-                  has_ipa = "Blusion.ipa" in names
-                  rebuild = os.environ.get("REBUILD") == "true"
-                  build = "true" if rebuild or not has_ipa else "false"
-                  output.write(f"tag={tag}\nbuild={build}\n")
-                  if build == "true":
-                      print(f"Will build Blusion.ipa for {tag}" + (" (replacing the existing asset)" if has_ipa else ""))
-                  else:
-                      print(f"{tag} already has Blusion.ipa; skipping")
+                  print(f"No new commit since {baseline}")
+
+          existing = subprocess.run(
+              ["git", "rev-parse", "-q", "--verify", f"refs/tags/{version}^{{commit}}"],
+              capture_output=True, text=True,
+          )
+          create = True
+          if existing.returncode == 0:
+              tagged = existing.stdout.strip()
+              if tagged != head:
+                  raise SystemExit(f"Tag {version} already exists on {tagged}; refusing to move it")
+              create = False
+              print(f"{version} already points at this commit")
+
+          rebuild = os.environ.get("REBUILD") == "true"
+          build = changed or rebuild
+          if not build:
+              create = False
+              print("Skipping the IPA build")
+          elif not changed:
+              print("Rebuilding because dispatch passed rebuild: true")
+
+          print(f"version={version} build={str(build).lower()} create={str(create).lower()}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"tag={version}\n")
+              output.write(f"build={'true' if build else 'false'}\n")
+              output.write(f"create={'true' if create else 'false'}\n")
           PY
   build:
     needs: select
@@ -153,10 +103,12 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+      actions: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.select.outputs.tag }}
+          # The tag is created after this build, so check out the commit being released.
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Select Xcode 26
@@ -205,11 +157,84 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Blusion.ipa
           path: dist
+      - name: Publish the release
+        if: needs.select.outputs.create == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+          import os
+          import re
+          import subprocess
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+
+          readme = Path("README.md").read_text()
+          found = re.search(r" Blusion (v\.[0-9]+a) </h1>", readme)
+          if not found:
+              raise SystemExit("README is missing the v.<count>a version")
+          version = found.group(1)
+          if version != os.environ["VERSION"]:
+              raise SystemExit(f"README version {version} does not match the selected tag {os.environ['VERSION']}")
+          previous = subprocess.run(["git", "describe", "--tags", "--match", "v.*", "--abbrev=0", "HEAD^"], capture_output=True, text=True)
+          baseline = previous.stdout.strip() if previous.returncode == 0 else git("hash-object", "-t", "tree", "/dev/null")
+          changes = git("diff", "--name-only", baseline, "HEAD").splitlines()
+          groups = Counter()
+          for path in changes:
+              parts = path.split("/")
+              if path.startswith("Packages/Features/Sources/") and len(parts) > 3:
+                  group = "App interface" if parts[3] == "Views" else parts[3]
+              elif path.startswith("Packages/"):
+                  group = {"StremioKit": "Metadata and addons", "PlayerKit": "Playback", "AetherPlayer": "Playback", "FallbackPlayer": "Playback", "PlaybackGeometry": "Playback", "Persistence": "Saved data"}.get(parts[1], parts[1])
+              else:
+                  group = {"App": "App startup and assets", "scripts": "Build tools", "Config": "Build configuration", "project.yml": "Build configuration", ".github": "Release automation", "docs": "Documentation", "README.md": "Documentation"}.get(parts[0], "Repository maintenance")
+              groups[group] += 1
+          notes = [f"Alpha source release **{version}**. The number is the app source commit count at sync time.", "", "### Changes"]
+          notes += [f"- {group}: {count} file{'s' if count != 1 else ''} updated." for group, count in sorted(groups.items())]
+          if previous.returncode == 0:
+              notes += ["", f"[Full changes](https://github.com/{os.environ['GITHUB_REPOSITORY']}/compare/{baseline}...{version})"]
+          notes += [
+              "",
+              "### Install",
+              "",
+              "The nightly build attaches an unsigned iPhone app, `Blusion.ipa`. It is not signed with an Apple Developer certificate. Install it with AltStore, SideStore or Sideloadly, which sign it using your Apple ID.",
+              "",
+              "To build from source, see the [build instructions](https://github.com/Oscarrscso/Blusion#build).",
+          ]
+          Path(os.environ["RUNNER_TEMP"], "release-notes.md").write_text("\n".join(notes) + "\n")
+          PY
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists; leaving its tag, title and notes unchanged."
+          else
+            gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --title "$VERSION" --latest \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+            test "$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json isPrerelease,isDraft --jq '(.isPrerelease or .isDraft)')" = "false"
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${VERSION}" --jq .sha)" = "$GITHUB_SHA"
+            latest=""
+            for _ in 1 2 3 4 5; do
+              latest="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)"
+              [[ "$latest" == "$VERSION" ]] && break
+              sleep 2
+            done
+            test "$latest" = "$VERSION"
+          fi
       - name: Attach Blusion.ipa
         env:
           GH_TOKEN: ${{ github.token }}
