@@ -483,6 +483,22 @@ private struct PageTopBarModifier: ViewModifier {
     }
 }
 
+/// Fade the landscape artwork itself so the page's continuous background shows through at its foot.
+struct LandscapeHeroFade: ViewModifier {
+    func body(content: Content) -> some View {
+        content.mask {
+            LinearGradient(stops: [
+                .init(color: .black, location: 0.58),
+                .init(color: .black.opacity(0.90), location: 0.6556),
+                .init(color: .black.opacity(0.68), location: 0.748),
+                .init(color: .black.opacity(0.38), location: 0.853),
+                .init(color: .black.opacity(0.12), location: 0.937),
+                .init(color: .clear, location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
+    }
+}
+
 /// A fade from clear to the page's background (black unless Appearance chose another), eased so there is no visible edge where it
 /// starts. Hero artwork and the backdrops of title pages end in one. `length` is the share of the height the fade covers, measured from
 /// the bottom. On a title page with a Blurred background, it fades into that instead (see `pageBackdrop`).

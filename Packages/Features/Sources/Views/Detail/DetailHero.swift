@@ -118,9 +118,9 @@ struct DetailHero<Controls: View, TrailerPanel: View, Synopsis: View>: View {
                     ], startPoint: .leading, endPoint: .trailing)
                 }
                 .offset(x: TitleHero.landscapeBackdropShift)
-            BottomFade(length: 0.42)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        .modifier(LandscapeHeroFade())
         .modifier(DetailHeroScrollPull(scroll: scroll))
         .animation(Theme.Motion.standard, value: model.playColourHex)
         .allowsHitTesting(false)

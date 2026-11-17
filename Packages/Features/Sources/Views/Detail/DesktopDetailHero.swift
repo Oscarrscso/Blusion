@@ -87,10 +87,9 @@ struct DesktopDetailHero<Controls: View, Trailer: View, Synopsis: View, Informat
                 .init(color: .clear, location: 1),
             ], startPoint: .leading, endPoint: .trailing)
             .allowsHitTesting(false)
-            // The fade starts lower than it did, so more of the picture shows above it before it fades into the page.
-            BottomFade(length: 0.42)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .modifier(LandscapeHeroFade())
         .modifier(DetailHeroScrollPull(scroll: scroll))
         .allowsHitTesting(false)
     }
