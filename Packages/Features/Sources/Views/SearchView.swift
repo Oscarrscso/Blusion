@@ -38,6 +38,11 @@ struct SearchView: View {
         // A title opened from the results has just been recorded.
         .onChange(of: router.recentSearchRevision) { model.reloadRecents() }
         .onChange(of: model.query) { model.queryDidChange() }
+        .task(id: router.shortcutQueryRevision) {
+            guard let query = router.takeShortcutQuery() else { return }
+            model.query = query
+            await model.submit()
+        }
         .task {
             await model.refreshAvailability()
             model.prewarmAI()

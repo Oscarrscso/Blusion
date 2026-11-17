@@ -183,6 +183,51 @@ final class AppRouter {
         tab = .search
     }
 
+    /// A query a shortcut asked Search to run. Search reads it once, so a later visit keeps whatever the person typed.
+    var shortcutQuery: String?
+    private(set) var shortcutQueryRevision = 0
+
+    func takeShortcutQuery() -> String? {
+        let query = shortcutQuery
+        shortcutQuery = nil
+        return query
+    }
+
+    /// Search from a shortcut. An empty query opens the field; a query is submitted by Search when it appears.
+    func showShortcutSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchPath = NavigationPath()
+        tab = .search
+        guard !trimmed.isEmpty else {
+            shortcutQuery = nil
+            searchBrowseRevision += 1
+            searchFocusRevision += 1
+            return
+        }
+        shortcutQuery = trimmed
+        shortcutQueryRevision += 1
+    }
+
+    /// Library at its first page.
+    func showLibraryRoot() {
+        libraryPath = NavigationPath()
+        tab = .library
+    }
+
+    /// The stream picker for the item Resume chose, on Home.
+    func showResume(_ candidate: ResumeCandidate) {
+        let request = StreamRequest(type: candidate.type, id: candidate.contentID, title: candidate.title, poster: candidate.poster,
+                                    season: candidate.season, episode: candidate.episode)
+        homePath = NavigationPath([request])
+        tab = .home
+    }
+
+    /// Blusion TV's guide, pushed on Home.
+    func showBlusionTV() {
+        homePath = NavigationPath([BlusionTVRoute()])
+        tab = .home
+    }
+
     /// The Settings tab, on its first screen.
     func showSettings() { showSettings(.settings) }
 

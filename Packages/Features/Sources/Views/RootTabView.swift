@@ -316,6 +316,10 @@ public struct RootTabView: View {
             addonLink = nil
         }
         .fullScreenCover(item: $router.demoPlan) { PlayerScreen(plan: $0, services: services) }
+        .onReceive(NotificationCenter.default.publisher(for: AppShortcutInbox.didReceive)) { _ in
+            Task { await applyShortcutRequests() }
+        }
+        .task { await applyShortcutRequests() }
         .task {
             await Task.yield()
             guard !Task.isCancelled else { return }
@@ -368,6 +372,24 @@ public struct RootTabView: View {
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { windowSafeArea = $0 }
         // Settings → Appearance: accent, text, font and the preferences every page and card reads, on iPhone and Mac alike.
         .appliesAppearance()
+    }
+
+    /// Applies shortcut requests that arrived before the tabs existed, and any that arrive while they are on screen.
+    private func applyShortcutRequests() async {
+        for request in await AppShortcutInbox.shared.drain() {
+            switch request {
+            case .resumeLatest:
+                if let candidate = ResumeSelection.latest(in: await services.progress.all()) {
+                    router.showResume(candidate)
+                }
+            case .search(let query):
+                router.showShortcutSearch(query)
+            case .openLibrary:
+                router.showLibraryRoot()
+            case .openBlusionTV:
+                router.showBlusionTV()
+            }
+        }
     }
 
     /// A tab's item. On a phone the tab bar shows the icon alone, and the title stays the item's accessibility label, which the UI tests
