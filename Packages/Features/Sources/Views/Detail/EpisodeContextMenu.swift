@@ -8,7 +8,6 @@ struct EpisodeContextMenu<Content: View, Preview: View>: UIViewControllerReprese
     let preview: (CGFloat) -> Preview
     let previewSize: CGSize
     let previewCornerRadius: CGFloat
-    let secondaryAction: () -> Void
     let menu: () -> UIMenu
     @Binding var isPresented: Bool
     @Environment(\.self) private var environment
@@ -39,16 +38,8 @@ struct EpisodeContextMenu<Content: View, Preview: View>: UIViewControllerReprese
         init(_ owner: EpisodeContextMenu) { self.owner = owner }
 
         func installInteraction(on view: UIView) {
-            #if targetEnvironment(macCatalyst)
-            let click = UITapGestureRecognizer(target: self, action: #selector(secondaryClick))
-            click.buttonMaskRequired = .secondary
-            view.addGestureRecognizer(click)
-            #else
             view.addInteraction(UIContextMenuInteraction(delegate: self))
-            #endif
         }
-
-        @objc func secondaryClick() { owner.secondaryAction() }
 
         func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                     configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
