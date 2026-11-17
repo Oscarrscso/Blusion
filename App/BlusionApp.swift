@@ -310,11 +310,11 @@ final class DownloadAppDelegate: NSObject, UIApplicationDelegate, UNUserNotifica
         return true
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
 
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         guard let raw = response.notification.request.content.userInfo["download"] as? String, let id = UUID(uuidString: raw) else { return }
         await AppShortcutInbox.shared.submit(.openDownload(id))
     }
