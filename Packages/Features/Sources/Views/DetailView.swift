@@ -692,7 +692,7 @@ struct DetailView: View {
         }
     }
 
-    /// Appearance's Blurred background: one row stretched to the page's height, so it reads the same however far the page has scrolled.
+    /// Appearance's Blurred background: the hero's edge stretched across the page, fixed while the page scrolls.
     private var backdropLayer: some View {
         ZStack {
             if let backdrop {
@@ -722,7 +722,7 @@ struct DetailView: View {
             let height = TitleHero.landscapeHeroHeight(pageHeight: size.height)
             let width = TitleHero.landscapeArtWidth(heroHeight: height, pageWidth: size.width)
             request = TitleBackdropRequest(image: image, frame: CGSize(width: width, height: height), visibleBottom: height, alignsTop: false,
-                                           trailingOverhang: TitleHero.landscapeBackdropShift)
+                                           samplesLeadingEdge: true, trailingOverhang: TitleHero.landscapeBackdropShift)
         } else {
             let height = TitleHero.height(width: size.width, metrics: metrics)
             let logo = TitleHero.logoHeight(logoSlot, hidden: hidesLogo, width: size.width - contentMargin * 2)

@@ -415,9 +415,9 @@ enum ExtendedArtworkRenderer {
         return gradient.outputImage
     }
 
-    /// One row of `TitleBackdropRequest`'s backdrop: the band at the picture's foot, averaged down, set under the columns it came from, then
-    /// given the card's blur and a dark charcoal veil. The row's edges carry on across the page where the picture does not reach.
-    static func backdropRow(_ request: TitleBackdropRequest) -> UIImage? {
+    /// A thin strip from the visible picture's bottom or leading edge, with the card's blur and a dark charcoal veil.
+    /// Bottom colours run down the page; leading-edge colours run across it, retaining their top-to-bottom order.
+    static func backdrop(_ request: TitleBackdropRequest) -> UIImage? {
         let scale = request.scale
         let pageWidth = (request.pageWidth * scale).rounded()
         let frameWidth = request.frame.width * scale, frameHeight = request.frame.height * scale
@@ -434,26 +434,30 @@ enum ExtendedArtworkRenderer {
         let left = (frameWidth - imageWidth * fill) / 2
         let top = request.alignsTop ? 0 : (frameHeight - imageHeight * fill) / 2
         let bottom = min(max(1, request.visibleBottom * scale), frameHeight)
-        let bandHeight = max(1, bottom * band)
-        let bandRect = CGRect(x: -left / fill, y: imageHeight - (bottom - top) / fill, width: frameWidth / fill, height: bandHeight / fill)
-            .intersection(picture.extent)
+        let bandRect = (request.samplesLeadingEdge
+            ? CGRect(x: -left / fill, y: imageHeight - (bottom - top) / fill,
+                     width: max(1, frameWidth * band) / fill, height: bottom / fill)
+            : CGRect(x: -left / fill, y: imageHeight - (bottom - top) / fill,
+                     width: frameWidth / fill, height: max(1, bottom * band) / fill))
+                .intersection(picture.extent)
         guard bandRect.width >= 1, bandRect.height >= 1 else { return nil }
 
+        let stripSize = request.samplesLeadingEdge ? CGSize(width: 1, height: bottom) : CGSize(width: frameWidth, height: 1)
         let scaler = CIFilter.lanczosScaleTransform()
         scaler.inputImage = picture.cropped(to: bandRect)
             .transformed(by: CGAffineTransform(translationX: -bandRect.minX, y: -bandRect.minY))
             .clampedToExtent()
-        scaler.scale = Float(1 / bandRect.height)
-        scaler.aspectRatio = Float(frameWidth / bandRect.width * bandRect.height)
-        guard let row = scaler.outputImage?.cropped(to: CGRect(x: 0, y: 0, width: frameWidth, height: 1)) else { return nil }
+        scaler.scale = Float(stripSize.height / bandRect.height)
+        scaler.aspectRatio = Float(stripSize.width / bandRect.width * bandRect.height / stripSize.height)
+        guard let strip = scaler.outputImage?.cropped(to: CGRect(origin: .zero, size: stripSize)) else { return nil }
 
         let blur = CIFilter.gaussianBlur()
-        blur.inputImage = row
-            .transformed(by: CGAffineTransform(translationX: pageWidth + request.trailingOverhang * scale - frameWidth, y: 0))
+        blur.inputImage = strip
+            .transformed(by: CGAffineTransform(translationX: request.samplesLeadingEdge ? 0 : pageWidth + request.trailingOverhang * scale - frameWidth, y: 0))
             .clampedToExtent()
         blur.radius = Float(pageWidth * 9 / 16 * blurRadius)
 
-        let bounds = CGRect(x: 0, y: 0, width: pageWidth, height: 1)
+        let bounds = CGRect(x: 0, y: 0, width: request.samplesLeadingEdge ? 1 : pageWidth, height: stripSize.height)
         let veil = CIImage(color: CIColor(red: backdropVeilGrey, green: backdropVeilGrey, blue: backdropVeilGrey, alpha: backdropVeilAmount))
             .cropped(to: bounds)
         guard let blurred = blur.outputImage,
@@ -462,9 +466,8 @@ enum ExtendedArtworkRenderer {
     }
 }
 
-/// Appearance's Blurred background on a title page: the hero picture's foot run down the whole page, with an episode card's blur and veil.
-/// It is one row the page's width, stretched to the page's height, so it is the same behind every part of the page however far it has
-/// scrolled, and the hero's fade (see `BottomFade`) ends in exactly what is under it.
+/// Appearance's Blurred background: a strip from the hero picture's bottom, or its leading side in the landscape title layout.
+/// The strip stretches across the page with the same blur and veil as the bottom-edge background.
 struct TitleBackdropRequest: Equatable, Sendable {
     let image: UIImage
     /// The frame the hero fills with the picture, and how far down it the picture shows.
@@ -472,6 +475,8 @@ struct TitleBackdropRequest: Equatable, Sendable {
     let visibleBottom: CGFloat
     /// The picture sits at its frame's top (portrait) rather than its middle.
     let alignsTop: Bool
+    /// Landscape title artwork sits beside the text, so extend its leading edge across the page.
+    var samplesLeadingEdge: Bool = false
     /// How far the frame's trailing edge runs past the page's.
     var trailingOverhang: CGFloat = 0
     var pageWidth: CGFloat = 0
@@ -479,10 +484,11 @@ struct TitleBackdropRequest: Equatable, Sendable {
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.image === rhs.image && lhs.frame == rhs.frame && lhs.visibleBottom == rhs.visibleBottom && lhs.alignsTop == rhs.alignsTop
-            && lhs.trailingOverhang == rhs.trailingOverhang && lhs.pageWidth == rhs.pageWidth && lhs.scale == rhs.scale
+            && lhs.samplesLeadingEdge == rhs.samplesLeadingEdge && lhs.trailingOverhang == rhs.trailingOverhang
+            && lhs.pageWidth == rhs.pageWidth && lhs.scale == rhs.scale
     }
 
-    func render() -> UIImage? { ExtendedArtworkRenderer.backdropRow(self) }
+    func render() -> UIImage? { ExtendedArtworkRenderer.backdrop(self) }
 }
 
 extension EnvironmentValues {
